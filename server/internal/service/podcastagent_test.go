@@ -46,25 +46,25 @@ func TestEveryPodcastRequestNamesTheServer(t *testing.T) {
 		cfg.AllowPrivateFeedHosts = true
 		cfg.Version = "9.9.9"
 	})
-	sub, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: ts.URL + "/feed.xml"})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: ts.URL + "/feed.xml"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	eps, _, err := svc.Episodes(ctx, uc, sub.Show.PID, "", 10)
+	eps, _, err := svc.Podcasts.Episodes(ctx, uc, sub.Show.PID, "", 10)
 	if err != nil || len(eps) != 1 {
 		t.Fatalf("episodes = %+v (%v), want one", eps, err)
 	}
-	if err := svc.CaptureEpisodeTranscript(ctx, uc, eps[0].PID); err != nil {
+	if err := svc.Podcasts.CaptureEpisodeTranscript(ctx, uc, eps[0].PID); err != nil {
 		t.Fatalf("capturing the transcript: %v", err)
 	}
 	_, bare, _ := parseAPIPID(sub.Show.PID)
-	if _, err := svc.syncShow(ctx, bare, syncOwn); err != nil {
+	if _, err := svc.Podcasts.syncShow(ctx, bare, syncOwn); err != nil {
 		t.Fatalf("syncing: %v", err)
 	}
-	if err := svc.QueueEpisodeFetch(ctx, uc, eps[0].PID); err != nil {
+	if err := svc.Podcasts.QueueEpisodeFetch(ctx, uc, eps[0].PID); err != nil {
 		t.Fatal(err)
 	}
-	svc.DrainFetchQueue(ctx)
+	svc.Podcasts.DrainFetchQueue(ctx)
 
 	want := svc.UserAgent()
 	mu.Lock()
@@ -98,8 +98,10 @@ func TestThePodcastDirectoryIsAskedAsTheServer(t *testing.T) {
 		fmt.Fprint(w, `{"resultCount":0,"results":[]}`)
 	}))
 	t.Cleanup(ts.Close)
-	l := &Library{version: "9.9.9", podcastDirectoryBase: ts.URL, log: slog.New(slog.DiscardHandler)}
-	l.SearchPodcastDirectory(context.Background(), "jazz", 5)
+	l := bareLibrary(&core{log: slog.New(slog.DiscardHandler)})
+	l.version = "9.9.9"
+	l.Podcasts.podcastDirectoryBase = ts.URL
+	l.Podcasts.SearchPodcastDirectory(context.Background(), "jazz", 5)
 	select {
 	case got := <-agents:
 		if want := l.UserAgent(); got != want {

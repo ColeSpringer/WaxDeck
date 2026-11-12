@@ -37,7 +37,7 @@ func ownedNamed(t *testing.T, ctx context.Context, svc *Library, catalogPID, nam
 // shareOf makes a public link to a playlist and answers its bare id.
 func shareOf(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, playlist string) string {
 	t.Helper()
-	sh, err := svc.CreateShare(ctx, uc, playlist, 0, false, 0)
+	sh, err := svc.Reads.CreateShare(ctx, uc, playlist, 0, false, 0)
 	if err != nil {
 		t.Fatalf("sharing %s: %v", playlist, err)
 	}
@@ -59,12 +59,12 @@ func TestDeletingAnAccountHandsOverAListThatFollowsTheirStarsAsAFixedList(t *tes
 	_, reader := playlistMember(t, ctx, svc, "reader")
 
 	for _, pid := range pids[:2] {
-		if _, err := svc.SetStar(ctx, samCtx, pid, true, nil); err != nil {
+		if _, err := svc.Playback.SetStar(ctx, samCtx, pid, true, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// The administrator's own star sits on a track sam's list never held.
-	if _, err := svc.SetStar(ctx, admin, pids[3], true, nil); err != nil {
+	if _, err := svc.Playback.SetStar(ctx, admin, pids[3], true, nil); err != nil {
 		t.Fatal(err)
 	}
 	list := smartPlaylist(t, ctx, svc, samCtx, "Sam's favourites", "shared", SmartRule{
@@ -75,7 +75,7 @@ func TestDeletingAnAccountHandsOverAListThatFollowsTheirStarsAsAFixedList(t *tes
 		t.Fatalf("the reader sees %v before the handover, want sam's two stars", before)
 	}
 	link := shareOf(t, ctx, svc, samCtx, list)
-	if _, err := svc.PutPrefs(ctx, reader, Prefs{Pinned: []string{list}}); err != nil {
+	if _, err := svc.Identity.PutPrefs(ctx, reader, Prefs{Pinned: []string{list}}); err != nil {
 		t.Fatal(err)
 	}
 	since, err := svc.MintServerCursor(ctx)
@@ -83,7 +83,7 @@ func TestDeletingAnAccountHandsOverAListThatFollowsTheirStarsAsAFixedList(t *tes
 		t.Fatal(err)
 	}
 
-	got, err := svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
+	got, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestDeletingAnAccountHandsOverAListThatFollowsTheirStarsAsAFixedList(t *tes
 	if got.LinksEnded != 1 {
 		t.Errorf("result = %+v, want the member's one link counted as ended", got)
 	}
-	if _, err := svc.ResolveShare(ctx, link); KindOf(err) != KindNotFound {
+	if _, err := svc.Reads.ResolveShare(ctx, link); KindOf(err) != KindNotFound {
 		t.Errorf("the member's link after the deletion = %v, want not found", err)
 	}
 	if _, err := svc.db.ShareByID(ctx, link); !errors.Is(err, wdb.ErrNotFound) {
@@ -118,7 +118,7 @@ func TestDeletingAnAccountHandsOverAListThatFollowsTheirStarsAsAFixedList(t *tes
 	}
 
 	// A reader's pin follows to the new list.
-	prefs, err := svc.Prefs(ctx, reader)
+	prefs, err := svc.Identity.Prefs(ctx, reader)
 	if err != nil || !slices.Equal(prefs.Pinned, []string{handed}) {
 		t.Errorf("the reader's pins = %v (%v), want [%s]", prefs.Pinned, err, handed)
 	}
@@ -162,7 +162,7 @@ func TestDeletingAnAccountHandsOverACatalogOnlySmartListUnchanged(t *testing.T) 
 	}
 	link := shareOf(t, ctx, svc, samCtx, list)
 
-	if _, err := svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{}); err != nil {
+	if _, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -176,7 +176,7 @@ func TestDeletingAnAccountHandsOverACatalogOnlySmartListUnchanged(t *testing.T) 
 	if after := memberPIDs(t, ctx, svc, reader, list); !slices.Equal(after, before) {
 		t.Errorf("the reader sees %v after the handover, want %v", after, before)
 	}
-	if _, err := svc.ResolveShare(ctx, link); KindOf(err) != KindNotFound {
+	if _, err := svc.Reads.ResolveShare(ctx, link); KindOf(err) != KindNotFound {
 		t.Errorf("the member's link after the deletion = %v, want not found", err)
 	}
 }
@@ -194,13 +194,13 @@ func TestADeletedMembersPublicLinksEndWithTheAccount(t *testing.T) {
 	link := shareOf(t, ctx, svc, samCtx, list)
 	// A link the member pulled stays pulled.
 	revoked := shareOf(t, ctx, svc, samCtx, list)
-	if err := svc.RevokeShare(ctx, samCtx, "sh-"+revoked); err != nil {
+	if err := svc.Reads.RevokeShare(ctx, samCtx, "sh-"+revoked); err != nil {
 		t.Fatal(err)
 	}
 	// A link to something that is not a playlist ends the same way.
 	other := shareOf(t, ctx, svc, samCtx, pids[0])
 	// One that has run out was not serving either.
-	expired, err := svc.CreateShare(ctx, samCtx, pids[1], time.Hour, false, 0)
+	expired, err := svc.Reads.CreateShare(ctx, samCtx, pids[1], time.Hour, false, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestADeletedMembersPublicLinksEndWithTheAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
+	got, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestADeletedMembersPublicLinksEndWithTheAccount(t *testing.T) {
 	for name, id := range map[string]string{
 		"the handed-over playlist's link": link, "a pulled link": revoked, "a track's link": other, "an expired link": string(expiredID),
 	} {
-		if _, err := svc.ResolveShare(ctx, id); KindOf(err) != KindNotFound {
+		if _, err := svc.Reads.ResolveShare(ctx, id); KindOf(err) != KindNotFound {
 			t.Errorf("%s after the deletion = %v, want not found", name, err)
 		}
 		if _, err := svc.db.ShareByID(ctx, id); !errors.Is(err, wdb.ErrNotFound) {
@@ -230,7 +230,7 @@ func TestADeletedMembersPublicLinksEndWithTheAccount(t *testing.T) {
 	}
 	// The playlist itself is the administrator's, whose own reach it is
 	// served under from now on.
-	if pl, err := svc.PlaylistByPID(ctx, admin, list); err != nil || !pl.IsOwner {
+	if pl, err := svc.Playlists.ByPID(ctx, admin, list); err != nil || !pl.IsOwner {
 		t.Errorf("the handed-over playlist = %+v (%v), want the administrator's", pl, err)
 	}
 }
@@ -241,28 +241,28 @@ func TestADeletedMembersPublicLinksEndWithTheAccount(t *testing.T) {
 func TestAHandedOverListDoesNotServeWhatItsMemberCouldNotReach(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
-	sam, err := svc.CreateAccount(ctx, AccountCreate{Username: "sam", Password: "correct-horse", AccessMode: "granted"})
+	sam, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "sam", Password: "correct-horse", AccessMode: "granted"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	samCtx, err := svc.UserCtx(ctx, sam.User)
+	samCtx, err := svc.Grants.UserCtxFor(ctx, sam.User)
 	if err != nil {
 		t.Fatal(err)
 	}
 	list := smartPlaylist(t, ctx, svc, samCtx, "Everything", "shared", SmartRule{Root: allMusic()})
 	link := shareOf(t, ctx, svc, samCtx, list)
-	if _, err := svc.ResolveShare(ctx, link); KindOf(err) != KindNotFound {
+	if _, err := svc.Reads.ResolveShare(ctx, link); KindOf(err) != KindNotFound {
 		t.Fatalf("the link before the deletion = %v, want it to serve nothing", err)
 	}
 
-	if _, err := svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{}); err != nil {
+	if _, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{}); err != nil {
 		t.Fatal(err)
 	}
 
-	if pub, err := svc.ResolveShare(ctx, link); KindOf(err) != KindNotFound {
+	if pub, err := svc.Reads.ResolveShare(ctx, link); KindOf(err) != KindNotFound {
 		t.Errorf("the link after the deletion = %v (%+v), want it to serve nothing still", err, pub)
 	}
-	if pl, err := svc.PlaylistByPID(ctx, admin, list); err != nil || pl.Kind != "smart" || !pl.IsOwner {
+	if pl, err := svc.Playlists.ByPID(ctx, admin, list); err != nil || pl.Kind != "smart" || !pl.IsOwner {
 		t.Errorf("the handed-over playlist = %+v (%v), want the administrator's smart list", pl, err)
 	}
 }
@@ -278,7 +278,7 @@ func TestAHandoverLeavesTheLinksWhereTheyAre(t *testing.T) {
 	second := playlistAs(t, ctx, svc, samCtx, "Second", "shared", pids)
 	links := map[string]string{first: shareOf(t, ctx, svc, samCtx, first), second: shareOf(t, ctx, svc, samCtx, second)}
 	starts := 0
-	svc.handoverHook = func(stage string, _ *model.Playlist) error {
+	svc.Playlists.handoverHook = func(stage string, _ *model.Playlist) error {
 		if stage == "start" {
 			starts++
 			if starts == 2 {
@@ -288,7 +288,7 @@ func TestAHandoverLeavesTheLinksWhereTheyAre(t *testing.T) {
 		return nil
 	}
 
-	got, err := svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
+	got, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
 	if err == nil || got.PlaylistsTransferred != 1 {
 		t.Fatalf("the stopped deletion = %+v (%v), want one list handed over and an error", got, err)
 	}
@@ -298,7 +298,7 @@ func TestAHandoverLeavesTheLinksWhereTheyAre(t *testing.T) {
 		if err != nil || row.UserID != sam.User.ID || row.TargetPID != playlist {
 			t.Errorf("the link on %s = %+v (%v), want it still sam's, on the same list", playlist, row, err)
 		}
-		if _, err := svc.ResolveShare(ctx, link); KindOf(err) != KindNotFound {
+		if _, err := svc.Reads.ResolveShare(ctx, link); KindOf(err) != KindNotFound {
 			t.Errorf("the link on %s while sam is disabled = %v, want not found", playlist, err)
 		}
 	}
@@ -322,7 +322,7 @@ func TestDeletingAnAccountFreezesAListThatNamesAPlaylistThatGoes(t *testing.T) {
 		t.Fatalf("the reader sees %v before the handover, want the source's two tracks", before)
 	}
 
-	if _, err := svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{}); err != nil {
+	if _, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -346,18 +346,18 @@ func TestDeletingAnAccountCarriesTheCoverOfAFrozenList(t *testing.T) {
 	ctx, svc, admin := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, admin)
 	sam, samCtx := playlistMember(t, ctx, svc, "sam")
-	if _, err := svc.SetStar(ctx, samCtx, pids[0], true, nil); err != nil {
+	if _, err := svc.Playback.SetStar(ctx, samCtx, pids[0], true, nil); err != nil {
 		t.Fatal(err)
 	}
 	list := smartPlaylist(t, ctx, svc, samCtx, "Pictured", "shared", SmartRule{
 		Root: RuleNode{Type: "condition", Field: "starred", Op: "is", Value: "true"},
 	})
 	custom := coverPNG(t, 200)
-	if _, err := svc.SetEntityArtwork(ctx, samCtx, "playlist", list, "", custom, false); err != nil {
+	if _, err := svc.Editor.SetEntityArtwork(ctx, samCtx, "playlist", list, "", custom, false); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{}); err != nil {
+	if _, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -395,7 +395,7 @@ func TestDeletingAnAccountFixesAListThatOnlyOrdersByTheirRatings(t *testing.T) {
 	_, reader := playlistMember(t, ctx, svc, "reader")
 	rate := func(uc *UserCtx, pid string, stars int) {
 		t.Helper()
-		if _, err := svc.SetRating(ctx, uc, pid, &stars, nil); err != nil {
+		if _, err := svc.Playback.SetRating(ctx, uc, pid, &stars, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -413,7 +413,7 @@ func TestDeletingAnAccountFixesAListThatOnlyOrdersByTheirRatings(t *testing.T) {
 		t.Fatalf("the reader sees %v before the handover, want sam's two best %v", before, []string{pids[2], pids[1]})
 	}
 
-	got, err := svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
+	got, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -509,37 +509,37 @@ func TestAHandoverThatFailsLeavesTheOldListAndItsReferences(t *testing.T) {
 	pids := fixtureItemPIDs(t, ctx, svc, admin)
 	sam, samCtx := playlistMember(t, ctx, svc, "sam")
 	_, reader := playlistMember(t, ctx, svc, "reader")
-	if _, err := svc.SetStar(ctx, samCtx, pids[0], true, nil); err != nil {
+	if _, err := svc.Playback.SetStar(ctx, samCtx, pids[0], true, nil); err != nil {
 		t.Fatal(err)
 	}
 	list := smartPlaylist(t, ctx, svc, samCtx, "Sam's favourites", "shared", SmartRule{
 		Root: RuleNode{Type: "condition", Field: "starred", Op: "is", Value: "true"},
 	})
 	link := shareOf(t, ctx, svc, samCtx, list)
-	if _, err := svc.PutPrefs(ctx, reader, Prefs{Pinned: []string{list}}); err != nil {
+	if _, err := svc.Identity.PutPrefs(ctx, reader, Prefs{Pinned: []string{list}}); err != nil {
 		t.Fatal(err)
 	}
 	failing := errors.New("the catalog went away")
-	svc.handoverHook = func(stage string, _ *model.Playlist) error {
+	svc.Playlists.handoverHook = func(stage string, _ *model.Playlist) error {
 		if stage == "swap" {
 			return failing
 		}
 		return nil
 	}
 
-	got, err := svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
+	got, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
 	if !errors.Is(err, failing) {
 		t.Fatalf("err = %v, want the failure", err)
 	}
 	if got.PlaylistsTransferred != 0 || got.PlaylistsFixed != 0 || !got.Disabled {
 		t.Errorf("result = %+v, want nothing handed over and the account disabled", got)
 	}
-	acct, err := svc.Account(ctx, sam.User.ID)
+	acct, err := svc.Identity.Account(ctx, sam.User.ID)
 	if err != nil || !acct.User.Disabled {
 		t.Fatalf("the account after the failure = %+v (%v), want it there and disabled", acct, err)
 	}
 	pl, err := svc.lib.Playlists().Get(ctx, mustBare(t, list))
-	if err != nil || pl.Kind != model.PlaylistSmart || string(pl.OwnerPID) != sam.User.WaxbinUserPID {
+	if err != nil || pl.Kind != model.PlaylistSmart || string(pl.OwnerPID) != sam.User.row.WaxbinUserPID {
 		t.Errorf("the old list = %+v (%v), want it still sam's smart list", pl, err)
 	}
 	if owned := ownedBy(t, ctx, svc, admin.CatalogPID); slices.Contains(owned, "Sam's favourites") {
@@ -549,12 +549,12 @@ func TestAHandoverThatFailsLeavesTheOldListAndItsReferences(t *testing.T) {
 	if err != nil || row.UserID != sam.User.ID || row.TargetPID != list {
 		t.Errorf("the link = %+v (%v), want it untouched on sam's list", row, err)
 	}
-	if prefs, err := svc.Prefs(ctx, reader); err != nil || !slices.Equal(prefs.Pinned, []string{list}) {
+	if prefs, err := svc.Identity.Prefs(ctx, reader); err != nil || !slices.Equal(prefs.Pinned, []string{list}) {
 		t.Errorf("the reader's pins = %v (%v), want the old list", prefs.Pinned, err)
 	}
 
-	svc.handoverHook = nil
-	got, err = svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
+	svc.Playlists.handoverHook = nil
+	got, err = svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
 	if err != nil {
 		t.Fatalf("the retry: %v", err)
 	}
@@ -562,10 +562,10 @@ func TestAHandoverThatFailsLeavesTheOldListAndItsReferences(t *testing.T) {
 		t.Errorf("the retry = %+v, want the one fixed list and no second disabling", got)
 	}
 	handed := ownedNamed(t, ctx, svc, admin.CatalogPID, "Sam's favourites")
-	if _, err := svc.ResolveShare(ctx, link); KindOf(err) != KindNotFound {
+	if _, err := svc.Reads.ResolveShare(ctx, link); KindOf(err) != KindNotFound {
 		t.Errorf("the member's link after the retry = %v, want it ended with the account", err)
 	}
-	if prefs, _ := svc.Prefs(ctx, reader); !slices.Equal(prefs.Pinned, []string{apiPID(PrefixPlaylist, handed.PID)}) {
+	if prefs, _ := svc.Identity.Prefs(ctx, reader); !slices.Equal(prefs.Pinned, []string{apiPID(PrefixPlaylist, handed.PID)}) {
 		t.Errorf("the reader's pins after the retry = %v, want the fixed list", prefs.Pinned)
 	}
 }
@@ -585,19 +585,19 @@ func TestADeletionThatStopsPartWayLeavesADisabledAccountAndSaysWhatWasDone(t *te
 
 	var disabledAtStart []bool
 	starts := 0
-	svc.handoverHook = func(stage string, _ *model.Playlist) error {
+	svc.Playlists.handoverHook = func(stage string, _ *model.Playlist) error {
 		if stage != "start" {
 			return nil
 		}
 		starts++
-		acct, err := svc.Account(ctx, sam.User.ID)
+		acct, err := svc.Identity.Account(ctx, sam.User.ID)
 		disabledAtStart = append(disabledAtStart, err == nil && acct.User.Disabled)
 		if starts == 2 {
 			return errors.New("the catalog went away")
 		}
 		return nil
 	}
-	got, err := svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
+	got, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
 	if err == nil {
 		t.Fatal("the deletion went through a failing step")
 	}
@@ -611,8 +611,8 @@ func TestADeletionThatStopsPartWayLeavesADisabledAccountAndSaysWhatWasDone(t *te
 		t.Error("a private playlist was deleted before the shared ones were settled")
 	}
 
-	svc.handoverHook = nil
-	got, err = svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
+	svc.Playlists.handoverHook = nil
+	got, err = svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
 	if err != nil {
 		t.Fatalf("the retry: %v", err)
 	}
@@ -622,7 +622,7 @@ func TestADeletionThatStopsPartWayLeavesADisabledAccountAndSaysWhatWasDone(t *te
 	if catalogHas(ctx, svc, private) {
 		t.Error("the retry left the private playlist")
 	}
-	if _, err := svc.Account(ctx, sam.User.ID); KindOf(err) != KindNotFound {
+	if _, err := svc.Identity.Account(ctx, sam.User.ID); KindOf(err) != KindNotFound {
 		t.Errorf("the account after the retry = %v, want it gone", err)
 	}
 }
@@ -633,11 +633,11 @@ func TestDeletingTheLastOtherAdministratorChangesNothing(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, admin)[:1]
-	other, err := svc.CreateAccount(ctx, AccountCreate{Username: "second", Password: "correct-horse", Roles: []string{"admin"}})
+	other, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "second", Password: "correct-horse", Roles: []string{"admin"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	otherCtx, err := svc.UserCtx(ctx, other.User)
+	otherCtx, err := svc.Grants.UserCtxFor(ctx, other.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,18 +645,18 @@ func TestDeletingTheLastOtherAdministratorChangesNothing(t *testing.T) {
 	mine := playlistAs(t, ctx, svc, admin, "Mine", "shared", pids)
 	// The acting administrator is demoted while the request is in flight:
 	// the other account is now the only one left.
-	if _, err := svc.UpdateAccount(ctx, admin.ID, AccountUpdate{Roles: []string{"user"}}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, admin.ID, AccountUpdate{Roles: []string{"user"}}); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := svc.DeleteAccount(ctx, admin, other.User.ID, AccountDeletion{})
+	got, err := svc.Identity.DeleteAccount(ctx, admin, other.User.ID, AccountDeletion{})
 	if KindOf(err) != KindConflict {
 		t.Fatalf("err = %v, want a conflict", err)
 	}
 	if !reflect.DeepEqual(got, AccountDeleted{}) {
 		t.Errorf("result = %+v, want nothing done", got)
 	}
-	acct, err := svc.Account(ctx, other.User.ID)
+	acct, err := svc.Identity.Account(ctx, other.User.ID)
 	if err != nil || acct.User.Disabled {
 		t.Errorf("the other administrator = %+v (%v), want them there and enabled", acct, err)
 	}
@@ -665,7 +665,7 @@ func TestDeletingTheLastOtherAdministratorChangesNothing(t *testing.T) {
 			t.Errorf("playlist %s = %+v (%v), want it untouched", kept, pl, err)
 		}
 	}
-	if owned := ownedBy(t, ctx, svc, other.User.WaxbinUserPID); !slices.Contains(owned, "Theirs") {
+	if owned := ownedBy(t, ctx, svc, other.User.row.WaxbinUserPID); !slices.Contains(owned, "Theirs") {
 		t.Errorf("the refused account owns %v, want its playlist kept", owned)
 	}
 }
@@ -689,27 +689,27 @@ func TestAPlaylistDeletedWhileTheAccountIsSettledDoesNotStopTheDeletion(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	owned, err := svc.ownedPlaylists(ctx, victim)
+	owned, err := svc.Identity.ownedPlaylists(ctx, victim)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The administrator deletes one, and the member's own delete lands on
 	// the other, after the listing.
-	if err := svc.DeletePlaylist(ctx, admin, gone); err != nil {
+	if err := svc.Playlists.DeletePlaylist(ctx, admin, gone); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.DeletePlaylist(ctx, samCtx, goneToo); err != nil {
+	if err := svc.Playlists.DeletePlaylist(ctx, samCtx, goneToo); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := svc.settlePlaylists(ctx, victim, owned, taker)
+	got, err := svc.Identity.settlePlaylists(ctx, victim, owned, taker)
 	if err != nil {
 		t.Fatalf("settling with two playlists already gone: %v", err)
 	}
 	if got.PlaylistsTransferred != 1 {
 		t.Errorf("result = %+v, want only the one that was still there handed over", got)
 	}
-	if pl, err := svc.PlaylistByPID(ctx, admin, kept); err != nil || !pl.IsOwner {
+	if pl, err := svc.Playlists.ByPID(ctx, admin, kept); err != nil || !pl.IsOwner {
 		t.Errorf("the playlist that stayed = %+v (%v), want it the administrator's", pl, err)
 	}
 }
@@ -723,22 +723,22 @@ func TestAccountDeletionRefusesARecipientTheCatalogHasNoUserFor(t *testing.T) {
 	sam, samCtx := playlistMember(t, ctx, svc, "sam")
 	pat, _ := playlistMember(t, ctx, svc, "pat")
 	roadTrip := playlistAs(t, ctx, svc, samCtx, "Road trip", "shared", pids)
-	svc.catalogUsersMu.Lock()
-	svc.catalogUsers = map[string]model.PID{pat.User.ID: "01JZX5N8QW3F4V9T2B7KDXXXXX"}
-	svc.catalogUsersMu.Unlock()
+	svc.Identity.catalogUsersMu.Lock()
+	svc.Identity.catalogUsers = map[string]model.PID{pat.User.ID: "01JZX5N8QW3F4V9T2B7KDXXXXX"}
+	svc.Identity.catalogUsersMu.Unlock()
 
-	got, err := svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{TransferTo: pat.User.ID})
+	got, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{TransferTo: pat.User.ID})
 	if KindOf(err) != KindInvalid {
 		t.Fatalf("err = %v (kind %q), want invalid", err, KindOf(err))
 	}
 	if !reflect.DeepEqual(got, AccountDeleted{}) {
 		t.Errorf("result = %+v, want nothing done", got)
 	}
-	acct, err := svc.Account(ctx, sam.User.ID)
+	acct, err := svc.Identity.Account(ctx, sam.User.ID)
 	if err != nil || acct.User.Disabled {
 		t.Errorf("the account = %+v (%v), want it there and enabled", acct, err)
 	}
-	if pl, err := svc.PlaylistByPID(ctx, samCtx, roadTrip); err != nil || !pl.IsOwner {
+	if pl, err := svc.Playlists.ByPID(ctx, samCtx, roadTrip); err != nil || !pl.IsOwner {
 		t.Errorf("the playlist = %+v (%v), want it untouched", pl, err)
 	}
 }

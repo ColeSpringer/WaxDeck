@@ -28,6 +28,7 @@ test('every location serves its own screen cold', async ({ app }) => {
   // location stands on its own - a stranger pasting the link gets the
   // screen, with no in-memory payload behind it.
   test.setTimeout(J.journey);
+  const started = Date.now();
 
   // A fresh browser's first boot also pays every first-time cost (the
   // bundle's compile, the fonts, the server's cold reads) and can run past
@@ -37,15 +38,25 @@ test('every location serves its own screen cold', async ({ app }) => {
 
   const unreachable: string[] = [];
   for (const dest of destinations) {
+    // Once a destination has failed the run is red either way, so what is
+    // left of the journey goes to naming the rest: one that no longer has
+    // room for a boot that never comes is listed untried, rather than
+    // started and cut off by the test's own timeout with the list unsaid.
+    if (unreachable.length > 0 && Date.now() - started > J.journey - T.fetch) {
+      unreachable.push(`${dest} (${DEST[dest].path}): not tried, the journey ran out of budget`);
+      continue;
+    }
     try {
-      // The step tier per destination, not the nav tier. This loop's
-      // whole value is that it names EVERY unreachable destination in
-      // one run, and at 30s each a handful of failures would run the
+      // The step tier per destination's screen, not the nav tier. This
+      // loop's whole value is that it names EVERY unreachable destination
+      // in one run, and at 30s each a handful of failures would run the
       // test out of its own budget - which reports "test timeout" at
       // whichever one happened to be in flight and says nothing at all
-      // about the rest. Five seconds is generous for a page that is
-      // already served and booted; a destination that is merely slow
-      // shows up as a failure here and is worth knowing about too.
+      // about the rest. Each iteration is still a cold boot, which keeps
+      // the nav tier inside `enter`: four workers on four cores stretch
+      // one to seven seconds. Five seconds is generous for a screen once
+      // the app is up; a destination that is merely slow shows up as a
+      // failure here and is worth knowing about too.
       await app.nav.enter(dest, { within: T.step });
       await app.nav.expectAt(dest);
     } catch (e) {

@@ -10,22 +10,26 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
-// settle waits for the catalog positions to hold still, so a test about
-// what is kept under one reads one position throughout.
+// settle waits for the catalog positions to hold still and for the change
+// feed to reach them, so a test about what is kept under one reads one
+// position throughout. Still alone is not enough: the content position
+// answers the feed's while the feed trails the log, and a slow feed looks
+// still until it moves.
 func settle(t *testing.T, h *Handler) {
 	t.Helper()
 	ctx := context.Background()
-	at := func() [2]int64 {
-		plays, _ := h.svc.CatalogPlaysSeq(ctx)
-		return [2]int64{plays, h.svc.CatalogContentSeq(ctx)}
+	at := func() (pos [2]int64, fed bool) {
+		plays, ok := h.svc.Reads.CatalogPlaysSeq(ctx)
+		return [2]int64{plays, h.svc.Reads.CatalogContentSeq(ctx)}, ok && h.svc.CatalogTailSeq() >= plays
 	}
-	last, stable := at(), 0
+	last, _ := at()
+	stable := 0
 	for deadline := time.Now().Add(10 * time.Second); stable < 5; {
 		if time.Now().After(deadline) {
-			t.Fatal("the catalog positions never held still")
+			t.Fatal("the catalog positions never held still with the feed caught up")
 		}
 		time.Sleep(20 * time.Millisecond)
-		if now := at(); now == last {
+		if now, fed := at(); fed && now == last {
 			stable++
 		} else {
 			last, stable = now, 0
@@ -123,7 +127,7 @@ func TestPlaylistTotalsOverAFallbackAreNotKept(t *testing.T) {
 	var fell atomic.Bool
 	h.watch = fellBack(&fell)
 	ctx := context.Background()
-	pl, err := h.svc.CreatePlaylist(ctx, uc, service.PlaylistCreate{Name: "Counted", Kind: "static"})
+	pl, err := h.svc.Playlists.CreatePlaylist(ctx, uc, service.PlaylistCreate{Name: "Counted", Kind: "static"})
 	if err != nil {
 		t.Fatal(err)
 	}

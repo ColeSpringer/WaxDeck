@@ -147,7 +147,7 @@ func parsePlaylistExport(src, payload string, portableRefs []PortableRefDTO) ([]
 // upgrade passes over parsed refs, one resolution per ref in order, each
 // pass keeping only matches the filter's caller may hold, and answers
 // the views the passes read beside them.
-func (l *Library) resolvePlaylistImportRefs(ctx context.Context, f memberFilter, refs []PortableRefDTO) ([]model.RefResolution, map[model.PID]*model.ItemView, error) {
+func (l *Playlists) resolvePlaylistImportRefs(ctx context.Context, f memberFilter, refs []PortableRefDTO) ([]model.RefResolution, map[model.PID]*model.ItemView, error) {
 	modelRefs := make([]model.PortableRef, len(refs))
 	for i, r := range refs {
 		modelRefs[i] = toModelRef(r)
@@ -170,7 +170,7 @@ func (l *Library) resolvePlaylistImportRefs(ctx context.Context, f memberFilter,
 // not hold into a miss. A hidden match reads exactly like no match, and
 // filtering inside each pass lets the retries look past it. An import
 // takes a tie between copies of one recording: any of them serves.
-func (l *Library) resolveReachable(ctx context.Context, f memberFilter, refs []model.PortableRef) ([]model.RefResolution, map[model.PID]*model.ItemView, error) {
+func (l *Playlists) resolveReachable(ctx context.Context, f memberFilter, refs []model.PortableRef) ([]model.RefResolution, map[model.PID]*model.ItemView, error) {
 	return l.resolveVisible(ctx, f, refs, true)
 }
 
@@ -178,7 +178,7 @@ func (l *Library) resolveReachable(ctx context.Context, f memberFilter, refs []m
 // taking ties, then a plain walk of those whose tie stood above the last
 // rung, where a unique match is the answer. It answers the tie-taking walk
 // beside it, since a match the caller may not hold falls back on its tie.
-func (l *Library) resolveTakingTies(ctx context.Context, refs []model.PortableRef) (res, tied []model.RefResolution, err error) {
+func (l *Playlists) resolveTakingTies(ctx context.Context, refs []model.PortableRef) (res, tied []model.RefResolution, err error) {
 	tied, err = l.resolveRefs(ctx, refs, waxbin.ResolveOptions{AcceptSameRecording: true})
 	if err != nil {
 		return nil, nil, err
@@ -209,7 +209,7 @@ func (l *Library) resolveTakingTies(ctx context.Context, refs []model.PortableRe
 
 // resolveRefs walks the catalog's resolve ladder for each of refs, in
 // order.
-func (l *Library) resolveRefs(ctx context.Context, refs []model.PortableRef, opts waxbin.ResolveOptions) ([]model.RefResolution, error) {
+func (l *Playlists) resolveRefs(ctx context.Context, refs []model.PortableRef, opts waxbin.ResolveOptions) ([]model.RefResolution, error) {
 	if l.refResolveHook != nil {
 		l.refResolveHook(opts, len(refs))
 	}
@@ -219,7 +219,7 @@ func (l *Library) resolveRefs(ctx context.Context, refs []model.PortableRef, opt
 // resolveVisible is the resolve both directions share: the catalog's
 // ladder, then every match the filter's caller may not hold made a miss,
 // answering the matched views beside the resolutions.
-func (l *Library) resolveVisible(ctx context.Context, f memberFilter, refs []model.PortableRef, takeTies bool) ([]model.RefResolution, map[model.PID]*model.ItemView, error) {
+func (l *Playlists) resolveVisible(ctx context.Context, f memberFilter, refs []model.PortableRef, takeTies bool) ([]model.RefResolution, map[model.PID]*model.ItemView, error) {
 	var res, tied []model.RefResolution
 	var err error
 	if takeTies {
@@ -256,7 +256,7 @@ func (l *Library) resolveVisible(ctx context.Context, f memberFilter, refs []mod
 
 // dropHidden turns every match the filter's caller may not hold into a
 // miss, answering the matched views and where the hidden matches were.
-func (l *Library) dropHidden(ctx context.Context, f memberFilter, res []model.RefResolution) (map[model.PID]*model.ItemView, []int, error) {
+func (l *Playlists) dropHidden(ctx context.Context, f memberFilter, res []model.RefResolution) (map[model.PID]*model.ItemView, []int, error) {
 	var pids []model.PID
 	for _, r := range res {
 		if r.Rung != model.MatchNone {
@@ -285,7 +285,7 @@ func (l *Library) dropHidden(ctx context.Context, f memberFilter, res []model.Re
 
 // ImportStreamingPlaylist parses an export, resolves it against the
 // library, and creates a playlist from what matched.
-func (l *Library) ImportStreamingPlaylist(ctx context.Context, uc *UserCtx, in PlaylistImportInput) (PlaylistImportOutcome, error) {
+func (l *Playlists) ImportStreamingPlaylist(ctx context.Context, uc *UserCtx, in PlaylistImportInput) (PlaylistImportOutcome, error) {
 	refs, listName, err := parsePlaylistExport(in.Source, in.Payload, in.Refs)
 	if err != nil {
 		return PlaylistImportOutcome{}, err
@@ -301,7 +301,7 @@ func (l *Library) ImportStreamingPlaylist(ctx context.Context, uc *UserCtx, in P
 		return PlaylistImportOutcome{}, err
 	}
 	// The new list is static, so a trashed match is a miss too.
-	res, _, err := l.resolvePlaylistImportRefs(ctx, memberFilter{uc: uc, subs: l.newSubscriptionFilter(uc)}, refs)
+	res, _, err := l.resolvePlaylistImportRefs(ctx, memberFilter{uc: uc, subs: l.Podcasts.newSubscriptionFilter(uc)}, refs)
 	if err != nil {
 		return PlaylistImportOutcome{}, err
 	}
@@ -348,7 +348,7 @@ func (l *Library) ImportStreamingPlaylist(ctx context.Context, uc *UserCtx, in P
 // primary. The trim runs only on misses so comma-carrying band names
 // ("Earth, Wind & Fire", "Tyler, the Creator") keep their exact
 // first-pass match. Purely local, so every miss gets the retry.
-func (l *Library) retryMissesWithTrimmedArtist(ctx context.Context, f memberFilter, refs []PortableRefDTO, modelRefs []model.PortableRef, res []model.RefResolution, views map[model.PID]*model.ItemView) error {
+func (l *Playlists) retryMissesWithTrimmedArtist(ctx context.Context, f memberFilter, refs []PortableRefDTO, modelRefs []model.PortableRef, res []model.RefResolution, views map[model.PID]*model.ItemView) error {
 	var retryIdx []int
 	var retryRefs []model.PortableRef
 	for i := range res {
@@ -383,7 +383,7 @@ func (l *Library) retryMissesWithTrimmedArtist(ctx context.Context, f memberFilt
 // an ISRC: the identifier upgrades to a recording MBID through
 // MusicBrainz and the ladder runs again on the strong rung. Bounded
 // and best-effort; without internet the import stands as resolved.
-func (l *Library) upgradeMissesByISRC(ctx context.Context, f memberFilter, refs []PortableRefDTO, modelRefs []model.PortableRef, res []model.RefResolution, views map[model.PID]*model.ItemView) {
+func (l *Playlists) upgradeMissesByISRC(ctx context.Context, f memberFilter, refs []PortableRefDTO, modelRefs []model.PortableRef, res []model.RefResolution, views map[model.PID]*model.ItemView) {
 	if l.isrcResolver == nil {
 		return
 	}
@@ -414,7 +414,7 @@ func (l *Library) upgradeMissesByISRC(ctx context.Context, f memberFilter, refs 
 
 // ExportPlaylistPortable exports the members of a playlist this caller
 // can see as portable refs.
-func (l *Library) ExportPlaylistPortable(ctx context.Context, uc *UserCtx, apiPlaylistPID string) (string, []PortableRefDTO, error) {
+func (l *Playlists) ExportPlaylistPortable(ctx context.Context, uc *UserCtx, apiPlaylistPID string) (string, []PortableRefDTO, error) {
 	pl, err := l.resolvePlaylist(ctx, uc, apiPlaylistPID)
 	if err != nil {
 		return "", nil, err
@@ -452,7 +452,7 @@ func (l *Library) ExportPlaylistPortable(ctx context.Context, uc *UserCtx, apiPl
 // ref. The members are read on both sides of the export and the list's
 // edit stamp around all three (an edit and its undo still move the
 // stamp); a list that moved is read again once, then refused.
-func (l *Library) reachableRefs(ctx context.Context, uc *UserCtx, pl *model.Playlist) ([]model.PortableRef, error) {
+func (l *Playlists) reachableRefs(ctx context.Context, uc *UserCtx, pl *model.Playlist) ([]model.PortableRef, error) {
 	f := l.newMemberFilter(uc, pl)
 	if drawsAfresh(pl) {
 		return l.drawnRefs(ctx, f, pl)
@@ -500,7 +500,7 @@ func sameMembers(a, b []*model.ItemView) bool {
 
 // pairRefs keeps the refs of the visible members, reporting false when
 // the two lists do not line up.
-func (l *Library) pairRefs(ctx context.Context, f memberFilter, members []*model.ItemView, refs []model.PortableRef) ([]model.PortableRef, bool) {
+func (l *Playlists) pairRefs(ctx context.Context, f memberFilter, members []*model.ItemView, refs []model.PortableRef) ([]model.PortableRef, bool) {
 	if len(members) != len(refs) {
 		return nil, false
 	}
@@ -530,7 +530,7 @@ func drawsAfresh(pl *model.Playlist) bool {
 // own kind, title and length that the caller can see. Unlike an import
 // it declines ties: a ref here must name the member it came from, not
 // any copy of the recording, which may be one the caller cannot see.
-func (l *Library) drawnRefs(ctx context.Context, f memberFilter, pl *model.Playlist) ([]model.PortableRef, error) {
+func (l *Playlists) drawnRefs(ctx context.Context, f memberFilter, pl *model.Playlist) ([]model.PortableRef, error) {
 	refs, err := l.lib.ExportPlaylistRefs(ctx, pl.PID, pl.OwnerPID)
 	if err != nil {
 		return nil, classify(err)

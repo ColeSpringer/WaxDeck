@@ -19,10 +19,10 @@ type PodcastDirectoryEntry struct {
 	EpisodeCount int
 }
 
-// podcastDirectorySearch builds the directory client on first use. The
+// directorySearch builds the directory client on first use. The
 // base is a config override so a test can point it at a fake, exactly
 // as the radio directory's is.
-func (l *Library) podcastDirectorySearch() *providers.PodcastDirectory {
+func (l *Podcasts) directorySearch() *providers.PodcastDirectory {
 	l.podcastDirectoryOnce.Do(func() {
 		l.podcastDirectory = providers.NewPodcastDirectory(providers.PodcastDirectoryConfig{
 			BaseURL:   l.podcastDirectoryBase,
@@ -41,14 +41,14 @@ func (l *Library) podcastDirectorySearch() *providers.PodcastDirectory {
 // turns 429 and 503 into ErrThrottled, and an untranslated ErrThrottled
 // would reach the client as a 500, which reads as this server being
 // broken rather than as a busy directory to try again.
-func (l *Library) SearchPodcastDirectory(ctx context.Context, q string, limit int) ([]PodcastDirectoryEntry, error) {
+func (l *Podcasts) SearchPodcastDirectory(ctx context.Context, q string, limit int) ([]PodcastDirectoryEntry, error) {
 	q = strings.TrimSpace(q)
 	if q == "" {
 		return nil, &Error{Kind: KindInvalid, Msg: "a search query is required"}
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	hits, err := l.podcastDirectorySearch().Search(callCtx, q, limit)
+	hits, err := l.directorySearch().Search(callCtx, q, limit)
 	if err != nil {
 		if errors.Is(err, providers.ErrThrottled) {
 			return nil, &Error{

@@ -144,9 +144,9 @@ func unreachableFolders(r *ScanTallyDTO) string {
 }
 
 // notifyJobEnd files an ended job in its starter's inbox.
-func (l *Library) notifyJobEnd(ctx context.Context, userID string, j Job) {
+func (l *Jobs) notifyJobEnd(ctx context.Context, userID string, j Job) {
 	if model.JobState(j.State) == model.JobDone {
-		l.EmitNotificationFor(ctx, "job-finished", jobTitle(j.Kind, false), jobBody(j), j.PID, []string{userID})
+		l.Integrations.EmitNotificationFor(ctx, "job-finished", jobTitle(j.Kind, false), jobBody(j), j.PID, []string{userID})
 		return
 	}
 	// The recorded failure names the server's paths, which only an
@@ -155,7 +155,7 @@ func (l *Library) notifyJobEnd(ctx context.Context, userID string, j Job) {
 	u, err := l.db.UserByID(ctx, userID)
 	var uc *UserCtx
 	if err == nil {
-		uc, err = l.UserCtx(ctx, u)
+		uc, err = l.Grants.UserCtx(ctx, u)
 	}
 	switch {
 	case err != nil:
@@ -163,7 +163,7 @@ func (l *Library) notifyJobEnd(ctx context.Context, userID string, j Job) {
 	case !uc.Admin:
 		j.Error = l.failureWordsFor(uc, j.Error)
 	}
-	l.EmitNotificationFor(ctx, "job-failed", jobTitle(j.Kind, true),
+	l.Integrations.EmitNotificationFor(ctx, "job-failed", jobTitle(j.Kind, true),
 		jobSubjectOf(j)+": "+jobFailure(j), j.PID, []string{userID})
 }
 
@@ -180,8 +180,8 @@ func jobFailure(j Job) string {
 
 // notifyWorkDone files the end of work an administrator ran inside their
 // own request, which leaves no job for the follower to settle.
-func (l *Library) notifyWorkDone(ctx context.Context, uc *UserCtx, j Job) {
-	l.EmitNotificationFor(ctx, "job-finished", jobTitle(j.Kind, false), jobBody(j), "", []string{uc.ID})
+func (l *Jobs) notifyWorkDone(ctx context.Context, uc *UserCtx, j Job) {
+	l.Integrations.EmitNotificationFor(ctx, "job-finished", jobTitle(j.Kind, false), jobBody(j), "", []string{uc.ID})
 }
 
 // trashBody says what emptying the trash did.

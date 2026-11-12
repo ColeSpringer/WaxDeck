@@ -22,10 +22,10 @@ func TestAStartsProfileMoveNamesTheLibrary(t *testing.T) {
 	}
 	withBooks := func(c *Config) { c.Roots = append(c.Roots, Root{Name: "books", Path: books, Managed: true}) }
 	ctx, svc, uc, stop := openServiceAt(t, dataDir, withBooks)
-	if _, err := svc.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
+	if _, err := svc.Health.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SetLibraryProfile(ctx, uc, libraryAt(t, ctx, svc, books).PID, "flat"); err != nil {
+	if _, err := svc.Health.SetLibraryProfile(ctx, uc, libraryAt(t, ctx, svc, books).PID, "flat"); err != nil {
 		t.Fatal(err)
 	}
 	stop()
@@ -39,7 +39,7 @@ func TestAStartsProfileMoveNamesTheLibrary(t *testing.T) {
 	store.Close()
 
 	ctx, svc, _, _ = openServiceAt(t, dataDir, withBooks)
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "library.profile"}, "", 10)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: "library.profile"}, "", 10)
 	if err != nil || len(page.Events) == 0 {
 		t.Fatalf("no library.profile audit (%v)", err)
 	}

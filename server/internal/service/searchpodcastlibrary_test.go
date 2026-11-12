@@ -57,17 +57,17 @@ func TestSearchFollowsThePodcastLibraryRule(t *testing.T) {
 		for _, lib := range libs {
 			grants = append(grants, apiPID(PrefixLibrary, model.PID(lib)))
 		}
-		acct, err := f.svc.CreateAccount(f.ctx, AccountCreate{
+		acct, err := f.svc.Identity.CreateAccount(f.ctx, AccountCreate{
 			Username: name, Password: "correct-horse", AccessMode: "granted", LibraryPIDs: grants,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		uc, err := f.svc.UserCtx(f.ctx, acct.User)
+		uc, err := f.svc.Grants.UserCtxFor(f.ctx, acct.User)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := f.svc.Subscribe(f.ctx, uc, SubscribeRequest{URL: "https://feeds.example/moved", SourceType: "rss"}); err != nil {
+		if _, _, err := f.svc.Podcasts.Subscribe(f.ctx, uc, SubscribeRequest{URL: "https://feeds.example/moved", SourceType: "rss"}); err != nil {
 			t.Fatal(err)
 		}
 		return uc
@@ -79,22 +79,22 @@ func TestSearchFollowsThePodcastLibraryRule(t *testing.T) {
 	episodes := showEpisodePIDs(t, f, sub.Show.PID)
 	underOld := episodes[1]
 	fetch(f, underOld)
-	old, _ := svc.podcastLibrary(f.ctx)
+	old, _ := svc.Grants.podcastLibrary(f.ctx)
 	oldOnly := follower(f, "old-only", old)
 	stop()
 
 	svc, _ = open(moved)
 	f.svc = svc
 	fetch(f, episodes[0])
-	svc.libDirs.mu.Lock()
-	svc.libDirs.missed = time.Now().Add(-2 * time.Second)
-	svc.libDirs.mu.Unlock()
-	fresh, _ := svc.podcastLibrary(f.ctx)
+	svc.Grants.libDirs.mu.Lock()
+	svc.Grants.libDirs.missed = time.Now().Add(-2 * time.Second)
+	svc.Grants.libDirs.mu.Unlock()
+	fresh, _ := svc.Grants.podcastLibrary(f.ctx)
 	if fresh == "" || fresh == old {
 		t.Fatalf("the podcast library after the move = %q, want a new one beside %q", fresh, old)
 	}
 	newOnly := follower(f, "new-only", fresh)
-	if oldOnly, err := svc.userCtxByID(f.ctx, oldOnly.ID); err != nil {
+	if oldOnly, err := svc.Grants.UserCtxByID(f.ctx, oldOnly.ID); err != nil {
 		t.Fatal(err)
 	} else {
 		f.uc = oldOnly
@@ -102,7 +102,7 @@ func TestSearchFollowsThePodcastLibraryRule(t *testing.T) {
 
 	hits := func(uc *UserCtx) []string {
 		t.Helper()
-		res, err := svc.Search(f.ctx, uc, "Wax", 20)
+		res, err := svc.Reads.Search(f.ctx, uc, "Wax", 20)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -112,7 +112,7 @@ func TestSearchFollowsThePodcastLibraryRule(t *testing.T) {
 		}
 		return out
 	}
-	if _, err := svc.EpisodeDetailFor(f.ctx, newOnly, underOld); err != nil {
+	if _, err := svc.Podcasts.EpisodeDetailFor(f.ctx, newOnly, underOld); err != nil {
 		t.Fatalf("the new library's account opening the episode = %v, want it", err)
 	}
 	if got := hits(newOnly); !slices.Contains(got, underOld) {
@@ -129,7 +129,7 @@ func TestSearchFollowsThePodcastLibraryRule(t *testing.T) {
 func TestASearchByAFollowerOfNothingSkipsTheBacklog(t *testing.T) {
 	t.Parallel()
 	g := newGrantedSearcher(t, 6, 0)
-	if err := g.f.svc.Unsubscribe(g.f.ctx, g.listener, g.show, false); err != nil {
+	if err := g.f.svc.Podcasts.Unsubscribe(g.f.ctx, g.listener, g.show, false); err != nil {
 		t.Fatal(err)
 	}
 	res := g.search(t)

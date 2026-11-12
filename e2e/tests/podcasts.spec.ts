@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { J, T, clickUntilRequested, retryCatalogBusy } from './driver';
+import { J, T, clickOnceForAnswer, clickUntilRequested, retryCatalogBusy } from './driver';
 import { SemanticsIds } from './semantics-ids';
 
 // The podcast domain over the real stack. The feed host (feedserv)
@@ -158,10 +158,23 @@ test('subscribe, fetch, and play an episode with silence trimming', async (
   const held = async () =>
     (await app.seed.tryEpisodes(showPid)).find((e) => e.pid === episode.pid)?.downloaded ??
     true;
+  // One press of Remove, waited on for its answer. What an attempt reads
+  // after it is the server's word on that press: a read that overtakes
+  // the DELETE still in flight says "held", and the press it then repeats
+  // lands on the row's Fetch once the row flips. A press that sent
+  // nothing costs the step tier, so the loop still has presses to spend.
+  const pressRemove = () =>
+    clickOnceForAnswer(
+      app.page,
+      app.podcasts.episodeRemove(episode.pid),
+      (r) =>
+        r.request().method() === 'DELETE' &&
+        r.url().endsWith(`/episodes/${episode.pid}/fetch`),
+    );
   // Clicked again while the server still holds it: a removal is refused
   // while a sibling is listening, and the row does not say so.
   await expect(async () => {
-    if (await held()) await app.podcasts.episodeRemove(episode.pid).click({ timeout: T.step });
+    if (await held()) await pressRemove();
     expect(await held(), 'the removal should unfetch the episode').toBe(false);
   }).toPass({ timeout: T.fetch });
 
@@ -181,9 +194,7 @@ test('subscribe, fetch, and play an episode with silence trimming', async (
   );
   await expect(app.podcasts.episodeRemove(episode.pid)).toBeVisible({ timeout: T.fetch });
   await expect(async () => {
-    if (await app.podcasts.episodeRemove(episode.pid).isVisible()) {
-      await app.podcasts.episodeRemove(episode.pid).click({ timeout: T.step });
-    }
+    if (await app.podcasts.episodeRemove(episode.pid).isVisible()) await pressRemove();
     await expect(app.podcasts.episodeFetch(episode.pid)).toBeVisible({ timeout: T.step });
   }).toPass({ timeout: T.fetch });
   await app.podcasts.back(app.podcasts.unsubscribe());

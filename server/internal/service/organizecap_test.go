@@ -22,13 +22,13 @@ func TestAnOrganizeOrAFixPastTheItemCapIsRefused(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, _ := managedTrackFixture(t)
 	over := itemPids(maxItemPids + 1)
-	if _, err := svc.PreviewOrganize(ctx, uc, "", over); KindOf(err) != KindInvalid {
+	if _, err := svc.Health.PreviewOrganize(ctx, uc, "", over); KindOf(err) != KindInvalid {
 		t.Fatalf("a preview of %d items = %v, want invalid", len(over), err)
 	}
-	if _, err := svc.ApplyOrganize(ctx, uc, "", over); KindOf(err) != KindInvalid {
+	if _, err := svc.Health.ApplyOrganize(ctx, uc, "", over); KindOf(err) != KindInvalid {
 		t.Fatalf("an apply of %d items = %v, want invalid", len(over), err)
 	}
-	if _, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, over); KindOf(err) != KindInvalid {
+	if _, err := svc.Health.StartHealthFix(ctx, uc, rulePathMismatch, over); KindOf(err) != KindInvalid {
 		t.Fatalf("a path fix of %d items = %v, want invalid", len(over), err)
 	}
 	jobs, err := svc.lib.Jobs(ctx, 50)
@@ -40,10 +40,10 @@ func TestAnOrganizeOrAFixPastTheItemCapIsRefused(t *testing.T) {
 			t.Fatalf("an organize job ran for a refused apply: %+v", j)
 		}
 	}
-	if tasks, _, err := svc.ListToolTasksFor(ctx, uc, "", 10); err != nil || len(tasks) != 0 {
+	if tasks, _, err := svc.Tools.ListToolTasksFor(ctx, uc, "", 10); err != nil || len(tasks) != 0 {
 		t.Fatalf("tasks = %+v (%v), want none queued", tasks, err)
 	}
-	if _, err := svc.PreviewOrganize(ctx, uc, "", itemPids(maxItemPids)); err != nil {
+	if _, err := svc.Health.PreviewOrganize(ctx, uc, "", itemPids(maxItemPids)); err != nil {
 		t.Fatalf("a preview of %d items = %v, want it planned", maxItemPids, err)
 	}
 }

@@ -39,15 +39,15 @@ func seedStamps(t *testing.T, ctx context.Context, l *Library, uc *UserCtx, n in
 // answering the episode's pid.
 func followedEpisode(t *testing.T, ctx context.Context, l *Library, uc *UserCtx, feed string) string {
 	t.Helper()
-	sub, _, err := l.Subscribe(ctx, uc, SubscribeRequest{URL: feed})
+	sub, _, err := l.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: feed})
 	if err != nil {
 		t.Fatal(err)
 	}
-	eps, _, err := l.Episodes(ctx, uc, sub.Show.PID, "", 10)
+	eps, _, err := l.Podcasts.Episodes(ctx, uc, sub.Show.PID, "", 10)
 	if err != nil || len(eps) != 1 {
 		t.Fatalf("episodes = %+v (%v), want the fixture's one", eps, err)
 	}
-	if _, err := l.Checkpoint(ctx, uc, eps[0].PID, 30_000, nil); err != nil {
+	if _, err := l.Playback.Checkpoint(ctx, uc, eps[0].PID, 30_000, nil); err != nil {
 		t.Fatal(err)
 	}
 	return eps[0].PID
@@ -60,7 +60,7 @@ func TestAFirstDownloadReadsPastAMusicHistory(t *testing.T) {
 	feed, _ := timedFeed(t)
 	seedStamps(t, ctx, svc, uc, 6000, time.Now().Add(-time.Hour).UnixNano(), int64(time.Millisecond))
 	followedEpisode(t, ctx, svc, uc, feed)
-	rows, cursor, err := svc.GpodderActionsSince(ctx, uc, "", 0, "", "")
+	rows, cursor, err := svc.Podcasts.GpodderActionsSince(ctx, uc, "", 0, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestADownloadThatStopsShortStillMakesProgress(t *testing.T) {
 	since, plays := base.Unix()-1, 0
 	var cursors []int64
 	for range 10 {
-		made, through, err := svc.gpodderFirstPartyPlays(ctx, uc, since, "", paging)
+		made, through, err := svc.Podcasts.gpodderFirstPartyPlays(ctx, uc, since, "", paging)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -170,7 +170,7 @@ func TestThePruneTrimsTheChangeLog(t *testing.T) {
 	}, gpodderActionsPerUser); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.RunPrune(ctx); err != nil {
+	if err := svc.Integrations.RunPrune(ctx); err != nil {
 		t.Fatal(err)
 	}
 	evs, err := svc.db.GpodderSubEventsSince(ctx, uc.ID, 0)
@@ -202,7 +202,7 @@ func TestThePruneTrimsTheChangeLog(t *testing.T) {
 // said back as the server's own beside it.
 func TestALongUploadIsNeverSaidBack(t *testing.T) {
 	ctx, svc, uc, feed := openPodcastFixture(t)
-	if _, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: feed}); err != nil {
+	if _, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: feed}); err != nil {
 		t.Fatal(err)
 	}
 	enclosure := strings.TrimSuffix(feed, "feed.xml") + "one.mp3"
@@ -214,10 +214,9 @@ func TestALongUploadIsNeverSaidBack(t *testing.T) {
 	t.Cleanup(func() { testHookMembership = nil })
 	uploaded := time.Now().Unix()
 	started, position := int64(0), int64(120)
-	if err := svc.GpodderRecordActions(ctx, uc, []wdb.GpodderAction{{
+	if err := svc.Podcasts.GpodderRecordActions(ctx, uc, []GpodderAction{{
 		PodcastURL: feed, EpisodeURL: enclosure, DeviceID: "phone", Action: "play",
 		ActionTS: time.Now().UTC().Format(gpodderTimeLayout), StartedSec: &started, PositionSec: &position,
-		UploadedSec: uploaded,
 	}}); err != nil {
 		t.Fatal(err)
 	}
@@ -230,11 +229,11 @@ func TestALongUploadIsNeverSaidBack(t *testing.T) {
 	if seen := stamps[0].SeenNS / int64(time.Second); seen < uploaded+2 {
 		t.Fatalf("the write-through landed in second %d, want two or more after the upload's %d", seen, uploaded)
 	}
-	rows, _, err := svc.GpodderActionsSince(ctx, uc, "", 0, "", "")
+	rows, _, err := svc.Podcasts.GpodderActionsSince(ctx, uc, "", 0, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got []wdb.GpodderAction
+	var got []GpodderAction
 	for _, a := range rows {
 		if a.EpisodeURL == enclosure {
 			got = append(got, a)

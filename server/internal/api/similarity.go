@@ -51,7 +51,7 @@ func requireWorker(ctx context.Context) error {
 
 func (s *Server) GetSimilarityStatus(ctx context.Context, _ GetSimilarityStatusRequestObject) (GetSimilarityStatusResponseObject, error) {
 	uc := userCtx(ctx)
-	st, err := s.svc.SimilarityStatusFor(ctx, uc)
+	st, err := s.svc.Similarity.StatusFor(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (s *Server) PullSimilarityWork(ctx context.Context, req PullSimilarityWorkR
 	if s.engineIsAway() {
 		return PullSimilarityWork200JSONResponse(SimilarityWorkPage{Items: []SimilarityWorkItem{}, RetryAfterSeconds: flow.EngineRetrySeconds}), nil
 	}
-	work, err := s.svc.LeaseSimilarityWork(ctx, limit, s.bridge != nil)
+	work, err := s.svc.Similarity.LeaseSimilarityWork(ctx, limit, s.bridge != nil)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func (s *Server) ReportEmbeddings(ctx context.Context, req ReportEmbeddingsReque
 	for _, e := range req.Body.Embeddings {
 		batch = append(batch, service.EmbeddingUpload{PID: e.Pid, Essence: e.Essence, Vector: e.Vector})
 	}
-	res, err := s.svc.IngestEmbeddings(ctx, req.Body.Model, req.Body.Dims, batch)
+	res, err := s.svc.Similarity.IngestEmbeddings(ctx, req.Body.Model, req.Body.Dims, batch)
 	if err != nil {
 		return nil, err
 	}

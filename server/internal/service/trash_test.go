@@ -111,13 +111,13 @@ func TestADeleteThatMovedNothingIsRefused(t *testing.T) {
 		action := "items.delete-files"
 		if whole {
 			action = "items.delete"
-			_, err = svc.DeleteItems(ctx, admin, []string{tr.pid}, "trash", false)
+			_, err = svc.Tools.DeleteItems(ctx, admin, []string{tr.pid}, "trash", false)
 		} else {
 			refs, ferr := svc.lib.ItemFiles(ctx, tr.item)
 			if ferr != nil || len(refs) != 1 {
 				t.Fatalf("files = %+v (%v)", refs, ferr)
 			}
-			_, err = svc.DeleteItemFiles(ctx, admin, tr.pid, []string{string(refs[0].FilePID)}, "trash", false)
+			_, err = svc.Tools.DeleteItemFiles(ctx, admin, tr.pid, []string{string(refs[0].FilePID)}, "trash", false)
 		}
 		if KindOf(err) != KindStorageUnwritable {
 			t.Fatalf("whole %v: delete = %v (kind %q), want storage-unwritable", whole, err, KindOf(err))
@@ -150,7 +150,7 @@ func TestADeleteReportsItsFailuresPerEntry(t *testing.T) {
 	ctx, svc, admin, root, tracks := newTrashFixture(t, "Open", "Locked")
 	open, locked := tracks["Open"], tracks["Locked"]
 	lockFolder(t, filepath.Join(root, "Locked"))
-	res, err := svc.DeleteItems(ctx, admin, []string{open.pid, locked.pid}, "trash", false)
+	res, err := svc.Tools.DeleteItems(ctx, admin, []string{open.pid, locked.pid}, "trash", false)
 	if err != nil {
 		t.Fatalf("a half-refused delete = %v, want what went answered", err)
 	}
@@ -189,7 +189,7 @@ func TestADeleteReportsItsFailuresPerEntry(t *testing.T) {
 func TestADeletePlanNamesItsFiles(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin, root, tracks := newTrashFixture(t, "First", "Second")
-	plan, err := svc.DeleteItems(ctx, admin, []string{tracks["First"].pid, tracks["Second"].pid}, "trash", true)
+	plan, err := svc.Tools.DeleteItems(ctx, admin, []string{tracks["First"].pid, tracks["Second"].pid}, "trash", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,12 +215,12 @@ func TestADeleteThatFailedOtherwiseIsInternal(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin, root, tracks := newTrashFixture(t, "Vanishing")
 	tr := tracks["Vanishing"]
-	svc.deleteApplyHook = func(context.Context) {
+	svc.Tools.deleteApplyHook = func(context.Context) {
 		if err := os.Remove(tr.path); err != nil {
 			t.Error(err)
 		}
 	}
-	_, err := svc.DeleteItems(ctx, admin, []string{tr.pid}, "trash", false)
+	_, err := svc.Tools.DeleteItems(ctx, admin, []string{tr.pid}, "trash", false)
 	if KindOf(err) != KindInternal {
 		t.Fatalf("delete of a vanished file = %v (kind %q), want internal", err, KindOf(err))
 	}
@@ -239,10 +239,10 @@ func TestADeleteThatFailedOtherwiseIsInternal(t *testing.T) {
 func TestTrashEntriesNameFilesWithinTheirLibrary(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin, root, tracks := newTrashFixture(t, "Shelf")
-	if _, err := svc.DeleteItems(ctx, admin, []string{tracks["Shelf"].pid}, "trash", false); err != nil {
+	if _, err := svc.Tools.DeleteItems(ctx, admin, []string{tracks["Shelf"].pid}, "trash", false); err != nil {
 		t.Fatal(err)
 	}
-	entries, err := svc.TrashEntries(ctx, admin, false, 10)
+	entries, err := svc.Tools.TrashEntries(ctx, admin, false, 10)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("trash = %+v (%v), want the one file", entries, err)
 	}
@@ -279,14 +279,14 @@ func TestADeleteOfAFoldersLastTrackPrunesTheFolder(t *testing.T) {
 		folder := filepath.Join(root, "Words")
 		touchSidecarFiles(t, folder, "cover.jpg")
 
-		plan, err := svc.DeleteItems(ctx, admin, []string{pid}, mode, true)
+		plan, err := svc.Tools.DeleteItems(ctx, admin, []string{pid}, mode, true)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if got := sidecarsAcross(plan); len(got) != 0 {
 			t.Errorf("%s plan sidecars = %q, want none: the cover belongs to the folder", mode, got)
 		}
-		res, err := svc.DeleteItems(ctx, admin, []string{pid}, mode, false)
+		res, err := svc.Tools.DeleteItems(ctx, admin, []string{pid}, mode, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -322,7 +322,7 @@ func TestADeleteInAnInPlaceLibraryKeepsTheFolder(t *testing.T) {
 	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := svc.DeleteItems(ctx, admin, []string{itemPIDByTitle(t, ctx, svc, admin, "Words Song")}, "trash", false)
+	res, err := svc.Tools.DeleteItems(ctx, admin, []string{itemPIDByTitle(t, ctx, svc, admin, "Words Song")}, "trash", false)
 	if err != nil || res.Trashed != 1 || res.DirsPruned != 0 {
 		t.Fatalf("delete = %+v (%v), want the track trashed and no folder pruned", res, err)
 	}

@@ -94,7 +94,7 @@ func TestTheFeedRestartsBeforeEachFile(t *testing.T) {
 func TestAJoinedFileSettlesWithoutAGrant(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "uploader", Password: "correct-horse"})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "uploader", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestAJoinedFileSettlesWithoutAGrant(t *testing.T) {
 	if err := svc.db.InsertReviewEntry(ctx, entry); err != nil {
 		t.Fatal(err)
 	}
-	staged := filepath.Join(svc.stagingDir, "up-joined", "copy.flac")
+	staged := filepath.Join(svc.Ingest.stagingDir, "up-joined", "copy.flac")
 	if err := os.MkdirAll(filepath.Dir(staged), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestAJoinedFileSettlesWithoutAGrant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	svc.settleImportedUploads(ctx, &entry, map[string]importedFile{staged: {pid: string(bare), joined: true}})
+	svc.Ingest.settleImportedUploads(ctx, &entry, map[string]importedFile{staged: {pid: string(bare), joined: true}})
 
 	row, err := svc.db.UploadByID(ctx, "up-joined")
 	if err != nil {

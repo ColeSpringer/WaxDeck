@@ -40,7 +40,7 @@ func chmodFor(t *testing.T, dir string, mode os.FileMode) {
 func TestAddLibraryRefusesARelativePath(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
-	_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "rel", Path: "relative/path"})
+	_, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "rel", Path: "relative/path"})
 	if KindOf(err) != KindInvalid || err.Error() != "the library path must be absolute" {
 		t.Fatalf("a relative path = %v, want it refused as not absolute", err)
 	}
@@ -61,7 +61,7 @@ func TestAnAbsentRootIsRegisteredWhenAllowed(t *testing.T) {
 	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
 	dir := t.TempDir()
 	later := filepath.Join(dir, "later")
-	info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "later", Path: later, AllowAbsent: true})
+	info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "later", Path: later, AllowAbsent: true})
 	if err != nil {
 		t.Fatalf("an absent folder with AllowAbsent = %v, want it registered", err)
 	}
@@ -70,7 +70,7 @@ func TestAnAbsentRootIsRegisteredWhenAllowed(t *testing.T) {
 	}
 	_, bare, _ := parseAPIPID(info.PID)
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
 	res, err := svc.lib.Scan(ctx, waxbin.ScanRequest{LibraryPID: bare})
@@ -85,7 +85,7 @@ func TestAnAbsentRootIsRegisteredWhenAllowed(t *testing.T) {
 	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "file", Path: file, AllowAbsent: true}); KindOf(err) != KindInvalid ||
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "file", Path: file, AllowAbsent: true}); KindOf(err) != KindInvalid ||
 		!strings.Contains(err.Error(), "not a folder") {
 		t.Errorf("a file with AllowAbsent = %v, want it refused as not a folder", err)
 	}
@@ -100,7 +100,7 @@ func TestAManagedLibraryMustBeWritable(t *testing.T) {
 	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
 	dir := t.TempDir()
 	chmodFor(t, dir, 0o555)
-	_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "locked", Path: dir, Managed: true})
+	_, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "locked", Path: dir, Managed: true})
 	if KindOf(err) != KindInvalid || err.Error() !=
 		"the library path is not writable by the server, so it cannot be managed; fix its ownership or add it unmanaged" {
 		t.Fatalf("an unwritable managed folder = %v, want it refused as unwritable", err)
@@ -111,7 +111,7 @@ func TestAManagedLibraryMustBeWritable(t *testing.T) {
 	if stored, err := svc.db.LibraryRootsList(ctx); err != nil || slices.ContainsFunc(stored, func(r wdb.LibraryRoot) bool { return r.Name == "locked" }) {
 		t.Errorf("stored names = %+v (%v), want none for the refused library", stored, err)
 	}
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "locked", Path: dir}); err != nil {
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "locked", Path: dir}); err != nil {
 		t.Errorf("the same folder in place = %v, want it created", err)
 	}
 }
@@ -128,7 +128,7 @@ func TestAnUnreadableLibraryPathIsSaidSo(t *testing.T) {
 		t.Fatal(err)
 	}
 	chmodFor(t, parent, 0)
-	_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "hidden", Path: music})
+	_, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "hidden", Path: music})
 	if KindOf(err) != KindInvalid || err.Error() != "the server cannot read the library path" {
 		t.Fatalf("an unreadable path = %v, want it refused as unreadable", err)
 	}
@@ -139,7 +139,7 @@ func TestAnUnreadableLibraryPathIsSaidSo(t *testing.T) {
 		t.Fatal(err)
 	}
 	chmodFor(t, closed, 0)
-	_, err = svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "closed", Path: closed})
+	_, err = svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "closed", Path: closed})
 	if KindOf(err) != KindInvalid || err.Error() != "the server cannot read the library path" {
 		t.Fatalf("an unlistable folder = %v, want it refused as unreadable", err)
 	}
@@ -152,7 +152,7 @@ func TestALibraryIsKeptByItsCleanPath(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
 	dir := t.TempDir()
-	info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "tidy", Path: dir + "/./"})
+	info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "tidy", Path: dir + "/./"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func TestALibraryIsKeptByItsCleanPath(t *testing.T) {
 	if err != nil || !slices.Contains(stored, wdb.LibraryRoot{Path: dir, Name: "tidy", CreatedAtNS: storedAt(stored, dir)}) {
 		t.Errorf("stored names = %+v (%v), want tidy at %s", stored, err, dir)
 	}
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "library.create"}, "", 10)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: "library.create"}, "", 10)
 	if err != nil || len(page.Events) == 0 {
 		t.Fatalf("no library.create audit entry (%v)", err)
 	}

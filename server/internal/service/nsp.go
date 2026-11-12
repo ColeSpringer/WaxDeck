@@ -132,7 +132,7 @@ func splitNSP(doc []byte) (nspMeta, []byte, error) {
 // nameOverride wins over the document's own name, which is what lets a
 // nameless document be imported at all. partial drops what has no
 // WaxDeck form instead of refusing the document for it.
-func (l *Library) ImportPlaylistNSP(ctx context.Context, uc *UserCtx, doc []byte, nameOverride string, partial bool) (Playlist, error) {
+func (l *Playlists) ImportPlaylistNSP(ctx context.Context, uc *UserCtx, doc []byte, nameOverride string, partial bool) (Playlist, error) {
 	if len(doc) > maxNSPBytes {
 		return Playlist{}, errInvalid(fmt.Sprintf("an NSP document may be at most %d bytes", maxNSPBytes))
 	}
@@ -297,7 +297,7 @@ func nspRulePointer(path string) string {
 // ReportPlaylistNSPImport says what importing a document would drop,
 // and what a partial import would keep, without importing it. It never
 // refuses on expressiveness, only a document that is not one.
-func (l *Library) ReportPlaylistNSPImport(doc []byte) (NSPReport, error) {
+func (l *Playlists) ReportPlaylistNSPImport(doc []byte) (NSPReport, error) {
 	if len(doc) > maxNSPBytes {
 		return NSPReport{}, errInvalid(fmt.Sprintf("an NSP document may be at most %d bytes", maxNSPBytes))
 	}
@@ -530,7 +530,7 @@ func nspReasons(rep NSPReport, strict error) string {
 // convert. Not owner-gated, deliberately: a shared playlist is readable
 // by everyone who can see it, and exporting its rule says nothing the
 // playlist detail does not already.
-func (l *Library) exportableRule(ctx context.Context, uc *UserCtx, apiPlaylistPID string) (*model.Playlist, error) {
+func (l *Playlists) exportableRule(ctx context.Context, uc *UserCtx, apiPlaylistPID string) (*model.Playlist, error) {
 	pl, err := l.resolvePlaylist(ctx, uc, apiPlaylistPID)
 	if err != nil {
 		return nil, err
@@ -543,7 +543,7 @@ func (l *Library) exportableRule(ctx context.Context, uc *UserCtx, apiPlaylistPI
 
 // ReportPlaylistNSPExport says what exporting a playlist's rule would
 // drop, and what a partial export would keep, without exporting it.
-func (l *Library) ReportPlaylistNSPExport(ctx context.Context, uc *UserCtx, apiPlaylistPID string) (NSPReport, error) {
+func (l *Playlists) ReportPlaylistNSPExport(ctx context.Context, uc *UserCtx, apiPlaylistPID string) (NSPReport, error) {
 	pl, err := l.exportableRule(ctx, uc, apiPlaylistPID)
 	if err != nil {
 		return NSPReport{}, err
@@ -567,7 +567,7 @@ func (l *Library) ReportPlaylistNSPExport(ctx context.Context, uc *UserCtx, apiP
 // ExportPlaylistNSP renders a smart playlist's rule as an NSP document,
 // refusing what NSP cannot say unless partial drops it. wantHash, when
 // set, refuses a rule changed since its report was read.
-func (l *Library) ExportPlaylistNSP(ctx context.Context, uc *UserCtx, apiPlaylistPID string, partial bool, wantHash string) (map[string]any, error) {
+func (l *Playlists) ExportPlaylistNSP(ctx context.Context, uc *UserCtx, apiPlaylistPID string, partial bool, wantHash string) (map[string]any, error) {
 	// A hash no report could have given is the request's fault.
 	if wantHash != "" && !ruleHashForm.MatchString(wantHash) {
 		return nil, errInvalid("ruleHash must be the 16 lower-case hex characters a report gave")

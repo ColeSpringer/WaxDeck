@@ -58,6 +58,11 @@ export class Player extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.playerStartRetry));
   }
 
+  /// The toast [startRetry] stands on, named by its sentence ([toast]).
+  startFailure(): Locator {
+    return this.toast(SemanticsIds.playerStartRetry);
+  }
+
   /// The sleep timer's control, whose name says what is armed.
   sleepTimer(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.sleepTimerOpen));
@@ -141,12 +146,16 @@ export class Player extends Surface {
   ///
   /// And Play alone proves nothing: a press swallowed while the queue
   /// moves on would pass for a landed one wherever the next track rests
-  /// on Play. A press counts once the transport rests on the track it was
-  /// made on ([restsOn]), and the latch that stops a retry pressing again
-  /// holds that track, raised only once the press was dispatched.
+  /// on Play. A press counts once the transport rests where it was made
+  /// ([restsOn]): on the track named before the click, or on the one named
+  /// once it returned, because a fixture lasts seconds and a click on a
+  /// busy machine can take one, so the press lands on the track that took
+  /// over meanwhile and leaves it paused for good. The latch that stops a
+  /// retry pressing again holds those tracks, raised only once the press
+  /// was dispatched.
   private async pauseWith(toggle: Locator): Promise<void> {
     await expect(toggle).toHaveAccessibleName(/Pause/i, { timeout: T.nav });
-    let pressedOn: string | undefined;
+    let pressedOn: string[] | undefined;
     await expect(async () => {
       if (pressedOn !== undefined && (await this.restsOn(toggle, pressedOn))) return;
       // Only a control offering Pause is pressed: between tracks it reads
@@ -154,9 +163,11 @@ export class Player extends Surface {
       await expect(toggle).toHaveAccessibleName(/Pause/i, { timeout: T.step });
       const track = await this.nowPlaying();
       await toggle.click({ force: true });
-      pressedOn = track;
+      // A name only: a session that names nothing has stopped, not paused.
+      const tracks = [track, await this.nowPlaying()].filter((t) => t !== '');
+      pressedOn = tracks;
       await expect
-        .poll(() => this.restsOn(toggle, track), {
+        .poll(() => this.restsOn(toggle, tracks), {
           timeout: T.step,
           message: 'the transport should rest on the track it was paused on',
         })
@@ -164,18 +175,19 @@ export class Player extends Surface {
     }).toPass({ timeout: T.nav });
   }
 
-  /// Whether the transport rests on [track]: the control offers Play and
-  /// the browser's media session still names that track. A track change
+  /// Whether the transport rests on one of [tracks]: the control offers
+  /// Play and the browser's media session names that track. A track change
   /// names the next one from the start of its load, so it never passes;
   /// but between the old track ending and the next taking its place the
   /// session still names the old one, which is why this reads twice, a
-  /// beat apart.
-  private async restsOn(toggle: Locator, track: string): Promise<boolean> {
-    const rests = async () =>
-      /Play/i.test(await nameOf(toggle)) && (await this.nowPlaying()) === track;
-    if (!(await rests())) return false;
+  /// beat apart, and wants the same track both times.
+  private async restsOn(toggle: Locator, tracks: readonly string[]): Promise<boolean> {
+    const resting = async () =>
+      /Play/i.test(await nameOf(toggle)) ? await this.nowPlaying() : undefined;
+    const first = await resting();
+    if (first === undefined || !tracks.includes(first)) return false;
     await new Promise((resolve) => setTimeout(resolve, TRACK_CHANGE_BEAT));
-    return rests();
+    return (await resting()) === first;
   }
 
   /// What the browser's media session names as playing; empty when it

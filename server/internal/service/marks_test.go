@@ -18,11 +18,11 @@ import (
 func marksFixture(t *testing.T) (context.Context, *Library, *UserCtx, *UserCtx) {
 	t.Helper()
 	ctx, svc, admin := newCatalogFixture(t)
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "other", Password: "correct-horse-2"})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "other", Password: "correct-horse-2"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := svc.UserCtx(ctx, acct.User)
+	other, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,11 +31,11 @@ func marksFixture(t *testing.T) (context.Context, *Library, *UserCtx, *UserCtx) 
 
 func fixtureEntityPIDs(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) (album, artist string) {
 	t.Helper()
-	res, err := svc.Search(ctx, uc, "Signal Garden", 10)
+	res, err := svc.Reads.Search(ctx, uc, "Signal Garden", 10)
 	if err != nil || len(res.Albums) == 0 {
 		t.Fatalf("fixture album not found: %+v (%v)", res, err)
 	}
-	res2, err := svc.Search(ctx, uc, "Test Ensemble", 10)
+	res2, err := svc.Reads.Search(ctx, uc, "Test Ensemble", 10)
 	if err != nil || len(res2.Artists) == 0 {
 		t.Fatalf("fixture artist not found: %+v (%v)", res2, err)
 	}
@@ -51,20 +51,20 @@ func TestItemMarksAreTheCallersOwnInOneBatch(t *testing.T) {
 	untouched, _ := fixtureTrackPID(t, ctx, svc, uc, "Delta Groove")
 
 	before := time.Now().Add(-time.Second)
-	if _, err := svc.SetStar(ctx, uc, starred, true, nil); err != nil {
+	if _, err := svc.Playback.SetStar(ctx, uc, starred, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	r := 80
-	if _, err := svc.SetRating(ctx, uc, rated, &r, nil); err != nil {
+	if _, err := svc.Playback.SetRating(ctx, uc, rated, &r, nil); err != nil {
 		t.Fatal(err)
 	}
-	if res, err := svc.IngestListens(ctx, uc, []ListenSession{{
+	if res, err := svc.Playback.IngestListens(ctx, uc, []ListenSession{{
 		SessionID: "m-1", PID: played, StartedAt: time.Now().UTC(), MsPlayed: 3000, Finished: true,
 	}}); err != nil || res.Accepted != 1 {
 		t.Fatalf("ingest = %+v (%v)", res, err)
 	}
 
-	marks, err := svc.ItemMarks(ctx, uc, []string{starred, rated, played, untouched, "nonsense", starred})
+	marks, err := svc.Reads.ItemMarks(ctx, uc, []string{starred, rated, played, untouched, "nonsense", starred})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestItemMarksAreTheCallersOwnInOneBatch(t *testing.T) {
 		t.Errorf("untouched track carries a mark: %+v", m)
 	}
 
-	theirs, err := svc.ItemMarks(ctx, other, []string{starred, rated, played})
+	theirs, err := svc.Reads.ItemMarks(ctx, other, []string{starred, rated, played})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,15 +96,15 @@ func TestEntityMarksStarsAndBoundedRatings(t *testing.T) {
 	album, artist := fixtureEntityPIDs(t, ctx, svc, uc)
 
 	before := time.Now().Add(-time.Second)
-	if _, err := svc.SetEntityStar(ctx, uc, album, true, nil); err != nil {
+	if _, err := svc.Identity.SetEntityStar(ctx, uc, album, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	r := 60
-	if _, err := svc.SetEntityRating(ctx, uc, artist, &r, nil); err != nil {
+	if _, err := svc.Identity.SetEntityRating(ctx, uc, artist, &r, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	marks, err := svc.EntityMarks(ctx, uc, []string{album, artist, "nonsense", "tr-" + ulid.Make().String()})
+	marks, err := svc.Reads.EntityMarks(ctx, uc, []string{album, artist, "nonsense", "tr-" + ulid.Make().String()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestEntityMarksStarsAndBoundedRatings(t *testing.T) {
 	for len(many) <= entityRatingReadCap {
 		many = append(many, "ar-"+ulid.Make().String())
 	}
-	bounded, err := svc.EntityMarks(ctx, uc, many)
+	bounded, err := svc.Reads.EntityMarks(ctx, uc, many)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestEntityMarksStarsAndBoundedRatings(t *testing.T) {
 		t.Error("a request past the bound lost the stars")
 	}
 
-	theirs, err := svc.EntityMarks(ctx, other, []string{album, artist})
+	theirs, err := svc.Reads.EntityMarks(ctx, other, []string{album, artist})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,10 +151,10 @@ func TestEntityRatingsAreMemoizedUntilTheUsersNextWrite(t *testing.T) {
 	_, albumPID, _ := parseAPIPID(album)
 
 	r := 80
-	if _, err := svc.SetEntityRating(ctx, uc, album, &r, nil); err != nil {
+	if _, err := svc.Identity.SetEntityRating(ctx, uc, album, &r, nil); err != nil {
 		t.Fatal(err)
 	}
-	got, err := svc.EntityRatings(ctx, uc, []string{album})
+	got, err := svc.Reads.EntityRatings(ctx, uc, []string{album})
 	if err != nil || got[album] != 80 {
 		t.Fatalf("ratings = %v (%v), want the album at 80", got, err)
 	}
@@ -165,32 +165,32 @@ func TestEntityRatingsAreMemoizedUntilTheUsersNextWrite(t *testing.T) {
 	if _, err := svc.lib.SetEntityRating(ctx, model.PID(uc.CatalogPID), model.MergeAlbum, albumPID, &beneath, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := svc.EntityRatings(ctx, uc, []string{album}); got[album] != 80 {
+	if got, _ := svc.Reads.EntityRatings(ctx, uc, []string{album}); got[album] != 80 {
 		t.Fatalf("ratings = %v, want the memoized 80", got)
 	}
 
 	// A star changes no rating, the caller's own or another account's, so
 	// neither clears it; the caller's own rating write does.
-	if _, err := svc.SetEntityStar(ctx, other, album, true, nil); err != nil {
+	if _, err := svc.Identity.SetEntityStar(ctx, other, album, true, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SetEntityStar(ctx, uc, album, true, nil); err != nil {
+	if _, err := svc.Identity.SetEntityStar(ctx, uc, album, true, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := svc.EntityRatings(ctx, uc, []string{album}); got[album] != 80 {
+	if got, _ := svc.Reads.EntityRatings(ctx, uc, []string{album}); got[album] != 80 {
 		t.Fatalf("ratings after two stars = %v, want the memoized 80", got)
 	}
 	r = 40
-	if _, err := svc.SetEntityRating(ctx, uc, album, &r, nil); err != nil {
+	if _, err := svc.Identity.SetEntityRating(ctx, uc, album, &r, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := svc.EntityRatings(ctx, uc, []string{album}); got[album] != 40 {
+	if got, _ := svc.Reads.EntityRatings(ctx, uc, []string{album}); got[album] != 40 {
 		t.Fatalf("ratings after the account's own write = %v, want 40", got)
 	}
-	if _, err := svc.SetEntityRating(ctx, uc, album, nil, nil); err != nil {
+	if _, err := svc.Identity.SetEntityRating(ctx, uc, album, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := svc.EntityRatings(ctx, uc, []string{album}); len(got) != 0 {
+	if got, _ := svc.Reads.EntityRatings(ctx, uc, []string{album}); len(got) != 0 {
 		t.Fatalf("ratings after clearing = %v, want none", got)
 	}
 }
@@ -206,7 +206,7 @@ func TestARatingWriteClearsOnlyItsOwnAccountsMemo(t *testing.T) {
 	var reads atomic.Int32
 	var hold atomic.Bool
 	arrived, release := make(chan struct{}), make(chan struct{})
-	svc.trackFacts.entityReadHook = func(ctx context.Context, user model.PID, kind model.MergeEntity, pid model.PID) (*model.EntityPlayState, error) {
+	svc.Reads.trackFacts.entityReadHook = func(ctx context.Context, user model.PID, kind model.MergeEntity, pid model.PID) (*model.EntityPlayState, error) {
 		if user == model.PID(uc.CatalogPID) {
 			reads.Add(1)
 			if hold.CompareAndSwap(true, false) {
@@ -218,13 +218,13 @@ func TestARatingWriteClearsOnlyItsOwnAccountsMemo(t *testing.T) {
 	}
 	rate := func(who *UserCtx, pid string, r int) {
 		t.Helper()
-		if _, err := svc.SetEntityRating(ctx, who, pid, &r, nil); err != nil {
+		if _, err := svc.Identity.SetEntityRating(ctx, who, pid, &r, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 	ratings := func() map[string]int {
 		t.Helper()
-		got, err := svc.EntityRatings(ctx, uc, wants)
+		got, err := svc.Reads.EntityRatings(ctx, uc, wants)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -247,7 +247,7 @@ func TestARatingWriteClearsOnlyItsOwnAccountsMemo(t *testing.T) {
 	hold.Store(true)
 	done := make(chan map[string]int, 1)
 	go func() {
-		got, _ := svc.EntityRatings(ctx, uc, wants)
+		got, _ := svc.Reads.EntityRatings(ctx, uc, wants)
 		done <- got
 	}()
 	select {
@@ -302,7 +302,7 @@ func twoAlbumFixture(t *testing.T) (context.Context, *Library, *UserCtx, string,
 	}})
 	find := func(name string) string {
 		t.Helper()
-		res, err := svc.Search(ctx, uc, name, 10)
+		res, err := svc.Reads.Search(ctx, uc, name, 10)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -325,16 +325,16 @@ func TestEntityRatingsFollowAMerge(t *testing.T) {
 	ctx, svc, uc, survivor, loser := twoAlbumFixture(t)
 
 	r := 80
-	if _, err := svc.SetEntityRating(ctx, uc, loser, &r, nil); err != nil {
+	if _, err := svc.Identity.SetEntityRating(ctx, uc, loser, &r, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := svc.EntityRatings(ctx, uc, []string{survivor, loser}); err != nil || got[loser] != 80 || len(got) != 1 {
+	if got, err := svc.Reads.EntityRatings(ctx, uc, []string{survivor, loser}); err != nil || got[loser] != 80 || len(got) != 1 {
 		t.Fatalf("ratings = %v (%v), want the loser at 80", got, err)
 	}
-	if _, err := svc.MergeDuplicates(ctx, uc, "album", survivor, []string{loser}); err != nil {
+	if _, err := svc.Health.MergeDuplicates(ctx, uc, "album", survivor, []string{loser}); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := svc.EntityRatings(ctx, uc, []string{survivor}); err != nil || got[survivor] != 80 {
+	if got, err := svc.Reads.EntityRatings(ctx, uc, []string{survivor}); err != nil || got[survivor] != 80 {
 		t.Fatalf("ratings after the merge = %v (%v), want the survivor at 80", got, err)
 	}
 }
@@ -347,19 +347,19 @@ func TestEntityMarksOutliveAVanishedEntity(t *testing.T) {
 	album, _ := fixtureEntityPIDs(t, ctx, svc, uc)
 	gone := PrefixAlbum + "-" + ulid.Make().String()
 	r := 60
-	if _, err := svc.SetEntityRating(ctx, uc, album, &r, nil); err != nil {
+	if _, err := svc.Identity.SetEntityRating(ctx, uc, album, &r, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SetEntityStar(ctx, uc, album, true, nil); err != nil {
+	if _, err := svc.Identity.SetEntityStar(ctx, uc, album, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	reads := map[string]int{}
-	svc.trackFacts.entityReadHook = func(ctx context.Context, user model.PID, kind model.MergeEntity, pid model.PID) (*model.EntityPlayState, error) {
+	svc.Reads.trackFacts.entityReadHook = func(ctx context.Context, user model.PID, kind model.MergeEntity, pid model.PID) (*model.EntityPlayState, error) {
 		reads[string(pid)]++
 		return svc.lib.EntityPlayState(ctx, user, kind, pid)
 	}
 	for range 2 {
-		got, err := svc.EntityRatings(ctx, uc, []string{album, gone})
+		got, err := svc.Reads.EntityRatings(ctx, uc, []string{album, gone})
 		if err != nil || len(got) != 1 || got[album] != 60 {
 			t.Fatalf("ratings = %v (%v), want the album at 60 and nothing for the vanished one", got, err)
 		}
@@ -368,7 +368,7 @@ func TestEntityMarksOutliveAVanishedEntity(t *testing.T) {
 	if reads[string(gonePID)] != 2 {
 		t.Errorf("the vanished entity was read %d times over two calls, want it re-read each time", reads[string(gonePID)])
 	}
-	marks, err := svc.EntityMarks(ctx, uc, []string{album, gone})
+	marks, err := svc.Reads.EntityMarks(ctx, uc, []string{album, gone})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,28 +384,28 @@ func TestEntityRatingsKeepWhatTheyRead(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, survivor, other := twoAlbumFixture(t)
 	_, ensemble := fixtureEntityPIDs(t, ctx, svc, uc)
-	res, err := svc.Search(ctx, uc, "Brass Nine", 10)
+	res, err := svc.Reads.Search(ctx, uc, "Brass Nine", 10)
 	if err != nil || len(res.Artists) == 0 {
 		t.Fatalf("no Brass Nine: %+v (%v)", res, err)
 	}
 	brass := res.Artists[0].PID
-	if _, err := svc.SetEntityStar(ctx, uc, survivor, true, nil); err != nil {
+	if _, err := svc.Identity.SetEntityStar(ctx, uc, survivor, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	var reads []string
 	failAt := 2
-	svc.trackFacts.entityReadHook = func(ctx context.Context, user model.PID, kind model.MergeEntity, pid model.PID) (*model.EntityPlayState, error) {
+	svc.Reads.trackFacts.entityReadHook = func(ctx context.Context, user model.PID, kind model.MergeEntity, pid model.PID) (*model.EntityPlayState, error) {
 		reads = append(reads, string(pid))
 		if len(reads) == failAt {
 			return nil, errors.New("disk on fire")
 		}
 		return svc.lib.EntityPlayState(ctx, user, kind, pid)
 	}
-	if _, err := svc.EntityRatings(ctx, uc, []string{ensemble, other}); err == nil || len(reads) != 2 {
+	if _, err := svc.Reads.EntityRatings(ctx, uc, []string{ensemble, other}); err == nil || len(reads) != 2 {
 		t.Fatalf("a failed second read = %v after %d reads, want an error after 2", err, len(reads))
 	}
 	reads, failAt = nil, 0
-	if _, err := svc.EntityRatings(ctx, uc, []string{ensemble, other}); err != nil {
+	if _, err := svc.Reads.EntityRatings(ctx, uc, []string{ensemble, other}); err != nil {
 		t.Fatal(err)
 	}
 	if len(reads) != 1 {
@@ -415,7 +415,7 @@ func TestEntityRatingsKeepWhatTheyRead(t *testing.T) {
 	// The starred album's rating rides its star read; the artist's point
 	// read fails, and the star is still answered beside the error.
 	reads, failAt = nil, 1
-	marks, err := svc.EntityMarks(ctx, uc, []string{survivor, brass})
+	marks, err := svc.Reads.EntityMarks(ctx, uc, []string{survivor, brass})
 	if err == nil || len(reads) != 1 {
 		t.Fatalf("a failed rating read = %v after %d reads, want an error after 1", err, len(reads))
 	}
@@ -430,13 +430,13 @@ func TestEntityRatingsKeepAMergeSeenBeforeAFailure(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, survivor, loser := twoAlbumFixture(t)
 	r := 80
-	if _, err := svc.SetEntityRating(ctx, uc, loser, &r, nil); err != nil {
+	if _, err := svc.Identity.SetEntityRating(ctx, uc, loser, &r, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := svc.EntityRatings(ctx, uc, []string{survivor, loser}); err != nil || got[loser] != 80 {
+	if got, err := svc.Reads.EntityRatings(ctx, uc, []string{survivor, loser}); err != nil || got[loser] != 80 {
 		t.Fatalf("ratings = %v (%v), want the loser at 80", got, err)
 	}
-	if _, err := svc.MergeDuplicates(ctx, uc, "album", survivor, []string{loser}); err != nil {
+	if _, err := svc.Health.MergeDuplicates(ctx, uc, "album", survivor, []string{loser}); err != nil {
 		t.Fatal(err)
 	}
 	// The look reads the merge's rows, then its next read of the log fails:
@@ -445,21 +445,21 @@ func TestEntityRatingsKeepAMergeSeenBeforeAFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.trackFacts.headHook = func(context.Context) (int64, error) { return head + 3, nil }
+	svc.Reads.trackFacts.headHook = func(context.Context) (int64, error) { return head + 3, nil }
 	reads := 0
-	svc.trackFacts.changesHook = func(ctx context.Context, since int64) ([]model.Change, error) {
+	svc.Reads.trackFacts.changesHook = func(ctx context.Context, since int64) ([]model.Change, error) {
 		if reads++; reads == 2 {
 			return nil, errors.New("catalog busy")
 		}
 		return svc.lib.Changes(ctx, since)
 	}
-	_, _ = svc.EntityRatings(ctx, uc, []string{survivor})
-	svc.trackFacts.changesHook, svc.trackFacts.headHook = nil, nil
+	_, _ = svc.Reads.EntityRatings(ctx, uc, []string{survivor})
+	svc.Reads.trackFacts.changesHook, svc.Reads.trackFacts.headHook = nil, nil
 	if reads != 2 {
 		t.Fatalf("the look read the log %d times, want the merge's page and then the failure", reads)
 	}
 	for range 2 {
-		if got, err := svc.EntityRatings(ctx, uc, []string{survivor}); err != nil || got[survivor] != 80 {
+		if got, err := svc.Reads.EntityRatings(ctx, uc, []string{survivor}); err != nil || got[survivor] != 80 {
 			t.Fatalf("ratings after the merge = %v (%v), want the survivor at 80", got, err)
 		}
 	}
@@ -474,17 +474,17 @@ func TestAFailedLookLeavesTheRatingsMemoWarm(t *testing.T) {
 	album, _ := fixtureEntityPIDs(t, ctx, svc, uc)
 	_, albumPID, _ := parseAPIPID(album)
 	r := 80
-	if _, err := svc.SetEntityRating(ctx, uc, album, &r, nil); err != nil {
+	if _, err := svc.Identity.SetEntityRating(ctx, uc, album, &r, nil); err != nil {
 		t.Fatal(err)
 	}
 	reads := 0
-	svc.trackFacts.entityReadHook = func(ctx context.Context, user model.PID, kind model.MergeEntity, pid model.PID) (*model.EntityPlayState, error) {
+	svc.Reads.trackFacts.entityReadHook = func(ctx context.Context, user model.PID, kind model.MergeEntity, pid model.PID) (*model.EntityPlayState, error) {
 		reads++
 		return svc.lib.EntityPlayState(ctx, user, kind, pid)
 	}
 	ratings := func(want int) {
 		t.Helper()
-		if got, err := svc.EntityRatings(ctx, uc, []string{album}); err != nil || got[album] != want {
+		if got, err := svc.Reads.EntityRatings(ctx, uc, []string{album}); err != nil || got[album] != want {
 			t.Fatalf("ratings = %v (%v), want the album at %d", got, err, want)
 		}
 	}
@@ -492,8 +492,8 @@ func TestAFailedLookLeavesTheRatingsMemoWarm(t *testing.T) {
 
 	gone, cancel := context.WithCancel(ctx)
 	cancel()
-	svc.CatalogContentSeq(gone)
-	svc.entityEpoch(gone)
+	svc.Reads.CatalogContentSeq(gone)
+	svc.Reads.entityEpoch(gone)
 	reads = 0
 	ratings(80)
 	if reads != 0 {
@@ -505,9 +505,9 @@ func TestAFailedLookLeavesTheRatingsMemoWarm(t *testing.T) {
 	if _, err := svc.lib.SetEntityRating(ctx, model.PID(uc.CatalogPID), model.MergeAlbum, albumPID, &beneath, nil); err != nil {
 		t.Fatal(err)
 	}
-	svc.trackFacts.headHook = func(context.Context) (int64, error) { return 0, errors.New("catalog busy") }
+	svc.Reads.trackFacts.headHook = func(context.Context) (int64, error) { return 0, errors.New("catalog busy") }
 	ratings(20)
-	svc.trackFacts.headHook = nil
+	svc.Reads.trackFacts.headHook = nil
 	reads = 0
 	ratings(80)
 	if reads != 0 {
@@ -524,17 +524,17 @@ func TestAStarredRatingReadBeforeAWriteIsNotKept(t *testing.T) {
 	album, _ := fixtureEntityPIDs(t, ctx, svc, uc)
 	rate := func(r int) {
 		t.Helper()
-		if _, err := svc.SetEntityRating(ctx, uc, album, &r, nil); err != nil {
+		if _, err := svc.Identity.SetEntityRating(ctx, uc, album, &r, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 	rate(40)
-	if _, err := svc.SetEntityStar(ctx, uc, album, true, nil); err != nil {
+	if _, err := svc.Identity.SetEntityStar(ctx, uc, album, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	var hold atomic.Bool
 	arrived, release := make(chan struct{}), make(chan struct{})
-	svc.trackFacts.headHook = func(ctx context.Context) (int64, error) {
+	svc.Reads.trackFacts.headHook = func(ctx context.Context) (int64, error) {
 		if hold.CompareAndSwap(true, false) {
 			close(arrived)
 			<-release
@@ -548,7 +548,7 @@ func TestAStarredRatingReadBeforeAWriteIsNotKept(t *testing.T) {
 	}
 	done := make(chan answer, 1)
 	go func() {
-		got, err := svc.EntityRatings(ctx, uc, []string{album})
+		got, err := svc.Reads.EntityRatings(ctx, uc, []string{album})
 		done <- answer{got, err}
 	}()
 	select {
@@ -561,7 +561,7 @@ func TestAStarredRatingReadBeforeAWriteIsNotKept(t *testing.T) {
 	if in := <-done; in.err != nil || in.ratings[album] != 40 {
 		t.Fatalf("the read across the write = %v (%v), want the 40 it read", in.ratings, in.err)
 	}
-	if got, err := svc.EntityRatings(ctx, uc, []string{album}); err != nil || got[album] != 80 {
+	if got, err := svc.Reads.EntityRatings(ctx, uc, []string{album}); err != nil || got[album] != 80 {
 		t.Fatalf("the next read = %v (%v), want the written 80", got, err)
 	}
 }
@@ -575,19 +575,19 @@ func TestARatingWriteForgetsOnlyTheEntityItWrote(t *testing.T) {
 	_, firstPID, _ := parseAPIPID(first)
 	_, secondPID, _ := parseAPIPID(second)
 	reads := map[model.PID]int{}
-	svc.trackFacts.entityReadHook = func(ctx context.Context, user model.PID, kind model.MergeEntity, pid model.PID) (*model.EntityPlayState, error) {
+	svc.Reads.trackFacts.entityReadHook = func(ctx context.Context, user model.PID, kind model.MergeEntity, pid model.PID) (*model.EntityPlayState, error) {
 		reads[pid]++
 		return svc.lib.EntityPlayState(ctx, user, kind, pid)
 	}
 	rate := func(pid string, r int) {
 		t.Helper()
-		if _, err := svc.SetEntityRating(ctx, uc, pid, &r, nil); err != nil {
+		if _, err := svc.Identity.SetEntityRating(ctx, uc, pid, &r, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 	ratings := func() map[string]int {
 		t.Helper()
-		got, err := svc.EntityRatings(ctx, uc, []string{first, second})
+		got, err := svc.Reads.EntityRatings(ctx, uc, []string{first, second})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -614,16 +614,16 @@ func TestStarredAlbumMarksCarryTheirRatings(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, starred, rated := twoAlbumFixture(t)
 	r := 80
-	if _, err := svc.SetEntityStar(ctx, uc, starred, true, nil); err != nil {
+	if _, err := svc.Identity.SetEntityStar(ctx, uc, starred, true, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SetEntityRating(ctx, uc, starred, &r, nil); err != nil {
+	if _, err := svc.Identity.SetEntityRating(ctx, uc, starred, &r, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SetEntityRating(ctx, uc, rated, &r, nil); err != nil {
+	if _, err := svc.Identity.SetEntityRating(ctx, uc, rated, &r, nil); err != nil {
 		t.Fatal(err)
 	}
-	order, marks, err := svc.StarredAlbumMarks(ctx, uc)
+	order, marks, err := svc.Reads.StarredAlbumMarks(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}

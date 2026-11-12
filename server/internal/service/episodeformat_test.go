@@ -54,7 +54,7 @@ func TestAnUnfetchedEpisodeReportsTheFormatAFetchedCopyWould(t *testing.T) {
 	byTitle := map[string]EpisodeSummary{}
 	read := func() {
 		t.Helper()
-		rows, _, err := f.svc.Episodes(f.ctx, f.uc, sub.Show.PID, "", len(declared))
+		rows, _, err := f.svc.Podcasts.Episodes(f.ctx, f.uc, sub.Show.PID, "", len(declared))
 		if err != nil || len(rows) != len(declared) {
 			t.Fatalf("episodes = %d (%v), want %d", len(rows), err, len(declared))
 		}

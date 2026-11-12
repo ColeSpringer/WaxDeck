@@ -80,7 +80,7 @@ func TestARunningJobPastTheWindowIsListedFirst(t *testing.T) {
 
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		jobs, err := svc.Jobs(ctx, uc, 2)
+		jobs, err := svc.Jobs.List(ctx, uc, 2)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -111,19 +111,19 @@ func TestAStartersJobIsFollowedWhateverTheFeedDropped(t *testing.T) {
 	defer gate()
 	<-a.asked
 	followed := func() bool {
-		svc.jobs.mu.Lock()
-		defer svc.jobs.mu.Unlock()
-		_, ok := svc.jobs.running[pid]
+		svc.Jobs.jobs.mu.Lock()
+		defer svc.Jobs.jobs.mu.Unlock()
+		_, ok := svc.Jobs.jobs.running[pid]
 		return ok
 	}
 	waitFor(t, followed, "the feed's row should reach the follower")
 	// As if the feed had never passed the job on.
-	svc.jobs.mu.Lock()
-	delete(svc.jobs.running, pid)
-	delete(svc.jobs.changed, pid)
-	svc.jobs.mu.Unlock()
+	svc.Jobs.jobs.mu.Lock()
+	delete(svc.Jobs.jobs.running, pid)
+	delete(svc.Jobs.jobs.changed, pid)
+	svc.Jobs.jobs.mu.Unlock()
 
-	svc.adoptJob(ctx, pid, uc.ID, "")
+	svc.Jobs.adoptJob(ctx, pid, uc.ID, "")
 	waitFor(t, followed, "recording the starter should hand the job to the follower")
 	gate()
 	waitForInbox(t, ctx, svc, uc, "job-finished")
@@ -145,20 +145,20 @@ func TestAJobWhoseStarterCouldNotBeRecordedIsStillFollowed(t *testing.T) {
 	defer gate()
 	<-a.asked
 	followed := func() bool {
-		svc.jobs.mu.Lock()
-		defer svc.jobs.mu.Unlock()
-		_, ok := svc.jobs.running[pid]
+		svc.Jobs.jobs.mu.Lock()
+		defer svc.Jobs.jobs.mu.Unlock()
+		_, ok := svc.Jobs.jobs.running[pid]
 		return ok
 	}
 	waitFor(t, followed, "the feed's row should reach the follower")
 	// As if the feed had never passed the job on.
-	svc.jobs.mu.Lock()
-	delete(svc.jobs.running, pid)
-	delete(svc.jobs.changed, pid)
-	svc.jobs.mu.Unlock()
+	svc.Jobs.jobs.mu.Lock()
+	delete(svc.Jobs.jobs.running, pid)
+	delete(svc.Jobs.jobs.changed, pid)
+	svc.Jobs.jobs.mu.Unlock()
 
 	refuseJobOriginWrites(t, ctx, svc)
-	svc.adoptJob(ctx, pid, uc.ID, "")
+	svc.Jobs.adoptJob(ctx, pid, uc.ID, "")
 	waitFor(t, followed, "a starter that could not be recorded should still hand the job to the follower")
 }
 
@@ -180,7 +180,7 @@ func waitFor(t *testing.T, cond func() bool, what string) {
 func TestAJobTheCatalogLostLetsGoOfItsOrigin(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openLyricsFixture(t, &lyricist{name: "a"})
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	lost := model.NewPID()
@@ -191,7 +191,7 @@ func TestAJobTheCatalogLostLetsGoOfItsOrigin(t *testing.T) {
 		t.Fatal("the rule does not read as fixing while its job's origin stands")
 	}
 	seen := markers(t, ctx, svc, uc.ID, eventHealth, "")
-	svc.followJob(lost)
+	svc.Jobs.followJob(lost)
 	waitFor(t, func() bool { return !ruleFixing(t, ctx, svc, ruleMissingLyrics) },
 		"the rule should stop reading as fixing once its job is gone")
 	waitFor(t, func() bool { return markers(t, ctx, svc, uc.ID, eventHealth, "") > seen },
@@ -214,9 +214,9 @@ func TestTheFeedRereadsWhatTheSubscriptionDropped(t *testing.T) {
 	defer gate()
 	<-a.asked
 	followed := func() bool {
-		svc.jobs.mu.Lock()
-		defer svc.jobs.mu.Unlock()
-		_, ok := svc.jobs.running[pid]
+		svc.Jobs.jobs.mu.Lock()
+		defer svc.Jobs.jobs.mu.Unlock()
+		_, ok := svc.Jobs.jobs.running[pid]
 		return ok
 	}
 	waitFor(t, followed, "the feed's row should reach the follower")
@@ -240,10 +240,10 @@ func TestTheFeedRereadsWhatTheSubscriptionDropped(t *testing.T) {
 	svc.feed.mu.Lock()
 	svc.feed.tail = created - 1
 	svc.feed.mu.Unlock()
-	svc.jobs.mu.Lock()
-	delete(svc.jobs.running, pid)
-	delete(svc.jobs.changed, pid)
-	svc.jobs.mu.Unlock()
+	svc.Jobs.jobs.mu.Lock()
+	delete(svc.Jobs.jobs.running, pid)
+	delete(svc.Jobs.jobs.changed, pid)
+	svc.Jobs.jobs.mu.Unlock()
 
 	waitFor(t, followed, "the feed should read the dropped rows from the log")
 }
@@ -271,7 +271,7 @@ func TestATargetedJobsEndReachesEveryAdministrator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.adoptJob(ctx, started, uc.ID, "")
+	svc.Jobs.adoptJob(ctx, started, uc.ID, "")
 	waitForJob(t, ctx, svc, started)
 	unowned, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{ItemPID: track})
 	if err != nil {
@@ -287,7 +287,7 @@ func TestATargetedJobsEndReachesEveryAdministrator(t *testing.T) {
 	if a, b := markers(t, ctx, svc, uc.ID, eventJob, apiPID(PrefixJob, unowned)), markers(t, ctx, svc, other, eventJob, apiPID(PrefixJob, unowned)); a != 1 || b != 1 {
 		t.Errorf("a run nobody started was announced %d and %d times, want its end once each", a, b)
 	}
-	job, err := svc.JobStatus(ctx, apiPID(PrefixJob, started))
+	job, err := svc.Jobs.Status(ctx, apiPID(PrefixJob, started))
 	if err != nil || job.Target == nil || job.Target.Type != "item" || job.Target.PID != apiPID(PrefixTrack, track) || job.Target.Name != "Amber Waves" {
 		t.Errorf("target = %+v (%v), want the track by name", job.Target, err)
 	}
@@ -309,7 +309,7 @@ func TestAFinishedTargetedJobLeavesTheList(t *testing.T) {
 		}
 		waitForJob(t, ctx, svc, pid)
 	}
-	jobs, err := svc.Jobs(ctx, uc, 2)
+	jobs, err := svc.Jobs.List(ctx, uc, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +328,7 @@ func TestAFinishedTargetedJobLeavesTheList(t *testing.T) {
 func TestAScanOfOneLibraryAnnouncesItsEnd(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openLyricsFixture(t, &lyricist{name: "a"})
-	lib := svc.libraryRoots()[0]
+	lib := svc.Roots.libraryRoots()[0]
 	res, err := svc.lib.Scan(ctx, waxbin.ScanRequest{LibraryPID: model.PID(lib.PID)})
 	if err != nil {
 		t.Fatal(err)
@@ -337,7 +337,7 @@ func TestAScanOfOneLibraryAnnouncesItsEnd(t *testing.T) {
 	if n := markers(t, ctx, svc, uc.ID, eventJob, apiPID(PrefixJob, res.JobPID)); n != 1 {
 		t.Errorf("a one-library scan was announced %d times, want its end once", n)
 	}
-	job, err := svc.JobStatus(ctx, apiPID(PrefixJob, res.JobPID))
+	job, err := svc.Jobs.Status(ctx, apiPID(PrefixJob, res.JobPID))
 	if err != nil || job.Target == nil || job.Target.Type != "library" || job.Target.PID != apiPID(PrefixLibrary, model.PID(lib.PID)) || job.Target.Name != lib.Name {
 		t.Errorf("job = %+v (%v), want the library as its target", job.Target, err)
 	}
@@ -349,13 +349,16 @@ func TestAScanOfOneLibraryAnnouncesItsEnd(t *testing.T) {
 func TestScanRunsAreNamedByRootNameNotPath(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
-	lib := svc.libraryRoots()[0]
+	lib := svc.Roots.libraryRoots()[0]
 	pid, err := svc.lib.StartScan(ctx, waxbin.ScanRequest{LibraryPID: model.PID(lib.PID)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	waitForJob(t, ctx, svc, pid)
-	job, err := svc.JobStatusFor(ctx, admin, apiPID(PrefixJob, pid))
+	// The follower claims an origin it finds at a job's end, so it takes
+	// this end in before the starter is recorded.
+	jobFollowerSettled(t, svc, pid)
+	job, err := svc.Jobs.StatusFor(ctx, admin, apiPID(PrefixJob, pid))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,18 +373,18 @@ func TestScanRunsAreNamedByRootNameNotPath(t *testing.T) {
 		t.Fatalf("run named %q, a path", run.Library)
 	}
 
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "starter", Password: "correct-horse"})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "starter", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	starter, err := svc.UserCtx(ctx, acct.User)
+	starter, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.db.InsertJobOrigin(ctx, wdb.JobOrigin{PID: string(pid), UserID: starter.ID, CreatedAtNS: time.Now().UnixNano()}); err != nil {
 		t.Fatal(err)
 	}
-	mine, err := svc.JobStatusFor(ctx, starter, apiPID(PrefixJob, pid))
+	mine, err := svc.Jobs.StatusFor(ctx, starter, apiPID(PrefixJob, pid))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +411,7 @@ func TestTheLastRunIsAWholePass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st, err := svc.EnrichmentStatusFor(ctx, uc)
+	st, err := svc.Enrichment.StatusFor(ctx, uc)
 	if err != nil || st.LastRun == nil || st.LastRun.FinishedAtNS != j.FinishedAt {
 		t.Fatalf("last run = %+v (%v), want the whole pass finished at %d", st.LastRun, err, j.FinishedAt)
 	}
@@ -508,11 +511,11 @@ func TestReadResultCountsHeldMovesAsSkipped(t *testing.T) {
 func TestJobStatusForFollowsTheJobsAudience(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "starter", Password: "correct-horse"})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "starter", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	listener, err := svc.UserCtx(ctx, acct.User)
+	listener, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -530,35 +533,39 @@ func TestJobStatusForFollowsTheJobsAudience(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.JobStatusFor(ctx, admin, apiPID(PrefixJob, pass)); err != nil {
+	if _, err := svc.Jobs.StatusFor(ctx, admin, apiPID(PrefixJob, pass)); err != nil {
 		t.Errorf("an administrator: %v", err)
 	}
 	originFor(pass)
-	if _, err := svc.JobStatusFor(ctx, listener, apiPID(PrefixJob, pass)); KindOf(err) != KindForbidden {
+	if _, err := svc.Jobs.StatusFor(ctx, listener, apiPID(PrefixJob, pass)); KindOf(err) != KindForbidden {
 		t.Errorf("a non-administrator holding a pass's origin = %v, want forbidden", err)
 	}
 
-	// A targeted job is its starter's too, while its origin row holds.
+	// A targeted job is its starter's too, while its origin row holds. The
+	// follower drops the origin it finds at a job's end, so the kind change
+	// is taken in before the starter is recorded.
 	_, item, _ := parseAPIPID(fixtureItemPIDs(t, ctx, svc, admin)[0])
+	followed := jobEndFollowed(t, svc, "set-kind")
 	targeted, err := svc.lib.StartSetItemKind(ctx, []model.PID{item}, model.KindBook, waxbin.KindOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	followed("the follower to take the kind change's end in")
 	job := apiPID(PrefixJob, targeted)
-	if _, err := svc.JobStatusFor(ctx, listener, job); KindOf(err) != KindForbidden {
+	if _, err := svc.Jobs.StatusFor(ctx, listener, job); KindOf(err) != KindForbidden {
 		t.Errorf("an account that did not start it = %v, want forbidden", err)
 	}
 	originFor(targeted)
-	if _, err := svc.JobStatusFor(ctx, listener, job); err != nil {
+	if _, err := svc.Jobs.StatusFor(ctx, listener, job); err != nil {
 		t.Errorf("its starter: %v", err)
 	}
 	if _, err := svc.db.DeleteJobOrigin(ctx, string(targeted)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.JobStatusFor(ctx, listener, job); KindOf(err) != KindForbidden {
+	if _, err := svc.Jobs.StatusFor(ctx, listener, job); KindOf(err) != KindForbidden {
 		t.Errorf("its starter once its end was told = %v, want forbidden", err)
 	}
-	if _, err := svc.JobStatusFor(ctx, listener, "jb-01JZX5N8QW3F4V9T2B7KDEXAMPL"); KindOf(err) != KindNotFound {
+	if _, err := svc.Jobs.StatusFor(ctx, listener, "jb-01JZX5N8QW3F4V9T2B7KDEXAMPL"); KindOf(err) != KindNotFound {
 		t.Errorf("an unknown job = %v, want not-found", err)
 	}
 }
@@ -583,18 +590,18 @@ func TestClearingFinishedJobsKeepsARunningJob(t *testing.T) {
 	defer a.open()
 	<-a.asked
 
-	cleared, err := svc.ClearFinishedJobs(ctx, uc)
+	cleared, err := svc.Jobs.ClearFinishedJobs(ctx, uc)
 	if err != nil || cleared < 3 {
 		t.Fatalf("cleared = (%d, %v), want at least the three scans", cleared, err)
 	}
-	jobs, err := svc.Jobs(ctx, uc, 50)
+	jobs, err := svc.Jobs.List(ctx, uc, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(jobs) != 1 || jobs[0].PID != apiPID(PrefixJob, pid) || jobs[0].State != "running" {
 		t.Fatalf("jobs after the clear = %+v, want only the running pass", jobs)
 	}
-	if again, err := svc.ClearFinishedJobs(ctx, uc); err != nil || again != 0 {
+	if again, err := svc.Jobs.ClearFinishedJobs(ctx, uc); err != nil || again != 0 {
 		t.Errorf("a second clear = (%d, %v), want 0", again, err)
 	}
 }
@@ -617,13 +624,13 @@ func TestAClearedJobTakesNoPageSlot(t *testing.T) {
 	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	if cleared, err := svc.ClearFinishedJobs(ctx, uc); err != nil || cleared < 1 {
+	if cleared, err := svc.Jobs.ClearFinishedJobs(ctx, uc); err != nil || cleared < 1 {
 		t.Fatalf("cleared = (%d, %v), want at least the scan", cleared, err)
 	}
 	a.open()
 	waitForJob(t, ctx, svc, pid)
 
-	jobs, err := svc.Jobs(ctx, uc, 1)
+	jobs, err := svc.Jobs.List(ctx, uc, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -652,13 +659,13 @@ func TestAJobEndedAfterTheClearListsBehindAWindowOfClearedOnes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if cleared, err := svc.ClearFinishedJobs(ctx, uc); err != nil || cleared < jobsOverfetch+1 {
+	if cleared, err := svc.Jobs.ClearFinishedJobs(ctx, uc); err != nil || cleared < jobsOverfetch+1 {
 		t.Fatalf("cleared = (%d, %v), want at least the %d scans", cleared, err, jobsOverfetch+1)
 	}
 	a.open()
 	waitForJob(t, ctx, svc, pid)
 
-	jobs, err := svc.Jobs(ctx, uc, 1)
+	jobs, err := svc.Jobs.List(ctx, uc, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -696,14 +703,14 @@ func TestAnUploadsFinishedImportsAreNeitherListedNorCounted(t *testing.T) {
 		t.Fatalf("the catalog holds no import job: %+v", raw)
 	}
 
-	page, err := svc.Jobs(ctx, uc, 2)
+	page, err := svc.Jobs.List(ctx, uc, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.ContainsFunc(page, func(j Job) bool { return j.PID == apiPID(PrefixJob, whole.JobPID) }) {
 		t.Errorf("a page of two = %+v, want the scan behind the imports", page)
 	}
-	listed, err := svc.Jobs(ctx, uc, 200)
+	listed, err := svc.Jobs.List(ctx, uc, 200)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -716,7 +723,7 @@ func TestAnUploadsFinishedImportsAreNeitherListedNorCounted(t *testing.T) {
 			finished++
 		}
 	}
-	cleared, err := svc.ClearFinishedJobs(ctx, uc)
+	cleared, err := svc.Jobs.ClearFinishedJobs(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -799,7 +806,7 @@ func TestClearingFinishedJobsStampsTheNewestEnd(t *testing.T) {
 			newest = max(newest, jobEndedAt(j))
 		}
 	}
-	if _, err := svc.ClearFinishedJobs(ctx, uc); err != nil {
+	if _, err := svc.Jobs.ClearFinishedJobs(ctx, uc); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := svc.db.JobsClearedAt(ctx, uc.ID); err != nil || got != newest {

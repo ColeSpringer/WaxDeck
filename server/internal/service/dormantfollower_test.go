@@ -69,12 +69,12 @@ func newDormantFollower(t *testing.T) dormantFollower {
 	}))
 	t.Cleanup(ts.Close)
 	d := dormantFollower{ctx: ctx, svc: svc, feed: ts.URL + "/feed.xml", episodes: map[string]string{}, asked: asked}
-	sub, _, err := svc.Subscribe(ctx, admin, SubscribeRequest{URL: d.feed})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, admin, SubscribeRequest{URL: d.feed})
 	if err != nil {
 		t.Fatal(err)
 	}
 	d.show = sub.Show.PID
-	eps, _, err := svc.Episodes(ctx, admin, d.show, "", 10)
+	eps, _, err := svc.Podcasts.Episodes(ctx, admin, d.show, "", 10)
 	if err != nil || len(eps) != 2 {
 		t.Fatalf("episodes = %+v (%v), want two", eps, err)
 	}
@@ -85,25 +85,25 @@ func newDormantFollower(t *testing.T) dormantFollower {
 	if _, err := svc.lib.Podcasts().ImportEpisodeFile(ctx, first, paths[0], false); err != nil {
 		t.Fatal(err)
 	}
-	podcastLib, _ := svc.podcastLibrary(ctx)
+	podcastLib, _ := svc.Grants.podcastLibrary(ctx)
 	grants := []string{apiPID(PrefixLibrary, model.PID(podcastLib))}
-	for _, r := range svc.libraryRoots() {
+	for _, r := range svc.Roots.libraryRoots() {
 		if r.Name == "configured" {
 			d.music = apiPID(PrefixLibrary, model.PID(r.PID))
 			grants = append(grants, d.music)
 		}
 	}
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "carol", Password: "correct-horse", AccessMode: "granted", LibraryPIDs: grants,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	d.carolID = acct.User.ID
-	if _, _, err := svc.Subscribe(ctx, d.carol(t), SubscribeRequest{URL: d.feed}); err != nil {
+	if _, _, err := svc.Podcasts.Subscribe(ctx, d.carol(t), SubscribeRequest{URL: d.feed}); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.Unsubscribe(ctx, admin, d.show, false); err != nil {
+	if err := svc.Podcasts.Unsubscribe(ctx, admin, d.show, false); err != nil {
 		t.Fatal(err)
 	}
 	asked.Store(0)
@@ -113,7 +113,7 @@ func newDormantFollower(t *testing.T) dormantFollower {
 // carol reads the follower's account as it stands.
 func (d dormantFollower) carol(t *testing.T) *UserCtx {
 	t.Helper()
-	uc, err := d.svc.userCtxByID(d.ctx, d.carolID)
+	uc, err := d.svc.Grants.UserCtxByID(d.ctx, d.carolID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func (d dormantFollower) carol(t *testing.T) *UserCtx {
 func (d dormantFollower) narrow(t *testing.T) {
 	t.Helper()
 	mode := "granted"
-	if _, err := d.svc.UpdateAccount(d.ctx, d.carolID, AccountUpdate{AccessMode: &mode, LibraryPIDs: []string{d.music}}); err != nil {
+	if _, err := d.svc.Identity.UpdateAccount(d.ctx, d.carolID, AccountUpdate{AccessMode: &mode, LibraryPIDs: []string{d.music}}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -134,7 +134,7 @@ func (d dormantFollower) narrow(t *testing.T) {
 // marker on their stream.
 func TestAFetchLandingForADormantFollowerTellsThemNothing(t *testing.T) {
 	d := newDormantFollower(t)
-	if err := d.svc.QueueEpisodeFetch(d.ctx, d.carol(t), d.episodes["Episode 2"]); err != nil {
+	if err := d.svc.Podcasts.QueueEpisodeFetch(d.ctx, d.carol(t), d.episodes["Episode 2"]); err != nil {
 		t.Fatal(err)
 	}
 	d.narrow(t)
@@ -142,7 +142,7 @@ func TestAFetchLandingForADormantFollowerTellsThemNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !d.svc.DrainFetchQueue(d.ctx) {
+	if !d.svc.Podcasts.DrainFetchQueue(d.ctx) {
 		t.Fatal("the queued fetch did not run")
 	}
 	_, bare, _ := parseAPIPID(d.episodes["Episode 2"])
@@ -150,7 +150,7 @@ func TestAFetchLandingForADormantFollowerTellsThemNothing(t *testing.T) {
 	if err != nil || !det.Episode.Downloaded {
 		t.Fatalf("episode 2 after the drain = %+v (%v), want it downloaded", det, err)
 	}
-	page, err := d.svc.Notifications(d.ctx, d.carol(t), "", 50)
+	page, err := d.svc.Integrations.Notifications(d.ctx, d.carol(t), "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,12 +175,12 @@ func TestAFetchLandingForADormantFollowerTellsThemNothing(t *testing.T) {
 func TestAShowFollowedOnlyByTheDormantIsNotPolled(t *testing.T) {
 	d := newDormantFollower(t)
 	d.narrow(t)
-	d.svc.NotePodping(d.ctx, d.feed)
+	d.svc.Podcasts.NotePodping(d.ctx, d.feed)
 	if n := d.asked.Load(); n != 0 {
 		t.Errorf("a ping had the feed's host asked %d times for a show nobody can hear", n)
 	}
 	d.asked.Store(0)
-	d.svc.RefreshDueFeeds(d.ctx, 0)
+	d.svc.Podcasts.RefreshDueFeeds(d.ctx, 0)
 	if n := d.asked.Load(); n != 0 {
 		t.Errorf("the scheduler asked the feed's host %d times for a show nobody can hear", n)
 	}
@@ -190,10 +190,10 @@ func TestAShowFollowedOnlyByTheDormantIsNotPolled(t *testing.T) {
 // polled for them.
 func TestAShowWithAnUnjudgedFollowerIsPolled(t *testing.T) {
 	d := newDormantFollower(t)
-	d.svc.listenerReadHook = func(context.Context, string) (*UserCtx, error) {
+	d.svc.Podcasts.listenerReadHook = func(context.Context, string) (*UserCtx, error) {
 		return nil, &Error{Kind: KindInternal, Err: errors.New("database is locked")}
 	}
-	d.svc.RefreshDueFeeds(d.ctx, 0)
+	d.svc.Podcasts.RefreshDueFeeds(d.ctx, 0)
 	if n := d.asked.Load(); n != 1 {
 		t.Errorf("the scheduler asked the feed's host %d times with a follower unjudged, want once", n)
 	}

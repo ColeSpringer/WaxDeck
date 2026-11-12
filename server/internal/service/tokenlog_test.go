@@ -40,18 +40,18 @@ func TestDownloadAndCatalogFailuresNameNoAddress(t *testing.T) {
 </channel></rss>`, r.Host)
 	}))
 	t.Cleanup(ts.Close)
-	sub, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: ts.URL + "/s3cr3t-token/feed.xml"})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: ts.URL + "/s3cr3t-token/feed.xml"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	eps, _, err := svc.Episodes(ctx, uc, sub.Show.PID, "", 10)
+	eps, _, err := svc.Podcasts.Episodes(ctx, uc, sub.Show.PID, "", 10)
 	if err != nil || len(eps) != 1 {
 		t.Fatalf("episodes = %+v (%v), want one", eps, err)
 	}
-	if err := svc.QueueEpisodeFetch(ctx, uc, eps[0].PID); err != nil {
+	if err := svc.Podcasts.QueueEpisodeFetch(ctx, uc, eps[0].PID); err != nil {
 		t.Fatal(err)
 	}
-	if !svc.DrainFetchQueue(ctx) {
+	if !svc.Podcasts.DrainFetchQueue(ctx) {
 		t.Fatal("the fetch queue had nothing to work")
 	}
 	_, bare, _ := parseAPIPID(eps[0].PID)
@@ -100,7 +100,7 @@ func TestAChaptersFailureLogsNoAddress(t *testing.T) {
 	} {
 		before := len(logged.String())
 		ep := chaptersEpisode(fmt.Sprintf("ep-%d", i), c.base+"/s3cr3t-path/chapters.json?auth=s3cr3t-token")
-		if got := svc.fetchedChapters(context.Background(), "", ep); len(got) != 0 {
+		if got := svc.Podcasts.fetchedChapters(context.Background(), "", ep); len(got) != 0 {
 			t.Errorf("%s gave chapters %+v", c.base, got)
 		}
 		if line := logged.String()[before:]; !strings.Contains(line, "chapters") || !strings.Contains(line, c.cause) {
@@ -258,13 +258,13 @@ func TestAFailedSyncKeepsNoAddress(t *testing.T) {
 <item><title>One</title><guid>kept-1</guid></item></channel></rss>`)
 	}))
 	t.Cleanup(ts.Close)
-	sub, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: ts.URL + "/s3cr3t-token/feed.xml"})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: ts.URL + "/s3cr3t-token/feed.xml"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	down.Store(true)
 	_, bare, _ := parseAPIPID(sub.Show.PID)
-	if _, err := svc.syncShow(ctx, bare, syncOwn); FeedFailureReason(err) != reasonHostError {
+	if _, err := svc.Podcasts.syncShow(ctx, bare, syncOwn); FeedFailureReason(err) != reasonHostError {
 		t.Fatalf("sync = %v, want the host's error", err)
 	}
 	st, err := svc.db.FeedStateFor(ctx, string(bare))

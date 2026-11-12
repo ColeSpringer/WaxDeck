@@ -59,7 +59,7 @@ func TestAParkedFeedIsNotFetchedAgainWhenNamedAgain(t *testing.T) {
 	if got := hits.Load(); got != 1 {
 		t.Fatalf("the host saw %d requests, want only the first ask", got)
 	}
-	e.svc.RetryPendingGpodderAt(e.ctx, time.Now().Add(6*time.Minute))
+	e.svc.Podcasts.RetryPendingGpodderAt(e.ctx, time.Now().Add(6*time.Minute))
 	e.wantList("after it landed", flaky)
 	// The tablet asked too, so the phone letting go leaves it followed.
 	e.put("phone", "json", `[]`)

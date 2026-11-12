@@ -23,34 +23,46 @@ import (
 // drives is the only one: the follower takes an end in once.
 func takenOut(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, name string) (LibraryInfo, string, *model.RemoveRootReport) {
 	t.Helper()
+	followed := jobEndFollowed(t, svc, "remove-root")
+	lib, dir, rep := removeDirectly(t, ctx, svc, uc, name)
+	followed("the follower to take the removal's end in")
+	return lib, dir, rep
+}
+
+// jobEndFollowed arms the follower's hook for the end of the next job of
+// kind, before the caller starts it. The wait it returns ends once the
+// follower has taken that end in, and takes the hook off again.
+func jobEndFollowed(t *testing.T, svc *Library, kind string) (await func(what string)) {
+	t.Helper()
 	followed := make(chan struct{})
 	var once sync.Once
 	hook := func(j *model.Job, done bool) {
-		if done && j.Kind == "remove-root" {
+		if done && j.Kind == kind {
 			once.Do(func() { close(followed) })
 		}
 	}
-	svc.jobFinishedHook.Store(&hook)
-	lib, dir, rep := removeDirectly(t, ctx, svc, uc, name)
-	awaitClosed(t, followed, "the follower to take the removal's end in")
-	svc.jobFinishedHook.Store(nil)
-	return lib, dir, rep
+	svc.Jobs.jobFinishedHook.Store(&hook)
+	return func(what string) {
+		t.Helper()
+		awaitClosed(t, followed, what)
+		svc.Jobs.jobFinishedHook.Store(nil)
+	}
 }
 
 // removeDirectly is takenOut without waiting for the follower.
 func removeDirectly(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, name string) (LibraryInfo, string, *model.RemoveRootReport) {
 	t.Helper()
 	dir := t.TempDir()
-	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: name, Path: dir})
+	lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: name, Path: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, bare, _ := parseAPIPID(lib.PID)
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
-	svc.removals.begin(bare, removal{name: name, path: dir, userID: uc.ID})
+	svc.Roots.removals.begin(bare, removal{name: name, path: dir, userID: uc.ID})
 	rep, err := svc.lib.RemoveRoot(ctx, bare, waxbin.RemoveRootOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -107,7 +119,7 @@ func endedRemoval(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, 
 // with this title.
 func inboxSays(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, j *model.Job, title string) bool {
 	t.Helper()
-	page, err := svc.Notifications(ctx, uc, "", 50)
+	page, err := svc.Integrations.Notifications(ctx, uc, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,11 +136,11 @@ func TestARemovalThatEndedBadlyAfterTheLibraryWentIsFollowedUp(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
 	flow := &fakeFlowRoots{names: []string{"configured"}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	books, booksDir, _ := takenOut(t, ctx, svc, uc, "books")
 	member := memberCtx(t, ctx, svc, "member", books.PID)
 	crashed := endedRemoval(t, ctx, svc, uc, books, booksDir, model.JobCrashed, nil)
-	svc.settleJobOrigin(ctx, crashed)
+	svc.Jobs.settleJobOrigin(ctx, crashed)
 
 	audit := removalAudit(t, ctx, svc, books.PID)
 	if audit == nil || audit.ActorID != uc.ID || audit.TargetName != "books" || audit.Detail["path"] != booksDir {
@@ -142,7 +154,7 @@ func TestARemovalThatEndedBadlyAfterTheLibraryWentIsFollowedUp(t *testing.T) {
 	}
 	if u, err := svc.db.UserByID(ctx, member.ID); err != nil {
 		t.Fatal(err)
-	} else if uc2, err := svc.UserCtx(ctx, u); err != nil || uc2.AllLibraries || len(uc2.Libraries) != 0 {
+	} else if uc2, err := svc.Grants.UserCtx(ctx, u); err != nil || uc2.AllLibraries || len(uc2.Libraries) != 0 {
 		t.Errorf("a member granted only books now sees all=%v %v (%v), want nothing", uc2.AllLibraries, uc2.Libraries, err)
 	}
 	flow.mu.Lock()
@@ -157,7 +169,7 @@ func TestARemovalThatEndedBadlyAfterTheLibraryWentIsFollowedUp(t *testing.T) {
 
 	tapes, tapesDir, rep := takenOut(t, ctx, svc, uc, "tapes")
 	canceled := endedRemoval(t, ctx, svc, uc, tapes, tapesDir, model.JobCanceled, rep)
-	svc.settleJobOrigin(ctx, canceled)
+	svc.Jobs.settleJobOrigin(ctx, canceled)
 	if audit := removalAudit(t, ctx, svc, tapes.PID); audit == nil || audit.Detail["filesDetached"] != float64(rep.FilesDetached) {
 		t.Errorf("audit = %+v, want tapes' removal with the report's counts", audit)
 	}
@@ -169,15 +181,15 @@ func TestARemovalStoppedBeforeTheLibraryWentLeavesItAll(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
 	flow := &fakeFlowRoots{names: []string{"configured"}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	dir := t.TempDir()
-	spare, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "spare", Path: dir})
+	spare, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "spare", Path: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
 	member := memberCtx(t, ctx, svc, "member", spare.PID)
 	failed := endedRemoval(t, ctx, svc, uc, spare, dir, model.JobFailed, nil)
-	svc.settleJobOrigin(ctx, failed)
+	svc.Jobs.settleJobOrigin(ctx, failed)
 
 	if audit := removalAudit(t, ctx, svc, spare.PID); audit != nil {
 		t.Errorf("audit = %+v, want none for a library still there", audit)
@@ -185,7 +197,7 @@ func TestARemovalStoppedBeforeTheLibraryWentLeavesItAll(t *testing.T) {
 	if stored, err := svc.db.LibraryRootsList(ctx); err != nil || !slices.ContainsFunc(stored, func(r wdb.LibraryRoot) bool { return r.Name == "spare" }) {
 		t.Errorf("stored names = %+v (%v), want spare's kept", stored, err)
 	}
-	if acct, err := svc.Account(ctx, member.ID); err != nil || !slices.Equal(acct.LibraryPIDs, []string{spare.PID}) {
+	if acct, err := svc.Identity.Account(ctx, member.ID); err != nil || !slices.Equal(acct.LibraryPIDs, []string{spare.PID}) {
 		t.Errorf("the member's grants = %v (%v), want spare kept", acct.LibraryPIDs, err)
 	}
 	flow.mu.Lock()
@@ -206,14 +218,14 @@ func TestALibraryAddedAgainAtTheFolderKeepsItsName(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
 	flow := &fakeFlowRoots{names: []string{"configured"}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	books, dir, rep := takenOut(t, ctx, svc, uc, "books")
-	again, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "audio", Path: dir})
+	again, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "audio", Path: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
 	done := endedRemoval(t, ctx, svc, uc, books, dir, model.JobDone, rep)
-	svc.settleJobOrigin(ctx, done)
+	svc.Jobs.settleJobOrigin(ctx, done)
 
 	if lib := libraryAt(t, ctx, svc, dir); lib.PID != again.PID || lib.Name != "audio" {
 		t.Errorf("the folder lists %+v, want the new library audio", lib)
@@ -241,7 +253,7 @@ func TestARemovalWhoseFollowUpFailsIsDoneAtTheNextStart(t *testing.T) {
 	ctx, svc, uc, stop := openServiceAt(t, dataDir, func(c *Config) {
 		c.Logger = slog.New(slog.NewTextHandler(&logged, nil))
 	})
-	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()})
+	lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +264,7 @@ func TestARemovalWhoseFollowUpFailsIsDoneAtTheNextStart(t *testing.T) {
 	}
 	var job Job
 	waitFor(t, func() bool {
-		job, err = svc.RemoveLibrary(ctx, uc, lib.PID)
+		job, err = svc.Roots.RemoveLibrary(ctx, uc, lib.PID)
 		return err == nil
 	}, "the removal to start once the create's scan ends")
 	_, jobPID, _ := parseAPIPID(job.PID)
@@ -271,7 +283,7 @@ func TestARemovalWhoseFollowUpFailsIsDoneAtTheNextStart(t *testing.T) {
 
 	ctx, svc, _, _ = openServiceAt(t, dataDir, nil)
 	waitFor(t, func() bool { return removalAudit(t, ctx, svc, lib.PID) != nil }, "the follow-up at the next start")
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "library.remove", TargetPID: lib.PID}, "", 10)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: "library.remove", TargetPID: lib.PID}, "", 10)
 	if err != nil || len(page.Events) != 1 {
 		t.Errorf("removal audits = %d (%v), want one", len(page.Events), err)
 	}
@@ -291,7 +303,7 @@ func TestALateFollowerOfASettledRemovalUnmountsOnce(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
 	flow := &fakeFlowRoots{names: []string{"configured"}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	reached, followed := make(chan struct{}), make(chan struct{})
 	late := newGate(t)
 	var reachedOnce, followedOnce sync.Once
@@ -306,10 +318,10 @@ func TestALateFollowerOfASettledRemovalUnmountsOnce(t *testing.T) {
 		reachedOnce.Do(func() { close(reached) })
 		late.wait()
 	}
-	svc.jobFinishedHook.Store(&hook)
+	svc.Jobs.jobFinishedHook.Store(&hook)
 	books, dir, rep := removeDirectly(t, ctx, svc, uc, "books")
 	awaitClosed(t, reached, "the follower to reach the removal")
-	svc.settleJobOrigin(ctx, endedRemoval(t, ctx, svc, uc, books, dir, model.JobDone, rep))
+	svc.Jobs.settleJobOrigin(ctx, endedRemoval(t, ctx, svc, uc, books, dir, model.JobDone, rep))
 	late.release()
 	awaitClosed(t, followed, "the follower to follow the removal up")
 	flow.mu.Lock()

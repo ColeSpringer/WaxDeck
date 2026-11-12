@@ -14,7 +14,7 @@ func TestLibraryItemCountAgreesWithALibraryScopedQuery(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 
-	libs, err := svc.LibrariesWithCounts(ctx)
+	libs, err := svc.Roots.LibrariesWithCounts(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

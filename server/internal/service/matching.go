@@ -188,7 +188,7 @@ func newReviewID() string { return "rv-" + ulid.Make().String() }
 
 // notifyReview fans a review marker to every administrator plus the
 // entry's uploader.
-func (l *Library) notifyReview(ctx context.Context, entryID, uploadedBy string) {
+func (l *Ingest) notifyReview(ctx context.Context, entryID, uploadedBy string) {
 	seen := map[string]bool{}
 	if admins, err := l.db.EnabledAdminIDs(ctx); err == nil {
 		for _, id := range admins {
@@ -207,7 +207,7 @@ func (l *Library) notifyReview(ctx context.Context, entryID, uploadedBy string) 
 // its two terminal shapes it landed: waiting for a decision, or already
 // filed. Emitted here, not at entry open, so the re-read sees an
 // auto-apply that landed in between; scan and rematch stay silent.
-func (l *Library) notifyIdentified(ctx context.Context, entryID string) {
+func (l *Ingest) notifyIdentified(ctx context.Context, entryID string) {
 	entry, err := l.db.ReviewEntryByID(ctx, entryID)
 	if err != nil {
 		return
@@ -220,14 +220,14 @@ func (l *Library) notifyIdentified(ctx context.Context, entryID string) {
 	}
 	recipients := l.reviewRecipients(ctx, entry.UploadedBy)
 	if entry.Status == reviewPending {
-		l.EmitNotification(ctx, "review-ready", "Ready for review",
+		l.Integrations.EmitNotification(ctx, "review-ready", "Ready for review",
 			entryWhat(entry.Artist, entry.Title, entry.TrackCount)+
 				" finished identification and waits for a decision.", recipients)
 		return
 	}
 	// Best* rather than the entry's own tags: an applied entry names what
 	// it was identified *as*, which is what landed in the library.
-	l.EmitNotificationFor(ctx, "import-completed", "Import finished",
+	l.Integrations.EmitNotificationFor(ctx, "import-completed", "Import finished",
 		entryWhat(entry.BestArtist, entry.BestTitle, entry.TrackCount)+
 			" was identified and added to the library.", entry.ID, recipients)
 	seen := map[string]bool{}
@@ -256,7 +256,7 @@ func entryWhat(artist, title string, tracks int) string {
 // declined entry opens with no candidates and identification never
 // started: the queue stays the audit trail and one decision imports
 // the files with the tags they arrived with.
-func (l *Library) openReviewEntry(ctx context.Context, e wdb.ReviewEntry, payload reviewPayload, identify bool) (string, error) {
+func (l *Ingest) openReviewEntry(ctx context.Context, e wdb.ReviewEntry, payload reviewPayload, identify bool) (string, error) {
 	if e.ID == "" {
 		e.ID = newReviewID()
 	}
@@ -302,11 +302,11 @@ func (l *Library) openReviewEntry(ctx context.Context, e wdb.ReviewEntry, payloa
 // asked for, or the account's own default when it asked for nothing.
 // Resolved once, when the submission is accepted, so a preference
 // changed while bytes are still moving does not move what is moving.
-func (l *Library) resolveIdentify(ctx context.Context, userID string, asked *bool) bool {
+func (l *Ingest) resolveIdentify(ctx context.Context, userID string, asked *bool) bool {
 	if asked != nil {
 		return *asked
 	}
-	return !l.PrefsForUser(ctx, userID).IdentifyOptOut
+	return !l.Identity.PrefsForUser(ctx, userID).IdentifyOptOut
 }
 
 // importDeclinedEntry files a declined submission as-is, as the button
@@ -321,7 +321,7 @@ func (l *Library) resolveIdentify(ctx context.Context, userID string, asked *boo
 // system. The stall paths already sent the external one and never rang
 // the bell; the success path rang the bell for a queue with nothing in
 // it. Both are now the other way round.
-func (l *Library) importDeclinedEntry(ctx context.Context, entryID string) {
+func (l *Ingest) importDeclinedEntry(ctx context.Context, entryID string) {
 	// Another change to the entry goes first, and the import once it lets
 	// go, finding the entry decided if that was a decision. Owed before
 	// the second try, so a release in between is not missed.
@@ -370,7 +370,7 @@ func (l *Library) importDeclinedEntry(ctx context.Context, entryID string) {
 	if prefix, pid, ok := parseAPIPID(entry.LibraryPID); ok && prefix == PrefixLibrary {
 		bareLib = string(pid)
 	}
-	if err := l.CheckWritable(ctx, bareLib); err != nil {
+	if err := l.Settings.CheckWritable(ctx, bareLib); err != nil {
 		l.log.Info("a declined submission waits for review", "entry", entryID, "err", err)
 		l.notifyReviewReady(ctx, &entry)
 		l.notifyReview(ctx, entry.ID, entry.UploadedBy)
@@ -412,7 +412,7 @@ func (l *Library) importDeclinedEntry(ctx context.Context, entryID string) {
 
 // markWaiting records on a declined entry whether it waits for the
 // catalog, so a restart finds the wait an earlier process owed.
-func (l *Library) markWaiting(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload, waiting bool) {
+func (l *Ingest) markWaiting(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload, waiting bool) {
 	payload.WaitingForCatalog = waiting
 	entry.Payload = marshalJSON(*payload)
 	if err := l.db.UpdateReviewEntry(ctx, *entry); err != nil {
@@ -422,7 +422,7 @@ func (l *Library) markWaiting(ctx context.Context, entry *wdb.ReviewEntry, paylo
 
 // retryWaitingImports imports again the declined submissions a busy
 // catalog held back. One still held waits for the next try.
-func (l *Library) retryWaitingImports() {
+func (l *Ingest) retryWaitingImports() {
 	var ids []string
 	l.waitingForCatalog.Range(func(k, _ any) bool {
 		ids = append(ids, k.(string))
@@ -434,7 +434,7 @@ func (l *Library) retryWaitingImports() {
 
 // loadWaitingImports takes up the waits for the catalog an earlier
 // process left on declined entries.
-func (l *Library) loadWaitingImports(ctx context.Context) {
+func (l *Ingest) loadWaitingImports(ctx context.Context) {
 	ids, err := l.db.ReviewEntriesWaitingForCatalog(ctx)
 	if err != nil {
 		l.log.Warn("listing declined submissions waiting for the catalog", "err", err)
@@ -447,7 +447,7 @@ func (l *Library) loadWaitingImports(ctx context.Context) {
 
 // waitingImports reports whether a declined submission waits for the
 // catalog.
-func (l *Library) waitingImports() bool {
+func (l *Ingest) waitingImports() bool {
 	waiting := false
 	l.waitingForCatalog.Range(func(any, any) bool {
 		waiting = true
@@ -457,7 +457,7 @@ func (l *Library) waitingImports() bool {
 }
 
 // importLater imports declined submissions again off the caller.
-func (l *Library) importLater(ids []string) {
+func (l *Ingest) importLater(ids []string) {
 	if len(ids) == 0 {
 		return
 	}
@@ -471,7 +471,7 @@ func (l *Library) importLater(ids []string) {
 
 // entryHasFlaggedDuplicate reports whether any session behind an entry
 // arrived carrying a duplicate warning.
-func (l *Library) entryHasFlaggedDuplicate(ctx context.Context, entryID string) bool {
+func (l *Ingest) entryHasFlaggedDuplicate(ctx context.Context, entryID string) bool {
 	rows, err := l.db.ListUploadsByReviewEntry(ctx, entryID)
 	if err != nil {
 		// Unreadable is treated as flagged: stopping for a person is
@@ -489,7 +489,7 @@ func (l *Library) entryHasFlaggedDuplicate(ctx context.Context, entryID string) 
 
 // notifyReviewReady tells the administrators and the uploader that an
 // entry is waiting for a decision, and how much of it already landed.
-func (l *Library) notifyReviewReady(ctx context.Context, entry *wdb.ReviewEntry) {
+func (l *Ingest) notifyReviewReady(ctx context.Context, entry *wdb.ReviewEntry) {
 	body := entryWhat(entry.Artist, entry.Title, entry.TrackCount) +
 		" could not be imported on its own and waits for a decision."
 	var payload reviewPayload
@@ -506,14 +506,14 @@ func (l *Library) notifyReviewReady(ctx context.Context, entry *wdb.ReviewEntry)
 				entryWhat(entry.Artist, entry.Title, entry.TrackCount), landed, len(payload.Tracks), verb, rest)
 		}
 	}
-	l.EmitNotification(ctx, "review-ready", "Ready for review", body, l.reviewRecipients(ctx, entry.UploadedBy))
+	l.Integrations.EmitNotification(ctx, "review-ready", "Ready for review", body, l.reviewRecipients(ctx, entry.UploadedBy))
 }
 
 // notifyImported announces files that reached the library with no
 // decision asked for, saying so of those that joined items the library
 // already had, and of those it already held where they would go, which
 // added nothing.
-func (l *Library) notifyImported(ctx context.Context, entry *wdb.ReviewEntry) {
+func (l *Ingest) notifyImported(ctx context.Context, entry *wdb.ReviewEntry) {
 	recipients := l.reviewRecipients(ctx, entry.UploadedBy)
 	what := entryWhat(entry.Artist, entry.Title, entry.TrackCount)
 	body := what + " was added to the library with the tags it arrived with."
@@ -538,7 +538,7 @@ func (l *Library) notifyImported(ctx context.Context, entry *wdb.ReviewEntry) {
 			body += filesAlready(held, ", so nothing was added for it", ", so nothing was added for them")
 		}
 	}
-	l.EmitNotificationFor(ctx, "import-completed", "Import finished", body, entry.ID, recipients)
+	l.Integrations.EmitNotificationFor(ctx, "import-completed", "Import finished", body, entry.ID, recipients)
 	seen := map[string]bool{}
 	for _, uid := range recipients {
 		if uid == "" || seen[uid] {
@@ -562,7 +562,7 @@ func filesAlready(n int, one, many string) string {
 }
 
 // reviewRecipients is every administrator plus the entry's uploader.
-func (l *Library) reviewRecipients(ctx context.Context, uploadedBy string) []string {
+func (l *Ingest) reviewRecipients(ctx context.Context, uploadedBy string) []string {
 	recipients := []string{}
 	if admins, err := l.db.EnabledAdminIDs(ctx); err == nil {
 		recipients = append(recipients, admins...)
@@ -577,7 +577,7 @@ func (l *Library) reviewRecipients(ctx context.Context, uploadedBy string) []str
 
 // matchWake is the identify worker's lossy wakeup hint; the ticker is
 // the backstop.
-func (l *Library) matchWakeup() {
+func (l *Ingest) matchWakeup() {
 	select {
 	case l.matchWake <- struct{}{}:
 	default:
@@ -585,13 +585,13 @@ func (l *Library) matchWakeup() {
 }
 
 // MatchWakeups exposes the identify worker's wakeup channel to main.
-func (l *Library) MatchWakeups() <-chan struct{} { return l.matchWake }
+func (l *Ingest) MatchWakeups() <-chan struct{} { return l.matchWake }
 
 // RematchItem rebuilds the album unit containing an item and opens a
 // fresh review entry for it. The unit is the item's album siblings;
 // an item with no album is a unit of one.
-func (l *Library) RematchItem(ctx context.Context, uc *UserCtx, apiItemPID string) (string, error) {
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+func (l *Ingest) RematchItem(ctx context.Context, uc *UserCtx, apiItemPID string) (string, error) {
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return "", err
 	}
@@ -625,7 +625,7 @@ func (l *Library) RematchItem(ctx context.Context, uc *UserCtx, apiItemPID strin
 }
 
 // ownedTracks keeps the docs whose items the caller's uploads brought in.
-func (l *Library) ownedTracks(ctx context.Context, uc *UserCtx, unit []reviewTrackDoc) ([]reviewTrackDoc, error) {
+func (l *Ingest) ownedTracks(ctx context.Context, uc *UserCtx, unit []reviewTrackDoc) ([]reviewTrackDoc, error) {
 	kept := unit[:0:0]
 	for _, doc := range unit {
 		owns, err := l.db.UploadOwnsItem(ctx, uc.ID, doc.PID)
@@ -646,7 +646,7 @@ func (l *Library) ownedTracks(ctx context.Context, uc *UserCtx, unit []reviewTra
 // artists apart (the store's album_artist column is empty for files
 // tagged with per-track artists only, so filtering on it would lose
 // siblings).
-func (l *Library) albumUnit(ctx context.Context, it *model.ItemView) ([]reviewTrackDoc, error) {
+func (l *Ingest) albumUnit(ctx context.Context, it *model.ItemView) ([]reviewTrackDoc, error) {
 	items := []*model.ItemView{it}
 	if it.Album != "" {
 		b := query.New(query.EntityTracks).Where("album", query.OpIs, it.Album)
@@ -734,7 +734,7 @@ func itemTags(it *model.ItemView) map[string]string {
 // matchTracks converts stored track docs to engine input, computing
 // fingerprints for real files when the fingerprint binary is present.
 // Virtual tracks export no fingerprint by upstream design.
-func (l *Library) matchTracks(ctx context.Context, docs []reviewTrackDoc) []match.Track {
+func (l *Ingest) matchTracks(ctx context.Context, docs []reviewTrackDoc) []match.Track {
 	out := make([]match.Track, 0, len(docs))
 	for _, d := range docs {
 		t := match.Track{
@@ -758,7 +758,7 @@ func (l *Library) matchTracks(ctx context.Context, docs []reviewTrackDoc) []matc
 // LibraryMatchingMode reads a library's matching mode (default auto).
 // The key is the bare catalog pid; a prefixed API pid is normalized so
 // both the handler (prefixed) and the pipeline (bare) read one truth.
-func (l *Library) LibraryMatchingMode(ctx context.Context, libraryPID string) string {
+func (l *Ingest) LibraryMatchingMode(ctx context.Context, libraryPID string) string {
 	if prefix, bare, ok := parseAPIPID(libraryPID); ok && prefix == PrefixLibrary {
 		libraryPID = string(bare)
 	}
@@ -774,7 +774,7 @@ func (l *Library) LibraryMatchingMode(ctx context.Context, libraryPID string) st
 // among near-tied releases is a wrong-release risk a person accepts
 // deliberately). Stored as "true"/absent like the read-only flag; the
 // key normalization matches LibraryMatchingMode.
-func (l *Library) LibrarySinglesAutoApply(ctx context.Context, libraryPID string) bool {
+func (l *Ingest) LibrarySinglesAutoApply(ctx context.Context, libraryPID string) bool {
 	if prefix, bare, ok := parseAPIPID(libraryPID); ok && prefix == PrefixLibrary {
 		libraryPID = string(bare)
 	}
@@ -797,7 +797,7 @@ func (l *Library) LibrarySinglesAutoApply(ctx context.Context, libraryPID string
 // off for an ambiguity the uploader was never given a way to resolve.
 // Visibility is left out because it is per-user and this is not: an
 // entry reaches here after its uploader is gone from the request.
-func (l *Library) singlesAutoApplyFor(ctx context.Context, entry *wdb.ReviewEntry) bool {
+func (l *Ingest) singlesAutoApplyFor(ctx context.Context, entry *wdb.ReviewEntry) bool {
 	if entry.LibraryPID != "" {
 		return l.LibrarySinglesAutoApply(ctx, entry.LibraryPID)
 	}
@@ -817,7 +817,7 @@ func (l *Library) singlesAutoApplyFor(ctx context.Context, entry *wdb.ReviewEntr
 		if lib.Media != "" && !lib.Media.Accepts(kind) {
 			continue
 		}
-		if l.CheckWritable(ctx, string(lib.PID)) != nil {
+		if l.Settings.CheckWritable(ctx, string(lib.PID)) != nil {
 			continue
 		}
 		if only != nil {
@@ -838,7 +838,7 @@ type LibraryMatching struct {
 // validating that the library exists first so an unknown or malformed
 // pid answers not-found rather than a fabricated default. The pipeline
 // reads the mode through LibraryMatchingMode, which never errors.
-func (l *Library) LibraryMatchingFor(ctx context.Context, uc *UserCtx, apiLibraryPID string) (LibraryMatching, error) {
+func (l *Ingest) LibraryMatchingFor(ctx context.Context, uc *UserCtx, apiLibraryPID string) (LibraryMatching, error) {
 	if !uc.Admin {
 		return LibraryMatching{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -846,7 +846,7 @@ func (l *Library) LibraryMatchingFor(ctx context.Context, uc *UserCtx, apiLibrar
 	if !ok || prefix != PrefixLibrary {
 		return LibraryMatching{}, errNotFound("no such library")
 	}
-	if _, err := l.libraryByPID(ctx, pid); err != nil {
+	if _, err := l.Roots.libraryByPID(ctx, pid); err != nil {
 		return LibraryMatching{}, err
 	}
 	return LibraryMatching{
@@ -857,7 +857,7 @@ func (l *Library) LibraryMatchingFor(ctx context.Context, uc *UserCtx, apiLibrar
 
 // SetLibraryMatching stores a library's matching behavior whole: the
 // PUT is a full replace, so both fields land on every write.
-func (l *Library) SetLibraryMatching(ctx context.Context, uc *UserCtx, apiLibraryPID string, matching LibraryMatching) error {
+func (l *Ingest) SetLibraryMatching(ctx context.Context, uc *UserCtx, apiLibraryPID string, matching LibraryMatching) error {
 	if !uc.Admin {
 		return &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -870,7 +870,7 @@ func (l *Library) SetLibraryMatching(ctx context.Context, uc *UserCtx, apiLibrar
 	if !ok || prefix != PrefixLibrary {
 		return errNotFound("no such library")
 	}
-	lib, err := l.libraryByPID(ctx, pid)
+	lib, err := l.Roots.libraryByPID(ctx, pid)
 	if err != nil {
 		return err
 	}
@@ -891,28 +891,14 @@ func (l *Library) SetLibraryMatching(ctx context.Context, uc *UserCtx, apiLibrar
 	if err := l.db.SettingSet(ctx, "matching:"+string(pid), matching.Mode, time.Now().UnixNano()); err != nil {
 		return &Error{Kind: KindInternal, Err: err}
 	}
-	l.Audit(ctx, uc, "library.matching", l.libraryAuditTarget(ctx, apiLibraryPID, pid),
+	l.Audit.Record(ctx, uc, "library.matching", l.Settings.libraryAuditTarget(ctx, apiLibraryPID, pid),
 		map[string]any{"mode": matching.Mode, "singlesAutoApply": matching.SinglesAutoApply})
 	return nil
 }
 
-// libraryByPID resolves a catalog library by bare pid.
-func (l *Library) libraryByPID(ctx context.Context, pid model.PID) (*model.Library, error) {
-	libs, err := l.lib.Libraries(ctx)
-	if err != nil {
-		return nil, classify(err)
-	}
-	for _, lib := range libs {
-		if lib.PID == pid {
-			return lib, nil
-		}
-	}
-	return nil, errNotFound("no such library")
-}
-
 // DrainMatchQueue runs one identify job; true means it did work.
-func (l *Library) DrainMatchQueue(ctx context.Context) bool {
-	if l.Maintenance() {
+func (l *Ingest) DrainMatchQueue(ctx context.Context) bool {
+	if l.library.Maintenance() {
 		return false
 	}
 	now := time.Now()
@@ -974,7 +960,7 @@ func backoffFor(attempts int) time.Duration {
 }
 
 // finishIdentifyEmpty closes identification with no candidates.
-func (l *Library) finishIdentifyEmpty(ctx context.Context, entryID, note string) {
+func (l *Ingest) finishIdentifyEmpty(ctx context.Context, entryID, note string) {
 	entry, err := l.db.ReviewEntryByID(ctx, entryID)
 	if err != nil {
 		return
@@ -993,7 +979,7 @@ func (l *Library) finishIdentifyEmpty(ctx context.Context, entryID, note string)
 
 // identifyEntry runs the engine for one entry and applies the
 // confident outcome when the library's mode allows it.
-func (l *Library) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) error {
+func (l *Ingest) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) error {
 	var payload reviewPayload
 	if err := json.Unmarshal([]byte(entry.Payload), &payload); err != nil {
 		return fmt.Errorf("decoding payload: %w", err)
@@ -1099,7 +1085,7 @@ func (l *Library) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) err
 
 // autoApplyEntry applies an identification's confident candidate,
 // unless a person decided the entry meanwhile or is deciding it now.
-func (l *Library) autoApplyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload) {
+func (l *Ingest) autoApplyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload) {
 	release, ok := l.claimEntry(entry.ID)
 	if !ok {
 		l.log.Info("auto-apply withheld: the entry is being decided", "entry", entry.ID)
@@ -1121,7 +1107,7 @@ func (l *Library) autoApplyEntry(ctx context.Context, entry *wdb.ReviewEntry, pa
 // those reader may see (every one for an administrator, or with no
 // reader). err is a failure after the commit, which the batch still
 // stands through.
-func (l *Library) writeBackWarnings(ctx context.Context, reader *UserCtx, res *waxbin.BatchEditResult, err error) []string {
+func (l *Ingest) writeBackWarnings(ctx context.Context, reader *UserCtx, res *waxbin.BatchEditResult, err error) []string {
 	var out []string
 	if res != nil {
 		for _, wbe := range res.WriteBackErrors {
@@ -1238,7 +1224,7 @@ func candidateDoc(m *match.Match, unit match.Unit, indexOf map[string]int) revie
 // applyEntry applies one candidate's metadata to the unit. For import
 // entries the staged file enters the library first. Returns non-fatal
 // warnings; the entry is decided on return.
-func (l *Library) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload, candidateMBID string, decider *UserCtx, auto bool) ([]string, error) {
+func (l *Ingest) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload, candidateMBID string, decider *UserCtx, auto bool) ([]string, error) {
 	var cand *reviewCandidateDoc
 	for i := range payload.Candidates {
 		if payload.Candidates[i].MBID == candidateMBID {
@@ -1416,7 +1402,7 @@ func (l *Library) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payloa
 
 // revertEntry restores the snapshot an apply took and unlocks the
 // fields the apply locked.
-func (l *Library) revertEntry(ctx context.Context, entry *wdb.ReviewEntry, decidedBy string) error {
+func (l *Ingest) revertEntry(ctx context.Context, entry *wdb.ReviewEntry, decidedBy string) error {
 	if entry.Status != reviewApplied && entry.Status != reviewAutoApplied {
 		return &Error{Kind: KindConflict, Msg: "only applied entries revert"}
 	}
@@ -1483,12 +1469,12 @@ func (l *Library) revertEntry(ctx context.Context, entry *wdb.ReviewEntry, decid
 // when the server takes writes and any member's library does. A member
 // whose library is read-only is then refused by the catalog file by
 // file, and a unit with none to write stays catalog-only, owing them.
-func (l *Library) unitWritable(ctx context.Context, pids []model.PID) bool {
-	if l.CheckWritable(ctx, "") != nil {
+func (l *Ingest) unitWritable(ctx context.Context, pids []model.PID) bool {
+	if l.Settings.CheckWritable(ctx, "") != nil {
 		return false
 	}
 	for _, pid := range pids {
-		if it, err := l.lib.Get(ctx, pid); err == nil && l.checkPathWritable(ctx, string(it.Path)) == nil {
+		if it, err := l.lib.Get(ctx, pid); err == nil && l.Settings.checkPathWritable(ctx, string(it.Path)) == nil {
 			return true
 		}
 	}

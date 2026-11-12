@@ -37,7 +37,7 @@ func playOf(device, feed, episode, at, started, position, total string) string {
 // positionOf reads where the account is in an episode, in milliseconds.
 func (e *env) positionOf(episode string) int64 {
 	e.t.Helper()
-	st, err := e.svc.PlayState(e.ctx, e.uc, episode)
+	st, err := e.svc.Playback.PlayState(e.ctx, e.uc, episode)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestTheAggregatedDownloadKeepsTheLatestAction(t *testing.T) {
 	feed, enclosure := e.feedURLOf(2), e.feed.URL+"/show2.mp3"
 	e.change("phone", []string{feed}, nil)
 	_, ep := e.episodePID(feed, "Show 2 Pilot")
-	if _, err := e.svc.Checkpoint(e.ctx, e.uc, ep, 500_000, nil); err != nil {
+	if _, err := e.svc.Playback.Checkpoint(e.ctx, e.uc, ep, 500_000, nil); err != nil {
 		t.Fatal(err)
 	}
 	nextSecond()
@@ -201,7 +201,7 @@ func TestAPositionOfUnknownLengthSaysNothing(t *testing.T) {
 	e := newEnv(t)
 	e.change("phone", []string{e.feedURL()}, nil)
 	_, one := e.episodePID(e.feedURL(), "Episode One")
-	if _, err := e.svc.Checkpoint(e.ctx, e.uc, one, 1_200_000, nil); err != nil {
+	if _, err := e.svc.Playback.Checkpoint(e.ctx, e.uc, one, 1_200_000, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, a := range e.actions("since=0").Actions {
@@ -238,7 +238,7 @@ func TestAnUploadAnswersTheTimeItArrived(t *testing.T) {
 
 	// The apps move the episode; the phone's next upload then waits on the
 	// writer longer than the cursor trails the clock.
-	if _, err := e.svc.Checkpoint(e.ctx, e.uc, ep, 300_000, nil); err != nil {
+	if _, err := e.svc.Playback.Checkpoint(e.ctx, e.uc, ep, 300_000, nil); err != nil {
 		t.Fatal(err)
 	}
 	e.holdWriter(stall)

@@ -33,7 +33,7 @@ func TestADormantSubscriptionReadsAbsentOnTheServerStream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.svc.PutSubscriptionSettings(d.ctx, d.carol(t), d.show, SubscriptionSettings{Folder: "News"}); err != nil {
+	if _, err := d.svc.Podcasts.PutSubscriptionSettings(d.ctx, d.carol(t), d.show, SubscriptionSettings{Folder: "News"}); err != nil {
 		t.Fatal(err)
 	}
 	d.narrow(t)
@@ -58,9 +58,9 @@ func TestAGrantChangeAnnouncesTheAccountsSubscriptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	podcastLib, _ := d.svc.podcastLibrary(d.ctx)
+	podcastLib, _ := d.svc.Grants.podcastLibrary(d.ctx)
 	mode := "granted"
-	if _, err := d.svc.UpdateAccount(d.ctx, d.carolID, AccountUpdate{
+	if _, err := d.svc.Identity.UpdateAccount(d.ctx, d.carolID, AccountUpdate{
 		AccessMode: &mode, LibraryPIDs: []string{d.music, apiPID(PrefixLibrary, model.PID(podcastLib))},
 	}); err != nil {
 		t.Fatal(err)
@@ -81,14 +81,14 @@ func TestAnAccessChangeOutlivesItsRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	before, err := d.svc.grantEpoch(d.ctx, d.carolID)
+	before, err := d.svc.Grants.grantEpoch(d.ctx, d.carolID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	canceled, cancel := context.WithCancel(d.ctx)
 	cancel()
-	d.svc.reachChanged(canceled, d.carolID)
-	if after, err := d.svc.grantEpoch(d.ctx, d.carolID); err != nil || after == before {
+	d.svc.Identity.reachChanged(canceled, d.carolID)
+	if after, err := d.svc.Grants.grantEpoch(d.ctx, d.carolID); err != nil || after == before {
 		t.Errorf("grant epoch after a canceled access change = %d (%v), want it moved past %d", after, err, before)
 	}
 	if events := subscriptionEvents(t, d, since); len(events) != 1 {

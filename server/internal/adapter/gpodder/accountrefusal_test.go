@@ -40,10 +40,10 @@ func TestAnAccountWithoutPodcastsIsRefusedAKnownShow(t *testing.T) {
 	})
 	// The catalog holds the show: alice followed it once, and let go.
 	show := e.subscribeFirstParty(e.feedURL())
-	if err := e.svc.Unsubscribe(e.ctx, e.uc, show, false); err != nil {
+	if err := e.svc.Podcasts.Unsubscribe(e.ctx, e.uc, show, false); err != nil {
 		t.Fatal(err)
 	}
-	libs, err := e.svc.Libraries(e.ctx)
+	libs, err := e.svc.Roots.Libraries(e.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestAnAccountWithoutPodcastsIsRefusedAKnownShow(t *testing.T) {
 		}
 	}
 	granted := "granted"
-	if _, err := e.svc.UpdateAccount(e.ctx, e.uc.ID, service.AccountUpdate{AccessMode: &granted, LibraryPIDs: []string{music}}); err != nil {
+	if _, err := e.svc.Identity.UpdateAccount(e.ctx, e.uc.ID, service.AccountUpdate{AccessMode: &granted, LibraryPIDs: []string{music}}); err != nil {
 		t.Fatal(err)
 	}
 

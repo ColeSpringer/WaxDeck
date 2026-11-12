@@ -175,7 +175,7 @@ func TestAPlaylistNamingAPrivateHostIsNeverDialed(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	stream, err := stationStream(ctx, h.svc.RadioHTTP(), "test", resp, stop, time.Minute)
+	stream, err := stationStream(ctx, h.svc.Radio.HTTP(), "test", resp, stop, time.Minute)
 	var why stationRefusal
 	if err == nil || errors.As(err, &why) {
 		if stream != nil {

@@ -132,7 +132,7 @@ func (a *chaptersAsk) failed(budgetSpent bool, budget time.Duration, err error) 
 // fetchedChapters answers the chapters of an episode the catalog holds
 // none for, from its feed's chapters document, for the reader userID. A
 // failure is no chapters: the read that asked has its answer without them.
-func (l *Library) fetchedChapters(ctx context.Context, userID string, ep *model.Episode) []ChapterMark {
+func (l *Podcasts) fetchedChapters(ctx context.Context, userID string, ep *model.Episode) []ChapterMark {
 	rawURL := strings.TrimSpace(ep.ChaptersURL)
 	target, err := url.Parse(rawURL)
 	if rawURL == "" || err != nil || (target.Scheme != "http" && target.Scheme != "https") || target.Host == "" {
@@ -175,7 +175,7 @@ func (l *Library) fetchedChapters(ctx context.Context, userID string, ep *model.
 // readChapters leads one fetch: it asks the host, settles the call for the
 // readers waiting on it, and remembers the outcome, and the host too when it
 // gave no answer.
-func (l *Library) readChapters(ctx context.Context, ep *model.Episode, rawURL string, login feedLogin, key chaptersKey, call *chaptersCall) []ChapterMark {
+func (l *Podcasts) readChapters(ctx context.Context, ep *model.Episode, rawURL string, login feedLogin, key chaptersKey, call *chaptersCall) []ChapterMark {
 	var marks []ChapterMark
 	settled := false
 	defer func() { l.chapterDocs.settle(key, call, marks, settled) }()
@@ -207,7 +207,7 @@ func (l *Library) readChapters(ctx context.Context, ep *model.Episode, rawURL st
 // fetchChapters pulls and parses one chapters document through the transcript
 // fetch's guarded client, the show's login on each request at its feed's
 // origin.
-func (l *Library) fetchChapters(ctx context.Context, ep *model.Episode, rawURL string, login feedLogin) ([]ChapterMark, error) {
+func (l *Podcasts) fetchChapters(ctx context.Context, ep *model.Episode, rawURL string, login feedLogin) ([]ChapterMark, error) {
 	budget := l.chapterDocs.budget()
 	fetchCtx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
@@ -239,7 +239,7 @@ func (l *Library) fetchChapters(ctx context.Context, ep *model.Episode, rawURL s
 // which it reports to ask. A hop is followed only to a web address, to a
 // host not known to be down, and within the guarded client's cap. The copy
 // shares the guarded client's transport, and so its dial guard.
-func (l *Library) chaptersClient(ask *chaptersAsk) *http.Client {
+func (l *Podcasts) chaptersClient(ask *chaptersAsk) *http.Client {
 	base := l.transcriptClient()
 	client := *base
 	client.CheckRedirect = func(next *http.Request, via []*http.Request) error {

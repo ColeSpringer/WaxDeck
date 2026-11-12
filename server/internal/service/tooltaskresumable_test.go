@@ -19,7 +19,7 @@ func spendAttempts(t *testing.T, ctx context.Context, svc *Library, taskID strin
 // drainOnce leases and works one task as the worker would now.
 func drainOnce(t *testing.T, ctx context.Context, svc *Library) {
 	t.Helper()
-	if !svc.drainToolTasksAt(ctx, wdb.TaskTypes{Except: longToolTasks}, time.Now().UnixNano()) {
+	if !svc.Tools.drainToolTasksAt(ctx, wdb.TaskTypes{Except: longToolTasks}, time.Now().UnixNano()) {
 		t.Fatal("the worker found no task to run")
 	}
 }
@@ -31,7 +31,7 @@ func drainOnce(t *testing.T, ctx context.Context, svc *Library) {
 func TestACueSplitCutOnItsLastAttemptWaitsOutAFailedRecordOfTheCut(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, one, _, _ := cueSplitFixture(t)
-	task, err := svc.StartCueSplit(ctx, uc, one, false)
+	task, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,17 +67,17 @@ func TestACueSplitCutOnItsLastAttemptWaitsOutAFailedRecordOfTheCut(t *testing.T)
 func TestABookMergeStagedOnItsLastAttemptIsNotFailedForItsAttempts(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, book, dir, _ := bookToolFixture(t, false)
-	if _, err := svc.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
 		t.Fatal(err)
 	}
-	task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	spendAttempts(t, ctx, svc, task.ID, toolTaskMaxAttempts-1)
-	svc.toolStepHook = stopAt("staged", nil)
+	svc.Tools.toolStepHook = stopAt("staged", nil)
 	drainOnce(t, ctx, svc)
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	row, err := svc.db.ToolTaskByID(ctx, task.ID)
 	if err != nil {
 		t.Fatal(err)

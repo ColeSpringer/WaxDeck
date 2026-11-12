@@ -48,7 +48,7 @@ func TestTheDuplicatesListingReadsEveryReasonTheAuditGives(t *testing.T) {
 	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	groups, err := svc.ListDuplicateGroups(ctx, uc)
+	groups, err := svc.Health.ListDuplicateGroups(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}

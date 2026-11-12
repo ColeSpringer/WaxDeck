@@ -69,8 +69,8 @@ func newTestBackups(t *testing.T) (*Backups, *wdb.DB, string) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	l := &Library{db: d, log: slog.New(slog.DiscardHandler)}
-	b := newBackups(d, testCatalog{}, l, l, l.log, dataDir, nil)
+	l := bareLibrary(&core{db: d, log: slog.New(slog.DiscardHandler)})
+	b := newBackups(d, testCatalog{}, l.Audit, l.Integrations, l.log, dataDir, nil)
 	b.catalogStamp = func(context.Context) (uint32, error) { return testCatalogStamp, nil }
 	clk := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	b.now = func() time.Time {
@@ -88,7 +88,7 @@ func wantKind(t *testing.T, err error, kind ErrorKind) {
 }
 
 // createAndRun makes one finished backup and returns its row.
-func createAndRun(t *testing.T, b *Backups) wdb.Backup {
+func createAndRun(t *testing.T, b *Backups) Backup {
 	t.Helper()
 	ctx := context.Background()
 	row, err := b.Create(ctx, nil, "manual")
@@ -278,7 +278,7 @@ func TestRetentionKeepBytes(t *testing.T) {
 	if len(rows) != 1 || rows[0].ID != third.ID {
 		t.Fatalf("rows after byte sweep = %+v", rows)
 	}
-	for _, gone := range []wdb.Backup{first, second} {
+	for _, gone := range []Backup{first, second} {
 		if _, err := os.Stat(b.archivePath(gone.FileName)); !os.IsNotExist(err) {
 			t.Fatalf("swept archive %s still on disk", gone.FileName)
 		}

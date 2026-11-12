@@ -12,7 +12,7 @@ func TestAReadOnlyServersHoldsNameTheServer(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, _ := managedTrackFixture(t)
 	setServerReadOnly(t, ctx, svc, true)
-	plan, err := svc.PreviewOrganize(ctx, uc, organize.DefaultProfileName, nil)
+	plan, err := svc.Health.PreviewOrganize(ctx, uc, organize.DefaultProfileName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestAReadOnlyServersHoldsNameTheServer(t *testing.T) {
 func TestAWriteBackFixAReadOnlyServerStopsNamesTheServer(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, pid := managedTrackFixture(t)
-	start, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestAPathFixNamesWhatMadeItsItemsReadOnly(t *testing.T) {
 			if !c.server {
 				setLibrariesReadOnly(t, ctx, svc, uc, true)
 			}
-			start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
+			start, err := svc.Health.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
 			if err != nil {
 				t.Fatal(err)
 			}

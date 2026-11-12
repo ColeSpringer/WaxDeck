@@ -271,10 +271,28 @@ export class Nav {
 
   /// Open a destination cold, by its own location. The default way into
   /// a spec: one boot, no assumptions about the chrome.
+  ///
+  /// `within` budgets the screen once the app is up, not the boot: a cold
+  /// load is a wasm boot, which a busy machine stretches past the step
+  /// tier on its own, so the boot keeps the nav tier. Up is the engine's
+  /// semantics host holding a node, which every drawn frame publishes
+  /// whatever page it drew, the router's not-found page included. A
+  /// location the server refuses never boots the app at all, so it fails
+  /// here by name instead of being waited out on the nav tier.
   async enter(dest: Destination, options: { within?: number } = {}): Promise<void> {
     const entry: Dest = DEST[dest];
-    await this.page.goto(entry.path);
-    await entry.arrival(this.page).waitFor({ timeout: options.within ?? T.nav });
+    const served = await this.page.goto(entry.path);
+    if (served !== null && served.status() >= 400) {
+      throw new Error(`${entry.path} answered ${served.status()}, not the app`);
+    }
+    const arrival = entry.arrival(this.page);
+    if (options.within !== undefined) {
+      await this.page
+        .locator('flt-semantics-host flt-semantics')
+        .first()
+        .waitFor({ state: 'attached', timeout: T.nav });
+    }
+    await arrival.waitFor({ timeout: options.within ?? T.nav });
   }
 
   /// Walk there through the app's own chrome. For the specs where

@@ -14,7 +14,7 @@ import (
 // runtime limits and per-account permissions. Counts are in-memory:
 // sessions do not survive a restart, so neither should their slots.
 type transcodeGate struct {
-	l  *Library
+	l  *Playback
 	mu sync.Mutex
 	// active counts engine-backed sessions per user id; total is the
 	// sum, and timelines is how much of it is gapless queue renderings
@@ -37,7 +37,7 @@ type TranscodeActivity struct {
 
 // TranscodeGate returns the bridge-facing session gate. One instance
 // per service: the metrics surface reads the same counters.
-func (l *Library) TranscodeGate() flow.TranscodeGate {
+func (l *Playback) TranscodeGate() flow.TranscodeGate {
 	l.gateOnce.Do(func() {
 		l.gate = &transcodeGate{l: l, active: map[string]int{}}
 	})
@@ -45,7 +45,7 @@ func (l *Library) TranscodeGate() flow.TranscodeGate {
 }
 
 // ActiveTranscodeSessions reports the engine-backed sessions in flight.
-func (l *Library) ActiveTranscodeSessions() TranscodeActivity {
+func (l *Playback) ActiveTranscodeSessions() TranscodeActivity {
 	l.gateOnce.Do(func() {
 		l.gate = &transcodeGate{l: l, active: map[string]int{}}
 	})
@@ -55,7 +55,7 @@ func (l *Library) ActiveTranscodeSessions() TranscodeActivity {
 }
 
 func (g *transcodeGate) Acquire(ctx context.Context, user string, kind flow.TranscodeKind) (func(), error) {
-	lim := g.l.currentToggles().limits
+	lim := g.l.Settings.currentToggles().limits
 	admin := g.userIsAdmin(ctx, user)
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -96,7 +96,7 @@ func (g *transcodeGate) MaxBitrateKbps(ctx context.Context, user string) int {
 	if u, err := g.l.db.UserByID(ctx, user); err == nil && u.MaxTranscodeKbps > 0 {
 		return int(u.MaxTranscodeKbps)
 	}
-	return g.l.currentToggles().limits.DefaultMaxBitrateKbps
+	return g.l.Settings.currentToggles().limits.DefaultMaxBitrateKbps
 }
 
 // AuthorizeMedia is the bridge's per-fetch check of a media token, its
@@ -104,7 +104,7 @@ func (g *transcodeGate) MaxBitrateKbps(ctx context.Context, user string) int {
 func (g *transcodeGate) AuthorizeMedia(ctx context.Context, c auth.MediaClaims) error {
 	ctx, cancel := gateCtx(ctx)
 	defer cancel()
-	err := g.l.AuthorizeMedia(ctx, c)
+	err := g.l.Identity.AuthorizeMedia(ctx, c)
 	switch k := KindOf(err); {
 	case err == nil:
 	case k == KindNotFound || k == KindForbidden:

@@ -177,6 +177,10 @@ func NewServer(version string, opts Options) *Server {
 	if opts.ProcCtx == nil {
 		opts.ProcCtx = context.Background()
 	}
+	var sources downloadSources
+	if opts.Service != nil {
+		sources = opts.Service.Playback
+	}
 	return &Server{
 		Version:      version,
 		svc:          opts.Service,
@@ -185,7 +189,7 @@ func NewServer(version string, opts Options) *Server {
 		oidc:         opts.OIDC,
 		limiter:      opts.Limiter,
 		media:        opts.Media,
-		sources:      opts.Service,
+		sources:      sources,
 		connect:      opts.Connect,
 		group:        opts.Group,
 		bases:        opts.Bases,
@@ -259,8 +263,8 @@ func (s *Server) GetHealth(ctx context.Context, _ GetHealthRequestObject) (GetHe
 		Status:          "ok",
 		Version:         s.Version,
 		ApiVersion:      1,
-		UploadFormats:   ptr(s.svc.UploadFormats()),
-		RejectedFormats: ptr(s.svc.RejectedFormats()),
+		UploadFormats:   ptr(s.svc.Ingest.UploadFormats()),
+		RejectedFormats: ptr(s.svc.Ingest.RejectedFormats()),
 		Streaming: &StreamingEngineState{
 			Configured: s.bridge != nil,
 			Connected:  engine.Connected,
@@ -268,7 +272,7 @@ func (s *Server) GetHealth(ctx context.Context, _ GetHealthRequestObject) (GetHe
 			VoiceBoost: engine.VoiceBoost,
 			FileTools:  engine.FileTools,
 		},
-		Podcasts: ptr(s.svc.PodcastsOn()),
+		Podcasts: ptr(s.svc.Podcasts.On()),
 	}, nil
 }
 
@@ -296,7 +300,7 @@ func (s *Server) Login(ctx context.Context, req LoginRequestObject) (LoginRespon
 	if !s.limiter.Allowed(ipKey) || !s.limiter.Allowed(acctKey) {
 		return nil, refuse(http.StatusTooManyRequests, "rate-limited", "too many login attempts; retry later")
 	}
-	user, err := s.svc.VerifyLocalLogin(ctx, req.Body.Username, req.Body.Password)
+	user, err := s.svc.Identity.VerifyLocalLogin(ctx, req.Body.Username, req.Body.Password)
 	if err != nil {
 		return nil, err
 	}
@@ -343,10 +347,10 @@ func (s *Server) Logout(ctx context.Context, _ LogoutRequestObject) (LogoutRespo
 
 func (s *Server) GetSession(ctx context.Context, _ GetSessionRequestObject) (GetSessionResponseObject, error) {
 	if p, ok := principalFromContext(ctx); ok {
-		u := userJSON(p.User)
+		u := principalJSON(p.User)
 		return GetSession200JSONResponse{
 			Authenticated: true, User: &u, CsrfToken: &p.Session.CSRFToken,
-			Server: &SessionServer{ReadOnly: s.svc.ServerReadOnly()},
+			Server: &SessionServer{ReadOnly: s.svc.Settings.ServerReadOnly()},
 		}, nil
 	}
 	return GetSession200JSONResponse{Authenticated: false}, nil
@@ -380,16 +384,35 @@ func (s *Server) expiredSessionCookie() string {
 // managePodcasts, and delete are the effective rights (administrators
 // always hold them), so every client surface gates its affordances off
 // these fields.
-func userJSON(u *wdb.User) User {
-	out := User{Id: u.ID, Username: u.Username, Roles: u.Roles}
-	if u.DisplayName != "" {
-		out.DisplayName = ptr(u.DisplayName)
+func userJSON(u *service.User) User {
+	return selfView{id: u.ID, username: u.Username, displayName: u.DisplayName, roles: u.Roles,
+		uploadEnabled: u.UploadEnabled, perms: u.Permissions()}.json()
+}
+
+// principalJSON is userJSON for the signed-in principal, which carries its
+// account row.
+func principalJSON(u *wdb.User) User {
+	return selfView{id: u.ID, username: u.Username, displayName: u.DisplayName, roles: u.Roles,
+		uploadEnabled: u.UploadEnabled, perms: service.PermissionsOf(u)}.json()
+}
+
+// selfView is what the self view is rendered from, whichever holds it.
+type selfView struct {
+	id, username, displayName string
+	roles                     []string
+	uploadEnabled             bool
+	perms                     service.Permissions
+}
+
+func (v selfView) json() User {
+	out := User{Id: v.id, Username: v.username, Roles: v.roles}
+	if v.displayName != "" {
+		out.DisplayName = ptr(v.displayName)
 	}
-	out.UploadEnabled = u.UploadEnabled
-	perms := service.PermissionsOf(u)
-	manage := perms.ManagePodcasts
-	del := perms.Delete
-	for _, r := range u.Roles {
+	out.UploadEnabled = v.uploadEnabled
+	manage := v.perms.ManagePodcasts
+	del := v.perms.Delete
+	for _, r := range v.roles {
 		if r == "admin" {
 			out.UploadEnabled = true
 			manage = true
@@ -415,7 +438,7 @@ func (s *Server) ListItems(ctx context.Context, req ListItemsRequestObject) (Lis
 	}
 	uc := userCtx(ctx)
 	filter := itemFilterOf(req.Params.MediaType, req.Params.Facet, req.Params.FacetKey)
-	page, err := s.svc.Items(ctx, uc, filter, deref(req.Params.Cursor), limit)
+	page, err := s.svc.Reads.Items(ctx, uc, filter, deref(req.Params.Cursor), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -440,7 +463,7 @@ func (s *Server) ListFacets(ctx context.Context, req ListFacetsRequestObject) (L
 	if req.Params.Facet != nil {
 		facet = string(*req.Params.Facet)
 	}
-	page, err := s.svc.Facets(ctx, uc, service.FacetQuery{
+	page, err := s.svc.Reads.Facets(ctx, uc, service.FacetQuery{
 		Dimension: string(req.Params.Dimension),
 		Order:     order,
 		Cursor:    deref(req.Params.Cursor),
@@ -503,7 +526,7 @@ func (s *Server) BrowseList(ctx context.Context, req BrowseListRequestObject) (B
 	}
 	uc := userCtx(ctx)
 	filter := itemFilterOf(req.Params.MediaType, req.Params.Facet, req.Params.FacetKey)
-	page, err := s.svc.Browse(ctx, uc, string(req.Params.List), filter, seed, deref(req.Params.Cursor), limit)
+	page, err := s.svc.Reads.Browse(ctx, uc, string(req.Params.List), filter, seed, deref(req.Params.Cursor), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -523,7 +546,7 @@ func (s *Server) Search(ctx context.Context, req SearchRequestObject) (SearchRes
 		return nil, err
 	}
 	uc := userCtx(ctx)
-	res, err := s.svc.Search(ctx, uc, req.Params.Q, limit)
+	res, err := s.svc.Reads.Search(ctx, uc, req.Params.Q, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -543,7 +566,7 @@ func (s *Server) ResolveEntities(ctx context.Context, req ResolveEntitiesRequest
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	cards, departed, err := s.svc.EntityCards(ctx, uc, req.Body.Pids)
+	cards, departed, err := s.svc.Reads.EntityCards(ctx, uc, req.Body.Pids)
 	if err != nil {
 		return nil, err
 	}
@@ -574,7 +597,7 @@ func (s *Server) ResolveItems(ctx context.Context, req ResolveItemsRequestObject
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	items, departed, err := s.svc.ResolveItems(ctx, uc, req.Body.Pids)
+	items, departed, err := s.svc.Reads.ResolveItems(ctx, uc, req.Body.Pids)
 	if err != nil {
 		return nil, err
 	}
@@ -590,7 +613,7 @@ func (s *Server) ResolveItems(ctx context.Context, req ResolveItemsRequestObject
 
 func (s *Server) GetAlbum(ctx context.Context, req GetAlbumRequestObject) (GetAlbumResponseObject, error) {
 	uc := userCtx(ctx)
-	d, err := s.svc.Album(ctx, uc, req.Pid)
+	d, err := s.svc.Reads.Album(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -634,7 +657,7 @@ func albumJSON(d service.AlbumDetail) AlbumDetail {
 
 func (s *Server) GetItem(ctx context.Context, req GetItemRequestObject) (GetItemResponseObject, error) {
 	uc := userCtx(ctx)
-	d, err := s.svc.Item(ctx, uc, req.Pid)
+	d, err := s.svc.Reads.Item(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -746,7 +769,7 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 		}
 	}
 	uc := userCtx(ctx)
-	blob, err := s.svc.Art(ctx, uc, req.Pid, enumStr(req.Params.Role), size)
+	blob, err := s.svc.Reads.Art(ctx, uc, req.Pid, enumStr(req.Params.Role), size)
 	if err != nil {
 		return nil, err
 	}
@@ -824,7 +847,7 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 
 func (s *Server) GetItemArtRoles(ctx context.Context, req GetItemArtRolesRequestObject) (GetItemArtRolesResponseObject, error) {
 	uc := userCtx(ctx)
-	infos, err := s.svc.ItemArtRoles(ctx, uc, req.Pid)
+	infos, err := s.svc.Reads.ItemArtRoles(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -889,7 +912,7 @@ func artSourceJSON(a service.ArtSourceDTO) *ArtSource {
 
 func (s *Server) GetItemLyrics(ctx context.Context, req GetItemLyricsRequestObject) (GetItemLyricsResponseObject, error) {
 	uc := userCtx(ctx)
-	ly, err := s.svc.ItemLyrics(ctx, uc, req.Pid)
+	ly, err := s.svc.Reads.ItemLyrics(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -959,7 +982,7 @@ func (s *Server) GetJob(ctx context.Context, req GetJobRequestObject) (GetJobRes
 			return GetJob200JSONResponse(Job{Pid: req.Pid, Kind: "timeline", State: state}), nil
 		}
 	}
-	job, err := s.svc.JobStatusFor(ctx, uc, req.Pid)
+	job, err := s.svc.Jobs.StatusFor(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -974,7 +997,7 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 	// Visibility gates the mint: an item outside the caller's libraries
 	// must not yield a stream URL. The same read says whether the item is
 	// a book, the one kind that can lay out in parts.
-	book, err := s.svc.VisibleBook(ctx, uc, req.Pid)
+	book, err := s.svc.Grants.VisibleBook(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -987,7 +1010,7 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 	}
 	var part service.PlayPart
 	if book {
-		if part, err = s.svc.ResolvePlayPart(ctx, uc, req.Pid, positionMS); err != nil {
+		if part, err = s.svc.Playback.ResolvePlayPart(ctx, uc, req.Pid, positionMS); err != nil {
 			return nil, err
 		}
 	}
@@ -1011,7 +1034,7 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 	if req.Params.VoiceBoost != nil {
 		boost = *req.Params.VoiceBoost
 	} else {
-		boost = s.svc.EffectiveVoiceBoost(ctx, uc, req.Pid)
+		boost = s.svc.Playback.EffectiveVoiceBoost(ctx, uc, req.Pid)
 	}
 
 	// The position also cuts a stream that cannot be range-seeked, from
@@ -1070,7 +1093,7 @@ func (s *Server) directPlayInfo(ctx context.Context, uc *service.UserCtx, p *aut
 	if s.media == nil {
 		return nil, errStreamingUnavailable
 	}
-	res, err := s.svc.DirectPlayInfo(ctx, uc, pid, part.FilePID)
+	res, err := s.svc.Playback.DirectPlayInfo(ctx, uc, pid, part.FilePID)
 	if err != nil {
 		if out, ok := s.enclosurePlayInfo(ctx, uc.ID, sessionCred(p), pid, err); ok {
 			return out, nil
@@ -1107,7 +1130,7 @@ func (s *Server) directPlayInfo(ctx context.Context, uc *service.UserCtx, p *aut
 
 func (s *Server) GetPlayState(ctx context.Context, req GetPlayStateRequestObject) (GetPlayStateResponseObject, error) {
 	uc := userCtx(ctx)
-	st, err := s.svc.PlayState(ctx, uc, req.Pid)
+	st, err := s.svc.Playback.PlayState(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -1157,7 +1180,7 @@ func (s *Server) PutPlayState(ctx context.Context, req PutPlayStateRequestObject
 	uc := userCtx(ctx)
 	// A skipped replay is still a 204: the winning state is already in
 	// the caller's event stream, so there is nothing to report.
-	if _, err := s.svc.Checkpoint(ctx, uc, req.Pid, req.Body.PositionMs, req.Body.RecordedAt); err != nil {
+	if _, err := s.svc.Playback.Checkpoint(ctx, uc, req.Pid, req.Body.PositionMs, req.Body.RecordedAt); err != nil {
 		return nil, err
 	}
 	return PutPlayState204Response{}, nil
@@ -1190,7 +1213,7 @@ func (s *Server) ReportListens(ctx context.Context, req ReportListensRequestObje
 		}
 		sessions = append(sessions, s)
 	}
-	res, err := s.svc.IngestListens(ctx, uc, sessions)
+	res, err := s.svc.Playback.IngestListens(ctx, uc, sessions)
 	if err != nil {
 		return nil, err
 	}

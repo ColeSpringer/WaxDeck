@@ -110,11 +110,11 @@ func openStubFeeds(t *testing.T, feeds ...*stubFeed) stubFeedFixture {
 		svc.Close()
 		store.Close()
 	})
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "admin", Password: "correct-horse", Roles: []string{"admin"}})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "admin", Password: "correct-horse", Roles: []string{"admin"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func openStubFeeds(t *testing.T, feeds ...*stubFeed) stubFeedFixture {
 
 func (f stubFeedFixture) subscribe(t *testing.T, url, sourceType string) Subscription {
 	t.Helper()
-	sub, _, err := f.svc.Subscribe(f.ctx, f.uc, SubscribeRequest{URL: url, SourceType: sourceType})
+	sub, _, err := f.svc.Podcasts.Subscribe(f.ctx, f.uc, SubscribeRequest{URL: url, SourceType: sourceType})
 	if err != nil {
 		t.Fatalf("subscribing to %s: %v", url, err)
 	}
@@ -133,7 +133,7 @@ func (f stubFeedFixture) subscribe(t *testing.T, url, sourceType string) Subscri
 // countEpisodeReads routes the library's episode reads through a counter.
 func countEpisodeReads(svc *Library) *atomic.Int64 {
 	var n atomic.Int64
-	svc.episodeReadHook = func(ctx context.Context, pids []model.PID) ([]*model.Episode, error) {
+	svc.Podcasts.episodeReadHook = func(ctx context.Context, pids []model.PID) ([]*model.Episode, error) {
 		n.Add(1)
 		return svc.lib.Podcasts().EpisodesByPIDs(ctx, pids)
 	}
@@ -149,7 +149,7 @@ func TestEpisodeRowsReadTheCatalogOncePerPage(t *testing.T) {
 	f.subscribe(t, "https://feeds.example/sixty", "rss")
 	reads := countEpisodeReads(f.svc)
 
-	rows, next, err := f.svc.SubscribedEpisodes(f.ctx, f.uc, EpisodesLatest, "", 25)
+	rows, next, err := f.svc.Podcasts.SubscribedEpisodes(f.ctx, f.uc, EpisodesLatest, "", 25)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestEpisodeRowsReadTheCatalogOncePerPage(t *testing.T) {
 	if rows[0].Title != "Episode 059" || !rows[0].HasEnclosure || rows[0].ShowPID == "" {
 		t.Errorf("first row = %+v, want the newest episode with its show and enclosure", rows[0])
 	}
-	rows, _, err = f.svc.SubscribedEpisodes(f.ctx, f.uc, EpisodesLatest, next, 25)
+	rows, _, err = f.svc.Podcasts.SubscribedEpisodes(f.ctx, f.uc, EpisodesLatest, next, 25)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestSyncSnapshotEpisodesBatch(t *testing.T) {
 	}
 
 	feed.retitle("Remastered")
-	if _, err := f.svc.RefreshPodcast(f.ctx, f.uc, sub.Show.PID); err != nil {
+	if _, err := f.svc.Podcasts.RefreshPodcast(f.ctx, f.uc, sub.Show.PID); err != nil {
 		t.Fatal(err)
 	}
 	reads.Store(0)

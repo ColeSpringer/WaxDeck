@@ -20,8 +20,8 @@ func TestACanceledDeleteFinishesAndIsRecorded(t *testing.T) {
 	tr := tracks["Gone"]
 	request, cancel := context.WithCancel(ctx)
 	defer cancel()
-	svc.deleteApplyHook = func(context.Context) { cancel() }
-	res, err := svc.DeleteItems(request, admin, []string{tr.pid}, "trash", false)
+	svc.Tools.deleteApplyHook = func(context.Context) { cancel() }
+	res, err := svc.Tools.DeleteItems(request, admin, []string{tr.pid}, "trash", false)
 	if err != nil || res.Trashed != 1 {
 		t.Fatalf("a delete whose request ended mid-run = %+v, %v; want it finished", res, err)
 	}
@@ -40,7 +40,7 @@ func TestADeleteSkippedWholeAsItRanIsRefused(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin, _, tracks := newTrashFixture(t, "Flagged")
 	tr := tracks["Flagged"]
-	svc.deleteApplyHook = func(ctx context.Context) {
+	svc.Tools.deleteApplyHook = func(ctx context.Context) {
 		libs, err := svc.lib.Libraries(ctx)
 		if err != nil {
 			t.Error(err)
@@ -52,7 +52,7 @@ func TestADeleteSkippedWholeAsItRanIsRefused(t *testing.T) {
 			}
 		}
 	}
-	if _, err := svc.DeleteItems(ctx, admin, []string{tr.pid}, "trash", false); KindOf(err) != KindReadOnly {
+	if _, err := svc.Tools.DeleteItems(ctx, admin, []string{tr.pid}, "trash", false); KindOf(err) != KindReadOnly {
 		t.Fatalf("delete = %v (kind %q), want read-only", err, KindOf(err))
 	}
 	trashFileStillThere(t, tr.path, "the skipped track")
@@ -69,12 +69,12 @@ func TestADeleteSkippedWholeAsItRanIsRefused(t *testing.T) {
 func TestAnUpgradeThatMovedNothingIsAuditedAsRefused(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, paths, pids := twoTrackFixture(t)
-	svc.deleteApplyHook = func(context.Context) {
+	svc.Tools.deleteApplyHook = func(context.Context) {
 		if err := os.Remove(paths[1]); err != nil {
 			t.Error(err)
 		}
 	}
-	if _, err := svc.ResolveUpgrade(ctx, uc, UpgradeResolveDTO{KeepItemPID: pids[0], RemoveItemPIDs: []string{pids[1]}}); KindOf(err) != KindInternal {
+	if _, err := svc.Health.ResolveUpgrade(ctx, uc, UpgradeResolveDTO{KeepItemPID: pids[0], RemoveItemPIDs: []string{pids[1]}}); KindOf(err) != KindInternal {
 		t.Fatalf("resolve of a vanished file = %v (kind %q), want internal", err, KindOf(err))
 	}
 	if got := auditDetails(t, ctx, svc, "items.delete.refused"); len(got) != 1 || got[0]["reason"] != "quality-upgrade" {
@@ -88,7 +88,7 @@ func TestATrashedFileOfAGoneLibraryIsNamedByItsFile(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := openEnrichFixture(t, func(*Config) {})
 	gone := filepath.Join(string(filepath.Separator), "srv", "gone", "Album", "song.flac")
-	if got := svc.trashEntryName(model.TrashEntry{OrigDisplay: gone, LibraryPID: "01ARZ3NDEKTSV4RRFFQ69G5FAV"}); got != "song.flac" {
+	if got := svc.Tools.trashEntryName(model.TrashEntry{OrigDisplay: gone, LibraryPID: "01ARZ3NDEKTSV4RRFFQ69G5FAV"}); got != "song.flac" {
 		t.Fatalf("name = %q, want the file's own name", got)
 	}
 }
@@ -128,7 +128,7 @@ func TestAPartlyAppliedResolveKeepsEveryTrackOfARipThatStayed(t *testing.T) {
 			whole = append(whole, pid)
 		}
 	}
-	it, err := svc.getVisibleItem(ctx, uc, one)
+	it, err := svc.Grants.getVisibleItem(ctx, uc, one)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestAPartlyAppliedResolveKeepsEveryTrackOfARipThatStayed(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(ripDir, 0o755) })
-	if _, err := svc.ResolveUpgrade(ctx, uc, UpgradeResolveDTO{
+	if _, err := svc.Health.ResolveUpgrade(ctx, uc, UpgradeResolveDTO{
 		KeepItemPID: whole[0], RemoveItemPIDs: []string{one, two, whole[1]},
 	}); err == nil || !strings.Contains(err.Error(), "1 of the files") {
 		t.Fatalf("a resolve whose rip stayed answered %v, want the one file that stayed", err)

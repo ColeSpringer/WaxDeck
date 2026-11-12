@@ -14,7 +14,7 @@ func (s *Server) ListEntityFolds(ctx context.Context, req ListEntityFoldsRequest
 	if err != nil {
 		return nil, err
 	}
-	folds, next, err := s.svc.ListEntityFolds(ctx, uc, deref(req.Params.Cursor), limit)
+	folds, next, err := s.svc.Reads.ListEntityFolds(ctx, uc, deref(req.Params.Cursor), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func (s *Server) UnfoldEntities(ctx context.Context, req UnfoldEntitiesRequestOb
 	if !req.Body.EntityType.Valid() {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", "unknown entity type")
 	}
-	if err := s.svc.UnfoldEntities(ctx, uc, string(req.Body.EntityType), req.Body.Keys); err != nil {
+	if err := s.svc.Reads.UnfoldEntities(ctx, uc, string(req.Body.EntityType), req.Body.Keys); err != nil {
 		return nil, err
 	}
 	return UnfoldEntities204Response{}, nil

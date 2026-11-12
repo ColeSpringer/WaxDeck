@@ -18,7 +18,7 @@ type walkCount struct {
 
 func countWalks(svc *Library) *walkCount {
 	c := &walkCount{}
-	svc.refResolveHook = func(opts waxbin.ResolveOptions, refs int) {
+	svc.Playlists.refResolveHook = func(opts waxbin.ResolveOptions, refs int) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		if opts.AcceptSameRecording {
@@ -90,7 +90,7 @@ func TestAMigrationResolveWalksTwiceOnlyForATieAboveTheLastRung(t *testing.T) {
 	ctx, f, shapes := tieShapes(t)
 	walks := countWalks(f.svc)
 	for _, s := range shapes {
-		it, copies, err := f.svc.resolveMigrationRef(ctx, s.ref)
+		it, copies, err := f.svc.Migrate.resolveMigrationRef(ctx, s.ref)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -111,7 +111,7 @@ func TestAGroupMemberResolveWalksTwiceOnlyForATieAboveTheLastRung(t *testing.T) 
 	walks := countWalks(f.svc)
 	album := func(it *model.ItemView) model.PID { return it.AlbumPID }
 	for _, s := range shapes {
-		sure, fallback, err := f.svc.resolveGroupMember(ctx, s.ref, album)
+		sure, fallback, err := f.svc.Migrate.resolveGroupMember(ctx, s.ref, album)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -152,7 +152,7 @@ func TestAPlaylistImportWalksTwiceOnlyForATieAboveTheLastRung(t *testing.T) {
 	}
 	walks := countWalks(f.svc)
 
-	res, _, err := f.svc.resolvePlaylistImportRefs(ctx, memberFilter{uc: f.uc, subs: f.svc.newSubscriptionFilter(f.uc)}, refs)
+	res, _, err := f.svc.Playlists.resolvePlaylistImportRefs(ctx, memberFilter{uc: f.uc, subs: f.svc.Podcasts.newSubscriptionFilter(f.uc)}, refs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestAPlaylistImportWalksTwiceOnlyForATieAboveTheLastRung(t *testing.T) {
 
 	// A reader granted no library holds none of the matches.
 	blind := &UserCtx{ID: f.uc.ID, CatalogPID: f.uc.CatalogPID, Libraries: map[string]bool{"none": true}}
-	res, _, err = f.svc.resolvePlaylistImportRefs(ctx, memberFilter{uc: blind, subs: f.svc.newSubscriptionFilter(blind)}, refs)
+	res, _, err = f.svc.Playlists.resolvePlaylistImportRefs(ctx, memberFilter{uc: blind, subs: f.svc.Podcasts.newSubscriptionFilter(blind)}, refs)
 	if err != nil {
 		t.Fatal(err)
 	}

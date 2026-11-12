@@ -270,6 +270,14 @@ func (g facetGeneration) dominates(o facetGeneration) bool {
 	return g.tail >= o.tail && g.vocab >= o.vocab
 }
 
+// tagValueCache memoizes each custom-tag field's stored spellings within
+// one generation of the catalog they were read from.
+type tagValueCache struct {
+	mu      sync.Mutex
+	gen     facetGeneration
+	byField map[string][]string
+}
+
 // FacetQuery is one request for a dimension's buckets. A struct because
 // Cursor and StartsAt are two strings naming two different positions,
 // and a transposed pair would fail silently.
@@ -324,7 +332,7 @@ func (s facetScope) cacheKind() (string, bool) {
 
 // Facets enumerates one browse dimension's buckets, paged: most items
 // first by default, A to Z under FacetSortLabel.
-func (l *Library) Facets(ctx context.Context, uc *UserCtx, q FacetQuery) (FacetPage, error) {
+func (l *Reads) Facets(ctx context.Context, uc *UserCtx, q FacetQuery) (FacetPage, error) {
 	group, canonical, err := facetGroupFor(q.Dimension)
 	if err != nil {
 		return FacetPage{}, err
@@ -458,7 +466,7 @@ func facetSeekPrefix(buckets []FacetBucket, prefix string) int {
 
 // facetBuckets computes (or serves from cache) a dimension's whole
 // bucket list for the caller, in the requested order.
-func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension string, group read.GroupBy, order FacetSort, scope facetScope, scoped query.Query) ([]FacetBucket, error) {
+func (l *Reads) facetBuckets(ctx context.Context, uc *UserCtx, dimension string, group read.GroupBy, order FacetSort, scope facetScope, scoped query.Query) ([]FacetBucket, error) {
 	gen := l.facetGeneration(ctx)
 	// An entity-scoped enumeration takes part in the cache in neither
 	// direction. Not read, because the cached entry is another scope's
@@ -569,7 +577,7 @@ func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension strin
 }
 
 // facetGeneration reads the inputs a cached enumeration is valid for.
-func (l *Library) facetGeneration(ctx context.Context) facetGeneration {
+func (l *Reads) facetGeneration(ctx context.Context) facetGeneration {
 	return facetGeneration{tail: l.CatalogContentSeq(ctx), vocab: l.genres.version.Load()}
 }
 
@@ -590,7 +598,7 @@ func (l *Library) facetGeneration(ctx context.Context) facetGeneration {
 // generation is read before the lock, which holds no catalog read, and
 // under it only a generation dominating the held one is installed, so a
 // publisher holding an older one cannot land after a newer publish.
-func (l *Library) publishFacetBuckets(ctx context.Context, gen facetGeneration, key facetCacheKey, buckets []FacetBucket) {
+func (l *Reads) publishFacetBuckets(ctx context.Context, gen facetGeneration, key facetCacheKey, buckets []FacetBucket) {
 	if l.facetGeneration(ctx) != gen {
 		return
 	}
@@ -603,6 +611,85 @@ func (l *Library) publishFacetBuckets(ctx context.Context, gen facetGeneration, 
 		l.facets.gen, l.facets.byDimension = gen, map[facetCacheKey][]FacetBucket{}
 	}
 	l.facets.byDimension[key] = buckets
+}
+
+// tagSpellings lists the stored values of a tag field that case-fold to
+// value, which is how EqualFold survives the trip into SQL. An error is
+// the caller's to fail closed on; a value nothing carries is a nil
+// slice and no error.
+//
+// Read off the catalog's own aggregation over the whole library, not the
+// caller's scope: this builds a filter, so it needs every spelling that
+// exists rather than the ones the caller can already see. Memoized per
+// field on the facet generation, beside the browse enumerations and for
+// the same reason - a listing page asks this once per rule per request
+// otherwise. Published the way facet buckets are: only while the
+// generation the read started under is still current, so a slow
+// aggregation neither lands stale nor rolls the stamp back over a newer
+// field's entry.
+func (l *Reads) tagSpellings(ctx context.Context, field, value string) ([]string, error) {
+	gen := l.facetGeneration(ctx)
+	l.tagValues.mu.Lock()
+	if l.tagValues.gen == gen {
+		if held, ok := l.tagValues.byField[field]; ok {
+			l.tagValues.mu.Unlock()
+			return foldMatching(held, value), nil
+		}
+	}
+	l.tagValues.mu.Unlock()
+
+	// visibleItems, not a bare query: a spelling carried only by trashed
+	// items cannot change any answer - the state predicate drops those
+	// rows wherever this node is conjoined - and narrowing the
+	// aggregation is the cheaper way to say so.
+	var res *read.FacetResult
+	err := l.fallbackFault("tag spellings")
+	if err == nil {
+		res, err = l.lib.Facet(ctx, visibleItems().Build(),
+			read.GroupBy(field), read.FacetOrderLabel, 0, "")
+	}
+	if err != nil {
+		l.log.Warn("enumerating tag values for a content rule", "field", field, "err", err)
+		return nil, classify(err)
+	}
+	stored := make([]string, 0, len(res.Buckets))
+	for _, b := range res.Buckets {
+		if !b.IsUnknown && b.Display != "" {
+			stored = append(stored, b.Display)
+		}
+	}
+	l.publishTagValues(ctx, gen, field, stored)
+	return foldMatching(stored, value), nil
+}
+
+// publishTagValues stores one field's spellings, read under gen, while gen
+// is still the current generation: read before the lock, which holds no
+// catalog read, with only a generation dominating the held one installed
+// under it, so no publisher holding an older one can land after a newer
+// publish.
+func (l *Reads) publishTagValues(ctx context.Context, gen facetGeneration, field string, stored []string) {
+	if l.facetGeneration(ctx) != gen {
+		return
+	}
+	l.tagValues.mu.Lock()
+	defer l.tagValues.mu.Unlock()
+	if l.tagValues.byField != nil && !gen.dominates(l.tagValues.gen) {
+		return
+	}
+	if l.tagValues.gen != gen || l.tagValues.byField == nil {
+		l.tagValues.gen, l.tagValues.byField = gen, map[string][]string{}
+	}
+	l.tagValues.byField[field] = stored
+}
+
+func foldMatching(stored []string, value string) []string {
+	out := make([]string, 0, 1)
+	for _, s := range stored {
+		if strings.EqualFold(s, value) {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // sortFacetBuckets arranges buckets in one of the two orders, stably, so
@@ -761,28 +848,14 @@ func facetLess(a, b FacetBucket) bool {
 // it further: the two never met before this, and composing them is what
 // answers "the albums this artist is credited on" as album buckets
 // rather than as a download of item rows.
-func (l *Library) facetScopeBuilder(ctx context.Context, uc *UserCtx) *query.Builder {
-	return l.scopedTo(ctx, uc, visibleItems())
-}
-
-// scopedTo narrows a builder to what the caller may enumerate: their tag
-// rules and their library grants.
-func (l *Library) scopedTo(ctx context.Context, uc *UserCtx, b *query.Builder) *query.Builder {
-	// The caller's tag rules, as a node rather than the per-item pass
-	// that used to be their only home: a bucket count that ignored them
-	// read higher than the list it opened, and an "Appears on" card could
-	// open onto nothing.
-	b = b.WhereNode(l.contentRuleNode(ctx, uc))
-	if grants := l.grantNode(ctx, uc); grants != nil {
-		b = b.WhereNode(grants)
-	}
-	return b
+func (l *Reads) facetScopeBuilder(ctx context.Context, uc *UserCtx) *query.Builder {
+	return l.Grants.scopedTo(ctx, uc, visibleItems())
 }
 
 // facetScopeQuery is facetScopeBuilder narrowed by an optional scope
 // bucket and built. An empty scope.Facet is the whole-library
 // enumeration this endpoint has always answered.
-func (l *Library) facetScopeQuery(ctx context.Context, uc *UserCtx, scope facetScope) (query.Query, error) {
+func (l *Reads) facetScopeQuery(ctx context.Context, uc *UserCtx, scope facetScope) (query.Query, error) {
 	b := l.facetScopeBuilder(ctx, uc)
 	if scope.Facet == "" {
 		return b.Build(), nil

@@ -10,14 +10,22 @@ import (
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
-// playlistMember opens an account and its context.
+// playlistMember opens a plain account and its context.
 func playlistMember(t *testing.T, ctx context.Context, svc *Library, name string) (*Account, *UserCtx) {
 	t.Helper()
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: name, Password: "correct-horse"})
+	return memberAs(t, ctx, svc, AccountCreate{Username: name})
+}
+
+// memberAs opens the account in describes, under the tests' password, and
+// its context.
+func memberAs(t *testing.T, ctx context.Context, svc *Library, in AccountCreate) (*Account, *UserCtx) {
+	t.Helper()
+	in.Password = "correct-horse"
+	acct, err := svc.Identity.CreateAccount(ctx, in)
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +35,7 @@ func playlistMember(t *testing.T, ctx context.Context, svc *Library, name string
 // playlistAs creates a static playlist of the given visibility.
 func playlistAs(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, name, visibility string, pids []string) string {
 	t.Helper()
-	pl, err := svc.CreatePlaylist(ctx, uc, PlaylistCreate{
+	pl, err := svc.Playlists.CreatePlaylist(ctx, uc, PlaylistCreate{
 		Name: name, Kind: "static", Visibility: visibility, ItemPIDs: pids,
 	})
 	if err != nil {
@@ -76,26 +84,26 @@ func TestDeletingAnAccountHandsItsSharedPlaylistsOver(t *testing.T) {
 	guilty := playlistAs(t, ctx, svc, samCtx, "Guilty pleasures", "private", pids[:1])
 	mine := playlistAs(t, ctx, svc, admin, "Mine", "private", pids[:2])
 	theirs := playlistAs(t, ctx, svc, bystander, "Theirs", "shared", pids[:1])
-	privateBefore := len(ownedBy(t, ctx, svc, sam.User.WaxbinUserPID)) - 1
+	privateBefore := len(ownedBy(t, ctx, svc, sam.User.row.WaxbinUserPID)) - 1
 	since, err := svc.MintServerCursor(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
+	got, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.PlaylistsTransferred != 1 || got.PlaylistsDeleted != privateBefore || got.TransferredTo != "admin" {
 		t.Fatalf("result = %+v, want 1 handed to admin and %d private ones deleted", got, privateBefore)
 	}
-	if _, err := svc.Account(ctx, sam.User.ID); KindOf(err) != KindNotFound {
+	if _, err := svc.Identity.Account(ctx, sam.User.ID); KindOf(err) != KindNotFound {
 		t.Fatalf("the account after its deletion = %v, want not found", err)
 	}
 
 	// The shared playlist is the administrator's now: same entries, new
 	// owner shown, theirs to edit.
-	pl, err := svc.PlaylistByPID(ctx, admin, roadTrip)
+	pl, err := svc.Playlists.ByPID(ctx, admin, roadTrip)
 	if err != nil {
 		t.Fatalf("the handed-over playlist: %v", err)
 	}
@@ -106,10 +114,10 @@ func TestDeletingAnAccountHandsItsSharedPlaylistsOver(t *testing.T) {
 		t.Errorf("members = %v, want its entries %v kept", members, pids)
 	}
 	newName := "Road trip (kept)"
-	if _, err := svc.UpdatePlaylist(ctx, admin, roadTrip, PlaylistUpdate{Name: &newName}); err != nil {
+	if _, err := svc.Playlists.UpdatePlaylist(ctx, admin, roadTrip, PlaylistUpdate{Name: &newName}); err != nil {
 		t.Errorf("the administrator cannot edit what they were handed: %v", err)
 	}
-	seen, err := svc.PlaylistByPID(ctx, bystander, roadTrip)
+	seen, err := svc.Playlists.ByPID(ctx, bystander, roadTrip)
 	if err != nil || seen.IsOwner || seen.OwnerName != "admin" {
 		t.Errorf("another member sees %+v (%v), want it listed under the administrator", seen, err)
 	}
@@ -118,7 +126,7 @@ func TestDeletingAnAccountHandsItsSharedPlaylistsOver(t *testing.T) {
 	if catalogHas(ctx, svc, guilty) {
 		t.Error("a private playlist of the deleted member survived")
 	}
-	if left := ownedBy(t, ctx, svc, sam.User.WaxbinUserPID); len(left) != 0 {
+	if left := ownedBy(t, ctx, svc, sam.User.row.WaxbinUserPID); len(left) != 0 {
 		t.Errorf("the deleted member's catalog user still owns %v", left)
 	}
 	for _, other := range []string{mine, theirs} {
@@ -152,9 +160,9 @@ func TestDeletingAnAccountCanDeleteItsPlaylistsInstead(t *testing.T) {
 	sam, samCtx := playlistMember(t, ctx, svc, "sam")
 	roadTrip := playlistAs(t, ctx, svc, samCtx, "Road trip", "shared", pids)
 	guilty := playlistAs(t, ctx, svc, samCtx, "Guilty pleasures", "private", pids)
-	owned := len(ownedBy(t, ctx, svc, sam.User.WaxbinUserPID))
+	owned := len(ownedBy(t, ctx, svc, sam.User.row.WaxbinUserPID))
 
-	got, err := svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{Playlists: PlaylistsDelete})
+	got, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{Playlists: PlaylistsDelete})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,14 +205,14 @@ func TestDeletingAnAccountCanHandItsPlaylistsToAnotherMember(t *testing.T) {
 		}
 	}
 
-	got, err := svc.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{TransferTo: pat.User.ID})
+	got, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, AccountDeletion{TransferTo: pat.User.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.PlaylistsTransferred != 1 || got.TransferredTo != "pat" {
 		t.Fatalf("result = %+v, want one playlist handed to pat", got)
 	}
-	pl, err := svc.PlaylistByPID(ctx, patCtx, roadTrip)
+	pl, err := svc.Playlists.ByPID(ctx, patCtx, roadTrip)
 	if err != nil || !pl.IsOwner || pl.OwnerName != "pat" {
 		t.Errorf("pat sees %+v (%v), want it as theirs", pl, err)
 	}
@@ -229,10 +237,10 @@ func TestAccountDeletionRefusesWhatCannotTakeThePlaylists(t *testing.T) {
 	sam, samCtx := playlistMember(t, ctx, svc, "sam")
 	away, _ := playlistMember(t, ctx, svc, "away")
 	off := true
-	if _, err := svc.UpdateAccount(ctx, away.User.ID, AccountUpdate{Disabled: &off}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, away.User.ID, AccountUpdate{Disabled: &off}); err != nil {
 		t.Fatal(err)
 	}
-	pending, err := svc.CreateAccount(ctx, AccountCreate{Username: "applicant", Password: "correct-horse", Pending: true})
+	pending, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "applicant", Password: "correct-horse", Pending: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,17 +254,17 @@ func TestAccountDeletionRefusesWhatCannotTakeThePlaylists(t *testing.T) {
 		"a disabled recipient":      {TransferTo: away.User.ID},
 		"a pending recipient":       {TransferTo: pending.User.ID},
 	} {
-		if _, err := svc.DeleteAccount(ctx, admin, sam.User.ID, opts); KindOf(err) != KindInvalid {
+		if _, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, opts); KindOf(err) != KindInvalid {
 			t.Errorf("%s: err = %v (kind %q), want invalid", name, err, KindOf(err))
 		}
 	}
-	if _, err := svc.Account(ctx, sam.User.ID); err != nil {
+	if _, err := svc.Identity.Account(ctx, sam.User.ID); err != nil {
 		t.Errorf("a refused deletion removed the account: %v", err)
 	}
-	if pl, err := svc.PlaylistByPID(ctx, samCtx, roadTrip); err != nil || !pl.IsOwner {
+	if pl, err := svc.Playlists.ByPID(ctx, samCtx, roadTrip); err != nil || !pl.IsOwner {
 		t.Errorf("a refused deletion disturbed the playlist: %+v (%v)", pl, err)
 	}
-	if _, err := svc.DeleteAccount(ctx, admin, "us-01JZX5N8QW3F4V9T2B7KDNOBODY", AccountDeletion{}); KindOf(err) != KindNotFound {
+	if _, err := svc.Identity.DeleteAccount(ctx, admin, "us-01JZX5N8QW3F4V9T2B7KDNOBODY", AccountDeletion{}); KindOf(err) != KindNotFound {
 		t.Errorf("deleting an unknown account = %v, want not found", err)
 	}
 }
@@ -270,7 +278,7 @@ func TestRefusedAccountDeletionLeavesItsPlaylists(t *testing.T) {
 	mine := playlistAs(t, ctx, svc, admin, "Mine", "private", pids)
 	shared := playlistAs(t, ctx, svc, admin, "Ours", "shared", pids)
 
-	if _, err := svc.DeleteAccount(ctx, admin, admin.ID, AccountDeletion{Playlists: PlaylistsDelete}); KindOf(err) != KindConflict {
+	if _, err := svc.Identity.DeleteAccount(ctx, admin, admin.ID, AccountDeletion{Playlists: PlaylistsDelete}); KindOf(err) != KindConflict {
 		t.Fatalf("deleting the last administrator = %v, want a conflict", err)
 	}
 	for _, kept := range []string{mine, shared} {

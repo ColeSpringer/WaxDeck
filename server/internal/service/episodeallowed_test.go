@@ -20,15 +20,15 @@ func TestAnEpisodeRowAndItsDetailAgreeOnWhoSeesIt(t *testing.T) {
 	episode := showEpisodePIDs(t, f, sub.Show.PID)[0]
 	perms := DefaultPermissions()
 	perms.Explicit = false
-	acct, err := f.svc.CreateAccount(f.ctx, AccountCreate{Username: "kid", Password: "correct-horse", Permissions: &perms})
+	acct, err := f.svc.Identity.CreateAccount(f.ctx, AccountCreate{Username: "kid", Password: "correct-horse", Permissions: &perms})
 	if err != nil {
 		t.Fatal(err)
 	}
-	kid, err := f.svc.UserCtx(f.ctx, acct.User)
+	kid, err := f.svc.Grants.UserCtxFor(f.ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.svc.showReadHook = func(context.Context, model.PID) (*model.Podcast, error) {
+	f.svc.Podcasts.showReadHook = func(context.Context, model.PID) (*model.Podcast, error) {
 		return nil, errors.New("database is locked")
 	}
 	for _, c := range []struct {
@@ -39,8 +39,8 @@ func TestAnEpisodeRowAndItsDetailAgreeOnWhoSeesIt(t *testing.T) {
 		{"an account without explicit content", kid, KindNotFound},
 		{"an account with it", f.uc, ""},
 	} {
-		_, detailErr := f.svc.EpisodeDetailFor(f.ctx, c.uc, episode)
-		_, _, rowErr := f.svc.EpisodeSummaryFor(f.ctx, c.uc, episode)
+		_, detailErr := f.svc.Podcasts.EpisodeDetailFor(f.ctx, c.uc, episode)
+		_, _, rowErr := f.svc.Podcasts.EpisodeSummaryFor(f.ctx, c.uc, episode)
 		if KindOf(detailErr) != c.want || KindOf(rowErr) != c.want {
 			t.Errorf("%s, the show unreadable: detail %v, row %v; want both %q", c.name, detailErr, rowErr, c.want)
 		}

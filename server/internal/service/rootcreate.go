@@ -75,7 +75,7 @@ type folderLook struct {
 // other create looks at a folder this one is adding. A managed create asks
 // for the write probe, unless the server is read-only or the folder is a
 // library's own, holds one or lies inside one.
-func (l *Library) claimRoot(ctx context.Context, name, path string, managed bool) (*rootClaim, func(), error) {
+func (l *Roots) claimRoot(ctx context.Context, name, path string, managed bool) (*rootClaim, func(), error) {
 	c := &l.creates
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -83,7 +83,7 @@ func (l *Library) claimRoot(ctx context.Context, name, path string, managed bool
 	if err != nil {
 		return nil, nil, classify(err)
 	}
-	if err := l.rootTaken(ctx, name, path, libs); err != nil {
+	if err := l.taken(ctx, name, path, libs); err != nil {
 		return nil, nil, err
 	}
 	for _, other := range c.claims {
@@ -97,7 +97,7 @@ func (l *Library) claimRoot(ctx context.Context, name, path string, managed bool
 	// The probe goes to the typed path, decided before the look resolves
 	// it: re-deciding after would take a second look, and a probe file
 	// written through a link is removed at once all the same.
-	claim := &rootClaim{name: name, path: path, probe: managed && !l.currentToggles().readOnly &&
+	claim := &rootClaim{name: name, path: path, probe: managed && !l.Settings.currentToggles().readOnly &&
 		!slices.ContainsFunc(libs, func(lib *model.Library) bool { return pathsOverlap(rootKey(lib.DisplayRoot), path) })}
 	c.claims = append(c.claims, claim)
 	return claim, func() {
@@ -107,14 +107,14 @@ func (l *Library) claimRoot(ctx context.Context, name, path string, managed bool
 	}, nil
 }
 
-// rootStillFree repeats the cheap checks once the folder has answered:
+// stillFree repeats the cheap checks once the folder has answered:
 // the CLI may have added the folder, or a root taken the name, meanwhile.
 // It also refuses a folder that a library, or another create in flight,
 // holds by another path - a symlinked parent or a bind mount names one
 // folder twice, and two libraries on it would catalog it twice. Paths
 // cannot tell that; only the folders can, and they are looked at off the
 // lock, again for a library that landed meanwhile.
-func (l *Library) rootStillFree(ctx context.Context, claim *rootClaim, path string, folder fs.FileInfo) error {
+func (l *Roots) stillFree(ctx context.Context, claim *rootClaim, path string, folder fs.FileInfo) error {
 	c := &l.creates
 	compared := map[string]bool{}
 	for {
@@ -131,7 +131,7 @@ func (l *Library) rootStillFree(ctx context.Context, claim *rootClaim, path stri
 			c.mu.Unlock()
 			return classify(err)
 		}
-		if err := l.rootTaken(ctx, claim.name, path, libs); err != nil {
+		if err := l.taken(ctx, claim.name, path, libs); err != nil {
 			c.mu.Unlock()
 			return err
 		}
@@ -155,7 +155,7 @@ func (l *Library) rootStillFree(ctx context.Context, claim *rootClaim, path stri
 // compared yet, marking those it compares. Each library's folder is
 // stat'ed on a worker of its own within the create's bound, so one that
 // does not answer holds only its own stat, and is not compared.
-func (l *Library) folderNotHeld(ctx context.Context, folder fs.FileInfo, libs []*model.Library, compared map[string]bool) error {
+func (l *Roots) folderNotHeld(ctx context.Context, folder fs.FileInfo, libs []*model.Library, compared map[string]bool) error {
 	var roots []string
 	var stats []*folderStat
 	for _, lib := range libs {
@@ -202,7 +202,7 @@ func (l *Library) folderNotHeld(ctx context.Context, folder fs.FileInfo, libs []
 
 // folderStatAt is the stat of a library's folder under way, or a new one
 // on a worker; nil when the server is stopping.
-func (l *Library) folderStatAt(path string) *folderStat {
+func (l *Roots) folderStatAt(path string) *folderStat {
 	c := &l.creates
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -239,7 +239,7 @@ func (l *Library) folderStatAt(path string) *folderStat {
 // path with its symlinks followed ("" when they cannot be), waiting on the
 // look within the bound. A look that settled before this create
 // could ask it for the probe is followed by another.
-func (l *Library) lookAtFolder(ctx context.Context, claim *rootClaim, allowAbsent bool) (bool, fs.FileInfo, string, error) {
+func (l *Roots) lookAtFolder(ctx context.Context, claim *rootClaim, allowAbsent bool) (bool, fs.FileInfo, string, error) {
 	timer := time.NewTimer(cmp.Or(l.creates.wait, folderCheckWait))
 	defer timer.Stop()
 	for {
@@ -359,7 +359,7 @@ func climbPhysically(path string) (string, error) {
 // while a create still waiting at the folder asks for it: one that gave up
 // asks nothing, and by then the folder may be a library's. A look that
 // breaks still ends, answering folderBroken.
-func (l *Library) folderLookAt(path string) (*folderLook, error) {
+func (l *Roots) folderLookAt(path string) (*folderLook, error) {
 	c := &l.creates
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -411,7 +411,7 @@ func (l *Library) folderLookAt(path string) (*folderLook, error) {
 
 // probeAsked reports whether a create still waiting at the folder asks for
 // the write probe.
-func (l *Library) probeAsked(path string) bool {
+func (l *Roots) probeAsked(path string) bool {
 	l.creates.mu.Lock()
 	defer l.creates.mu.Unlock()
 	return slices.ContainsFunc(l.creates.claims, func(x *rootClaim) bool { return x.path == path && x.probe })

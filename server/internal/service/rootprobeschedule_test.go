@@ -21,7 +21,7 @@ import (
 // countProbePasses counts the probe passes that start from now on.
 func countProbePasses(svc *Library) *atomic.Int32 {
 	var passes atomic.Int32
-	p := &svc.rootProbe
+	p := &svc.Roots.rootProbe
 	p.mu.Lock()
 	p.step = func(step string) {
 		if step == "pass" {
@@ -46,7 +46,7 @@ func managedOpenRoot(t *testing.T, dataDir string, mutate func(*Config)) (contex
 			mutate(c)
 		}
 	})
-	waitFor(t, svc.rootProbe.idle, "the boot probe pass to end")
+	waitFor(t, svc.Roots.rootProbe.idle, "the boot probe pass to end")
 	return ctx, svc, uc, open, stop
 }
 
@@ -58,11 +58,11 @@ func TestAListingOrARefreshProbesNothing(t *testing.T) {
 	ctx, svc, _, open, _ := managedOpenRoot(t, t.TempDir(), nil)
 	n, mtime := folderState(t, open)
 	passes := countProbePasses(svc)
-	if _, err := svc.LibrariesWithCounts(ctx); err != nil {
+	if _, err := svc.Roots.LibrariesWithCounts(ctx); err != nil {
 		t.Fatal(err)
 	}
-	svc.refreshLibraryState(ctx)
-	waitFor(t, svc.rootProbe.idle, "any probe pass to end")
+	svc.Roots.refreshLibraryState(ctx)
+	waitFor(t, svc.Roots.rootProbe.idle, "any probe pass to end")
 	if got := passes.Load(); got != 0 {
 		t.Errorf("a listing and a refresh ran %d probe passes, want none", got)
 	}
@@ -88,12 +88,12 @@ func TestAReadOnlyServerWritesNoProbeAtItsStart(t *testing.T) {
 	t.Parallel()
 	dataDir := t.TempDir()
 	ctx, svc, uc, open, stop := managedOpenRoot(t, dataDir, nil)
-	st, err := svc.AdminSettingsGet(ctx)
+	st, err := svc.Settings.AdminSettingsGet(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	st.ReadOnly = true
-	if _, err := svc.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
 	stop()
@@ -127,10 +127,10 @@ func said(w *bool) string {
 func TestARefusedUploadProbesTheRootsAgain(t *testing.T) {
 	skipWithoutUnwritablePaths(t)
 	ctx, svc, uc := managedUploadFixture(t)
-	waitFor(t, svc.rootProbe.idle, "the boot probe pass to end")
+	waitFor(t, svc.Roots.rootProbe.idle, "the boot probe pass to end")
 	_, id := pendingUploadEntry(t, ctx, svc, uc)
 	var root string
-	for _, r := range svc.libraryRoots() {
+	for _, r := range svc.Roots.libraryRoots() {
 		if r.Name == "lib" {
 			root = r.Path
 		}
@@ -139,7 +139,7 @@ func TestARefusedUploadProbesTheRootsAgain(t *testing.T) {
 	if w := listedWritable(t, ctx, svc, root); w == nil || !*w {
 		t.Fatalf("before any write the root lists writable %s, want the boot probe's answer", said(w))
 	}
-	if _, _, err := svc.DecideReviewEntry(ctx, uc, id, "as-is", ""); KindOf(err) != KindStorageUnwritable {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", ""); KindOf(err) != KindStorageUnwritable {
 		t.Fatalf("decision = %v, want storage-unwritable", err)
 	}
 	waitFor(t, func() bool {
@@ -155,14 +155,14 @@ func TestARefusedDeleteProbesTheRootsAgain(t *testing.T) {
 	skipWithoutUnwritablePaths(t)
 	for _, albums := range [][]string{{"Locked"}, {"Open", "Locked"}} {
 		ctx, svc, admin, root, tracks := newTrashFixture(t, albums...)
-		waitFor(t, svc.rootProbe.idle, "the boot probe pass to end")
+		waitFor(t, svc.Roots.rootProbe.idle, "the boot probe pass to end")
 		lockFolder(t, filepath.Join(root, "Locked"))
 		passes := countProbePasses(svc)
 		var pids []string
 		for _, album := range albums {
 			pids = append(pids, tracks[album].pid)
 		}
-		if _, err := svc.DeleteItems(ctx, admin, pids, "trash", false); err != nil && KindOf(err) != KindStorageUnwritable {
+		if _, err := svc.Tools.DeleteItems(ctx, admin, pids, "trash", false); err != nil && KindOf(err) != KindStorageUnwritable {
 			t.Fatalf("%v: delete = %v", albums, err)
 		}
 		waitFor(t, func() bool { return passes.Load() >= 1 }, "a probe pass after the refused delete")
@@ -191,9 +191,9 @@ func TestARefusedOrganizeProbesTheRootsAgain(t *testing.T) {
 	if items, err := svc.lib.Query(ctx, query.New(query.EntityItems).Build(), ""); err != nil || len(items) != 1 {
 		t.Fatalf("items = %d (%v), want the stray track", len(items), err)
 	}
-	waitFor(t, svc.rootProbe.idle, "the boot probe pass to end")
+	waitFor(t, svc.Roots.rootProbe.idle, "the boot probe pass to end")
 	lockFolder(t, root)
-	rep, err := svc.ApplyOrganize(ctx, uc, "", nil)
+	rep, err := svc.Health.ApplyOrganize(ctx, uc, "", nil)
 	if err != nil || rep.Failed == 0 {
 		t.Fatalf("apply = %+v (%v), want the move refused", rep, err)
 	}
@@ -214,15 +214,15 @@ func TestARefreshKeepsTheAnswerOfAProbeLandingMidway(t *testing.T) {
 	}
 	chmodFor(t, open, 0o555)
 	var once sync.Once
-	svc.refreshMu.Lock()
-	svc.refreshHook = func() {
+	svc.Roots.refreshMu.Lock()
+	svc.Roots.refreshHook = func() {
 		once.Do(func() {
-			svc.probeRoots()
-			waitFor(t, svc.rootProbe.idle, "the probe pass inside the refresh to end")
+			svc.Roots.probeRoots()
+			waitFor(t, svc.Roots.rootProbe.idle, "the probe pass inside the refresh to end")
 		})
 	}
-	svc.refreshMu.Unlock()
-	svc.refreshLibraryState(ctx)
+	svc.Roots.refreshMu.Unlock()
+	svc.Roots.refreshLibraryState(ctx)
 	if w := listedWritable(t, ctx, svc, open); w == nil || *w {
 		t.Fatalf("after the refresh the root lists writable %s, want the pass's false", said(w))
 	}
@@ -255,16 +255,16 @@ func TestLiftingALibrarysReadOnlyFlagProbesIt(t *testing.T) {
 	skipWithoutUnwritableDirs(t)
 	ctx, svc, uc, flipped, other := twoManagedRoots(t)
 	pid := libraryAt(t, ctx, svc, flipped).PID
-	if err := svc.LibraryReadOnlySet(ctx, uc, pid, true); err != nil {
+	if err := svc.Settings.LibraryReadOnlySet(ctx, uc, pid, true); err != nil {
 		t.Fatal(err)
 	}
 	chmodFor(t, flipped, 0o555)
-	waitFor(t, svc.rootProbe.idle, "any probe pass to end")
+	waitFor(t, svc.Roots.rootProbe.idle, "any probe pass to end")
 	n, mtime := folderState(t, other)
-	if err := svc.LibraryReadOnlySet(ctx, uc, pid, false); err != nil {
+	if err := svc.Settings.LibraryReadOnlySet(ctx, uc, pid, false); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, svc.rootProbe.idle, "the probe pass the lift started")
+	waitFor(t, svc.Roots.rootProbe.idle, "the probe pass the lift started")
 	if w := listedWritable(t, ctx, svc, flipped); w == nil || *w {
 		t.Errorf("after the lift the locked library lists writable %s, want false", said(w))
 	}
@@ -278,20 +278,20 @@ func TestLiftingTheServersReadOnlySwitchProbesTheRoots(t *testing.T) {
 	t.Parallel()
 	skipWithoutUnwritableDirs(t)
 	ctx, svc, uc, flipped, _ := twoManagedRoots(t)
-	st, err := svc.AdminSettingsGet(ctx)
+	st, err := svc.Settings.AdminSettingsGet(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	st.ReadOnly = true
-	if _, err := svc.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
 	chmodFor(t, flipped, 0o555)
 	st.ReadOnly = false
-	if _, err := svc.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, svc.rootProbe.idle, "the probe pass the lift started")
+	waitFor(t, svc.Roots.rootProbe.idle, "the probe pass the lift started")
 	if w := listedWritable(t, ctx, svc, flipped); w == nil || *w {
 		t.Errorf("after the lift the locked library lists writable %s, want false", said(w))
 	}
@@ -321,10 +321,10 @@ func TestAConsoleCreateIsProbedOnce(t *testing.T) {
 	ctx, svc, uc, _, _ := managedOpenRoot(t, t.TempDir(), nil)
 	passes := countProbePasses(svc)
 	fresh := t.TempDir()
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "fresh", Path: fresh, Managed: true}); err != nil {
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "fresh", Path: fresh, Managed: true}); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, svc.rootProbe.idle, "any probe pass to end")
+	waitFor(t, svc.Roots.rootProbe.idle, "any probe pass to end")
 	if n := passes.Load(); n != 0 {
 		t.Errorf("the create ran %d probe passes beside its own look, want none", n)
 	}

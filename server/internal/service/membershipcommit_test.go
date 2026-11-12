@@ -20,7 +20,7 @@ func TestAMembershipChangeCanceledAfterItsCommitKeepsItsEvents(t *testing.T) {
 		t.Helper()
 		req, cancel := context.WithCancel(ctx)
 		defer cancel()
-		svc.podping.mu.Lock()
+		svc.Podcasts.podping.mu.Lock()
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
@@ -29,13 +29,13 @@ func TestAMembershipChangeCanceledAfterItsCommitKeepsItsEvents(t *testing.T) {
 		deadline := time.Now().Add(10 * time.Second)
 		for !committed() {
 			if time.Now().After(deadline) {
-				svc.podping.mu.Unlock()
+				svc.Podcasts.podping.mu.Unlock()
 				t.Fatal("the change never committed")
 			}
 			time.Sleep(5 * time.Millisecond)
 		}
 		cancel()
-		svc.podping.mu.Unlock()
+		svc.Podcasts.podping.mu.Unlock()
 		<-done
 	}
 	follows := func() bool {
@@ -61,7 +61,7 @@ func TestAMembershipChangeCanceledAfterItsCommitKeepsItsEvents(t *testing.T) {
 	}
 
 	changeCanceledAfterCommit(follows, func(req context.Context) {
-		_, _, _ = svc.Subscribe(req, uc, SubscribeRequest{URL: feed})
+		_, _, _ = svc.Podcasts.Subscribe(req, uc, SubscribeRequest{URL: feed})
 	})
 	if got := lastWord(); !follows() || got != "add" {
 		t.Fatalf("after a subscribe canceled past its commit: follows = %v, the change log's last word = %q, want add", follows(), got)
@@ -72,7 +72,7 @@ func TestAMembershipChangeCanceledAfterItsCommitKeepsItsEvents(t *testing.T) {
 	}
 	show := apiPID(PrefixPodcast, model.PID(shows[0]))
 	changeCanceledAfterCommit(func() bool { return !follows() }, func(req context.Context) {
-		_ = svc.Unsubscribe(req, uc, show, false)
+		_ = svc.Podcasts.Unsubscribe(req, uc, show, false)
 	})
 	if got := lastWord(); follows() || got != "remove" {
 		t.Errorf("after an unsubscribe canceled past its commit: follows = %v, the change log's last word = %q, want remove", follows(), got)

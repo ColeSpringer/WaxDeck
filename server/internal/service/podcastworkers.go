@@ -53,8 +53,8 @@ func queueRetryDelay(attempts int) time.Duration {
 // RefreshDueFeeds syncs every subscribed show whose last attempt is
 // older than interval, skipping disabled feeds. One failing feed never
 // stops the others.
-func (l *Library) RefreshDueFeeds(ctx context.Context, interval time.Duration) {
-	if l.Maintenance() {
+func (l *Podcasts) RefreshDueFeeds(ctx context.Context, interval time.Duration) {
+	if l.library.Maintenance() {
 		return
 	}
 	shows, err := l.db.SubscribedShowPIDs(ctx)
@@ -89,15 +89,15 @@ func (l *Library) RefreshDueFeeds(ctx context.Context, interval time.Duration) {
 // RetryPendingGpodder tries every parked feed that is due, landing it for
 // the devices that asked, which hold it then and whose add reaches the
 // account's other devices as any add does.
-func (l *Library) RetryPendingGpodder(ctx context.Context) {
+func (l *Podcasts) RetryPendingGpodder(ctx context.Context) {
 	l.RetryPendingGpodderAt(ctx, time.Now())
 }
 
 // RetryPendingGpodderAt is RetryPendingGpodder on a given clock. A feed
 // that fails for good, or is still failing a week after it was first
 // asked for, is dropped and the account's inbox says so.
-func (l *Library) RetryPendingGpodderAt(ctx context.Context, now time.Time) {
-	if l.Maintenance() {
+func (l *Podcasts) RetryPendingGpodderAt(ctx context.Context, now time.Time) {
+	if l.library.Maintenance() {
 		return
 	}
 	due, err := l.db.DueGpodderParks(ctx, now.UnixNano(), 100)
@@ -135,7 +135,7 @@ func (l *Library) RetryPendingGpodderAt(ctx context.Context, now time.Time) {
 // panics moves its park back and holds up only itself. A park whose
 // account cannot see the podcast library waits for the grant, untried and
 // uncounted, until its week is up.
-func (l *Library) retryGpodderPark(ctx context.Context, p wdb.GpodderPark, now time.Time) (*UserCtx, *gpodderNotice) {
+func (l *Podcasts) retryGpodderPark(ctx context.Context, p wdb.GpodderPark, now time.Time) (*UserCtx, *gpodderNotice) {
 	read, err := func() ([]wdb.GpodderPending, error) {
 		defer l.lockMembership(p.UserID)()
 		return l.db.GpodderParkAsks(ctx, p.UserID, p.FeedURL)
@@ -161,7 +161,7 @@ func (l *Library) retryGpodderPark(ctx context.Context, p wdb.GpodderPark, now t
 	}
 	// Only an account that can sign in has anything landed for it; a
 	// disabled, pending or deleted one has its parked feeds dropped.
-	uc, err := l.userCtxByID(ctx, p.UserID)
+	uc, err := l.Grants.UserCtxByID(ctx, p.UserID)
 	if KindOf(err) == KindNotFound {
 		if err := l.db.DeleteGpodderPending(ctx, p.UserID, p.FeedURL); err != nil {
 			l.log.Warn("dropping a parked gpodder feed", "err", err)
@@ -174,7 +174,7 @@ func (l *Library) retryGpodderPark(ctx context.Context, p wdb.GpodderPark, now t
 		return nil, nil
 	}
 	expired := now.Sub(time.Unix(0, read[0].CreatedAtNS)) >= gpodderPendingLifetime
-	if !expired && !l.podcastsVisible(ctx, uc) {
+	if !expired && !l.Grants.podcastsVisible(ctx, uc) {
 		reschedule(attempts, lastErr)
 		return uc, nil
 	}
@@ -220,7 +220,7 @@ const (
 // syncShow syncs one show now, records the outcome in feed_state, and
 // fans out what a change implies: auto-download for what the sync added
 // and a retention re-evaluation.
-func (l *Library) syncShow(ctx context.Context, showPID model.PID, origin syncOrigin) (int, error) {
+func (l *Podcasts) syncShow(ctx context.Context, showPID model.PID, origin syncOrigin) (int, error) {
 	pod, err := l.lib.Podcasts().Get(ctx, showPID)
 	if err != nil {
 		l.syncWithoutVerdict(ctx, showPID, origin, err)
@@ -251,7 +251,7 @@ func (l *Library) syncShow(ctx context.Context, showPID model.PID, origin syncOr
 		} else if st.Disabled && st.ConsecutiveFailures == feedDisableAfter {
 			l.log.Warn("feed disabled after repeated failures", "show", string(showPID), "failures", st.ConsecutiveFailures)
 			if subs, subErr := l.db.SubscribersByShow(ctx, string(showPID)); subErr == nil {
-				subs, _ = l.podcastListeners(ctx, subs)
+				subs, _ = l.listeners(ctx, subs)
 				userIDs := make([]string, 0, len(subs))
 				for _, s := range subs {
 					userIDs = append(userIDs, s.UserID)
@@ -260,7 +260,7 @@ func (l *Library) syncShow(ctx context.Context, showPID model.PID, origin syncOr
 				// notification surface, private shows especially.
 				apiShow := apiPID(PrefixPodcast, showPID)
 				title := clipFeedTitle(pod.Title)
-				l.EmitNotificationFor(ctx, "feed-disabled",
+				l.Integrations.EmitNotificationFor(ctx, "feed-disabled",
 					"Podcast feed disabled: "+title,
 					// The show's own name, even though the title carries
 					// it too: the inbox row draws the body as its detail
@@ -293,13 +293,13 @@ func (l *Library) syncShow(ctx context.Context, showPID model.PID, origin syncOr
 // handleArrivals tells subscribers what a sync added, those the catalog
 // created at or after since, and queues what their auto-download policies
 // admit, from one read of the subscribers and of the listing.
-func (l *Library) handleArrivals(ctx context.Context, pod *model.Podcast, since int64, added int) {
+func (l *Podcasts) handleArrivals(ctx context.Context, pod *model.Podcast, since int64, added int) {
 	subs, err := l.db.SubscribersByShow(ctx, string(pod.PID))
 	if err != nil {
 		l.log.Warn("listing subscribers", "show", string(pod.PID), "err", err)
 		return
 	}
-	if subs, _ = l.podcastListeners(ctx, subs); len(subs) == 0 {
+	if subs, _ = l.listeners(ctx, subs); len(subs) == 0 {
 		return
 	}
 	// The top rows, unless an arrival is dated among older episodes.
@@ -318,7 +318,7 @@ func (l *Library) handleArrivals(ctx context.Context, pod *model.Podcast, since 
 // notifyArrivals tells every subscriber of a show what a sync added,
 // once per sync, whether or not they download automatically. Best effort
 // by design.
-func (l *Library) notifyArrivals(ctx context.Context, pod *model.Podcast, subs []wdb.Subscription, eps []*model.Episode, since int64) {
+func (l *Podcasts) notifyArrivals(ctx context.Context, pod *model.Podcast, subs []wdb.Subscription, eps []*model.Episode, since int64) {
 	var arrived []*model.Episode
 	for _, ep := range eps {
 		if ep.CreatedAt >= since {
@@ -337,13 +337,13 @@ func (l *Library) notifyArrivals(ctx context.Context, pod *model.Podcast, subs [
 	for _, s := range subs {
 		userIDs = append(userIDs, s.UserID)
 	}
-	l.EmitNotificationFor(ctx, "episode-arrived", "New episode: "+cmp.Or(clipFeedTitle(pod.Title), "podcast"), body,
+	l.Integrations.EmitNotificationFor(ctx, "episode-arrived", "New episode: "+cmp.Or(clipFeedTitle(pod.Title), "podcast"), body,
 		apiPID(PrefixPodcast, pod.PID), userIDs)
 }
 
 // syncWithoutVerdict stamps a sync that says nothing about the feed, so
 // the next waits its turn, and logs this server's own.
-func (l *Library) syncWithoutVerdict(ctx context.Context, showPID model.PID, origin syncOrigin, err error) {
+func (l *Podcasts) syncWithoutVerdict(ctx context.Context, showPID model.PID, origin syncOrigin, err error) {
 	if origin == syncOwn {
 		// A switched-off source fails every poll until it is back.
 		level := slog.LevelWarn
@@ -385,7 +385,7 @@ func feedAtFault(ctx context.Context, err error) bool {
 // subscribers, so one subscriber wanting an episode is enough to fetch
 // the shared file, and a filter narrows what that subscriber asks for
 // rather than what everyone else gets.
-func (l *Library) autoDownloadArrivals(ctx context.Context, subs []wdb.Subscription, eps []*model.Episode, since int64) {
+func (l *Podcasts) autoDownloadArrivals(ctx context.Context, subs []wdb.Subscription, eps []*model.Episode, since int64) {
 	filters := make([]EpisodeFilter, 0, len(subs))
 	for _, s := range subs {
 		if s.AutoDownload {
@@ -441,8 +441,8 @@ func anyFilterAdmits(filters []EpisodeFilter, title string) bool {
 // DrainFetchQueue works one queued enclosure download; returns false
 // when the queue is idle so the caller can sleep. A hand-off or a
 // read-only server leaves the queue waiting for it.
-func (l *Library) DrainFetchQueue(ctx context.Context) bool {
-	if l.Maintenance() || l.checkPodcastWritable(ctx) != nil {
+func (l *Podcasts) DrainFetchQueue(ctx context.Context) bool {
+	if l.library.Maintenance() || l.checkPodcastWritable(ctx) != nil {
 		return false
 	}
 	row, err := l.db.LeaseFetch(ctx, time.Now().UnixNano(), fetchLease.Nanoseconds(), fetchMaxAttempts)
@@ -496,7 +496,7 @@ func (l *Library) DrainFetchQueue(ctx context.Context) bool {
 	}
 	// A fresh spoken-word file wants a silence map; queue analysis by
 	// essence so a replayed fetch never duplicates the work.
-	l.enqueueAnalysisForItem(ctx, model.PID(row.Key))
+	l.Tools.enqueueAnalysisForItem(ctx, model.PID(row.Key))
 	// The show may hold more downloads now than its followers keep: an
 	// automatic fetch, or one landing among the newest it keeps, pushes
 	// an older file past the cut. A requested older one is held anyway.
@@ -512,7 +512,7 @@ func (l *Library) DrainFetchQueue(ctx context.Context) bool {
 // landedInsideKeep reports whether a landed episode is among the newest
 // downloads its show keeps. A read that fails answers true, leaving the
 // sweep to judge.
-func (l *Library) landedInsideKeep(ctx context.Context, showPID, episodePID model.PID) bool {
+func (l *Podcasts) landedInsideKeep(ctx context.Context, showPID, episodePID model.PID) bool {
 	pod, err := l.lib.Podcasts().Get(ctx, showPID)
 	if err != nil {
 		return true
@@ -540,7 +540,7 @@ func (l *Library) landedInsideKeep(ctx context.Context, showPID, episodePID mode
 // the enclosure's address, which a private feed's token can be in: the
 // log keeps the reason and a cause without it, and the queue, which the
 // episode's listing reads, a sentence.
-func (l *Library) failFetch(ctx context.Context, row wdb.QueueRow, err error) {
+func (l *Podcasts) failFetch(ctx context.Context, row wdb.QueueRow, err error) {
 	why := "The episode could not be saved on this server."
 	if feedAtFault(ctx, err) {
 		reason := feedReason(err)
@@ -562,7 +562,7 @@ func (l *Library) failFetch(ctx context.Context, row wdb.QueueRow, err error) {
 // show's downloads, and the catalog cuts whatever is downloaded when it
 // gets there: a landing in between would move the cut onto an episode
 // whose guards were never read.
-func (l *Library) showHold(showPID model.PID) *sync.Mutex {
+func (l *Podcasts) showHold(showPID model.PID) *sync.Mutex {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(showPID))
 	return &l.showHolds[h.Sum32()%playedStripes]
@@ -571,13 +571,13 @@ func (l *Library) showHold(showPID model.PID) *sync.Mutex {
 // downloadHeld fetches one episode under its show's hold, which a sweep
 // of the show waits out by deferring, and runs landed before letting go,
 // so what a landing records is there before any sweep looks.
-func (l *Library) downloadHeld(ctx context.Context, showPID, episodePID model.PID, landed func()) (*podcast.DownloadResult, error) {
+func (l *Podcasts) downloadHeld(ctx context.Context, showPID, episodePID model.PID, landed func()) (*podcast.DownloadResult, error) {
 	hold := l.showHold(showPID)
 	hold.Lock()
 	defer hold.Unlock()
 	res, err := l.lib.Podcasts().Download(ctx, episodePID)
 	if err == nil {
-		l.podcastLibraryMayHaveLanded()
+		l.Grants.podcastLibraryMayHaveLanded()
 		landed()
 	}
 	return res, err
@@ -587,7 +587,7 @@ func (l *Library) downloadHeld(ctx context.Context, showPID, episodePID model.PI
 // account that asked for it, and tells every subscriber's client the
 // episode is downloaded now. An automatic fetch files nothing: its
 // arrival was the news. Best effort by design.
-func (l *Library) notifyEpisodeDownloaded(ctx context.Context, episodePID model.PID, requesters []string) {
+func (l *Podcasts) notifyEpisodeDownloaded(ctx context.Context, episodePID model.PID, requesters []string) {
 	det, err := l.lib.Podcasts().Episode(ctx, episodePID)
 	if err != nil {
 		return
@@ -602,7 +602,7 @@ func (l *Library) notifyEpisodeDownloaded(ctx context.Context, episodePID model.
 		}
 	}
 	if len(heard) > 0 {
-		l.EmitNotificationFor(ctx, "episode-downloaded", "Episode fetched: "+clipFeedTitle(det.Episode.Title),
+		l.Integrations.EmitNotificationFor(ctx, "episode-downloaded", "Episode fetched: "+clipFeedTitle(det.Episode.Title),
 			cmp.Or(clipFeedTitle(det.Episode.PodcastTitle), "podcast"), apiEpisode, heard)
 	}
 	subs, err := l.db.SubscribersByShow(ctx, string(det.Episode.PodcastPID))
@@ -610,7 +610,7 @@ func (l *Library) notifyEpisodeDownloaded(ctx context.Context, episodePID model.
 		l.log.Warn("reading subscribers for notification", "err", err)
 		return
 	}
-	subs, _ = l.podcastListeners(ctx, subs)
+	subs, _ = l.listeners(ctx, subs)
 	// The pid is the episode, so a client's row flips.
 	for _, s := range subs {
 		l.emitUserEvent(ctx, s.UserID, eventEpisodeDownloaded, apiEpisode)
@@ -621,9 +621,9 @@ func (l *Library) notifyEpisodeDownloaded(ctx context.Context, episodePID model.
 // keep-N into the catalog, protects starred and queued episodes by
 // pinning, and applies retention only when no candidate file is in
 // use. Deferred shows re-queue for the next cycle.
-func (l *Library) SweepRetention(ctx context.Context) {
+func (l *Podcasts) SweepRetention(ctx context.Context) {
 	// Taken, the queue is gone; a hand-off would fail every show in it.
-	if l.Maintenance() {
+	if l.library.Maintenance() {
 		return
 	}
 	shows, err := l.db.TakeRetentionQueue(ctx)
@@ -641,7 +641,7 @@ func (l *Library) SweepRetention(ctx context.Context) {
 	}
 }
 
-func (l *Library) sweepShowRetention(ctx context.Context, showPID model.PID) error {
+func (l *Podcasts) sweepShowRetention(ctx context.Context, showPID model.PID) error {
 	// A download landing in the show, or in one sharing its stripe, waits
 	// the show for the next cycle; the landing queues it again anyway.
 	hold := l.showHold(showPID)
@@ -661,7 +661,7 @@ func (l *Library) sweepShowRetention(ctx context.Context, showPID model.PID) err
 	// its files; destructive cleanup is an explicit admin decision, never
 	// a side effect (removing the show would cascade away every user's
 	// play history).
-	listening, judged := l.podcastListeners(ctx, subs)
+	listening, judged := l.listeners(ctx, subs)
 	if !judged {
 		l.deferRetention(ctx, showPID)
 		return nil
@@ -750,7 +750,7 @@ func (l *Library) sweepShowRetention(ctx context.Context, showPID model.PID) err
 }
 
 // deferRetention queues the show for the next sweep.
-func (l *Library) deferRetention(ctx context.Context, showPID model.PID) {
+func (l *Podcasts) deferRetention(ctx context.Context, showPID model.PID) {
 	if err := l.db.EnqueueRetention(ctx, string(showPID), time.Now().UnixNano()); err != nil {
 		l.log.Warn("re-queuing deferred retention", "show", string(showPID), "err", err)
 	}
@@ -768,7 +768,7 @@ func (l *Library) deferRetention(ctx context.Context, showPID model.PID) {
 // following the show or finished the episode after asking for it. A
 // requester who cannot see the podcast library keeps the hold for the
 // grant's return, and it protects nothing meanwhile.
-func (l *Library) retentionGuards(ctx context.Context, subs, listening []wdb.Subscription, holds []wdb.FetchHold,
+func (l *Podcasts) retentionGuards(ctx context.Context, subs, listening []wdb.Subscription, holds []wdb.FetchHold,
 	downloaded, candidates []*model.Episode,
 ) (protect map[model.PID]bool, inUse bool, stale []wdb.FetchHold, err error) {
 	users := make(map[model.PID]bool, len(subs))
@@ -851,7 +851,7 @@ func (l *Library) retentionGuards(ctx context.Context, subs, listening []wdb.Sub
 
 // liveHolds reads the holds on a show's downloads and drops those on a
 // file no longer on the server, answering the rest.
-func (l *Library) liveHolds(ctx context.Context, showPID model.PID, downloaded []*model.Episode) ([]wdb.FetchHold, error) {
+func (l *Podcasts) liveHolds(ctx context.Context, showPID model.PID, downloaded []*model.Episode) ([]wdb.FetchHold, error) {
 	holds, err := l.db.FetchHoldsByShow(ctx, string(showPID))
 	if err != nil {
 		return nil, fmt.Errorf("reading the show's download holds: %w", err)
@@ -892,7 +892,7 @@ func heardSince(st *model.PlayState, heldAtNS, durationMS int64) bool {
 // requeueHeldShow queues for retention the show of a download the account
 // asked for, once its played state moves: finishing the episode is what
 // lets the hold go.
-func (l *Library) requeueHeldShow(ctx context.Context, userID string, episodePID model.PID) {
+func (l *Podcasts) requeueHeldShow(ctx context.Context, userID string, episodePID model.PID) {
 	show, err := l.db.FetchHoldShow(ctx, string(episodePID), userID)
 	if errors.Is(err, wdb.ErrNotFound) {
 		return
@@ -908,7 +908,7 @@ func (l *Library) requeueHeldShow(ctx context.Context, userID string, episodePID
 
 // candidateStates reads every user's play state of the given episodes in
 // one read, through retentionStatesHook in a test.
-func (l *Library) candidateStates(ctx context.Context, pids []model.PID) (map[model.PID][]model.PlayState, error) {
+func (l *Podcasts) candidateStates(ctx context.Context, pids []model.PID) (map[model.PID][]model.PlayState, error) {
 	if l.retentionStatesHook != nil {
 		return l.retentionStatesHook(ctx, pids)
 	}
@@ -923,7 +923,7 @@ func (l *Library) candidateStates(ctx context.Context, pids []model.PID) (map[mo
 //
 // LastProgressAt as well as UpdatedAt: a remote session's ticks are
 // buffered, never written, and reach a read only through it.
-func (l *Library) stateReadsInUse(st *model.PlayState) bool {
+func (l *Podcasts) stateReadsInUse(st *model.PlayState) bool {
 	if st == nil || l.retentionInUseWindow <= 0 {
 		return false
 	}
@@ -931,7 +931,7 @@ func (l *Library) stateReadsInUse(st *model.PlayState) bool {
 		st.PositionMS > 0 && !st.Finished
 }
 
-// podcastListeners keeps the subscriptions whose account can see the
+// listeners keeps the subscriptions whose account can see the
 // podcast library now, one account read for each. The rest are kept for
 // the grant's return and do nothing meanwhile: no notice, no download by
 // their policy, no say in retention.
@@ -940,7 +940,7 @@ func (l *Library) stateReadsInUse(st *model.PlayState) bool {
 // with anything but not-found, or a granted one while the podcast library
 // could not be read, is left out unjudged: skipping it costs a notice or
 // a download, but the retention sweep must not count without it.
-func (l *Library) podcastListeners(ctx context.Context, subs []wdb.Subscription) (listening []wdb.Subscription, judged bool) {
+func (l *Podcasts) listeners(ctx context.Context, subs []wdb.Subscription) (listening []wdb.Subscription, judged bool) {
 	listening, judged = make([]wdb.Subscription, 0, len(subs)), true
 	for _, s := range subs {
 		visible, seen := l.hearsPodcasts(ctx, s.UserID)
@@ -952,9 +952,9 @@ func (l *Library) podcastListeners(ctx context.Context, subs []wdb.Subscription)
 	return listening, judged
 }
 
-// hearsPodcasts is podcastListeners' verdict on one account: whether it
+// hearsPodcasts is Podcasts.listeners' verdict on one account: whether it
 // can see the podcast library now, and whether that is a judgment.
-func (l *Library) hearsPodcasts(ctx context.Context, userID string) (visible, judged bool) {
+func (l *Podcasts) hearsPodcasts(ctx context.Context, userID string) (visible, judged bool) {
 	uc, err := l.listenerAccount(ctx, userID)
 	if err != nil {
 		if KindOf(err) != KindNotFound {
@@ -963,36 +963,36 @@ func (l *Library) hearsPodcasts(ctx context.Context, userID string) (visible, ju
 		}
 		return false, true
 	}
-	return l.podcastsJudged(ctx, uc)
+	return l.Grants.podcastsJudged(ctx, uc)
 }
 
 // showHeard reports whether the show is fetched for anyone: false only
 // when every follower was judged unable to see the podcast library. A
 // follower who could not be judged, or followers who could not be read,
 // keep it fetched.
-func (l *Library) showHeard(ctx context.Context, showPID model.PID) bool {
+func (l *Podcasts) showHeard(ctx context.Context, showPID model.PID) bool {
 	subs, err := l.db.SubscribersByShow(ctx, string(showPID))
 	if err != nil {
 		l.log.Warn("listing subscribers", "show", string(showPID), "err", err)
 		return true
 	}
-	listening, judged := l.podcastListeners(ctx, subs)
+	listening, judged := l.listeners(ctx, subs)
 	return len(listening) > 0 || !judged
 }
 
 // listenerAccount reads a subscriber's account, through listenerReadHook
 // in a test.
-func (l *Library) listenerAccount(ctx context.Context, userID string) (*UserCtx, error) {
+func (l *Podcasts) listenerAccount(ctx context.Context, userID string) (*UserCtx, error) {
 	if l.listenerReadHook != nil {
 		return l.listenerReadHook(ctx, userID)
 	}
-	return l.userCtxByID(ctx, userID)
+	return l.Grants.UserCtxByID(ctx, userID)
 }
 
 // unionRetention resolves the most generous keep-N across subscribers:
 // any keep-all wins; otherwise the largest N. Unset rows use the
 // server default.
-func (l *Library) unionRetention(subs []wdb.Subscription) int64 {
+func (l *Podcasts) unionRetention(subs []wdb.Subscription) int64 {
 	keep := int64(-1)
 	for _, s := range subs {
 		eff := l.defaultRetentionKeep
@@ -1013,19 +1013,19 @@ func (l *Library) unionRetention(subs []wdb.Subscription) int64 {
 }
 
 // userCatalogPID maps a WaxDeck user id to its catalog user.
-func (l *Library) userCatalogPID(ctx context.Context, userID string) (model.PID, error) {
+func (l *Podcasts) userCatalogPID(ctx context.Context, userID string) (model.PID, error) {
 	u, err := l.db.UserByID(ctx, userID)
 	if err != nil {
 		return "", err
 	}
-	return model.PID(l.catalogPID(u)), nil
+	return model.PID(l.Identity.catalogPID(u)), nil
 }
 
 // setEpisodePinned re-upserts the episode with only the pinned flag
 // changed. The upsert path preserves state and identity when every
 // field round-trips, which feedEpisodeOf guarantees by copying them
 // all.
-func (l *Library) setEpisodePinned(ctx context.Context, showPID model.PID, ep *model.Episode, pinned bool) error {
+func (l *Podcasts) setEpisodePinned(ctx context.Context, showPID model.PID, ep *model.Episode, pinned bool) error {
 	if l.pinHook != nil {
 		return l.pinHook(ctx, showPID, ep, pinned)
 	}

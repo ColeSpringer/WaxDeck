@@ -34,7 +34,7 @@ func TestSearchMarksOnlyAnArtistOrAlbumNamedAsTheQuery(t *testing.T) {
 		{"moon songs", map[string]bool{"Moon": false}, map[string]bool{"Moon Songs": true}},
 		{"Moonlight", map[string]bool{"Moonlight Band": false}, map[string]bool{"Moon": false}},
 	} {
-		res, err := svc.Search(ctx, admin, c.query, 10)
+		res, err := svc.Reads.Search(ctx, admin, c.query, 10)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -11,15 +11,15 @@ import (
 func TestFlippingServerReadOnlyMarksEveryAccountChanged(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "listener", Password: "correct-horse"})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "listener", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	listener, err := svc.UserCtx(ctx, acct.User)
+	listener, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
-	settings, err := svc.AdminSettingsGet(ctx)
+	settings, err := svc.Settings.AdminSettingsGet(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestFlippingServerReadOnlyMarksEveryAccountChanged(t *testing.T) {
 		t.Helper()
 		next := settings
 		mutate(&next)
-		saved, err := svc.AdminSettingsPut(ctx, admin, everySetting(next))
+		saved, err := svc.Settings.AdminSettingsPut(ctx, admin, everySetting(next))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -72,7 +72,7 @@ func TestFlippingServerReadOnlyMarksEveryAccountChanged(t *testing.T) {
 
 	save(func(s *AdminSettings) { s.ReadOnly = true })
 	both(1, "turning read-only on")
-	if !svc.ServerReadOnly() {
+	if !svc.Settings.ServerReadOnly() {
 		t.Error("the server does not report read-only after the switch")
 	}
 
@@ -81,7 +81,7 @@ func TestFlippingServerReadOnlyMarksEveryAccountChanged(t *testing.T) {
 
 	save(func(s *AdminSettings) { s.ReadOnly = false })
 	both(1, "turning read-only off")
-	if svc.ServerReadOnly() {
+	if svc.Settings.ServerReadOnly() {
 		t.Error("the server still reports read-only after the switch went off")
 	}
 }
@@ -92,18 +92,18 @@ func TestFlippingServerReadOnlyMarksEveryAccountChanged(t *testing.T) {
 func TestServerReadOnlyRefusesInTheServersWords(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
-	settings, err := svc.AdminSettingsGet(ctx)
+	settings, err := svc.Settings.AdminSettingsGet(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.CheckWritable(ctx, ""); err != nil {
+	if err := svc.Settings.CheckWritable(ctx, ""); err != nil {
 		t.Fatalf("a writable server refused: %v", err)
 	}
 	settings.ReadOnly = true
-	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(settings)); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, admin, everySetting(settings)); err != nil {
 		t.Fatal(err)
 	}
-	err = svc.CheckWritable(ctx, "")
+	err = svc.Settings.CheckWritable(ctx, "")
 	if KindOf(err) != KindReadOnly {
 		t.Fatalf("CheckWritable = %v, want a read-only refusal", err)
 	}

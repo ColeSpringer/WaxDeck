@@ -6,10 +6,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
@@ -57,42 +55,8 @@ func scrobbleHTTPClient(allowPrivate bool) *http.Client {
 	return &http.Client{Transport: guardedTransport(allowPrivate), Timeout: 15 * time.Second}
 }
 
-// hostAddrs is a host's addresses: a literal as itself, a name as the
-// resolver answers it under ctx.
-func (l *Library) hostAddrs(ctx context.Context, host string) ([]net.IP, error) {
-	if ip := net.ParseIP(host); ip != nil {
-		return []net.IP{ip}, nil
-	}
-	lookup := net.DefaultResolver.LookupIPAddr
-	if l.lookupHost != nil {
-		lookup = l.lookupHost
-	}
-	addrs, err := lookup(ctx, host)
-	if err != nil {
-		return nil, err
-	}
-	ips := make([]net.IP, len(addrs))
-	for i, a := range addrs {
-		ips[i] = a.IP
-	}
-	return ips, nil
-}
-
-// hostResolvesPrivate reports whether a hostname or address literal
-// resolves to a private address. An empty one, a URL naming only a
-// port, is this machine to a dialer and reads as private. Unresolvable
-// names read as not-private: the dial-time guard still stands at fetch,
-// this only shapes the write-time error.
-func (l *Library) hostResolvesPrivate(ctx context.Context, host string) bool {
-	if host == "" {
-		return true
-	}
-	ips, err := l.hostAddrs(ctx, host)
-	return err == nil && slices.ContainsFunc(ips, privateIP)
-}
-
 // ListScrobblers reports the caller's connection slots.
-func (l *Library) ListScrobblers(ctx context.Context, uc *UserCtx) ([]Scrobbler, error) {
+func (l *Integrations) ListScrobblers(ctx context.Context, uc *UserCtx) ([]Scrobbler, error) {
 	conns, err := l.db.ScrobbleConnections(ctx, uc.ID)
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
@@ -124,7 +88,7 @@ func (l *Library) ListScrobblers(ctx context.Context, uc *UserCtx) ([]Scrobbler,
 
 // ConnectListenBrainz validates and stores the caller's ListenBrainz
 // token; a new token replaces the old one.
-func (l *Library) ConnectListenBrainz(ctx context.Context, uc *UserCtx, token, apiURL string) (Scrobbler, error) {
+func (l *Integrations) ConnectListenBrainz(ctx context.Context, uc *UserCtx, token, apiURL string) (Scrobbler, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return Scrobbler{}, errInvalid("a token is required")
@@ -155,7 +119,7 @@ func (l *Library) ConnectListenBrainz(ctx context.Context, uc *UserCtx, token, a
 
 // DisconnectScrobbler removes the caller's connection to one service
 // and drops its queued deliveries.
-func (l *Library) DisconnectScrobbler(ctx context.Context, uc *UserCtx, service string) error {
+func (l *Integrations) DisconnectScrobbler(ctx context.Context, uc *UserCtx, service string) error {
 	if err := l.db.DeleteScrobbleConnection(ctx, uc.ID, service); err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
 			return errNotFound(service + " is not connected")
@@ -169,7 +133,7 @@ func (l *Library) DisconnectScrobbler(ctx context.Context, uc *UserCtx, service 
 // returns the authorization URL. callbackURL is this server's callback
 // endpoint, built by the API layer from the request origin; the state
 // rides it as a query parameter and Last.fm appends the token.
-func (l *Library) StartLastfmConnect(ctx context.Context, uc *UserCtx, callbackURL string) (string, error) {
+func (l *Integrations) StartLastfmConnect(ctx context.Context, uc *UserCtx, callbackURL string) (string, error) {
 	lastfm := l.lastfmClient()
 	if lastfm == nil {
 		return "", &Error{Kind: KindUnsupported, Msg: "this server has no Last.fm API credentials configured"}
@@ -200,7 +164,7 @@ func (l *Library) StartLastfmConnect(ctx context.Context, uc *UserCtx, callbackU
 // CompleteLastfmConnect consumes the callback: the one-time state
 // names the user, and the token exchanges for a session key stored
 // sealed. Returns the linked username.
-func (l *Library) CompleteLastfmConnect(ctx context.Context, state, token string) (string, error) {
+func (l *Integrations) CompleteLastfmConnect(ctx context.Context, state, token string) (string, error) {
 	lastfm := l.lastfmClient()
 	if lastfm == nil {
 		return "", &Error{Kind: KindUnsupported, Msg: "this server has no Last.fm API credentials configured"}
@@ -222,7 +186,7 @@ func (l *Library) CompleteLastfmConnect(ctx context.Context, state, token string
 	return username, nil
 }
 
-func (l *Library) storeScrobbleConnection(ctx context.Context, userID, service, secret, username, apiURL string) error {
+func (l *Integrations) storeScrobbleConnection(ctx context.Context, userID, service, secret, username, apiURL string) error {
 	if l.sealer == nil {
 		return &Error{Kind: KindInternal, Msg: "no sealing key is configured"}
 	}
@@ -248,7 +212,7 @@ func (l *Library) storeScrobbleConnection(ctx context.Context, userID, service, 
 // enqueueScrobbles queues one accepted music listen for every service
 // the user has connected. Failures log and never fail the ingest; the
 // listen itself is already durable.
-func (l *Library) enqueueScrobbles(ctx context.Context, uc *UserCtx, it *model.ItemView, startedAt time.Time) {
+func (l *Integrations) enqueueScrobbles(ctx context.Context, uc *UserCtx, it *model.ItemView, startedAt time.Time) {
 	conns, err := l.db.ScrobbleConnections(ctx, uc.ID)
 	if err != nil {
 		l.log.Warn("reading scrobble connections", "err", err)
@@ -278,8 +242,8 @@ func (l *Library) enqueueScrobbles(ctx context.Context, uc *UserCtx, it *model.I
 // NowPlayingScrobble pushes a best-effort now-playing update to the
 // caller's connected services. Nothing is queued: now playing is
 // ephemeral by definition.
-func (l *Library) NowPlayingScrobble(ctx context.Context, uc *UserCtx, apiItemPID string) error {
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+func (l *Integrations) NowPlayingScrobble(ctx context.Context, uc *UserCtx, apiItemPID string) error {
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return err
 	}
@@ -318,7 +282,7 @@ func (l *Library) NowPlayingScrobble(ctx context.Context, uc *UserCtx, apiItemPI
 }
 
 // DrainScrobbleOutbox delivers one queued scrobble; false when idle.
-func (l *Library) DrainScrobbleOutbox(ctx context.Context) bool {
+func (l *Integrations) DrainScrobbleOutbox(ctx context.Context) bool {
 	now := time.Now().UnixNano()
 	row, err := l.db.LeaseScrobble(ctx, now, int64(scrobbleLeaseSeconds)*int64(time.Second), scrobbleMaxAttempts)
 	if err != nil {
@@ -354,7 +318,7 @@ func (l *Library) DrainScrobbleOutbox(ctx context.Context) bool {
 // arriving (a revoked session key would otherwise fail silently). A
 // disconnected-since-queuing row matches no connection and records
 // nothing.
-func (l *Library) markScrobbleHealth(ctx context.Context, row wdb.ScrobbleRow, deliveryErr error) {
+func (l *Integrations) markScrobbleHealth(ctx context.Context, row wdb.ScrobbleRow, deliveryErr error) {
 	msg := ""
 	if deliveryErr != nil {
 		msg = clipHealthMessage(deliveryErr.Error())
@@ -365,7 +329,7 @@ func (l *Library) markScrobbleHealth(ctx context.Context, row wdb.ScrobbleRow, d
 }
 
 // deliverScrobble sends one row to its service.
-func (l *Library) deliverScrobble(ctx context.Context, row wdb.ScrobbleRow) error {
+func (l *Integrations) deliverScrobble(ctx context.Context, row wdb.ScrobbleRow) error {
 	conn, err := l.db.ScrobbleConnectionFor(ctx, row.UserID, row.Service)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
@@ -402,7 +366,7 @@ func (l *Library) deliverScrobble(ctx context.Context, row wdb.ScrobbleRow) erro
 
 // PruneScrobbleOutbox drops rows past the delivery horizon or out of
 // attempts.
-func (l *Library) PruneScrobbleOutbox(ctx context.Context) {
+func (l *Integrations) PruneScrobbleOutbox(ctx context.Context) {
 	cutoff := time.Now().Add(-scrobbleHorizon).UnixNano()
 	if n, err := l.db.PruneScrobbleOutbox(ctx, cutoff, scrobbleMaxAttempts); err != nil {
 		l.log.Warn("pruning scrobble outbox", "err", err)
@@ -411,7 +375,7 @@ func (l *Library) PruneScrobbleOutbox(ctx context.Context) {
 	}
 }
 
-func (l *Library) openScrobbleSecret(c wdb.ScrobbleConnection) (string, error) {
+func (l *Integrations) openScrobbleSecret(c wdb.ScrobbleConnection) (string, error) {
 	if l.sealer == nil {
 		return "", errors.New("no sealing key is configured")
 	}

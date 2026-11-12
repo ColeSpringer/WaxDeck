@@ -37,18 +37,18 @@ func TestARemovalStoppedPartWayScansTheLibraryItLeft(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
 	dir := t.TempDir()
-	spare, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "spare", Path: dir})
+	spare, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "spare", Path: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, bare, _ := parseAPIPID(spare.PID)
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
 	before := len(scansOf(t, ctx, svc, bare))
 	failed := endedRemoval(t, ctx, svc, uc, spare, dir, model.JobFailed, nil)
-	svc.settleJobOrigin(ctx, failed)
+	svc.Jobs.settleJobOrigin(ctx, failed)
 	waitFor(t, func() bool { return len(scansOf(t, ctx, svc, bare)) > before }, "a scan of the library the removal left")
 }
 
@@ -72,12 +72,12 @@ func scanCount(t *testing.T, ctx context.Context, svc *Library) int {
 func spareLibrary(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) (LibraryInfo, string) {
 	t.Helper()
 	dir := t.TempDir()
-	spare, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "spare", Path: dir})
+	spare, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "spare", Path: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
 	return spare, dir
@@ -103,7 +103,7 @@ func TestARemovalScansTheLibraryItLeftOnlyWhenItLetGoOfFiles(t *testing.T) {
 			before := scanCount(t, ctx, svc)
 			failed := endedRemoval(t, ctx, svc, uc, spare, dir, model.JobFailed,
 				&model.RemoveRootReport{Root: dir, FilesDetached: tc.detached})
-			svc.settleJobOrigin(ctx, failed)
+			svc.Jobs.settleJobOrigin(ctx, failed)
 			if scanned := scanCount(t, ctx, svc) > before; scanned != tc.scans {
 				t.Fatalf("scanned = %v, want %v", scanned, tc.scans)
 			}
@@ -129,11 +129,11 @@ func TestARemovalTheLastStopCutShortIsLeftToTheStartupScan(t *testing.T) {
 			t.Parallel()
 			ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
 			spare, dir := spareLibrary(t, ctx, svc, uc)
-			svc.startupScan = tc.startupScan
+			svc.Roots.startupScan = tc.startupScan
 			before := scanCount(t, ctx, svc)
 			crashed := endedRemoval(t, ctx, svc, uc, spare, dir, model.JobCrashed, nil)
-			crashed.FinishedAt = svc.openedAtNS - 1
-			svc.settleJobOrigin(ctx, crashed)
+			crashed.FinishedAt = svc.Jobs.openedAtNS - 1
+			svc.Jobs.settleJobOrigin(ctx, crashed)
 			if scanned := scanCount(t, ctx, svc) > before; scanned != tc.scans {
 				t.Fatalf("scanned = %v, want %v", scanned, tc.scans)
 			}

@@ -68,7 +68,7 @@ func (s *Server) ServeMediaArt(w http.ResponseWriter, r *http.Request) {
 		size = n
 	}
 
-	blob, err := s.svc.Art(r.Context(), uc, pid, "front", size)
+	blob, err := s.svc.Reads.Art(r.Context(), uc, pid, "front", size)
 	if err != nil {
 		switch s.kindOf(err) {
 		case service.KindNotFound, service.KindInvalid:

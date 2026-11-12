@@ -24,15 +24,15 @@ import (
 func TestMusicFoldersAreTheCallersMusicLibraries(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
-	music, err := svc.AddLibrary(ctx, admin, AddLibraryInput{Name: "vinyl", Path: t.TempDir(), Media: "music"})
+	music, err := svc.Roots.AddLibrary(ctx, admin, AddLibraryInput{Name: "vinyl", Path: t.TempDir(), Media: "music"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.AddLibrary(ctx, admin, AddLibraryInput{Name: "books", Path: t.TempDir(), Media: "audiobook"}); err != nil {
+	if _, err := svc.Roots.AddLibrary(ctx, admin, AddLibraryInput{Name: "books", Path: t.TempDir(), Media: "audiobook"}); err != nil {
 		t.Fatal(err)
 	}
 
-	folders, err := svc.MusicFolders(ctx, admin)
+	folders, err := svc.Playback.MusicFolders(ctx, admin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,27 +43,27 @@ func TestMusicFoldersAreTheCallersMusicLibraries(t *testing.T) {
 	if len(folders) != 2 || names["lib"].ID == 0 || names["vinyl"].ID == 0 {
 		t.Fatalf("folders = %+v, want lib and vinyl, never the audiobook library", folders)
 	}
-	again, _ := svc.MusicFolders(ctx, admin)
+	again, _ := svc.Playback.MusicFolders(ctx, admin)
 	for _, f := range again {
 		if names[f.Name].ID != f.ID {
 			t.Fatalf("%s moved from %d to %d", f.Name, names[f.Name].ID, f.ID)
 		}
 	}
-	lib, err := svc.MusicFolderLibrary(ctx, admin, names["vinyl"].ID)
+	lib, err := svc.Playback.MusicFolderLibrary(ctx, admin, names["vinyl"].ID)
 	if err != nil || lib != music.PID {
 		t.Fatalf("vinyl's folder = %q (%v), want %s", lib, err, music.PID)
 	}
 
 	granted := &UserCtx{ID: "us-restricted", CatalogPID: admin.CatalogPID,
 		Libraries: map[string]bool{strings.TrimPrefix(music.PID, PrefixLibrary+"-"): true}}
-	theirs, err := svc.MusicFolders(ctx, granted)
+	theirs, err := svc.Playback.MusicFolders(ctx, granted)
 	if err != nil || len(theirs) != 1 || theirs[0].ID != names["vinyl"].ID {
 		t.Fatalf("restricted folders = %+v (%v), want vinyl alone under its id", theirs, err)
 	}
-	if _, err := svc.MusicFolderLibrary(ctx, granted, names["lib"].ID); KindOf(err) != KindNotFound {
+	if _, err := svc.Playback.MusicFolderLibrary(ctx, granted, names["lib"].ID); KindOf(err) != KindNotFound {
 		t.Errorf("an ungranted folder = %v, want not-found", err)
 	}
-	if _, err := svc.MusicFolderLibrary(ctx, admin, 99999); KindOf(err) != KindNotFound {
+	if _, err := svc.Playback.MusicFolderLibrary(ctx, admin, 99999); KindOf(err) != KindNotFound {
 		t.Errorf("an unknown folder = %v, want not-found", err)
 	}
 	// An id whose library has since gone names nothing.
@@ -72,7 +72,7 @@ func TestMusicFoldersAreTheCallersMusicLibraries(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, id := range gone {
-		if _, err := svc.MusicFolderLibrary(ctx, admin, id); KindOf(err) != KindNotFound {
+		if _, err := svc.Playback.MusicFolderLibrary(ctx, admin, id); KindOf(err) != KindNotFound {
 			t.Errorf("a removed library's folder = %v, want not-found", err)
 		}
 	}
@@ -89,33 +89,33 @@ func TestSubsonicBookmarksForEveryKind(t *testing.T) {
 		}
 	}})
 	track, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
-	books, err := svc.Items(ctx, uc, ItemFilter{MediaType: "audiobook"}, "", 10)
+	books, err := svc.Reads.Items(ctx, uc, ItemFilter{MediaType: "audiobook"}, "", 10)
 	if err != nil || len(books.Items) != 1 {
 		t.Fatalf("books = %+v (%v), want the fixture book", books.Items, err)
 	}
 	book := books.Items[0].PID
 
-	if _, err := svc.Checkpoint(ctx, uc, track, 1500, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, track, 1500, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.SaveSubsonicBookmark(ctx, uc, track, 5000, "chorus"); err != nil {
+	if err := svc.Playback.SaveSubsonicBookmark(ctx, uc, track, 5000, "chorus"); err != nil {
 		t.Fatal(err)
 	}
-	if st, _ := svc.PlayState(ctx, uc, track); st.PositionMS != 1500 {
+	if st, _ := svc.Playback.PlayState(ctx, uc, track); st.PositionMS != 1500 {
 		t.Fatalf("a track's bookmark moved its resume position to %d", st.PositionMS)
 	}
-	if err := svc.SaveSubsonicBookmark(ctx, uc, book, 6500, "the duel"); err != nil {
+	if err := svc.Playback.SaveSubsonicBookmark(ctx, uc, book, 6500, "the duel"); err != nil {
 		t.Fatal(err)
 	}
-	if st, _ := svc.PlayState(ctx, uc, book); st.PositionMS != 6500 {
+	if st, _ := svc.Playback.PlayState(ctx, uc, book); st.PositionMS != 6500 {
 		t.Fatalf("a book's bookmark left its resume position at %d, want 6500", st.PositionMS)
 	}
 	// The first-party apps move the book on; the bookmark is where it is.
-	if _, err := svc.Checkpoint(ctx, uc, book, 9000, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, book, 9000, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	marks, err := svc.SubsonicBookmarks(ctx, uc)
+	marks, err := svc.Playback.SubsonicBookmarks(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,29 +131,29 @@ func TestSubsonicBookmarksForEveryKind(t *testing.T) {
 	}
 
 	// A book's bookmark without a comment is its resume position alone.
-	if err := svc.SaveSubsonicBookmark(ctx, uc, book, 7000, ""); err != nil {
+	if err := svc.Playback.SaveSubsonicBookmark(ctx, uc, book, 7000, ""); err != nil {
 		t.Fatal(err)
 	}
-	marks, _ = svc.SubsonicBookmarks(ctx, uc)
+	marks, _ = svc.Playback.SubsonicBookmarks(ctx, uc)
 	for _, b := range marks {
 		if b.Item.PID == book && (b.PositionMS != 7000 || b.Comment != "") {
 			t.Fatalf("book bookmark = %+v, want 7000 with no comment", b)
 		}
 	}
 
-	if err := svc.DeleteSubsonicBookmark(ctx, uc, track); err != nil {
+	if err := svc.Playback.DeleteSubsonicBookmark(ctx, uc, track); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.DeleteSubsonicBookmark(ctx, uc, book); err != nil {
+	if err := svc.Playback.DeleteSubsonicBookmark(ctx, uc, book); err != nil {
 		t.Fatal(err)
 	}
-	if marks, _ := svc.SubsonicBookmarks(ctx, uc); len(marks) != 0 {
+	if marks, _ := svc.Playback.SubsonicBookmarks(ctx, uc); len(marks) != 0 {
 		t.Fatalf("bookmarks after deleting both = %+v", marks)
 	}
-	if st, _ := svc.PlayState(ctx, uc, book); st.PositionMS != 0 {
+	if st, _ := svc.Playback.PlayState(ctx, uc, book); st.PositionMS != 0 {
 		t.Errorf("deleting a book's bookmark left its resume position at %d", st.PositionMS)
 	}
-	if st, _ := svc.PlayState(ctx, uc, track); st.PositionMS != 1500 {
+	if st, _ := svc.Playback.PlayState(ctx, uc, track); st.PositionMS != 1500 {
 		t.Errorf("deleting a track's bookmark moved its resume position to %d", st.PositionMS)
 	}
 }
@@ -162,20 +162,20 @@ func TestSubsonicBookmarksAreTheCallersAndVisible(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, other := marksFixture(t)
 	track, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
-	if err := svc.SaveSubsonicBookmark(ctx, uc, track, 5000, ""); err != nil {
+	if err := svc.Playback.SaveSubsonicBookmark(ctx, uc, track, 5000, ""); err != nil {
 		t.Fatal(err)
 	}
-	if marks, err := svc.SubsonicBookmarks(ctx, other); err != nil || len(marks) != 0 {
+	if marks, err := svc.Playback.SubsonicBookmarks(ctx, other); err != nil || len(marks) != 0 {
 		t.Fatalf("another account's bookmarks = %+v (%v), want none", marks, err)
 	}
 	nobody := &UserCtx{ID: uc.ID, CatalogPID: uc.CatalogPID, Libraries: map[string]bool{}}
-	if err := svc.SaveSubsonicBookmark(ctx, nobody, track, 1, ""); KindOf(err) != KindNotFound {
+	if err := svc.Playback.SaveSubsonicBookmark(ctx, nobody, track, 1, ""); KindOf(err) != KindNotFound {
 		t.Errorf("bookmarking a hidden item = %v, want not-found", err)
 	}
-	if marks, _ := svc.SubsonicBookmarks(ctx, nobody); len(marks) != 0 {
+	if marks, _ := svc.Playback.SubsonicBookmarks(ctx, nobody); len(marks) != 0 {
 		t.Errorf("a caller who cannot see the item lists %+v", marks)
 	}
-	if err := svc.SaveSubsonicBookmark(ctx, uc, track, 1, strings.Repeat("x", subsonicCommentMax+1)); KindOf(err) != KindInvalid {
+	if err := svc.Playback.SaveSubsonicBookmark(ctx, uc, track, 1, strings.Repeat("x", subsonicCommentMax+1)); KindOf(err) != KindInvalid {
 		t.Errorf("an oversized comment = %v, want invalid", err)
 	}
 
@@ -186,7 +186,7 @@ func TestSubsonicBookmarksAreTheCallersAndVisible(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	marks, err := svc.SubsonicBookmarks(ctx, uc)
+	marks, err := svc.Playback.SubsonicBookmarks(ctx, uc)
 	if err != nil || len(marks) != 1 || marks[0].Item.PID != track {
 		t.Fatalf("bookmarks = %+v (%v), want the live track alone", marks, err)
 	}
@@ -215,7 +215,7 @@ func TestSubsonicBookmarksFollowContentRules(t *testing.T) {
 	}
 	titles := func(who *UserCtx) []string {
 		t.Helper()
-		marks, err := svc.SubsonicBookmarks(ctx, who)
+		marks, err := svc.Playback.SubsonicBookmarks(ctx, who)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -247,14 +247,14 @@ func TestSubsonicBookmarkCapRefusesWholly(t *testing.T) {
 			t.Fatal(err)
 		}
 	}})
-	books, err := svc.Items(ctx, uc, ItemFilter{MediaType: "audiobook"}, "", 10)
+	books, err := svc.Reads.Items(ctx, uc, ItemFilter{MediaType: "audiobook"}, "", 10)
 	if err != nil || len(books.Items) != 1 {
 		t.Fatalf("books = %+v (%v)", books.Items, err)
 	}
 	book := books.Items[0].PID
 	var capped []string
 	for cursor := ""; ; {
-		page, err := svc.Items(ctx, uc, ItemFilter{MediaType: "music"}, cursor, 500)
+		page, err := svc.Reads.Items(ctx, uc, ItemFilter{MediaType: "music"}, cursor, 500)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -277,22 +277,22 @@ func TestSubsonicBookmarkCapRefusesWholly(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := svc.Checkpoint(ctx, uc, book, 2000, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, book, 2000, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.SaveSubsonicBookmark(ctx, uc, book, 5000, "a note"); KindOf(err) != KindConflict {
+	if err := svc.Playback.SaveSubsonicBookmark(ctx, uc, book, 5000, "a note"); KindOf(err) != KindConflict {
 		t.Fatalf("a bookmark past the cap = %v, want a conflict", err)
 	}
-	if st, _ := svc.PlayState(ctx, uc, book); st.PositionMS != 2000 {
+	if st, _ := svc.Playback.PlayState(ctx, uc, book); st.PositionMS != 2000 {
 		t.Fatalf("a refused bookmark moved the book to %d, want it left at 2000", st.PositionMS)
 	}
-	if err := svc.SaveSubsonicBookmark(ctx, uc, book, 5000, ""); err != nil {
+	if err := svc.Playback.SaveSubsonicBookmark(ctx, uc, book, 5000, ""); err != nil {
 		t.Fatalf("a book bookmark with no comment at the cap = %v, want it saved", err)
 	}
-	if st, _ := svc.PlayState(ctx, uc, book); st.PositionMS != 5000 {
+	if st, _ := svc.Playback.PlayState(ctx, uc, book); st.PositionMS != 5000 {
 		t.Fatalf("the book is at %d, want 5000", st.PositionMS)
 	}
-	marks, err := svc.SubsonicBookmarks(ctx, uc)
+	marks, err := svc.Playback.SubsonicBookmarks(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,7 +313,7 @@ func TestRecentlyAddedInAFolder(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	dir := t.TempDir()
-	vinyl, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "vinyl", Path: dir, Media: "music"})
+	vinyl, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "vinyl", Path: dir, Media: "music"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +339,7 @@ func TestRecentlyAddedInAFolder(t *testing.T) {
 	var titles []string
 	cursor := ""
 	for {
-		page, err := svc.Browse(ctx, uc, "recently-added", inVinyl, 0, cursor, 1)
+		page, err := svc.Reads.Browse(ctx, uc, "recently-added", inVinyl, 0, cursor, 1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -355,10 +355,10 @@ func TestRecentlyAddedInAFolder(t *testing.T) {
 		t.Fatalf("vinyl's recently added = [%s], want its own two tracks, newest first", got)
 	}
 	none := &UserCtx{ID: uc.ID, CatalogPID: uc.CatalogPID, Libraries: map[string]bool{}}
-	if page, err := svc.Browse(ctx, none, "recently-added", inVinyl, 0, "", 10); err != nil || len(page.Items) != 0 {
+	if page, err := svc.Reads.Browse(ctx, none, "recently-added", inVinyl, 0, "", 10); err != nil || len(page.Items) != 0 {
 		t.Fatalf("a caller without the library = %v (%v), want nothing", page.Items, err)
 	}
-	if _, err := svc.Browse(ctx, uc, "recently-added", ItemFilter{Library: "nonsense"}, 0, "", 10); KindOf(err) != KindInvalid {
+	if _, err := svc.Reads.Browse(ctx, uc, "recently-added", ItemFilter{Library: "nonsense"}, 0, "", 10); KindOf(err) != KindInvalid {
 		t.Fatalf("a library filter naming no library = %v, want invalid", err)
 	}
 }
@@ -372,12 +372,12 @@ func TestSubsonicBookmarksListEveryResumePosition(t *testing.T) {
 			t.Fatal(err)
 		}
 	}})
-	books, err := svc.Items(ctx, uc, ItemFilter{MediaType: "audiobook"}, "", 10)
+	books, err := svc.Reads.Items(ctx, uc, ItemFilter{MediaType: "audiobook"}, "", 10)
 	if err != nil || len(books.Items) != 1 {
 		t.Fatalf("books = %+v (%v)", books.Items, err)
 	}
 	book := books.Items[0].PID
-	if err := svc.SaveSubsonicBookmark(ctx, uc, book, 6500, "the duel"); err != nil {
+	if err := svc.Playback.SaveSubsonicBookmark(ctx, uc, book, 6500, "the duel"); err != nil {
 		t.Fatal(err)
 	}
 	later := time.Now().Add(time.Minute).UnixNano()
@@ -386,7 +386,7 @@ func TestSubsonicBookmarksListEveryResumePosition(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	marks, err := svc.SubsonicBookmarks(ctx, uc)
+	marks, err := svc.Playback.SubsonicBookmarks(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,16 +404,16 @@ func TestASubsonicBookmarkSurvivesAChangeOfKind(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	track, bare := fixtureTrackPID(t, ctx, svc, uc, "Cobalt Sky")
-	if err := svc.SaveSubsonicBookmark(ctx, uc, track, 5000, "chorus"); err != nil {
+	if err := svc.Playback.SaveSubsonicBookmark(ctx, uc, track, 5000, "chorus"); err != nil {
 		t.Fatal(err)
 	}
-	job, err := svc.SetItemsKind(ctx, uc, []string{track}, "audiobook", false)
+	job, err := svc.Reads.SetItemsKind(ctx, uc, []string{track}, "audiobook", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, jobPID, _ := parseAPIPID(job.PID)
 	waitForJob(t, ctx, svc, jobPID)
-	marks, err := svc.SubsonicBookmarks(ctx, uc)
+	marks, err := svc.Playback.SubsonicBookmarks(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,7 +446,7 @@ func TestUnlistedBookmarkRowsDoNotCountTowardTheCap(t *testing.T) {
 	for range 998 {
 		put(PrefixTrack + "-" + ulid.Make().String())
 	}
-	if err := svc.SaveSubsonicBookmark(ctx, kid, unsaid, 2000, ""); err != nil {
+	if err := svc.Playback.SaveSubsonicBookmark(ctx, kid, unsaid, 2000, ""); err != nil {
 		t.Fatalf("a bookmark beside rows nobody can list = %v, want it saved", err)
 	}
 	rows, err := svc.db.SubsonicBookmarks(ctx, uc.ID)
@@ -460,7 +460,7 @@ func TestUnlistedBookmarkRowsDoNotCountTowardTheCap(t *testing.T) {
 	if len(rows) != 2 || !held[flagged] || !held[unsaid] {
 		t.Fatalf("rows held = %v, want the hidden track's and the new one alone", held)
 	}
-	if marks, _ := svc.SubsonicBookmarks(ctx, uc); len(marks) != 2 {
+	if marks, _ := svc.Playback.SubsonicBookmarks(ctx, uc); len(marks) != 2 {
 		t.Errorf("the account that sees both lists %+v, want both", marks)
 	}
 }
@@ -477,12 +477,12 @@ func TestSubsonicBookmarkPositionsFollowTheListing(t *testing.T) {
 	}})
 	marked, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
 	resumed, _ := fixtureTrackPID(t, ctx, svc, uc, "Basalt Steps")
-	books, err := svc.Items(ctx, uc, ItemFilter{MediaType: "audiobook"}, "", 10)
+	books, err := svc.Reads.Items(ctx, uc, ItemFilter{MediaType: "audiobook"}, "", 10)
 	if err != nil || len(books.Items) != 1 {
 		t.Fatalf("books = %+v (%v)", books.Items, err)
 	}
 	book := books.Items[0].PID
-	if err := svc.SaveSubsonicBookmark(ctx, uc, marked, 5000, ""); err != nil {
+	if err := svc.Playback.SaveSubsonicBookmark(ctx, uc, marked, 5000, ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.db.PutSubsonicBookmark(ctx, wdb.SubsonicBookmark{
@@ -493,7 +493,7 @@ func TestSubsonicBookmarkPositionsFollowTheListing(t *testing.T) {
 	pids := []string{marked, resumed, book}
 	at := func(resume map[string]int64) map[string]int64 {
 		t.Helper()
-		got, err := svc.SubsonicBookmarkPositions(ctx, uc, pids, resume)
+		got, err := svc.Playback.SubsonicBookmarkPositions(ctx, uc, pids, resume)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -521,7 +521,7 @@ func TestSubsonicItemsOfferOnlyWhatTheCallerMay(t *testing.T) {
 	ask := []string{flagged, unsaid, PrefixTrack + "-NOTAPID", "garbage", PrefixAlbum + "-" + ulid.Make().String()}
 	offered := func(who *UserCtx) []string {
 		t.Helper()
-		got, err := svc.SubsonicItems(ctx, who, ask)
+		got, err := svc.Playback.SubsonicItems(ctx, who, ask)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -536,7 +536,7 @@ func TestSubsonicItemsOfferOnlyWhatTheCallerMay(t *testing.T) {
 	if got := offered(none); len(got) != 0 {
 		t.Errorf("a caller with no libraries is offered %v, want nothing", got)
 	}
-	if _, err := svc.DeleteItems(ctx, uc, []string{unsaid}, "trash", false); err != nil {
+	if _, err := svc.Tools.DeleteItems(ctx, uc, []string{unsaid}, "trash", false); err != nil {
 		t.Fatal(err)
 	}
 	if got := offered(uc); !slices.Equal(got, []string{flagged}) {
@@ -559,7 +559,7 @@ func TestTheOlderOfTwoBookmarkRowsForOneItemIsLetGo(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	marks, err := svc.SubsonicBookmarks(ctx, uc)
+	marks, err := svc.Playback.SubsonicBookmarks(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -583,12 +583,12 @@ func TestPositionedSpokenPagesToItsLimit(t *testing.T) {
 	_, eps := followedFeed(t, ctx, svc, uc, "Paged", 5)
 	var played []string
 	for _, ep := range eps {
-		if _, err := svc.Checkpoint(ctx, uc, ep, 30_000, nil); err != nil {
+		if _, err := svc.Playback.Checkpoint(ctx, uc, ep, 30_000, nil); err != nil {
 			t.Fatal(err)
 		}
 		played = append([]string{ep}, played...)
 	}
-	got, err := svc.positionedSpoken(ctx, uc, 3, 2)
+	got, err := svc.Playback.positionedSpoken(ctx, uc, 3, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -610,7 +610,7 @@ func TestHiddenBookmarkRowsHaveACeiling(t *testing.T) {
 	bookmarkOldestFirst(t, ctx, svc, uc, oldestFirst)
 	// The same account with no library: every row is hidden from it.
 	none := &UserCtx{ID: uc.ID, CatalogPID: uc.CatalogPID, Libraries: map[string]bool{}}
-	if marks, err := svc.SubsonicBookmarks(ctx, none); err != nil || len(marks) != 0 {
+	if marks, err := svc.Playback.SubsonicBookmarks(ctx, none); err != nil || len(marks) != 0 {
 		t.Fatalf("the listing without libraries = %d (%v), want none", len(marks), err)
 	}
 	rows, err := svc.db.SubsonicBookmarks(ctx, uc.ID)
@@ -635,13 +635,13 @@ func TestAStarDoesNotMoveABookmark(t *testing.T) {
 	older := f.itemPID(t, ctx, model.KindBook, "The Fixture Book")
 	newer := f.itemPID(t, ctx, model.KindBook, "The Chaptered Fixture")
 	for _, book := range []string{older, newer} {
-		if _, err := f.svc.Checkpoint(ctx, f.uc, book, 5000, nil); err != nil {
+		if _, err := f.svc.Playback.Checkpoint(ctx, f.uc, book, 5000, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 	listing := func() ([]string, []time.Time) {
 		t.Helper()
-		marks, err := f.svc.SubsonicBookmarks(ctx, f.uc)
+		marks, err := f.svc.Playback.SubsonicBookmarks(ctx, f.uc)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -656,7 +656,7 @@ func TestAStarDoesNotMoveABookmark(t *testing.T) {
 	if !slices.Equal(pids, []string{newer, older}) {
 		t.Fatalf("bookmarks = %v, want the newer book first", pids)
 	}
-	if _, err := f.svc.SetStar(ctx, f.uc, older, true, nil); err != nil {
+	if _, err := f.svc.Playback.SetStar(ctx, f.uc, older, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if after, afterChanged := listing(); !slices.Equal(after, pids) || !slices.Equal(afterChanged, changed) {
@@ -678,13 +678,13 @@ func followedFeed(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, 
 		fmt.Fprintf(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>%s</title>%s</channel></rss>`, title, items.String())
 	}))
 	t.Cleanup(feed.Close)
-	sub, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: feed.URL + "/feed.xml"})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: feed.URL + "/feed.xml"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var pids []string
 	for cursor := ""; ; {
-		eps, next, err := svc.Episodes(ctx, uc, sub.Show.PID, cursor, 500)
+		eps, next, err := svc.Podcasts.Episodes(ctx, uc, sub.Show.PID, cursor, 500)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -734,7 +734,7 @@ func TestAFailedReadLetsNoBookmarkRowGo(t *testing.T) {
 	}
 	listed := func() int {
 		t.Helper()
-		marks, err := svc.SubsonicBookmarks(ctx, uc)
+		marks, err := svc.Playback.SubsonicBookmarks(ctx, uc)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -743,7 +743,7 @@ func TestAFailedReadLetsNoBookmarkRowGo(t *testing.T) {
 	// What the API reaches when the cap fills, Bravo is unfollowed, and
 	// retries at the cap take 400 more on Alpha beside Bravo's hidden rows.
 	bookmarkOldestFirst(t, ctx, svc, uc, slices.Concat(alpha[:600], bravo, alpha[600:]))
-	if err := svc.Unsubscribe(ctx, uc, bravoShow, false); err != nil {
+	if err := svc.Podcasts.Unsubscribe(ctx, uc, bravoShow, false); err != nil {
 		t.Fatal(err)
 	}
 	if n, held := listed(), rows(); n != 1000 || held != 1400 {
@@ -781,17 +781,17 @@ func failFollowSets(t *testing.T, ctx context.Context, svc *Library) func() {
 func failLibraryList(t *testing.T, ctx context.Context, svc *Library) func() {
 	t.Helper()
 	due := func(at time.Time) {
-		svc.libDirs.mu.Lock()
-		svc.libDirs.missed = at
-		svc.libDirs.mu.Unlock()
+		svc.Grants.libDirs.mu.Lock()
+		svc.Grants.libDirs.missed = at
+		svc.Grants.libDirs.mu.Unlock()
 	}
-	if _, read := svc.podcastLibrary(ctx); !read {
+	if _, read := svc.Grants.podcastLibrary(ctx); !read {
 		t.Fatal("the library list could not be read to start with")
 	}
 	due(time.Time{})
 	failing, cancel := context.WithCancel(ctx)
 	cancel()
-	if _, read := svc.podcastLibrary(failing); read {
+	if _, read := svc.Grants.podcastLibrary(failing); read {
 		t.Fatal("a library list reload under a cancelled context was read")
 	}
 	due(time.Now().Add(time.Hour))
@@ -816,7 +816,7 @@ func TestAFailedLibraryListReadLetsNoBookmarkRowGo(t *testing.T) {
 	}
 	granted := &UserCtx{ID: uc.ID, CatalogPID: uc.CatalogPID, Libraries: map[string]bool{}}
 	restore := failLibraryList(t, ctx, svc)
-	marks, err := svc.SubsonicBookmarks(ctx, granted)
+	marks, err := svc.Playback.SubsonicBookmarks(ctx, granted)
 	restore()
 	if err != nil || len(marks) != 0 {
 		t.Fatalf("a listing without the library list = %d bookmarks (%v), want none", len(marks), err)
@@ -824,7 +824,7 @@ func TestAFailedLibraryListReadLetsNoBookmarkRowGo(t *testing.T) {
 	if n := rows(); n != len(eps) {
 		t.Errorf("a listing without the library list left %d rows, want all %d", n, len(eps))
 	}
-	if _, err := svc.SubsonicBookmarks(ctx, granted); err != nil {
+	if _, err := svc.Playback.SubsonicBookmarks(ctx, granted); err != nil {
 		t.Fatal(err)
 	}
 	if n := rows(); n != wdb.SubsonicBookmarkCap {
@@ -840,7 +840,7 @@ func TestAFailedLibraryListReadIsAFallbackForPlaylistMembers(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openPodcastFixture(t)
 	_, eps := followedFeed(t, ctx, svc, uc, "Listed", 1)
-	pl, err := svc.CreatePlaylist(ctx, uc, PlaylistCreate{Name: "With an episode", Kind: "static", ItemPIDs: eps})
+	pl, err := svc.Playlists.CreatePlaylist(ctx, uc, PlaylistCreate{Name: "With an episode", Kind: "static", ItemPIDs: eps})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -848,7 +848,7 @@ func TestAFailedLibraryListReadIsAFallbackForPlaylistMembers(t *testing.T) {
 	members := func() (int, bool) {
 		t.Helper()
 		counted, fell := WatchDegraded(ctx)
-		page, err := svc.PlaylistItems(counted, granted, pl.PID, "", 500)
+		page, err := svc.Playlists.Items(counted, granted, pl.PID, "", 500)
 		if err != nil {
 			t.Fatal(err)
 		}

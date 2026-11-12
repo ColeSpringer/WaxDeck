@@ -50,12 +50,12 @@ func newPlaylistShow(t *testing.T) playlistShow {
 	}))
 	t.Cleanup(ts.Close)
 	s := playlistShow{ctx: ctx, svc: svc, admin: admin, episodes: map[string]string{}}
-	sub, _, err := svc.Subscribe(ctx, admin, SubscribeRequest{URL: ts.URL + "/feed.xml"})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, admin, SubscribeRequest{URL: ts.URL + "/feed.xml"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	s.show = sub.Show.PID
-	eps, _, err := svc.Episodes(ctx, admin, s.show, "", 10)
+	eps, _, err := svc.Podcasts.Episodes(ctx, admin, s.show, "", 10)
 	if err != nil || len(eps) != 2 {
 		t.Fatalf("episodes = %+v (%v), want two", eps, err)
 	}
@@ -81,7 +81,7 @@ func (s playlistShow) queued(t *testing.T, title string) bool {
 // fetch: asking for it queues nothing, as the relay plays nothing.
 func TestAPlaylistTheFeedDeclaresIsNeverQueued(t *testing.T) {
 	s := newPlaylistShow(t)
-	if err := s.svc.QueueEpisodeFetch(s.ctx, s.admin, s.episodes["Declared"]); KindOf(err) != KindNotFound {
+	if err := s.svc.Podcasts.QueueEpisodeFetch(s.ctx, s.admin, s.episodes["Declared"]); KindOf(err) != KindNotFound {
 		t.Errorf("queuing a declared playlist = %v, want not-found", err)
 	}
 	if s.queued(t, "Declared") {
@@ -93,7 +93,7 @@ func TestAPlaylistTheFeedDeclaresIsNeverQueued(t *testing.T) {
 // same way, though its feed called it audio.
 func TestAPlaylistTheRelaySawIsNeverQueued(t *testing.T) {
 	s := newPlaylistShow(t)
-	src, err := s.svc.EnclosureStreamSource(s.ctx, s.admin.ID, s.episodes["Disguised"])
+	src, err := s.svc.Podcasts.EnclosureStreamSource(s.ctx, s.admin.ID, s.episodes["Disguised"])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,12 +101,12 @@ func TestAPlaylistTheRelaySawIsNeverQueued(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := s.svc.FetchEnclosure(req, src)
+	resp, err := s.svc.Podcasts.FetchEnclosure(req, src)
 	if err != nil {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
-	if err := s.svc.QueueEpisodeFetch(s.ctx, s.admin, s.episodes["Disguised"]); KindOf(err) != KindNotFound {
+	if err := s.svc.Podcasts.QueueEpisodeFetch(s.ctx, s.admin, s.episodes["Disguised"]); KindOf(err) != KindNotFound {
 		t.Errorf("queuing an episode its host answers with a playlist = %v, want not-found", err)
 	}
 	if s.queued(t, "Disguised") {
@@ -123,10 +123,10 @@ func TestAQueuedPlaylistIsNotStoredAsTheEpisode(t *testing.T) {
 	if err := s.svc.db.EnqueueFetch(s.ctx, string(bare), s.admin.ID, time.Now().UnixNano(), fetchMaxAttempts); err != nil {
 		t.Fatal(err)
 	}
-	if !s.svc.DrainFetchQueue(s.ctx) {
+	if !s.svc.Podcasts.DrainFetchQueue(s.ctx) {
 		t.Fatal("the queued fetch did not run")
 	}
-	eps, _, err := s.svc.Episodes(s.ctx, s.admin, s.show, "", 10)
+	eps, _, err := s.svc.Podcasts.Episodes(s.ctx, s.admin, s.show, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestAQueuedPlaylistIsNotStoredAsTheEpisode(t *testing.T) {
 // feed's own address when target is empty, and answers its type.
 func relayOnce(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, episode, target string) string {
 	t.Helper()
-	src, err := svc.EnclosureStreamSource(ctx, uc.ID, episode)
+	src, err := svc.Podcasts.EnclosureStreamSource(ctx, uc.ID, episode)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func relayOnce(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, epi
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := svc.FetchEnclosure(req, src)
+	resp, err := svc.Podcasts.FetchEnclosure(req, src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,11 +190,11 @@ func changingHost(t *testing.T, answers ...[2]any) (context.Context, *Library, *
 		fmt.Fprint(w, "#EXTM3U\nhttp://stream.example/live.mp3\n")
 	}))
 	t.Cleanup(ts.Close)
-	sub, _, err := svc.Subscribe(ctx, admin, SubscribeRequest{URL: ts.URL + "/feed.xml"})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, admin, SubscribeRequest{URL: ts.URL + "/feed.xml"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	eps, _, err := svc.Episodes(ctx, admin, sub.Show.PID, "", 10)
+	eps, _, err := svc.Podcasts.Episodes(ctx, admin, sub.Show.PID, "", 10)
 	if err != nil || len(eps) != 1 {
 		t.Fatalf("episodes = %+v (%v), want one", eps, err)
 	}
@@ -209,7 +209,7 @@ func TestAPlaylistAnswerFollowedByAudioIsForgotten(t *testing.T) {
 	for range 3 {
 		relayOnce(t, ctx, svc, admin, episode, "")
 	}
-	if err := svc.QueueEpisodeFetch(ctx, admin, episode); err != nil {
+	if err := svc.Podcasts.QueueEpisodeFetch(ctx, admin, episode); err != nil {
 		t.Errorf("queuing an episode whose host now answers audio = %v, want it queued", err)
 	}
 }
@@ -220,13 +220,13 @@ func TestAPlaylistAnswerFollowedByAudioIsForgotten(t *testing.T) {
 func TestOnlyTheFeedsAddressAnsweringAPlaylistCounts(t *testing.T) {
 	ctx, svc, admin, episode, host := changingHost(t, [2]any{http.StatusOK, "audio/x-mpegurl"})
 	relayOnce(t, ctx, svc, admin, episode, host+"/chain-end.mp3")
-	if err := svc.QueueEpisodeFetch(ctx, admin, episode); err != nil {
+	if err := svc.Podcasts.QueueEpisodeFetch(ctx, admin, episode); err != nil {
 		t.Errorf("queuing after a chain end answered a playlist = %v, want it queued", err)
 	}
 
 	ctx, svc, admin, episode, _ = changingHost(t, [2]any{http.StatusNotFound, "audio/x-mpegurl"})
 	relayOnce(t, ctx, svc, admin, episode, "")
-	if err := svc.QueueEpisodeFetch(ctx, admin, episode); err != nil {
+	if err := svc.Podcasts.QueueEpisodeFetch(ctx, admin, episode); err != nil {
 		t.Errorf("queuing after a refusal typed as a playlist = %v, want it queued", err)
 	}
 }

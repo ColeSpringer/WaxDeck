@@ -141,10 +141,10 @@ func (c *lbClient) feedback(ctx context.Context, user string, offset int) ([]lbT
 
 // runListenBrainzImport replays an account's listens and loved
 // recordings onto the target account.
-func (l *Library) runListenBrainzImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, secret string) (migrationSummary, error) {
+func (l *Migrate) runListenBrainzImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, secret string) (migrationSummary, error) {
 	sum := migrationSummary{Source: p.Source, DryRun: p.DryRun, Samples: migrationSamples{Unmatched: []string{}}}
 	client := newLBClient(p.ServerURL, secret)
-	prog := newToolProgress(l, t)
+	prog := newToolProgress(l.Tools, t)
 	hist := l.newMigrateHistory(uc, p, &sum)
 
 	if p.History {

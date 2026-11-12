@@ -33,17 +33,17 @@ func TestASyncedCoverNeverLeavesHTTPS(t *testing.T) {
 		http.Redirect(w, r, plain.URL+"/cover.png", http.StatusFound)
 	}))
 	t.Cleanup(secure.Close)
-	l := &Library{log: slog.New(slog.DiscardHandler)}
-	l.transcriptHTTPOnce.Do(func() { l.transcriptHTTP = secure.Client() })
+	l := bareLibrary(&core{log: slog.New(slog.DiscardHandler)})
+	l.Podcasts.transcriptHTTPOnce.Do(func() { l.Podcasts.transcriptHTTP = secure.Client() })
 	ctx := context.Background()
 
-	if raw, _, err := l.fetchSyncedCoverImage(ctx, secure.URL+"/downgrade"); err == nil {
+	if raw, _, err := l.Playlists.fetchSyncedCoverImage(ctx, secure.URL+"/downgrade"); err == nil {
 		t.Errorf("a redirect to http gave a cover of %d bytes", len(raw))
 	}
 	if n := plainAsked.Load(); n != 0 {
 		t.Errorf("the plain-http host was asked %d times", n)
 	}
-	if raw, mime, err := l.fetchSyncedCoverImage(ctx, secure.URL+"/hop"); err != nil || mime != "image/png" || len(raw) == 0 {
+	if raw, mime, err := l.Playlists.fetchSyncedCoverImage(ctx, secure.URL+"/hop"); err != nil || mime != "image/png" || len(raw) == 0 {
 		t.Errorf("an https redirect = %d bytes of %q (%v), want the cover", len(raw), mime, err)
 	}
 }

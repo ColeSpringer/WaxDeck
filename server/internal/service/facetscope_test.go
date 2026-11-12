@@ -27,7 +27,7 @@ func TestScopedFacetCountsTheScopeOnly(t *testing.T) {
 	artist := bucketPID(t, ctx, svc, uc, "artist", "Field Notes")
 	key := artistBucketKey(artist)
 
-	page, err := svc.Facets(ctx, uc, FacetQuery{
+	page, err := svc.Reads.Facets(ctx, uc, FacetQuery{
 		Dimension: "album", Facet: "artist", FacetKey: key, Limit: 500,
 	})
 	if err != nil {
@@ -48,7 +48,7 @@ func TestScopedFacetCountsTheScopeOnly(t *testing.T) {
 
 	// And the unscoped enumeration still answers the whole library, so the
 	// scope narrowed the read rather than the dimension.
-	whole, err := svc.Facets(ctx, uc, FacetQuery{Dimension: "album", Limit: 500})
+	whole, err := svc.Reads.Facets(ctx, uc, FacetQuery{Dimension: "album", Limit: 500})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestScopedFacetBypassesTheCacheBothWays(t *testing.T) {
 		t.Fatal("the album enumeration was cached before anything asked for it")
 	}
 
-	scoped, err := svc.Facets(ctx, uc, FacetQuery{
+	scoped, err := svc.Reads.Facets(ctx, uc, FacetQuery{
 		Dimension: "album", Facet: "artist", FacetKey: key, Limit: 500,
 	})
 	if err != nil {
@@ -95,14 +95,14 @@ func TestScopedFacetBypassesTheCacheBothWays(t *testing.T) {
 
 	// Now warm the cache with the real thing, and prove the scoped read
 	// does not take it.
-	whole, err := svc.Facets(ctx, uc, FacetQuery{Dimension: "album", Limit: 500})
+	whole, err := svc.Reads.Facets(ctx, uc, FacetQuery{Dimension: "album", Limit: 500})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(whole.Buckets) != 2 || !servesFromCache(svc, "album") {
 		t.Fatalf("the unscoped enumeration did not warm the cache: %+v", whole.Buckets)
 	}
-	again, err := svc.Facets(ctx, uc, FacetQuery{
+	again, err := svc.Reads.Facets(ctx, uc, FacetQuery{
 		Dimension: "album", Facet: "artist", FacetKey: key, Limit: 500,
 	})
 	if err != nil {
@@ -129,7 +129,7 @@ func TestScopedFacetRefusals(t *testing.T) {
 		{"an unknown scope dimension", "album", "not-a-dimension", ""},
 		{"kind has no unknown bucket to scope by", "album", "kind", ""},
 	} {
-		_, err := svc.Facets(ctx, uc, FacetQuery{
+		_, err := svc.Reads.Facets(ctx, uc, FacetQuery{
 			Dimension: bad.dimension, Facet: bad.facet, FacetKey: bad.key, Limit: 100,
 		})
 		if KindOf(err) != KindInvalid {
@@ -140,7 +140,7 @@ func TestScopedFacetRefusals(t *testing.T) {
 	// An empty key on a dimension that has an unknown bucket is a real
 	// scope: the items the dimension is absent from. The fixture tags
 	// every track with an artist, so it is legitimately empty.
-	page, err := svc.Facets(ctx, uc, FacetQuery{
+	page, err := svc.Reads.Facets(ctx, uc, FacetQuery{
 		Dimension: "album", Facet: "artist", FacetKey: "", Limit: 100,
 	})
 	if err != nil {
@@ -161,7 +161,7 @@ func TestScopedFacetCursorCarriesItsScope(t *testing.T) {
 
 	// One bucket per page over the two-album library, so both directions
 	// have a cursor to misuse.
-	whole, err := svc.Facets(ctx, uc, FacetQuery{Dimension: "album", Limit: 1})
+	whole, err := svc.Reads.Facets(ctx, uc, FacetQuery{Dimension: "album", Limit: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestScopedFacetCursorCarriesItsScope(t *testing.T) {
 	}
 	artist := bucketPID(t, ctx, svc, uc, "artist", "Field Notes")
 	key := artistBucketKey(artist)
-	if _, err := svc.Facets(ctx, uc, FacetQuery{
+	if _, err := svc.Reads.Facets(ctx, uc, FacetQuery{
 		Dimension: "album", Facet: "artist", FacetKey: key, Cursor: whole.Next, Limit: 1,
 	}); KindOf(err) != KindInvalid {
 		t.Fatalf("an unscoped cursor replayed under a scope gave %v", err)
@@ -178,7 +178,7 @@ func TestScopedFacetCursorCarriesItsScope(t *testing.T) {
 
 	// Every artist at once, so the scoped listing has more than one bucket
 	// and mints a cursor of its own.
-	scoped, err := svc.Facets(ctx, uc, FacetQuery{
+	scoped, err := svc.Reads.Facets(ctx, uc, FacetQuery{
 		Dimension: "artist", Facet: "kind", FacetKey: "track", Limit: 1,
 	})
 	if err != nil {
@@ -187,14 +187,14 @@ func TestScopedFacetCursorCarriesItsScope(t *testing.T) {
 	if scoped.Next == "" {
 		t.Fatal("the scoped enumeration fit one bucket")
 	}
-	if _, err := svc.Facets(ctx, uc, FacetQuery{
+	if _, err := svc.Reads.Facets(ctx, uc, FacetQuery{
 		Dimension: "artist", Cursor: scoped.Next, Limit: 1,
 	}); KindOf(err) != KindInvalid {
 		t.Fatalf("a scoped cursor replayed unscoped gave %v", err)
 	}
 	// The same scope still pages, so the refusal is about the scope rather
 	// than about the cursor.
-	if _, err := svc.Facets(ctx, uc, FacetQuery{
+	if _, err := svc.Reads.Facets(ctx, uc, FacetQuery{
 		Dimension: "artist", Facet: "kind", FacetKey: "track", Cursor: scoped.Next, Limit: 1,
 	}); err != nil {
 		t.Fatalf("the scoped listing did not page: %v", err)
@@ -213,7 +213,7 @@ func TestScopedFacetHonoursTheGrant(t *testing.T) {
 		ID: uc.ID, CatalogPID: uc.CatalogPID,
 		Libraries: map[string]bool{"lb-nothing": true},
 	}
-	page, err := svc.Facets(ctx, restricted, FacetQuery{
+	page, err := svc.Reads.Facets(ctx, restricted, FacetQuery{
 		Dimension: "album", Facet: "artist", FacetKey: key, Limit: 100,
 	})
 	if err != nil {
@@ -227,12 +227,12 @@ func TestScopedFacetHonoursTheGrant(t *testing.T) {
 	// without touching the catalog - but a malformed scope is still a
 	// request error, or the refusal would depend on who asked.
 	ungranted := &UserCtx{ID: uc.ID, CatalogPID: uc.CatalogPID}
-	if _, err := svc.Facets(ctx, ungranted, FacetQuery{
+	if _, err := svc.Reads.Facets(ctx, ungranted, FacetQuery{
 		Dimension: "album", Facet: "album", FacetKey: key, Limit: 100,
 	}); KindOf(err) != KindInvalid {
 		t.Fatalf("a bad scope should refuse whoever asks, got %v", err)
 	}
-	if _, err := svc.Facets(ctx, ungranted, FacetQuery{
+	if _, err := svc.Reads.Facets(ctx, ungranted, FacetQuery{
 		Dimension: "album", Facet: "artist", FacetKey: key, Limit: 100,
 	}); err != nil {
 		t.Fatalf("a good scope should still answer empty, got %v", err)
@@ -256,7 +256,7 @@ func TestScopedFacetByKindBookCountsBooksOnly(t *testing.T) {
 			t.Fatal(err)
 		}
 	}})
-	books, err := svc.Items(ctx, uc, ItemFilter{MediaType: "audiobook"}, "", 10)
+	books, err := svc.Reads.Items(ctx, uc, ItemFilter{MediaType: "audiobook"}, "", 10)
 	if err != nil || len(books.Items) != 1 {
 		t.Fatalf("books = %+v (%v), want the one fixture book", books.Items, err)
 	}
@@ -266,7 +266,7 @@ func TestScopedFacetByKindBookCountsBooksOnly(t *testing.T) {
 		{"artist", "Test Ensemble"},
 		{"genre", "Ambient"},
 	} {
-		whole, err := svc.Facets(ctx, uc, FacetQuery{Dimension: tc.dimension, Limit: 500})
+		whole, err := svc.Reads.Facets(ctx, uc, FacetQuery{Dimension: tc.dimension, Limit: 500})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -274,7 +274,7 @@ func TestScopedFacetByKindBookCountsBooksOnly(t *testing.T) {
 			t.Fatalf("unscoped %s %q counts %d, want the 3 tracks and the book", tc.dimension, tc.label, got)
 		}
 
-		scoped, err := svc.Facets(ctx, uc, FacetQuery{
+		scoped, err := svc.Reads.Facets(ctx, uc, FacetQuery{
 			Dimension: tc.dimension, Facet: "kind", FacetKey: "book", Limit: 500,
 		})
 		if err != nil {
@@ -284,7 +284,7 @@ func TestScopedFacetByKindBookCountsBooksOnly(t *testing.T) {
 			t.Fatalf("%s scoped to books = %+v, want %q with 1", tc.dimension, scoped.Buckets, tc.label)
 		}
 
-		opened, err := svc.Items(ctx, uc, ItemFilter{
+		opened, err := svc.Reads.Items(ctx, uc, ItemFilter{
 			MediaType: "audiobook", Facet: tc.dimension, FacetKey: scoped.Buckets[0].Key,
 		}, "", 50)
 		if err != nil {
@@ -308,13 +308,13 @@ func bucketCount(buckets []FacetBucket, label string) int {
 // servesKindFromCache is servesFromCache for an enumeration scoped to
 // one kind.
 func servesKindFromCache(l *Library, dimension, kind string) bool {
-	gen := l.facetGeneration(context.Background())
-	l.facets.mu.Lock()
-	defer l.facets.mu.Unlock()
-	if l.facets.gen != gen {
+	gen := l.Reads.facetGeneration(context.Background())
+	l.Reads.facets.mu.Lock()
+	defer l.Reads.facets.mu.Unlock()
+	if l.Reads.facets.gen != gen {
 		return false
 	}
-	_, ok := l.facets.byDimension[facetCacheKey{dimension: dimension, sort: FacetSortCount, kind: kind}]
+	_, ok := l.Reads.facets.byDimension[facetCacheKey{dimension: dimension, sort: FacetSortCount, kind: kind}]
 	return ok
 }
 
@@ -330,7 +330,7 @@ func TestKindScopedFacetIsCachedPerKind(t *testing.T) {
 	settleCatalogFeed(t, svc)
 	tracks := func(who *UserCtx) map[string]int {
 		t.Helper()
-		page, err := svc.Facets(ctx, who, FacetQuery{
+		page, err := svc.Reads.Facets(ctx, who, FacetQuery{
 			Dimension: "artist", Facet: "kind", FacetKey: "track", Limit: 500,
 		})
 		if err != nil {
@@ -355,9 +355,9 @@ func TestKindScopedFacetIsCachedPerKind(t *testing.T) {
 	}
 
 	// A hit: what the cache holds is what the next read answers.
-	gen := svc.facetGeneration(ctx)
+	gen := svc.Reads.facetGeneration(ctx)
 	marked := []FacetBucket{facetFolded(FacetBucket{Key: "marked", Label: "Marked", Count: 7})}
-	svc.publishFacetBuckets(ctx, gen, facetCacheKey{dimension: "artist", sort: FacetSortCount, kind: "track"}, marked)
+	svc.Reads.publishFacetBuckets(ctx, gen, facetCacheKey{dimension: "artist", sort: FacetSortCount, kind: "track"}, marked)
 	if got := tracks(uc); len(got) != 1 || got["Marked"] != 7 {
 		t.Fatalf("a repeated kind-scoped read = %v, want the cached entry", got)
 	}
@@ -378,7 +378,7 @@ func TestKindScopedFacetIsCachedPerKind(t *testing.T) {
 
 	// A key that names no kind is not cached: it is any string a client
 	// sends.
-	if _, err := svc.Facets(ctx, uc, FacetQuery{
+	if _, err := svc.Reads.Facets(ctx, uc, FacetQuery{
 		Dimension: "artist", Facet: "kind", FacetKey: "not-a-kind", Limit: 500,
 	}); err != nil {
 		t.Fatal(err)
@@ -394,7 +394,7 @@ func TestKindScopedFacetIsCachedPerKind(t *testing.T) {
 		t.Fatal("the kind-scoped enumeration did not cache again")
 	}
 	amber, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
-	if _, err := svc.EditItemMetadata(ctx, uc, amber, map[string]string{"artist": "Brass Nine"}, MetadataEditParams{}); err != nil {
+	if _, err := svc.Editor.EditItemMetadata(ctx, uc, amber, map[string]string{"artist": "Brass Nine"}, MetadataEditParams{}); err != nil {
 		t.Fatal(err)
 	}
 	for deadline := time.Now().Add(10 * time.Second); servesKindFromCache(svc, "artist", "track"); {

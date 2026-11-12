@@ -10,7 +10,7 @@ import (
 
 func (s *Server) ListOrganizeProfiles(ctx context.Context, _ ListOrganizeProfilesRequestObject) (ListOrganizeProfilesResponseObject, error) {
 	uc := userCtx(ctx)
-	profiles, err := s.svc.OrganizeProfilesFor(ctx, uc)
+	profiles, err := s.svc.Health.OrganizeProfilesFor(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func (s *Server) PutOrganizeProfile(ctx context.Context, req PutOrganizeProfileR
 		Podcast: deref(req.Body.PodcastTemplate), TagWrite: derefBool(req.Body.TagWrite),
 		CompilationFolder: req.Body.CompilationFolder,
 	}
-	p, err := s.svc.PutOrganizeProfile(ctx, uc, req.Name, in)
+	p, err := s.svc.Health.PutOrganizeProfile(ctx, uc, req.Name, in)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (s *Server) PutOrganizeProfile(ctx context.Context, req PutOrganizeProfileR
 
 func (s *Server) DeleteOrganizeProfile(ctx context.Context, req DeleteOrganizeProfileRequestObject) (DeleteOrganizeProfileResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.DeleteOrganizeProfile(ctx, uc, req.Name); err != nil {
+	if err := s.svc.Health.DeleteOrganizeProfile(ctx, uc, req.Name); err != nil {
 		return nil, err
 	}
 	return DeleteOrganizeProfile204Response{}, nil
@@ -75,7 +75,7 @@ func (s *Server) PreviewOrganizeProfile(ctx context.Context, req PreviewOrganize
 		Podcast: deref(req.Body.PodcastTemplate), TagWrite: derefBool(req.Body.TagWrite),
 		CompilationFolder: req.Body.CompilationFolder,
 	}
-	sample, err := s.svc.PreviewOrganizeProfile(ctx, uc, deref(req.Body.Name), in)
+	sample, err := s.svc.Health.PreviewOrganizeProfile(ctx, uc, deref(req.Body.Name), in)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (s *Server) PreviewOrganize(ctx context.Context, req PreviewOrganizeRequest
 	if req.Body.ItemPids != nil {
 		pids = *req.Body.ItemPids
 	}
-	plan, err := s.svc.PreviewOrganize(ctx, uc, deref(req.Body.Profile), pids)
+	plan, err := s.svc.Health.PreviewOrganize(ctx, uc, deref(req.Body.Profile), pids)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func (s *Server) ApplyOrganize(ctx context.Context, req ApplyOrganizeRequestObje
 	if req.Body.ItemPids != nil {
 		pids = *req.Body.ItemPids
 	}
-	rep, err := s.svc.ApplyOrganize(ctx, uc, deref(req.Body.Profile), pids)
+	rep, err := s.svc.Health.ApplyOrganize(ctx, uc, deref(req.Body.Profile), pids)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func (s *Server) ListOrganizeHistory(ctx context.Context, req ListOrganizeHistor
 	if err != nil {
 		return nil, err
 	}
-	runs, next, err := s.svc.OrganizeHistory(ctx, uc, deref(req.Params.Cursor), limit)
+	runs, next, err := s.svc.Health.OrganizeHistory(ctx, uc, deref(req.Params.Cursor), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func (s *Server) UndoOrganize(ctx context.Context, req UndoOrganizeRequestObject
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	rep, err := s.svc.UndoOrganize(ctx, uc, req.Body.JobPid)
+	rep, err := s.svc.Health.UndoOrganize(ctx, uc, req.Body.JobPid)
 	if err != nil {
 		return nil, err
 	}

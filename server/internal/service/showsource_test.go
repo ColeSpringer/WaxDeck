@@ -13,7 +13,7 @@ import (
 // failing them while fail is set.
 func countShowReads(svc *Library, fail *atomic.Bool) *atomic.Int64 {
 	var n atomic.Int64
-	svc.showReadHook = func(ctx context.Context, pid model.PID) (*model.Podcast, error) {
+	svc.Podcasts.showReadHook = func(ctx context.Context, pid model.PID) (*model.Podcast, error) {
 		n.Add(1)
 		if fail.Load() {
 			return nil, errors.New("the catalog is busy")
@@ -31,12 +31,12 @@ func TestEpisodeRowsReadTheirShowOnce(t *testing.T) {
 	feed := &stubFeed{kind: model.SourceRSS, n: 50, prefix: "Episode"}
 	f := openStubFeeds(t, feed)
 	f.subscribe(t, "https://feeds.example/fifty", "rss")
-	f.svc.showSources.Clear()
+	f.svc.Podcasts.showSources.Clear()
 	var fail atomic.Bool
 	reads := countShowReads(f.svc, &fail)
 	page := func(cursor string) ([]EpisodeSummary, string) {
 		t.Helper()
-		rows, next, err := f.svc.SubscribedEpisodes(f.ctx, f.uc, EpisodesLatest, cursor, 25)
+		rows, next, err := f.svc.Podcasts.SubscribedEpisodes(f.ctx, f.uc, EpisodesLatest, cursor, 25)
 		if err != nil {
 			t.Fatal(err)
 		}

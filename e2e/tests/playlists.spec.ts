@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 import { subsonic } from './driver/subsonic';
-import { clickThrough, clickUntilRequested, typeInto } from './driver/gestures';
+import { clickThrough, clickUntilRequested, pasteInto, typeInto } from './driver/gestures';
 import { SemanticsIds } from './semantics-ids';
 
 // The playlists slice over the real stack: the rule editor building a
@@ -462,7 +462,7 @@ test('a pasted NSP document is checked, then imports as a rule', async ({ app })
   // loved and duration arrive under the rule's own names, the duration
   // rescaled from seconds.
   await app.playlists.openImport('nsp');
-  await typeInto(
+  await pasteInto(
     app.page,
     app.playlists.importPayload(),
     JSON.stringify({
@@ -488,7 +488,7 @@ test('a pasted NSP document is checked, then imports as a rule', async ({ app })
   // An older WaxDeck export named the star `starred`, which NSP does not.
   await app.nav.enter('playlists');
   await app.playlists.openImport('nsp');
-  await typeInto(
+  await pasteInto(
     app.page,
     app.playlists.importPayload(),
     JSON.stringify({
@@ -535,7 +535,7 @@ test('a pasted M3U file is checked line by line, then imports what matched', asy
   await app.nav.enter('playlists');
   await app.playlists.openImport('m3u');
   await typeInto(app.page, app.playlists.control(SemanticsIds.playlistImportName), name);
-  await typeInto(app.page, app.playlists.importPayload(), document);
+  await pasteInto(app.page, app.playlists.importPayload(), document);
   await clickThrough(
     app.playlists.control(SemanticsIds.playlistM3uCheck),
     app.playlists.control(SemanticsIds.playlistM3uImport),

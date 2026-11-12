@@ -57,7 +57,7 @@ type EnclosureSource struct {
 //
 // userID identifies the listener, for the credential rule below; it is
 // the media token's subject at the relay and the caller at every mint.
-func (l *Library) EnclosureStreamSource(ctx context.Context, userID, apiEpisodePID string) (EnclosureSource, error) {
+func (l *Podcasts) EnclosureStreamSource(ctx context.Context, userID, apiEpisodePID string) (EnclosureSource, error) {
 	det, err := l.getEpisode(ctx, apiEpisodePID)
 	if err != nil {
 		return EnclosureSource{}, err
@@ -256,7 +256,7 @@ func episodeFormat(ep *model.Episode, fetchedContainer string) (container, mimeT
 // that did change heals at the next play attempt; a show dropped from
 // the catalog only leaves an entry behind. A read that fails is not
 // remembered, and answers false.
-func (l *Library) showSourceType(ctx context.Context, showPID model.PID) (model.SourceType, bool) {
+func (l *Podcasts) showSourceType(ctx context.Context, showPID model.PID) (model.SourceType, bool) {
 	if known, ok := l.showSources.Load(showPID); ok {
 		return known.(model.SourceType), true
 	}
@@ -269,7 +269,7 @@ func (l *Library) showSourceType(ctx context.Context, showPID model.PID) (model.
 }
 
 // readShow reads one show from the catalog, through showReadHook in a test.
-func (l *Library) readShow(ctx context.Context, showPID model.PID) (*model.Podcast, error) {
+func (l *Podcasts) readShow(ctx context.Context, showPID model.PID) (*model.Podcast, error) {
 	if l.showReadHook != nil {
 		return l.showReadHook(ctx, showPID)
 	}
@@ -296,7 +296,7 @@ func (l *Library) readShow(ctx context.Context, showPID model.PID) (*model.Podca
 //
 // A read that fails is the server's failure, never a refusal and never
 // half a login: a 401 that answered one would be kept as the host's word.
-func (l *Library) feedCredentials(ctx context.Context, userID string, pod *model.Podcast) (string, string, error) {
+func (l *Podcasts) feedCredentials(ctx context.Context, userID string, pod *model.Podcast) (string, string, error) {
 	if !l.showIsPrivate(ctx, pod) {
 		return "", "", nil
 	}
@@ -327,7 +327,7 @@ func (l *Library) feedCredentials(ctx context.Context, userID string, pod *model
 
 // feedSecret reads a show's stored feed password, through secretReadHook
 // in a test.
-func (l *Library) feedSecret(ctx context.Context, showPID model.PID) (string, error) {
+func (l *Podcasts) feedSecret(ctx context.Context, showPID model.PID) (string, error) {
 	key := "podcast.auth." + string(showPID)
 	if l.secretReadHook != nil {
 		return l.secretReadHook(ctx, key)
@@ -342,7 +342,7 @@ func (l *Library) feedSecret(ctx context.Context, showPID model.PID) (string, er
 // catching ErrEpisodeNotFetched, so a caller a credentialed feed will
 // not be spent on keeps the conflict instead of getting a URL that
 // would refuse at the relay.
-func (l *Library) PassthroughEpisode(ctx context.Context, userID, apiItemPID string) (EnclosureSource, bool) {
+func (l *Podcasts) PassthroughEpisode(ctx context.Context, userID, apiItemPID string) (EnclosureSource, bool) {
 	src, err := l.EnclosureStreamSource(ctx, userID, apiItemPID)
 	if err != nil {
 		return EnclosureSource{}, false
@@ -353,7 +353,7 @@ func (l *Library) PassthroughEpisode(ctx context.Context, userID, apiItemPID str
 // FetchEnclosure sends one request of the passthrough relay for src's
 // episode, a walk of its chain or a remembered chain end, with the show's
 // login on each request of the chain at the feed's origin and on no other.
-func (l *Library) FetchEnclosure(req *http.Request, src EnclosureSource) (*http.Response, error) {
+func (l *Podcasts) FetchEnclosure(req *http.Request, src EnclosureSource) (*http.Response, error) {
 	resp, err := sendWithLogin(l.enclosureClient(), req, feedLogin{feedURL: src.FeedURL, user: src.AuthUser, pass: src.AuthPass})
 	if err == nil && src.EpisodePID != "" && (resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent) {
 		l.noteEnclosureAnswer(req, src, resp.Header.Get("Content-Type"))
@@ -365,7 +365,7 @@ func (l *Library) FetchEnclosure(req *http.Request, src EnclosureSource) (*http.
 // playlist, so a fetch never stores one as the episode, and forgets it
 // once an answer passes the relay's audio gate. A remembered chain end's
 // playlist is not the episode's: the relay itself does not trust it.
-func (l *Library) noteEnclosureAnswer(req *http.Request, src EnclosureSource, contentType string) {
+func (l *Podcasts) noteEnclosureAnswer(req *http.Request, src EnclosureSource, contentType string) {
 	ctx := context.WithoutCancel(req.Context())
 	key := syncKeyPlaylistEnclosure + string(src.EpisodePID)
 	switch {
@@ -411,7 +411,7 @@ const syncKeyPlaylistEnclosure = "enclosure_playlist:"
 // answered one for the address the feed names now. Such an episode has
 // nothing to fetch. A failed read answers false, leaving the download to
 // judge.
-func (l *Library) playlistEnclosure(ctx context.Context, ep *model.Episode) bool {
+func (l *Podcasts) playlistEnclosure(ctx context.Context, ep *model.Episode) bool {
 	if playlistMediaType(ep.EnclosureType) {
 		return true
 	}
@@ -434,7 +434,7 @@ func (l *Library) playlistEnclosure(ctx context.Context, ep *model.Episode) bool
 // The guard follows allowPrivateFeedHosts rather than the radio flag:
 // an enclosure is a feed's own file, so the deployment that hosts feeds
 // on its own LAN is the one that needs it.
-func (l *Library) enclosureClient() *http.Client {
+func (l *Podcasts) enclosureClient() *http.Client {
 	l.enclosureHTTPOnce.Do(func() {
 		transport := guardedTransport(l.allowPrivateFeedHosts)
 		transport.ResponseHeaderTimeout = 15 * time.Second

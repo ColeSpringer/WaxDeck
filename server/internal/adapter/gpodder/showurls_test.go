@@ -34,11 +34,11 @@ func premiumFeed(t *testing.T) string {
 // listener is another account on the server.
 func (e *env) listener(name string) *service.UserCtx {
 	e.t.Helper()
-	acct, err := e.svc.CreateAccount(e.ctx, service.AccountCreate{Username: name, Password: "login-password-2"})
+	acct, err := e.svc.Identity.CreateAccount(e.ctx, service.AccountCreate{Username: name, Password: "login-password-2"})
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	uc, err := e.svc.UserCtx(e.ctx, acct.User)
+	uc, err := e.svc.Grants.UserCtxFor(e.ctx, acct.User)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -54,14 +54,14 @@ func TestEachAccountIsToldItsOwnURL(t *testing.T) {
 	premium := premiumFeed(t)
 	mine, theirs := premium+"?auth=AAA", premium+"?auth=BBB"
 	show := e.subscribeFirstParty(mine)
-	if _, _, err := e.svc.Subscribe(e.ctx, e.listener("bob"), service.SubscribeRequest{URL: theirs}); err != nil {
+	if _, _, err := e.svc.Podcasts.Subscribe(e.ctx, e.listener("bob"), service.SubscribeRequest{URL: theirs}); err != nil {
 		t.Fatal(err)
 	}
-	eps, _, err := e.svc.Episodes(e.ctx, e.uc, show, "", 1)
+	eps, _, err := e.svc.Podcasts.Episodes(e.ctx, e.uc, show, "", 1)
 	if err != nil || len(eps) != 1 {
 		t.Fatalf("episodes = %+v (%v)", eps, err)
 	}
-	if _, err := e.svc.Checkpoint(e.ctx, e.uc, eps[0].PID, 30_000, nil); err != nil {
+	if _, err := e.svc.Playback.Checkpoint(e.ctx, e.uc, eps[0].PID, 30_000, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -76,11 +76,11 @@ func TestEachAccountIsToldItsOwnURL(t *testing.T) {
 			t.Errorf("a play action names %q, want the account's %q", a.Podcast, mine)
 		}
 	}
-	export, err := e.svc.ExportOPML(e.ctx, e.uc)
+	export, err := e.svc.Podcasts.ExportOPML(e.ctx, e.uc)
 	if err != nil || strings.Contains(string(export), "BBB") || !strings.Contains(string(export), "auth=AAA") {
 		t.Errorf("the OPML export = %s (%v), want the account's own token alone", export, err)
 	}
-	if err := e.svc.Unsubscribe(e.ctx, e.uc, show, false); err != nil {
+	if err := e.svc.Podcasts.Unsubscribe(e.ctx, e.uc, show, false); err != nil {
 		t.Fatal(err)
 	}
 	if d := e.changesSince("tablet", 0); len(d.Add) != 0 || !slices.Equal(d.Remove, []string{mine}) {
@@ -101,11 +101,11 @@ func TestADeviceKeepsItsOwnSpelling(t *testing.T) {
 	if len(ack.UpdateURLs) != 0 {
 		t.Fatalf("update_urls = %v, want none for a spelling of a show the account follows", ack.UpdateURLs)
 	}
-	subs, _, err := e.svc.Subscriptions(e.ctx, e.uc, "", 10, false)
+	subs, _, err := e.svc.Podcasts.Subscriptions(e.ctx, e.uc, "", 10, false)
 	if err != nil || len(subs) != 1 || subs[0].Show.FeedURL != feed {
 		t.Fatalf("subscriptions = %+v (%v), want the catalog's spelling unchanged", subs, err)
 	}
-	if err := e.svc.Unsubscribe(e.ctx, e.uc, show, false); err != nil {
+	if err := e.svc.Podcasts.Unsubscribe(e.ctx, e.uc, show, false); err != nil {
 		t.Fatal(err)
 	}
 	if d := e.changesSince("phone", ack.Timestamp); !slices.Equal(d.Remove, []string{respelled}) {
@@ -133,7 +133,7 @@ func TestARevokedAccountsListLetsGoOfNothing(t *testing.T) {
 	e.put("phone", "json", fmt.Sprintf(`[%q]`, a))
 	perms := service.DefaultPermissions()
 	perms.ManagePodcasts = false
-	if _, err := e.svc.UpdateAccount(e.ctx, e.uc.ID, service.AccountUpdate{Permissions: &perms}); err != nil {
+	if _, err := e.svc.Identity.UpdateAccount(e.ctx, e.uc.ID, service.AccountUpdate{Permissions: &perms}); err != nil {
 		t.Fatal(err)
 	}
 	e.put("phone", "json", `[]`)

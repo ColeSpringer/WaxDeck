@@ -285,7 +285,7 @@ func TestResolveReachableFallsThroughToTheRetry(t *testing.T) {
 		},
 	})
 	var guest, plain string
-	page, err := svc.Items(ctx, uc, ItemFilter{}, "", 50)
+	page, err := svc.Reads.Items(ctx, uc, ItemFilter{}, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,12 +300,12 @@ func TestResolveReachableFallsThroughToTheRetry(t *testing.T) {
 	if guest == "" || plain == "" {
 		t.Fatalf("fixture copies: guest %q plain %q", guest, plain)
 	}
-	if _, err := svc.SetItemTag(ctx, uc, guest, "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
+	if _, err := svc.Editor.SetItemTag(ctx, uc, guest, "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
 		t.Fatal(err)
 	}
 	in := PlaylistImportInput{Source: "text", Payload: "Test Ensemble, Guest - Amber Waves\n"}
 
-	out, err := svc.ImportStreamingPlaylist(ctx, uc, in)
+	out, err := svc.Playlists.ImportStreamingPlaylist(ctx, uc, in)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +317,7 @@ func TestResolveReachableFallsThroughToTheRetry(t *testing.T) {
 		ID: uc.ID, CatalogPID: uc.CatalogPID, AllLibraries: true, Explicit: true,
 		TagDeny: []TagRule{{Key: "MOOD", Value: "calm"}},
 	}
-	out, err = svc.ImportStreamingPlaylist(ctx, kid, in)
+	out, err = svc.Playlists.ImportStreamingPlaylist(ctx, kid, in)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,8 +335,8 @@ func TestResolveReachableFallsThroughToTheRetry(t *testing.T) {
 // reader the ref of a member they cannot see.
 func TestPairRefsRefusesAListThatMoved(t *testing.T) {
 	t.Parallel()
-	l := &Library{}
-	f := memberFilter{uc: &UserCtx{Admin: true, AllLibraries: true, Explicit: true}, subs: l.newSubscriptionFilter(nil)}
+	l := bareLibrary(&core{})
+	f := memberFilter{uc: &UserCtx{Admin: true, AllLibraries: true, Explicit: true}, subs: l.Podcasts.newSubscriptionFilter(nil)}
 	view := func(pid, title string, state model.ItemState) *model.ItemView {
 		return &model.ItemView{PID: model.PID(pid), Kind: model.KindTrack, Title: title, DurationMS: 1000, State: state}
 	}
@@ -345,14 +345,14 @@ func TestPairRefsRefusesAListThatMoved(t *testing.T) {
 	}
 	live, gone := view("a", "Alpha", model.StatePresent), view("b", "Bravo", model.StateArchived)
 
-	out, ok := l.pairRefs(t.Context(), f, []*model.ItemView{live, gone}, []model.PortableRef{ref("Alpha"), ref("Bravo")})
+	out, ok := l.Playlists.pairRefs(t.Context(), f, []*model.ItemView{live, gone}, []model.PortableRef{ref("Alpha"), ref("Bravo")})
 	if !ok || len(out) != 1 || out[0].Title != "Alpha" {
 		t.Errorf("aligned lists = %+v (%v), want Alpha's ref alone", out, ok)
 	}
-	if _, ok := l.pairRefs(t.Context(), f, []*model.ItemView{live, gone}, []model.PortableRef{ref("Bravo"), ref("Alpha")}); ok {
+	if _, ok := l.Playlists.pairRefs(t.Context(), f, []*model.ItemView{live, gone}, []model.PortableRef{ref("Bravo"), ref("Alpha")}); ok {
 		t.Error("a reordered list paired")
 	}
-	if _, ok := l.pairRefs(t.Context(), f, []*model.ItemView{live}, []model.PortableRef{ref("Alpha"), ref("Bravo")}); ok {
+	if _, ok := l.Playlists.pairRefs(t.Context(), f, []*model.ItemView{live}, []model.PortableRef{ref("Alpha"), ref("Bravo")}); ok {
 		t.Error("lists of different lengths paired")
 	}
 }

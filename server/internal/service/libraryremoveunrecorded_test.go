@@ -34,18 +34,18 @@ func TestAnUnrecordedRemovalKilledMidFollowUpIsDoneAtTheNextStart(t *testing.T) 
 	dataDir := t.TempDir()
 	ctx, svc, uc, stop := openServiceAt(t, dataDir, nil)
 	killed := &killedFlowRoots{fakeFlowRoots: fakeFlowRoots{names: []string{"configured"}}}
-	svc.SetFlowRoots(killed)
+	svc.Roots.SetFlowRoots(killed)
 	folder := filepath.Join(t.TempDir(), "shelf")
 	if err := os.MkdirAll(folder, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: folder})
+	lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: folder})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, bare, _ := parseAPIPID(lib.PID)
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
 	job, err := svc.lib.StartRemoveRoot(ctx, bare, waxbin.RemoveRootOptions{})
@@ -65,7 +65,7 @@ func TestAnUnrecordedRemovalKilledMidFollowUpIsDoneAtTheNextStart(t *testing.T) 
 
 	ctx, svc, _, _ = openServiceAt(t, dataDir, nil)
 	fresh := &fakeFlowRoots{names: []string{"configured", "books"}}
-	svc.SetFlowRoots(fresh)
+	svc.Roots.SetFlowRoots(fresh)
 	waitFor(t, func() bool { return slices.Equal(fresh.removedNames(), []string{"books"}) },
 		"the next start's bridge to let go of books")
 	waitFor(t, func() bool { return removalAudit(t, ctx, svc, lib.PID) != nil }, "the removal audited")

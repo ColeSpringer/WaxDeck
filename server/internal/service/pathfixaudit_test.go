@@ -17,7 +17,7 @@ import (
 // pathFixEnds are the audit rows of path fixes' ends, newest first.
 func pathFixEnds(t *testing.T, ctx context.Context, svc *Library) []map[string]any {
 	t.Helper()
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "health.fix"}, "", 50)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: "health.fix"}, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func pathFixEnds(t *testing.T, ctx context.Context, svc *Library) []map[string]a
 func stopAfterRun(t *testing.T, ctx context.Context, svc *Library, stop context.CancelFunc) *model.PID {
 	t.Helper()
 	var run model.PID
-	svc.awaitJobHook = func(runCtx context.Context, job model.PID, _ time.Duration, _ func(context.Context)) (*model.Job, error) {
+	svc.Health.awaitJobHook = func(runCtx context.Context, job model.PID, _ time.Duration, _ func(context.Context)) (*model.Job, error) {
 		run = job
 		waitForEnd(t, ctx, svc, job)
 		stop()
@@ -51,7 +51,7 @@ func stopAfterRun(t *testing.T, ctx context.Context, svc *Library, stop context.
 func TestAPathFixCutByAStopIsAuditedOnceWhenItEnds(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, pid := managedTrackFixture(t)
-	start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestAPathFixCutByAStopIsAuditedOnceWhenItEnds(t *testing.T) {
 	if err := attempt(t, runCtx, svc, 1); !errors.Is(err, context.Canceled) {
 		t.Fatalf("the first attempt = %v, want it stopped", err)
 	}
-	svc.awaitJobHook = nil
+	svc.Health.awaitJobHook = nil
 	if ends := pathFixEnds(t, ctx, svc); len(ends) != 0 {
 		t.Fatalf("audit rows after the stopped attempt = %v, want none", ends)
 	}
@@ -85,7 +85,7 @@ func TestAPathFixCutByAStopIsAuditedOnceWhenItEnds(t *testing.T) {
 func TestAPathFixWhoseAttemptsRanOutIsAuditedOnceWithItsTotals(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, pid := managedTrackFixture(t)
-	start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,9 +94,9 @@ func TestAPathFixWhoseAttemptsRanOutIsAuditedOnceWithItsTotals(t *testing.T) {
 	if err := attempt(t, runCtx, svc, 1); !errors.Is(err, context.Canceled) {
 		t.Fatalf("the first attempt = %v, want it stopped", err)
 	}
-	svc.awaitJobHook = nil
+	svc.Health.awaitJobHook = nil
 	spendAttempts(t, ctx, svc, start.TaskID, toolTaskMaxAttempts)
-	svc.retireExhaustedToolTasks(ctx, time.Now().Add(time.Hour).UnixNano())
+	svc.Tools.retireExhaustedToolTasks(ctx, time.Now().Add(time.Hour).UnixNano())
 	if task := toolTask(t, ctx, svc, start.TaskID); task.State != taskStateFailed {
 		t.Fatalf("task = %s, want it ended for its attempts", task.State)
 	}
@@ -119,7 +119,7 @@ func TestAPathFixRerunGoesOnFromItsLastChunk(t *testing.T) {
 		t.Fatalf("fillers = %v (%v)", fillers, err)
 	}
 	scope := []string{stray, apiPID(PrefixTrack, fillers[0].PID)}
-	start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, scope)
+	start, err := svc.Health.StartHealthFix(ctx, uc, rulePathMismatch, scope)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,13 +136,13 @@ func TestAPathFixRerunGoesOnFromItsLastChunk(t *testing.T) {
 		if err := json.Unmarshal([]byte(row.Params), &p); err != nil {
 			t.Fatal(err)
 		}
-		return svc.fixPathScope(ctx, &row, &p, p.ItemPIDs, newToolProgress(svc, &row), 1)
+		return svc.Health.fixPathScope(ctx, &row, &p, p.ItemPIDs, newToolProgress(svc.Tools, &row), 1)
 	}
 
 	// The second chunk's run moves its item, and the stop comes then.
 	runCtx, stop := context.WithCancel(ctx)
 	var runs []model.PID
-	svc.awaitJobHook = func(runCtx context.Context, job model.PID, silence time.Duration, tick func(context.Context)) (*model.Job, error) {
+	svc.Health.awaitJobHook = func(runCtx context.Context, job model.PID, silence time.Duration, tick func(context.Context)) (*model.Job, error) {
 		runs = append(runs, job)
 		if len(runs) == 1 {
 			return waitJob(runCtx, func(ctx context.Context) (*model.Job, error) { return svc.lib.Job(ctx, job) },
@@ -160,7 +160,7 @@ func TestAPathFixRerunGoesOnFromItsLastChunk(t *testing.T) {
 		t.Fatalf("progress = %+v, want the first chunk done and the second's item and both runs kept", p)
 	}
 
-	svc.awaitJobHook = nil
+	svc.Health.awaitJobHook = nil
 	sum, err := run(ctx, 2)
 	if err != nil {
 		t.Fatal(err)

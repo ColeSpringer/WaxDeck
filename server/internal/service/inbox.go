@@ -56,7 +56,7 @@ func inboxDTO(n wdb.Notification) InboxNotification {
 }
 
 // Notifications pages the caller's inbox newest first.
-func (l *Library) Notifications(ctx context.Context, uc *UserCtx, cursor string, limit int) (InboxPage, error) {
+func (l *Integrations) Notifications(ctx context.Context, uc *UserCtx, cursor string, limit int) (InboxPage, error) {
 	// Guarded here as well as at the handler: a limit under one makes
 	// the page slice below a panic rather than a wrong answer.
 	if limit < 1 {
@@ -92,7 +92,7 @@ func (l *Library) Notifications(ctx context.Context, uc *UserCtx, cursor string,
 
 // MarkNotificationsRead stamps the named rows, or every unread row when
 // ids is empty.
-func (l *Library) MarkNotificationsRead(ctx context.Context, uc *UserCtx, ids []string) error {
+func (l *Integrations) MarkNotificationsRead(ctx context.Context, uc *UserCtx, ids []string) error {
 	// The spec's cap, enforced here: the ids become bound parameters,
 	// and SQLite's own limit would turn a long list into an internal
 	// error rather than the refusal the caller can act on.
@@ -111,7 +111,7 @@ func (l *Library) MarkNotificationsRead(ctx context.Context, uc *UserCtx, ids []
 }
 
 // DeleteNotification removes one of the caller's rows.
-func (l *Library) DeleteNotification(ctx context.Context, uc *UserCtx, id string) error {
+func (l *Integrations) DeleteNotification(ctx context.Context, uc *UserCtx, id string) error {
 	if prefix, _, ok := parseAPIPID(id); !ok || prefix != PrefixNotification {
 		return errNotFound("no notification with id " + id)
 	}
@@ -126,7 +126,7 @@ func (l *Library) DeleteNotification(ctx context.Context, uc *UserCtx, id string
 }
 
 // ClearNotifications empties the caller's inbox.
-func (l *Library) ClearNotifications(ctx context.Context, uc *UserCtx) error {
+func (l *Integrations) ClearNotifications(ctx context.Context, uc *UserCtx) error {
 	if err := l.db.ClearNotifications(ctx, uc.ID); err != nil {
 		return &Error{Kind: KindInternal, Err: err}
 	}
@@ -134,7 +134,7 @@ func (l *Library) ClearNotifications(ctx context.Context, uc *UserCtx) error {
 }
 
 // PruneNotifications drops inbox rows past the horizon and the cap.
-func (l *Library) PruneNotifications(ctx context.Context) {
+func (l *Integrations) PruneNotifications(ctx context.Context) {
 	cutoff := time.Now().Add(-notificationHorizon).UnixNano()
 	if n, err := l.db.PruneNotifications(ctx, cutoff, notificationPerUserCap); err != nil {
 		l.log.Warn("pruning notifications", "err", err)
@@ -146,7 +146,7 @@ func (l *Library) PruneNotifications(ctx context.Context) {
 // recordNotification writes the inbox row and marks the caller's sync
 // stream, so a client hears about it whether or not the account has a
 // delivery target for the event.
-func (l *Library) recordNotification(ctx context.Context, userID, event, title, body, targetPID string, now int64) {
+func (l *Integrations) recordNotification(ctx context.Context, userID, event, title, body, targetPID string, now int64) {
 	if userID == "" {
 		return
 	}

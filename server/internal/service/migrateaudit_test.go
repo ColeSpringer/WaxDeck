@@ -10,13 +10,11 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 func migrationRuns(t *testing.T, ctx context.Context, f *migrateFixture) []AuditEventDTO {
 	t.Helper()
-	page, err := f.svc.AuditEvents(ctx, wdb.AuditFilter{Action: "migration.run"}, "", 50)
+	page, err := f.svc.Audit.Events(ctx, AuditFilter{Action: "migration.run"}, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +23,7 @@ func migrationRuns(t *testing.T, ctx context.Context, f *migrateFixture) []Audit
 
 // drainAll runs the tool queue to idle, the way the worker does.
 func drainAll(ctx context.Context, f *migrateFixture) {
-	for f.svc.DrainToolTasks(ctx) {
+	for f.svc.Tools.DrainToolTasks(ctx) {
 	}
 }
 
@@ -33,11 +31,11 @@ func drainAll(ctx context.Context, f *migrateFixture) {
 // does: who ordered it, from what, onto whom, and why it failed.
 func TestAFailedMigrationIsOnTheRecord(t *testing.T) {
 	ctx, f := newMigrateFixture(t)
-	staged, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(spotifyExportZip(t)), 0)
+	staged, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(spotifyExportZip(t)), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	dto, err := f.svc.StartMigration(ctx, f.uc, MigrationRequest{
+	dto, err := f.svc.Migrate.StartMigration(ctx, f.uc, MigrationRequest{
 		Source: "spotify", ExportID: staged.PID, History: true, DryRun: true,
 	})
 	if err != nil {
@@ -45,7 +43,7 @@ func TestAFailedMigrationIsOnTheRecord(t *testing.T) {
 	}
 	// The upload goes before the run reads it, which no retry can bring
 	// back.
-	if err := f.svc.DiscardMigrationExport(ctx, f.uc, staged.PID); err != nil {
+	if err := f.svc.Migrate.DiscardMigrationExport(ctx, f.uc, staged.PID); err != nil {
 		t.Fatal(err)
 	}
 	drainAll(ctx, f)
@@ -78,7 +76,7 @@ func TestATransientMigrationFailureIsRecordedOnlyWhenItIsTheLast(t *testing.T) {
 		http.Error(w, "down for maintenance", http.StatusServiceUnavailable)
 	}))
 	t.Cleanup(down.Close)
-	dto, err := f.svc.StartMigration(ctx, f.uc, MigrationRequest{
+	dto, err := f.svc.Migrate.StartMigration(ctx, f.uc, MigrationRequest{
 		Source: "navidrome", ServerURL: down.URL, Username: "demo", Password: "demo-pass", DryRun: true,
 	})
 	if err != nil {
@@ -114,7 +112,7 @@ func TestATransientMigrationFailureIsRecordedOnlyWhenItIsTheLast(t *testing.T) {
 // run to return an error, and it is on the record all the same.
 func TestAMigrationThatRanOutOfAttemptsUnderTheLeaseIsOnTheRecord(t *testing.T) {
 	ctx, f := newMigrateFixture(t)
-	dto, err := f.svc.StartMigration(ctx, f.uc, MigrationRequest{
+	dto, err := f.svc.Migrate.StartMigration(ctx, f.uc, MigrationRequest{
 		Source: "navidrome", ServerURL: "http://old-box.example:4533", Username: "demo", Password: "demo-pass",
 	})
 	if err != nil {
@@ -150,7 +148,7 @@ func TestAMigrationWhoseLastRunTimedOutIsStillOnTheRecord(t *testing.T) {
 		<-r.Context().Done()
 	}))
 	t.Cleanup(stall.Close)
-	dto, err := f.svc.StartMigration(ctx, f.uc, MigrationRequest{
+	dto, err := f.svc.Migrate.StartMigration(ctx, f.uc, MigrationRequest{
 		Source: "navidrome", ServerURL: stall.URL, Username: "demo", Password: "demo-pass", DryRun: true,
 	})
 	if err != nil {
@@ -165,12 +163,12 @@ func TestAMigrationWhoseLastRunTimedOutIsStillOnTheRecord(t *testing.T) {
 	// What the drain does with an attempt: bound it, run it, and record
 	// the end on its own context.
 	runCtx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
-	runErr := f.svc.runToolTask(runCtx, &row)
+	runErr := f.svc.Tools.runToolTask(runCtx, &row)
 	cancel()
 	if !errors.Is(runErr, context.DeadlineExceeded) {
 		t.Fatalf("the run = %v, want its deadline", runErr)
 	}
-	f.svc.failToolTask(ctx, &row, runErr)
+	f.svc.Tools.failToolTask(ctx, &row, runErr)
 
 	runs := migrationRuns(t, ctx, f)
 	if len(runs) != 1 || runs[0].Detail["failed"] != true {

@@ -19,7 +19,7 @@ func entityFixture(t *testing.T) (context.Context, *Library, *UserCtx, string, *
 	t.Helper()
 	ctx, svc, admin := newCatalogFixture(t)
 
-	res, err := svc.Search(ctx, admin, "Signal Garden", 10)
+	res, err := svc.Reads.Search(ctx, admin, "Signal Garden", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func entityFixture(t *testing.T) (context.Context, *Library, *UserCtx, string, *
 	}
 	albumPID := res.Albums[0].PID
 
-	libs, err := svc.Libraries(ctx)
+	libs, err := svc.Roots.Libraries(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func entityFixture(t *testing.T) (context.Context, *Library, *UserCtx, string, *
 		ID: admin.ID, CatalogPID: admin.CatalogPID,
 		Libraries: map[string]bool{strings.TrimPrefix(libs[0].PID, PrefixLibrary+"-"): true},
 	}
-	other, err := svc.AddLibrary(ctx, admin, AddLibraryInput{Name: "other", Path: t.TempDir()})
+	other, err := svc.Roots.AddLibrary(ctx, admin, AddLibraryInput{Name: "other", Path: t.TempDir()})
 	if err != nil {
 		t.Fatalf("adding a second library: %v", err)
 	}
@@ -55,37 +55,37 @@ func TestEntityStateRestrictedVisibility(t *testing.T) {
 	ctx, svc, _, albumPID, granted, elsewhere := entityFixture(t)
 
 	// A caller granted the holding library reads and writes it.
-	if _, err := svc.EntityPlayStateFor(ctx, granted, albumPID); err != nil {
+	if _, err := svc.Identity.EntityPlayStateFor(ctx, granted, albumPID); err != nil {
 		t.Fatalf("granted read: %v", err)
 	}
-	st, err := svc.SetEntityStar(ctx, granted, albumPID, true, nil)
+	st, err := svc.Identity.SetEntityStar(ctx, granted, albumPID, true, nil)
 	if err != nil || !st.Starred {
 		t.Fatalf("granted star: %+v (%v), want starred", st, err)
 	}
 
 	// A caller granted some other library cannot tell the entity from
 	// one that does not exist, on any entry point.
-	if _, err := svc.EntityPlayStateFor(ctx, elsewhere, albumPID); KindOf(err) != KindNotFound {
+	if _, err := svc.Identity.EntityPlayStateFor(ctx, elsewhere, albumPID); KindOf(err) != KindNotFound {
 		t.Errorf("ungranted read: kind = %v, want not-found", KindOf(err))
 	}
-	if _, err := svc.SetEntityStar(ctx, elsewhere, albumPID, true, nil); KindOf(err) != KindNotFound {
+	if _, err := svc.Identity.SetEntityStar(ctx, elsewhere, albumPID, true, nil); KindOf(err) != KindNotFound {
 		t.Errorf("ungranted star: kind = %v, want not-found", KindOf(err))
 	}
 	rating := 60
-	if _, err := svc.SetEntityRating(ctx, elsewhere, albumPID, &rating, nil); KindOf(err) != KindNotFound {
+	if _, err := svc.Identity.SetEntityRating(ctx, elsewhere, albumPID, &rating, nil); KindOf(err) != KindNotFound {
 		t.Errorf("ungranted rating: kind = %v, want not-found", KindOf(err))
 	}
 
 	// The starred list filters the same way, so an ungranted caller
 	// never receives a pid the reads above would refuse.
-	list, err := svc.StarredEntities(ctx, elsewhere)
+	list, err := svc.Identity.StarredEntities(ctx, elsewhere)
 	if err != nil {
 		t.Fatalf("ungranted starred list: %v", err)
 	}
 	if len(list.Albums) != 0 || len(list.Artists) != 0 {
 		t.Errorf("ungranted starred list = %+v, want empty", list)
 	}
-	if list, err := svc.StarredEntities(ctx, granted); err != nil || len(list.Albums) != 1 {
+	if list, err := svc.Identity.StarredEntities(ctx, granted); err != nil || len(list.Albums) != 1 {
 		t.Errorf("granted starred list = %+v (%v), want the one starred album", list, err)
 	}
 }
@@ -103,10 +103,10 @@ func TestEntityStateRejectsNonEntityPIDs(t *testing.T) {
 		"tr-01JZX5N8QW3F4V9T2B7KD3M9R6", // an item, not an entity
 		"pl-01JZX5N8QW3F4V9T2B7KD3M9R6", // a playlist
 	} {
-		if _, err := svc.EntityPlayStateFor(ctx, admin, pid); KindOf(err) != KindNotFound {
+		if _, err := svc.Identity.EntityPlayStateFor(ctx, admin, pid); KindOf(err) != KindNotFound {
 			t.Errorf("read %q: kind = %v, want not-found", pid, KindOf(err))
 		}
-		if _, err := svc.SetEntityStar(ctx, admin, pid, true, nil); KindOf(err) != KindNotFound {
+		if _, err := svc.Identity.SetEntityStar(ctx, admin, pid, true, nil); KindOf(err) != KindNotFound {
 			t.Errorf("star %q: kind = %v, want not-found", pid, KindOf(err))
 		}
 	}
@@ -114,7 +114,7 @@ func TestEntityStateRejectsNonEntityPIDs(t *testing.T) {
 	// An out-of-range rating is rejected before the pid is resolved, so
 	// it stays an invalid-request rather than becoming a not-found.
 	rating := 500
-	if _, err := svc.SetEntityRating(ctx, admin, "nonsense", &rating, nil); KindOf(err) != KindInvalid {
+	if _, err := svc.Identity.SetEntityRating(ctx, admin, "nonsense", &rating, nil); KindOf(err) != KindInvalid {
 		t.Errorf("out-of-range rating: kind = %v, want invalid-request", KindOf(err))
 	}
 }
@@ -125,23 +125,23 @@ func TestEntityStateHidesAFullyDeniedAlbum(t *testing.T) {
 	t.Parallel()
 	f := newGenreFixture(t)
 	album := apiPID(PrefixAlbum, f.itemNamed(t, "Canonical").AlbumPID)
-	if _, err := f.svc.SetEntityStar(f.ctx, f.uc, album, true, nil); err != nil {
+	if _, err := f.svc.Identity.SetEntityStar(f.ctx, f.uc, album, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	f.tagAllCalm(t)
 	kid := f.calmDenied()
 
-	if _, err := f.svc.EntityPlayStateFor(f.ctx, kid, album); KindOf(err) != KindNotFound {
+	if _, err := f.svc.Identity.EntityPlayStateFor(f.ctx, kid, album); KindOf(err) != KindNotFound {
 		t.Errorf("read = %v, want not-found", err)
 	}
-	if _, err := f.svc.SetEntityStar(f.ctx, kid, album, false, nil); KindOf(err) != KindNotFound {
+	if _, err := f.svc.Identity.SetEntityStar(f.ctx, kid, album, false, nil); KindOf(err) != KindNotFound {
 		t.Errorf("star = %v, want not-found", err)
 	}
 	rating := 60
-	if _, err := f.svc.SetEntityRating(f.ctx, kid, album, &rating, nil); KindOf(err) != KindNotFound {
+	if _, err := f.svc.Identity.SetEntityRating(f.ctx, kid, album, &rating, nil); KindOf(err) != KindNotFound {
 		t.Errorf("rating = %v, want not-found", err)
 	}
-	list, err := f.svc.StarredEntities(f.ctx, kid)
+	list, err := f.svc.Identity.StarredEntities(f.ctx, kid)
 	if err != nil {
 		t.Fatal(err)
 	}

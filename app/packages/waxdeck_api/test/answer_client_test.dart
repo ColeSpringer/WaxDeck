@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -51,6 +52,38 @@ const _isolateThreshold = 50 * 1024;
 final _largeHealth =
     '{"status":"ok","version":"1.0.0","apiVersion":1,'
     '"padding":"${'x' * (_isolateThreshold + 1024)}"}';
+
+/// A timer that has already fired.
+class _SpentTimer implements Timer {
+  @override
+  void cancel() {}
+
+  @override
+  bool get isActive => false;
+
+  @override
+  int get tick => 1;
+}
+
+/// Runs [body] with each timer armed for exactly [budget] expiring in a
+/// microtask instead of by the clock, and adds the ones it saw to [armed].
+/// A microtask runs before the next event, so the expiry comes ahead of an
+/// isolate's answer however long that has been ready.
+Future<T> _expireBudget<T>(
+  Duration budget,
+  List<Duration> armed,
+  Future<T> Function() body,
+) => runZoned(
+  body,
+  zoneSpecification: ZoneSpecification(
+    createTimer: (self, parent, zone, duration, f) {
+      if (duration != budget) return parent.createTimer(zone, duration, f);
+      armed.add(duration);
+      zone.scheduleMicrotask(f);
+      return _SpentTimer();
+    },
+  ),
+);
 
 /// What the message says of an answer that is not JSON: its type and size,
 /// never its content.
@@ -374,30 +407,43 @@ void main() {
         );
       WaxDeckClient(baseUrl: 'http://host:4420', dio: dio);
       const url = 'http://host:4420/api/v1/health';
-      // The budget is for the isolate's work only, so it is spent on an
-      // answer that went to one and never on one that did not.
-      await expectLater(
-        dio.get<Object?>(
-          url,
-          options: Options(transformTimeout: const Duration(microseconds: 1)),
-        ),
-        throwsA(
-          isA<DioException>().having(
-            (e) => e.type,
-            'type',
-            DioExceptionType.transformTimeout,
+      // Dio arms the budget as a timer once the decode isolate is running,
+      // and the timer and the isolate's answer then race on one event loop.
+      // So the budget is only a label here and its timer is expired by hand
+      // (_expireBudget), ahead of whichever answer is ready. It matches no
+      // timeout the client sets, whose timers must keep running.
+      const budget = Duration(minutes: 7);
+      final armed = <Duration>[];
+      await _expireBudget(
+        budget,
+        armed,
+        () => expectLater(
+          dio.get<Object?>(url, options: Options(transformTimeout: budget)),
+          throwsA(
+            isA<DioException>().having(
+              (e) => e.type,
+              'type',
+              DioExceptionType.transformTimeout,
+            ),
           ),
         ),
       );
+      expect(armed, [budget], reason: 'the large answer\'s decode is timed');
+
+      // The budget is for the isolate's work only, so it is spent on an
+      // answer that went to one and never on one that did not.
+      armed.clear();
       dio.httpClientAdapter = _TextAdapter(
         _health,
         contentType: Headers.jsonContentType,
       );
-      final small = await dio.get<Object?>(
-        url,
-        options: Options(transformTimeout: const Duration(microseconds: 1)),
+      final small = await _expireBudget(
+        budget,
+        armed,
+        () => dio.get<Object?>(url, options: Options(transformTimeout: budget)),
       );
       expect((small.data! as Map)['status'], 'ok');
+      expect(armed, isEmpty, reason: 'the small answer\'s decode is not timed');
     });
   });
 

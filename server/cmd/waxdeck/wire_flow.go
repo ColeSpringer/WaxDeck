@@ -40,7 +40,7 @@ func startFlow(ctx context.Context, group *supervise.Group, cfg streamingConfig,
 		for _, r := range roots {
 			configured = append(configured, flow.Root{Name: r.Name, Path: r.Path})
 		}
-		for _, r := range svc.RootTable() {
+		for _, r := range svc.Roots.Table() {
 			table = append(table, flow.Root{Name: r.Name, Path: r.Path})
 		}
 		flowRoots := flow.SeedRoots(configured, table, cfg.flowConfig)
@@ -57,16 +57,16 @@ func startFlow(ctx context.Context, group *supervise.Group, cfg streamingConfig,
 			Roots:      flowRoots,
 			ConfigPath: cfg.flowConfig,
 			Tokens:     media,
-			Resolver:   svc,
+			Resolver:   svc.Playback,
 			Timelines:  store,
 			Logger:     log,
 		})
 		if err != nil {
 			return nil, err
 		}
-		svc.SetFlowJobs(bridge)
-		bridge.SetTranscodeGate(svc.TranscodeGate())
-		svc.FollowEngine(ctx, bridge)
+		svc.Tools.SetFlowJobs(bridge)
+		bridge.SetTranscodeGate(svc.Playback.TranscodeGate())
+		svc.Roots.FollowEngine(ctx, bridge)
 		group.Go(ctx, "flow-bridge", bridge.Run)
 		// A gapless queue holds a transcode slot the way a stream does,
 		// and there is no end-of-response to give it back at: the slot
@@ -89,7 +89,7 @@ func startFlow(ctx context.Context, group *supervise.Group, cfg streamingConfig,
 		log.Warn("WAXDECK_FLOW_URL is not set; playing original files directly (no transcoding, gapless timelines, or voice boost)")
 		// No sidecar config to take a removed library's root out of, so
 		// nothing owed to a bridge waits for one.
-		svc.SetFlowRoots(nil)
+		svc.Roots.SetFlowRoots(nil)
 	}
 	return bridge, nil
 }

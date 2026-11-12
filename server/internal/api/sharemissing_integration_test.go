@@ -24,7 +24,7 @@ func TestASharedTrackWhoseFileIsGoneHasNothingToPlay(t *testing.T) {
 			t.Parallel()
 			h := c.harness(t)
 			track := h.items(t, "?mediaType=music").Items[0]
-			file, err := h.svc.DownloadSource(context.Background(), track.Pid, "")
+			file, err := h.svc.Playback.DownloadSource(context.Background(), track.Pid, "")
 			if err != nil {
 				t.Fatal(err)
 			}

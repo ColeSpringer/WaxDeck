@@ -24,7 +24,7 @@ func startSweeps(ctx context.Context, group *supervise.Group, svc *service.Libra
 	// analysis on and off without a restart; external workers remain
 	// the offload path for installs that want analysis off this
 	// machine.
-	group.Go(ctx, "similarity-sweep", svc.RunSimilaritySweeps)
+	group.Go(ctx, "similarity-sweep", svc.Similarity.RunSimilaritySweeps)
 	group.Go(ctx, "embedded-analysis", func(ctx context.Context) error {
 		an := analyzer.New()
 		first := time.NewTimer(45 * time.Second)
@@ -39,7 +39,7 @@ func startSweeps(ctx context.Context, group *supervise.Group, svc *service.Libra
 			case <-tick.C:
 			}
 			for {
-				worked, err := svc.DrainEmbeddedAnalysis(ctx, an)
+				worked, err := svc.Similarity.DrainEmbeddedAnalysis(ctx, an)
 				if err != nil {
 					log.Warn("embedded analysis", "err", err)
 					break
@@ -67,7 +67,7 @@ func startSweeps(ctx context.Context, group *supervise.Group, svc *service.Libra
 			case <-first.C:
 			case <-tick.C:
 			}
-			rep, err := svc.SweepTrashRetention(ctx)
+			rep, err := svc.Tools.SweepTrashRetention(ctx)
 			if err != nil {
 				log.Warn("trash retention sweep", "err", err)
 				continue
@@ -96,7 +96,7 @@ func startSweeps(ctx context.Context, group *supervise.Group, svc *service.Libra
 			case <-first.C:
 			case <-tick.C:
 			}
-			rep, err := svc.SweepListenMarks(ctx)
+			rep, err := svc.Playback.SweepListenMarks(ctx)
 			if err != nil {
 				log.Warn("listen mark sweep", "err", err)
 				continue
@@ -127,10 +127,10 @@ func startJanitor(ctx context.Context, group *supervise.Group, store *db.DB, svc
 				if err := store.SweepExpired(ctx); err != nil {
 					log.Warn("sweeping expired auth state", "err", err)
 				}
-				svc.PruneScrobbleOutbox(ctx)
-				svc.PruneNotifyOutbox(ctx)
-				svc.PruneNotifications(ctx)
-				svc.SweepMigrationExports(ctx)
+				svc.Integrations.PruneScrobbleOutbox(ctx)
+				svc.Integrations.PruneNotifyOutbox(ctx)
+				svc.Integrations.PruneNotifications(ctx)
+				svc.Migrate.SweepMigrationExports(ctx)
 			}
 		}
 	})
@@ -149,10 +149,10 @@ func startCurationWorkers(ctx context.Context, group *supervise.Group, svc *serv
 			select {
 			case <-ctx.Done():
 				return nil
-			case <-svc.MatchWakeups():
+			case <-svc.Ingest.MatchWakeups():
 			case <-tick.C:
 			}
-			for svc.DrainMatchQueue(ctx) {
+			for svc.Ingest.DrainMatchQueue(ctx) {
 				if ctx.Err() != nil {
 					return nil
 				}
@@ -160,11 +160,11 @@ func startCurationWorkers(ctx context.Context, group *supervise.Group, svc *serv
 		}
 	})
 	for name, drain := range map[string]func(context.Context) bool{
-		"tool-worker": svc.DrainToolTasks,
+		"tool-worker": svc.Tools.DrainToolTasks,
 		// Health fixes and catalog repairs run for hours; on the tool
 		// worker, every acquisition and sync queued behind one would wait
 		// as long.
-		"long-task-worker": svc.DrainLongToolTasks,
+		"long-task-worker": svc.Tools.DrainLongToolTasks,
 	} {
 		group.Go(ctx, name, func(ctx context.Context) error {
 			tick := time.NewTicker(10 * time.Second)
@@ -193,12 +193,12 @@ func startCurationWorkers(ctx context.Context, group *supervise.Group, svc *serv
 			case <-tick.C:
 				// Overdue batches finalize first (their members regain
 				// normal retention), then expired sessions reclaim.
-				for svc.DrainExpiredUploadBatches(ctx) {
+				for svc.Ingest.DrainExpiredUploadBatches(ctx) {
 					if ctx.Err() != nil {
 						return nil
 					}
 				}
-				for svc.DrainExpiredUploads(ctx) {
+				for svc.Ingest.DrainExpiredUploads(ctx) {
 					if ctx.Err() != nil {
 						return nil
 					}
@@ -214,10 +214,10 @@ func startCurationWorkers(ctx context.Context, group *supervise.Group, svc *serv
 			case <-ctx.Done():
 				return nil
 			case <-tick.C:
-				if !svc.HealthSweepDue(ctx) {
+				if !svc.Health.SweepDue(ctx) {
 					continue
 				}
-				if err := svc.RunHealthSweep(ctx); err != nil {
+				if err := svc.Health.RunHealthSweep(ctx); err != nil {
 					log.Warn("health sweep", "err", err)
 				}
 			}
@@ -244,7 +244,7 @@ func startCurationWorkers(ctx context.Context, group *supervise.Group, svc *serv
 			case <-tick.C:
 			}
 			for {
-				rep, err := svc.SweepGenres(ctx)
+				rep, err := svc.Reads.SweepGenres(ctx)
 				if err != nil {
 					log.Warn("genre normalization sweep", "err", err)
 					break
@@ -288,7 +288,7 @@ func startCurationWorkers(ctx context.Context, group *supervise.Group, svc *serv
 			// passes turns that into a steady trickle; the ticker is
 			// the backstop either way.
 			for {
-				rep, err := svc.SweepDiscoveries(ctx)
+				rep, err := svc.Similarity.SweepDiscoveries(ctx)
 				if err != nil {
 					log.Warn("scan discovery sweep", "err", err)
 					break

@@ -32,7 +32,7 @@ func TestAdminSettingsPutKeepsWhatItDoesNotName(t *testing.T) {
 
 	yes, no := true, false
 	days, keep := 30, 5
-	if _, err := svc.AdminSettingsPut(ctx, admin, AdminSettingsChange{
+	if _, err := svc.Settings.AdminSettingsPut(ctx, admin, AdminSettingsChange{
 		SignupEnabled:      &yes,
 		SonicAnalysis:      &no,
 		RadioExternalArt:   &no,
@@ -41,12 +41,12 @@ func TestAdminSettingsPutKeepsWhatItDoesNotName(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	before, err := svc.AdminSettingsGet(ctx)
+	before, err := svc.Settings.AdminSettingsGet(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := svc.AdminSettingsPut(ctx, admin, AdminSettingsChange{ReadOnly: &yes})
+	got, err := svc.Settings.AdminSettingsPut(ctx, admin, AdminSettingsChange{ReadOnly: &yes})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,21 +55,21 @@ func TestAdminSettingsPutKeepsWhatItDoesNotName(t *testing.T) {
 	if got != want {
 		t.Fatalf("a write naming readOnly stored %+v, want %+v", got, want)
 	}
-	if !svc.ServerReadOnly() || svc.SonicAnalysisEnabled() || svc.RadioExternalArtEnabled() {
+	if !svc.Settings.ServerReadOnly() || svc.Settings.SonicAnalysisEnabled() || svc.Settings.RadioExternalArtEnabled() {
 		t.Fatal("the hot-path toggles did not follow the stored settings")
 	}
 
 	// Nothing named: nothing stored, and nothing to audit.
 	events := func() int {
 		t.Helper()
-		page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "settings."}, "", 50)
+		page, err := svc.Audit.Events(ctx, AuditFilter{Action: "settings."}, "", 50)
 		if err != nil {
 			t.Fatal(err)
 		}
 		return len(page.Events)
 	}
 	was := events()
-	if got, err := svc.AdminSettingsPut(ctx, admin, AdminSettingsChange{}); err != nil || got != want {
+	if got, err := svc.Settings.AdminSettingsPut(ctx, admin, AdminSettingsChange{}); err != nil || got != want {
 		t.Fatalf("an empty write answered %+v, %v; want %+v", got, err, want)
 	}
 	if events() != was {
@@ -78,18 +78,18 @@ func TestAdminSettingsPutKeepsWhatItDoesNotName(t *testing.T) {
 
 	// A refused field stores none of the others in the same write.
 	bad := maxRetentionDays + 1
-	if _, err := svc.AdminSettingsPut(ctx, admin, AdminSettingsChange{
+	if _, err := svc.Settings.AdminSettingsPut(ctx, admin, AdminSettingsChange{
 		SignupEnabled:      &no,
 		TrashRetentionDays: &bad,
 	}); KindOf(err) != KindInvalid {
 		t.Fatalf("an overflowing window answered %v, want invalid-request", err)
 	}
-	if now, _ := svc.AdminSettingsGet(ctx); now != want {
+	if now, _ := svc.Settings.AdminSettingsGet(ctx); now != want {
 		t.Fatalf("a refused write changed the settings: %+v", now)
 	}
 
 	// The entry records what was written.
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "settings."}, "", 1)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: "settings."}, "", 1)
 	if err != nil || len(page.Events) != 1 {
 		t.Fatalf("audit: %v %+v", err, page.Events)
 	}
@@ -105,23 +105,23 @@ func TestTranscodingLimitsPutWaitsForTheSettingsLock(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 
-	svc.adminSettingsMu.Lock()
+	svc.Settings.adminSettingsMu.Lock()
 	done := make(chan error, 1)
 	go func() {
-		_, err := svc.TranscodingLimitsPut(ctx, admin, TranscodingLimits{MaxConcurrent: 3})
+		_, err := svc.Settings.TranscodingLimitsPut(ctx, admin, TranscodingLimits{MaxConcurrent: 3})
 		done <- err
 	}()
 	select {
 	case err := <-done:
-		svc.adminSettingsMu.Unlock()
+		svc.Settings.adminSettingsMu.Unlock()
 		t.Fatalf("the limits were stored while a settings write held the lock (err %v)", err)
 	case <-time.After(300 * time.Millisecond):
 	}
-	svc.adminSettingsMu.Unlock()
+	svc.Settings.adminSettingsMu.Unlock()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if got := svc.TranscodingLimitsGet(ctx).MaxConcurrent; got != 3 {
+	if got := svc.Settings.TranscodingLimitsGet(ctx).MaxConcurrent; got != 3 {
 		t.Fatalf("limits read back %d, want 3", got)
 	}
 }
@@ -144,21 +144,21 @@ func TestAdminSettingsPutsOfDifferentFieldsBothStick(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if _, err := svc.AdminSettingsPut(ctx, admin, w); err != nil {
+			if _, err := svc.Settings.AdminSettingsPut(ctx, admin, w); err != nil {
 				t.Error(err)
 			}
 		}()
 	}
 	wg.Wait()
 
-	got, err := svc.AdminSettingsGet(ctx)
+	got, err := svc.Settings.AdminSettingsGet(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !got.SignupEnabled || !got.ReadOnly || got.TrashRetentionDays != 9 || got.BackupKeepCount != 4 {
 		t.Fatalf("settings after four concurrent writes: %+v", got)
 	}
-	if !svc.ServerReadOnly() {
+	if !svc.Settings.ServerReadOnly() {
 		t.Fatal("the read-only toggle did not follow the stored setting")
 	}
 }
@@ -169,10 +169,10 @@ func TestTaskRetentionDaysTellsUnsetFromZero(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 
-	if got := svc.TaskRetentionDays(ctx); got != defaultTaskRetentionDays {
+	if got := svc.Settings.TaskRetentionDays(ctx); got != defaultTaskRetentionDays {
 		t.Fatalf("unconfigured task retention = %d, want the shipped %d", got, defaultTaskRetentionDays)
 	}
-	st, err := svc.AdminSettingsGet(ctx)
+	st, err := svc.Settings.AdminSettingsGet(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,24 +181,24 @@ func TestTaskRetentionDaysTellsUnsetFromZero(t *testing.T) {
 	}
 
 	st.TaskRetentionDays = 0
-	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(st)); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, admin, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
-	if got := svc.TaskRetentionDays(ctx); got != 0 {
+	if got := svc.Settings.TaskRetentionDays(ctx); got != 0 {
 		t.Fatalf("an explicit zero read back as %d; a stored keep-them must not fall to the default", got)
 	}
 
 	st.TaskRetentionDays = 7
-	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(st)); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, admin, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
-	if got := svc.TaskRetentionDays(ctx); got != 7 {
+	if got := svc.Settings.TaskRetentionDays(ctx); got != 7 {
 		t.Fatalf("stored 7 read back as %d", got)
 	}
 
 	// The same overflow guard, since this reaches a duration conversion.
 	st.TaskRetentionDays = 200000
-	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(st)); KindOf(err) != KindInvalid {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, admin, everySetting(st)); KindOf(err) != KindInvalid {
 		t.Fatalf("an overflowing window answered %v, want invalid-request", err)
 	}
 }
@@ -222,15 +222,15 @@ func TestRunPruneHonoursTaskRetention(t *testing.T) {
 	}
 
 	// Retention off: an old receipt stays.
-	st, err := svc.AdminSettingsGet(ctx)
+	st, err := svc.Settings.AdminSettingsGet(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	st.TaskRetentionDays = 0
-	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(st)); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, admin, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.RunPrune(ctx); err != nil {
+	if err := svc.Integrations.RunPrune(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.db.ToolTaskByID(ctx, "tk-old-1"); err != nil {
@@ -239,10 +239,10 @@ func TestRunPruneHonoursTaskRetention(t *testing.T) {
 
 	// A week: the same row is now past the window and goes.
 	st.TaskRetentionDays = 7
-	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(st)); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, admin, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.RunPrune(ctx); err != nil {
+	if err := svc.Integrations.RunPrune(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.db.ToolTaskByID(ctx, "tk-old-1"); err == nil {
@@ -262,7 +262,7 @@ func TestRunPruneLetsStaleHeldYouTubeEntriesGo(t *testing.T) {
 	if err := svc.db.RememberYouTubePending(ctx, "UUgone", []string{"new00000001"}, now.Add(-24*time.Hour).UnixNano()); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.RunPrune(ctx); err != nil {
+	if err := svc.Integrations.RunPrune(ctx); err != nil {
 		t.Fatal(err)
 	}
 	// Listed as of the old sighting, so the horizon hides neither row.

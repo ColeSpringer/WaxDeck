@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/bodylimit"
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -94,14 +93,14 @@ func cookieToken(r *http.Request) string {
 
 // sessionUser resolves the request's cookie to its account, nil when it
 // names no live login.
-func (h *handler) sessionUser(r *http.Request) *wdb.User {
+func (h *handler) sessionUser(r *http.Request) *service.User {
 	u, _ := h.session(r)
 	return u
 }
 
 // session is sessionUser answering the session too.
-func (h *handler) session(r *http.Request) (*wdb.User, *wdb.GpodderSession) {
-	u, s, err := h.svc.GpodderSession(r.Context(), cookieToken(r))
+func (h *handler) session(r *http.Request) (*service.User, *service.GpodderSession) {
+	u, s, err := h.svc.Podcasts.GpodderSession(r.Context(), cookieToken(r))
 	if err != nil {
 		h.log.Warn("gpodder session lookup", "err", err)
 		return nil, nil
@@ -126,15 +125,15 @@ func (h *handler) clearSession(w http.ResponseWriter) {
 
 // sameUser compares an account with the path's username the way account
 // lookup does: case-insensitively.
-func sameUser(u *wdb.User, pathUser string) bool {
+func sameUser(u *service.User, pathUser string) bool {
 	return u != nil && strings.EqualFold(u.Username, pathUser)
 }
 
 // signIn is how a request authenticated: by the session its cookie names,
 // or by the app password it was signed with.
 type signIn struct {
-	user        *wdb.User
-	session     *wdb.GpodderSession
+	user        *service.User
+	session     *service.GpodderSession
 	appPassword string
 }
 
@@ -150,7 +149,7 @@ func (h *handler) authenticate(r *http.Request, pathUser string) (signIn, int, s
 		}
 	}
 	if username, password, ok := r.BasicAuth(); ok {
-		u, apID, err := h.svc.VerifyAppPasswordBasic(r.Context(), username, password)
+		u, apID, err := h.svc.Identity.VerifyAppPasswordBasic(r.Context(), username, password)
 		if err != nil || !sameUser(u, pathUser) {
 			return signIn{}, http.StatusUnauthorized, "wrong username or password"
 		}
@@ -191,16 +190,16 @@ func (h *handler) requireClient(w http.ResponseWriter, r *http.Request, pathUser
 	var err error
 	switch {
 	case in.appPassword != "":
-		token, expires, err = h.svc.GpodderOpenSession(r.Context(), in.user, in.appPassword)
+		token, expires, err = h.svc.Podcasts.GpodderOpenSession(r.Context(), in.user, in.appPassword)
 	case in.session != nil:
-		token, expires, err = h.svc.GpodderSessionUsed(r.Context(), in.session)
+		token, expires, err = h.svc.Podcasts.GpodderSessionUsed(r.Context(), in.session)
 	}
 	if err != nil {
 		h.log.Warn("keeping a gpodder session", "err", err)
 	} else if token != "" {
 		h.setSession(w, token, expires)
 	}
-	uc, err := h.svc.UserCtx(r.Context(), in.user)
+	uc, err := h.svc.Grants.UserCtxFor(r.Context(), in.user)
 	if err != nil {
 		h.fail(w, http.StatusInternalServerError, "resolving user failed")
 		return nil, "", false
@@ -234,7 +233,7 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request, pathUser string)
 		return
 	}
 	if username, password, ok := r.BasicAuth(); ok {
-		u, token, expires, err := h.svc.GpodderLogin(r.Context(), pathUser, username, password)
+		u, token, expires, err := h.svc.Podcasts.GpodderLogin(r.Context(), pathUser, username, password)
 		if err != nil || u == nil {
 			h.fail(w, http.StatusUnauthorized, "wrong username or password")
 			return
@@ -258,7 +257,7 @@ func (h *handler) logout(w http.ResponseWriter, r *http.Request, pathUser string
 		h.fail(w, http.StatusBadRequest, "cookie does not match the request username")
 		return
 	}
-	if err := h.svc.GpodderLogout(r.Context(), cookieToken(r)); err != nil {
+	if err := h.svc.Podcasts.GpodderLogout(r.Context(), cookieToken(r)); err != nil {
 		h.fail(w, http.StatusInternalServerError, "ending the session failed")
 		return
 	}
@@ -280,12 +279,12 @@ func (h *handler) devicesList(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	devs, err := h.svc.GpodderDevices(r.Context(), uc)
+	devs, err := h.svc.Podcasts.GpodderDevices(r.Context(), uc)
 	if err != nil {
 		h.fail(w, http.StatusInternalServerError, "listing devices failed")
 		return
 	}
-	feeds, err := h.svc.GpodderFeedURLs(r.Context(), uc, "")
+	feeds, err := h.svc.Podcasts.GpodderFeedURLs(r.Context(), uc, "")
 	if err != nil {
 		h.failService(w, err, "listing subscriptions failed")
 		return
@@ -336,7 +335,7 @@ func (h *handler) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 // upsertDevice registers or updates a device, answering the error itself:
 // a refused one (an id too long, an account at its device cap) is a 400.
 func (h *handler) upsertDevice(w http.ResponseWriter, r *http.Request, uc *service.UserCtx, device, caption, devType string) bool {
-	err := h.svc.GpodderUpsertDevice(r.Context(), uc, device, caption, devType)
+	err := h.svc.Podcasts.GpodderUpsertDevice(r.Context(), uc, device, caption, devType)
 	switch {
 	case err == nil:
 		return true
@@ -370,7 +369,7 @@ func (h *handler) serveSubscriptionList(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	if device != "" {
-		known, err := h.svc.GpodderDeviceExists(r.Context(), uc, device)
+		known, err := h.svc.Podcasts.GpodderDeviceExists(r.Context(), uc, device)
 		if err != nil {
 			h.fail(w, http.StatusInternalServerError, "checking device failed")
 			return
@@ -382,7 +381,7 @@ func (h *handler) serveSubscriptionList(w http.ResponseWriter, r *http.Request, 
 	}
 	// Private shows' feed URLs are deliberately included on this
 	// surface; see GpodderFeedURLs for the rationale.
-	urls, err := h.svc.GpodderFeedURLs(r.Context(), uc, device)
+	urls, err := h.svc.Podcasts.GpodderFeedURLs(r.Context(), uc, device)
 	if err != nil {
 		h.failService(w, err, "listing subscriptions failed")
 		return
@@ -437,7 +436,7 @@ func (h *handler) subsPut(w http.ResponseWriter, r *http.Request) {
 	if !h.upsertDevice(w, r, uc, device, "", "") {
 		return
 	}
-	res, err := h.svc.GpodderReplaceDeviceList(r.Context(), uc, device, feedList(uploaded))
+	res, err := h.svc.Podcasts.GpodderReplaceDeviceList(r.Context(), uc, device, feedList(uploaded))
 	if err != nil {
 		h.fail(w, http.StatusInternalServerError, "replacing the device list failed")
 		return
@@ -475,7 +474,7 @@ func (h *handler) subDeltaPost(w http.ResponseWriter, r *http.Request) {
 	// As of the upload's arrival, before its own work, which can wait on
 	// the writer or fetch feeds for a while: a client keeps it as the since
 	// of its next delta, which must still carry what changed meanwhile.
-	timestamp, err := h.svc.GpodderUploadCursor(r.Context(), uc, device, arrived)
+	timestamp, err := h.svc.Podcasts.GpodderUploadCursor(r.Context(), uc, device, arrived)
 	if err != nil {
 		h.fail(w, http.StatusInternalServerError, "reading the device's place failed")
 		return
@@ -507,7 +506,7 @@ func (h *handler) subDeltaPost(w http.ResponseWriter, r *http.Request) {
 	if !h.upsertDevice(w, r, uc, device, "", "") {
 		return
 	}
-	outcomes, err := h.svc.GpodderApplyChanges(r.Context(), uc, device, feedList(body.Add), feedList(body.Remove))
+	outcomes, err := h.svc.Podcasts.GpodderApplyChanges(r.Context(), uc, device, feedList(body.Add), feedList(body.Remove))
 	if err != nil {
 		h.fail(w, http.StatusInternalServerError, "applying subscription changes failed")
 		return
@@ -550,10 +549,10 @@ func (h *handler) subDeltaGet(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, http.StatusBadRequest, "malformed since")
 		return
 	}
-	h.svc.GpodderSeeDevice(r.Context(), uc, device)
-	events, cursor, err := h.svc.GpodderSubChangesSince(r.Context(), uc, device, since)
+	h.svc.Podcasts.GpodderSeeDevice(r.Context(), uc, device)
+	events, cursor, err := h.svc.Podcasts.GpodderSubChangesSince(r.Context(), uc, device, since)
 	if err == nil {
-		err = h.svc.GpodderRememberRead(r.Context(), uc, device, cursor)
+		err = h.svc.Podcasts.GpodderRememberRead(r.Context(), uc, device, cursor)
 	}
 	if err != nil {
 		h.fail(w, http.StatusInternalServerError, "listing changes failed")
@@ -595,7 +594,7 @@ func (h *handler) episodesPost(w http.ResponseWriter, r *http.Request) {
 	}
 	// As of the upload's arrival, for the same reason as a subscription
 	// upload's.
-	timestamp := h.svc.GpodderEpisodesUploadCursor(uc, appPassword, arrived)
+	timestamp := h.svc.Podcasts.GpodderEpisodesUploadCursor(uc, appPassword, arrived)
 	var actions []json.RawMessage
 	if err := json.NewDecoder(bodylimit.Reader(w, r.Body, maxBodyBytes)).Decode(&actions); err != nil {
 		h.failBody(w, err)
@@ -608,7 +607,7 @@ func (h *handler) episodesPost(w http.ResponseWriter, r *http.Request) {
 	// A client sends a batch until it is answered, so one action that
 	// cannot be kept, a field of the wrong type included, must not refuse
 	// the rest: it is skipped.
-	rows := make([]wdb.GpodderAction, 0, len(actions))
+	rows := make([]service.GpodderAction, 0, len(actions))
 	for _, raw := range actions {
 		var a episodeActionJSON
 		if json.Unmarshal(raw, &a) != nil {
@@ -621,7 +620,7 @@ func (h *handler) episodesPost(w http.ResponseWriter, r *http.Request) {
 	if skipped := len(actions) - len(rows); skipped > 0 {
 		h.log.Info("gpodder episode actions skipped", "skipped", skipped, "kept", len(rows))
 	}
-	if err := h.svc.GpodderRecordActions(r.Context(), uc, rows); err != nil {
+	if err := h.svc.Podcasts.GpodderRecordActions(r.Context(), uc, rows); err != nil {
 		h.fail(w, http.StatusInternalServerError, "storing episode actions failed")
 		return
 	}
@@ -634,18 +633,18 @@ func (h *handler) episodesPost(w http.ResponseWriter, r *http.Request) {
 // action can have, or numbers no play can have. A client reads each one
 // back, gPodder's mygpoclient refusing whatever the protocol does not
 // allow.
-func storedAction(a episodeActionJSON) (wdb.GpodderAction, bool) {
+func storedAction(a episodeActionJSON) (service.GpodderAction, bool) {
 	a.Action = strings.ToLower(a.Action)
 	if a.Podcast == "" || a.Episode == "" || !validActions[a.Action] ||
 		len(a.Podcast) > maxURLLen || len(a.Episode) > maxURLLen || len(a.Device) > service.GpodderMaxDeviceIDLen ||
 		a.Device == service.GpodderOwnDevice || !plausiblePlay(a) {
-		return wdb.GpodderAction{}, false
+		return service.GpodderAction{}, false
 	}
 	ts, err := service.NormalizeGpodderTime(a.Timestamp)
 	if err != nil {
-		return wdb.GpodderAction{}, false
+		return service.GpodderAction{}, false
 	}
-	return wdb.GpodderAction{
+	return service.GpodderAction{
 		PodcastURL: a.Podcast, EpisodeURL: a.Episode, DeviceID: a.Device,
 		Action: a.Action, ActionTS: ts,
 		StartedSec: a.Started, PositionSec: a.Position, TotalSec: a.Total,
@@ -687,7 +686,7 @@ func (h *handler) episodesGet(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, http.StatusBadRequest, "malformed since")
 		return
 	}
-	rows, cursor, err := h.svc.GpodderActionsSince(r.Context(), uc, appPassword, since, q.Get("podcast"), q.Get("device"))
+	rows, cursor, err := h.svc.Podcasts.GpodderActionsSince(r.Context(), uc, appPassword, since, q.Get("podcast"), q.Get("device"))
 	if err != nil {
 		h.fail(w, http.StatusInternalServerError, "listing episode actions failed")
 		return

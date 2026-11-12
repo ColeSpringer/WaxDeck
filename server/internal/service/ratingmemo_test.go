@@ -18,14 +18,14 @@ func TestALargeRankedReadIsPaidOnce(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := marksFixture(t)
 	reads := 0
-	svc.trackFacts.entityReadHook = func(context.Context, model.PID, model.MergeEntity, model.PID) (*model.EntityPlayState, error) {
+	svc.Reads.trackFacts.entityReadHook = func(context.Context, model.PID, model.MergeEntity, model.PID) (*model.EntityPlayState, error) {
 		reads++
 		return &model.EntityPlayState{}, nil
 	}
 	pids := albumPIDs(250_000)
 	for call, want := range []int{250_000, 0, 0} {
 		reads = 0
-		if _, err := svc.EntityRatings(ctx, uc, pids); err != nil {
+		if _, err := svc.Reads.EntityRatings(ctx, uc, pids); err != nil {
 			t.Fatal(err)
 		}
 		if reads != want {
@@ -60,7 +60,7 @@ func TestRankedReadsByManyAccountsArePaidOnceEach(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := marksFixture(t)
 	reads := 0
-	svc.trackFacts.entityReadHook = func(context.Context, model.PID, model.MergeEntity, model.PID) (*model.EntityPlayState, error) {
+	svc.Reads.trackFacts.entityReadHook = func(context.Context, model.PID, model.MergeEntity, model.PID) (*model.EntityPlayState, error) {
 		reads++
 		return &model.EntityPlayState{}, nil
 	}
@@ -69,7 +69,7 @@ func TestRankedReadsByManyAccountsArePaidOnceEach(t *testing.T) {
 	for round := range 3 {
 		for i, who := range accounts {
 			reads = 0
-			if _, err := svc.EntityRatings(ctx, who, pids); err != nil {
+			if _, err := svc.Reads.EntityRatings(ctx, who, pids); err != nil {
 				t.Fatal(err)
 			}
 			if want := map[bool]int{true: 40_000, false: 0}[round == 0]; reads != want {
@@ -83,7 +83,7 @@ func TestRankedReadsByManyAccountsArePaidOnceEach(t *testing.T) {
 // unrated.
 func countingReads(svc *Library) *int {
 	reads := new(int)
-	svc.trackFacts.entityReadHook = func(context.Context, model.PID, model.MergeEntity, model.PID) (*model.EntityPlayState, error) {
+	svc.Reads.trackFacts.entityReadHook = func(context.Context, model.PID, model.MergeEntity, model.PID) (*model.EntityPlayState, error) {
 		*reads++
 		return &model.EntityPlayState{}, nil
 	}
@@ -97,7 +97,7 @@ func rankedReads(t *testing.T, ctx context.Context, svc *Library) func(who *User
 	return func(who *UserCtx, pids []string) int {
 		t.Helper()
 		*reads = 0
-		if _, err := svc.EntityRatings(ctx, who, pids); err != nil {
+		if _, err := svc.Reads.EntityRatings(ctx, who, pids); err != nil {
 			t.Fatal(err)
 		}
 		return *reads
@@ -109,7 +109,7 @@ func rankedReads(t *testing.T, ctx context.Context, svc *Library) func(who *User
 func TestARatingReadPastTheBudgetRereadsOnlyItsOverflow(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := marksFixture(t)
-	svc.trackFacts.ratings.budget = 1000
+	svc.Reads.trackFacts.ratings.budget = 1000
 	ask := rankedReads(t, ctx, svc)
 	accounts := ratingAccounts(uc, 2)
 	a, b := accounts[0], accounts[1]
@@ -130,7 +130,7 @@ func TestARatingReadPastTheBudgetRereadsOnlyItsOverflow(t *testing.T) {
 func TestIdleAccountsGiveWayToTheRatingBudget(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := marksFixture(t)
-	m := &svc.trackFacts.ratings
+	m := &svc.Reads.trackFacts.ratings
 	m.budget = 1000
 	start := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
 	at := start
@@ -164,7 +164,7 @@ func TestIdleAccountsGiveWayToTheRatingBudget(t *testing.T) {
 func TestAnAccountUsedWithinTenMinutesKeepsItsAnswers(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := marksFixture(t)
-	m := &svc.trackFacts.ratings
+	m := &svc.Reads.trackFacts.ratings
 	m.budget = 1000
 	start := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
 	at := start
@@ -224,7 +224,7 @@ func TestARatingMadeOnceTheMemoIsFullIsServedRated(t *testing.T) {
 	var mu sync.Mutex
 	rated := map[model.PID]int{}
 	reads := 0
-	svc.trackFacts.entityReadHook = func(_ context.Context, _ model.PID, _ model.MergeEntity, pid model.PID) (*model.EntityPlayState, error) {
+	svc.Reads.trackFacts.entityReadHook = func(_ context.Context, _ model.PID, _ model.MergeEntity, pid model.PID) (*model.EntityPlayState, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		reads++
@@ -239,7 +239,7 @@ func TestARatingMadeOnceTheMemoIsFullIsServedRated(t *testing.T) {
 		mu.Lock()
 		reads = 0
 		mu.Unlock()
-		got, err := svc.EntityRatings(ctx, uc, albums)
+		got, err := svc.Reads.EntityRatings(ctx, uc, albums)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -247,7 +247,7 @@ func TestARatingMadeOnceTheMemoIsFullIsServedRated(t *testing.T) {
 		defer mu.Unlock()
 		return got, reads
 	}
-	m := &svc.trackFacts.ratings
+	m := &svc.Reads.trackFacts.ratings
 	m.budget = 1000
 	ask()
 	fillRatingMemo(t, ctx, svc, ratingAccounts(uc, 5))
@@ -268,12 +268,12 @@ func TestARatingMadeOnceTheMemoIsFullIsServedRated(t *testing.T) {
 // the memo holds its budget.
 func fillRatingMemo(t *testing.T, ctx context.Context, svc *Library, accounts []*UserCtx) {
 	t.Helper()
-	epoch, ok := svc.entityEpoch(ctx)
+	epoch, ok := svc.Reads.entityEpoch(ctx)
 	if !ok {
 		t.Fatal("the catalog watch could not tell its epoch")
 	}
 	stamp := ratingStamp{gen: svc.catalogGeneration(), entities: epoch}
-	m := &svc.trackFacts.ratings
+	m := &svc.Reads.trackFacts.ratings
 	for i, who := range accounts {
 		m.mu.Lock()
 		room := m.limit() - m.entries
@@ -303,14 +303,14 @@ func TestRatingAnswersCarryAcrossPages(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := marksFixture(t)
 	reads := 0
-	svc.trackFacts.entityReadHook = func(context.Context, model.PID, model.MergeEntity, model.PID) (*model.EntityPlayState, error) {
+	svc.Reads.trackFacts.entityReadHook = func(context.Context, model.PID, model.MergeEntity, model.PID) (*model.EntityPlayState, error) {
 		reads++
 		return &model.EntityPlayState{}, nil
 	}
 	library := albumPIDs(2_000)
 	marks := func(pids []string) {
 		t.Helper()
-		if _, err := svc.EntityMarks(ctx, uc, pids); err != nil {
+		if _, err := svc.Reads.EntityMarks(ctx, uc, pids); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -337,7 +337,7 @@ func TestRatingAnswersCarryAcrossPages(t *testing.T) {
 		t.Errorf("50 random pages over albums answered before made %d point reads, want none", reads)
 	}
 	reads = 0
-	if _, err := svc.EntityRatings(ctx, uc, library); err != nil {
+	if _, err := svc.Reads.EntityRatings(ctx, uc, library); err != nil {
 		t.Fatal(err)
 	}
 	if reads != 0 {

@@ -17,8 +17,8 @@ func raceGenerations(t *testing.T, svc *Library, publish func(gen facetGeneratio
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.CatalogContentSeq(ctx)
-	svc.trackFacts.headHook = func(context.Context) (int64, error) { return head, nil }
+	svc.Reads.CatalogContentSeq(ctx)
+	svc.Reads.trackFacts.headHook = func(context.Context) (int64, error) { return head, nil }
 	var (
 		mu         sync.Mutex
 		seen       int64
@@ -29,9 +29,9 @@ func raceGenerations(t *testing.T, svc *Library, publish func(gen facetGeneratio
 		wg.Go(func() {
 			for i := range 3000 {
 				if i%4 == w%4 {
-					svc.genres.version.Add(1)
+					svc.Reads.genres.version.Add(1)
 				}
-				publish(svc.facetGeneration(ctx))
+				publish(svc.Reads.facetGeneration(ctx))
 				mu.Lock()
 				if v := held().vocab; v < seen {
 					rolledBack = true
@@ -55,12 +55,12 @@ func TestFacetPublishesNeverRollTheCacheBack(t *testing.T) {
 	ctx := context.Background()
 	rolled := raceGenerations(t, svc,
 		func(gen facetGeneration) {
-			svc.publishFacetBuckets(ctx, gen, facetCacheKey{dimension: "artist", sort: FacetSortCount}, nil)
+			svc.Reads.publishFacetBuckets(ctx, gen, facetCacheKey{dimension: "artist", sort: FacetSortCount}, nil)
 		},
 		func() facetGeneration {
-			svc.facets.mu.Lock()
-			defer svc.facets.mu.Unlock()
-			return svc.facets.gen
+			svc.Reads.facets.mu.Lock()
+			defer svc.Reads.facets.mu.Unlock()
+			return svc.Reads.facets.gen
 		})
 	if rolled {
 		t.Fatal("an older enumeration rolled the cache's generation back")
@@ -74,11 +74,11 @@ func TestTagValuePublishesNeverRollTheMemoBack(t *testing.T) {
 	settleCatalogFeed(t, svc)
 	ctx := context.Background()
 	rolled := raceGenerations(t, svc,
-		func(gen facetGeneration) { svc.publishTagValues(ctx, gen, "tag.MOOD", nil) },
+		func(gen facetGeneration) { svc.Reads.publishTagValues(ctx, gen, "tag.MOOD", nil) },
 		func() facetGeneration {
-			svc.tagValues.mu.Lock()
-			defer svc.tagValues.mu.Unlock()
-			return svc.tagValues.gen
+			svc.Reads.tagValues.mu.Lock()
+			defer svc.Reads.tagValues.mu.Unlock()
+			return svc.Reads.tagValues.gen
 		})
 	if rolled {
 		t.Fatal("an older spellings read rolled the memo's generation back")
@@ -93,8 +93,8 @@ func TestPublishesLookAtTheLogOutsideTheirLocks(t *testing.T) {
 	ctx, svc, uc := newCatalogFixture(t)
 	settleCatalogFeed(t, svc)
 	var under atomic.Int64
-	svc.trackFacts.headHook = func(ctx context.Context) (int64, error) {
-		for _, mu := range []*sync.Mutex{&svc.facets.mu, &svc.tagValues.mu} {
+	svc.Reads.trackFacts.headHook = func(ctx context.Context) (int64, error) {
+		for _, mu := range []*sync.Mutex{&svc.Reads.facets.mu, &svc.Reads.tagValues.mu} {
 			if mu.TryLock() {
 				mu.Unlock()
 			} else {
@@ -103,10 +103,10 @@ func TestPublishesLookAtTheLogOutsideTheirLocks(t *testing.T) {
 		}
 		return svc.lib.LatestChangeSeq(ctx)
 	}
-	if _, err := svc.Facets(ctx, uc, FacetQuery{Dimension: "artist", Limit: 50}); err != nil {
+	if _, err := svc.Reads.Facets(ctx, uc, FacetQuery{Dimension: "artist", Limit: 50}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.tagSpellings(ctx, "tag.MOOD", "calm"); err != nil {
+	if _, err := svc.Reads.tagSpellings(ctx, "tag.MOOD", "calm"); err != nil {
 		t.Fatal(err)
 	}
 	if n := under.Load(); n != 0 {

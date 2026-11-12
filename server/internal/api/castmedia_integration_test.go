@@ -344,12 +344,12 @@ func TestBookPiecesResolveInOnePass(t *testing.T) {
 		t.Fatalf("audiobooks = %d, want the fixture's one", len(books.Items))
 	}
 	book := books.Items[0]
-	uc, err := h.svc.UserCtxByID(ctx, adminUserID(t, h))
+	uc, err := h.svc.Grants.UserCtxByID(ctx, adminUserID(t, h))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	pieces, err := h.svc.BookPieces(ctx, uc, book.Pid)
+	pieces, err := h.svc.Playback.BookPieces(ctx, uc, book.Pid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -389,7 +389,7 @@ func TestBookPiecesResolveInOnePass(t *testing.T) {
 
 	// Nothing else lays out as pieces: a track is served whole.
 	track := h.items(t, "?mediaType=music").Items[0]
-	if got, err := h.svc.BookPieces(ctx, uc, track.Pid); err != nil || got != nil {
+	if got, err := h.svc.Playback.BookPieces(ctx, uc, track.Pid); err != nil || got != nil {
 		t.Fatalf("a track laid out as %+v (err %v), want nothing", got, err)
 	}
 }

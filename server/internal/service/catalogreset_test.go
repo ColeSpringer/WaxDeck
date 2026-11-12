@@ -210,13 +210,13 @@ func TestResetCatalogKeepsEveryAccountWorking(t *testing.T) {
 	t.Parallel()
 	var stored string
 	dataDir, libDir := newStaleCatalogWith(t, func(ctx context.Context, svc *Library) {
-		acct, err := svc.CreateAccount(ctx, AccountCreate{
+		acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 			Username: "listener", Password: "correct-horse",
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		stored = acct.User.WaxbinUserPID
+		stored = acct.User.row.WaxbinUserPID
 	})
 
 	pids := map[string]bool{}
@@ -227,20 +227,20 @@ func TestResetCatalogKeepsEveryAccountWorking(t *testing.T) {
 			t.Fatalf("opening with -reset-catalog: %v", err)
 		}
 		ctx := context.Background()
-		u, err := svc.UserByName(ctx, "listener")
+		u, err := svc.Grants.UserByName(ctx, "listener")
 		if err != nil {
 			stop()
 			t.Fatal(err)
 		}
-		if u.WaxbinUserPID != stored {
-			t.Errorf("the account's stored catalog user = %s, want the %s it had", u.WaxbinUserPID, stored)
+		if u.row.WaxbinUserPID != stored {
+			t.Errorf("the account's stored catalog user = %s, want the %s it had", u.row.WaxbinUserPID, stored)
 		}
-		uc, err := svc.UserCtx(ctx, u)
+		uc, err := svc.Grants.UserCtxFor(ctx, u)
 		if err != nil {
 			stop()
 			t.Fatal(err)
 		}
-		if _, err := svc.Playlists(ctx, uc, "", "", 10); err != nil {
+		if _, err := svc.Playlists.List(ctx, uc, "", "", 10); err != nil {
 			t.Errorf("the account's playlists after the reset: %v", err)
 		}
 		pids[uc.CatalogPID] = true
@@ -451,7 +451,7 @@ func TestResetCatalogTellsTheAdministratorsWhatItDropped(t *testing.T) {
 	added := t.TempDir()
 	dataDir, libDir := newStaleCatalogWith(t, func(ctx context.Context, svc *Library) {
 		uc := addAdmin(t, ctx, svc, "admin")
-		if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "added", Path: added}); err != nil {
+		if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "added", Path: added}); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -463,7 +463,7 @@ func TestResetCatalogTellsTheAdministratorsWhatItDropped(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "catalog.reset"}, "", 10)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: "catalog.reset"}, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -474,11 +474,11 @@ func TestResetCatalogTellsTheAdministratorsWhatItDropped(t *testing.T) {
 		t.Errorf("the audit entry's droppedRoots = %s, want it to name %s", dropped, added)
 	}
 
-	u, err := svc.UserByName(ctx, "admin")
+	u, err := svc.Grants.UserByName(ctx, "admin")
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, u)
+	uc, err := svc.Grants.UserCtxFor(ctx, u)
 	if err != nil {
 		t.Fatal(err)
 	}

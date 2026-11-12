@@ -27,7 +27,7 @@ func TestASweepOverAFailedAdvisoryReadIsNotKept(t *testing.T) {
 	settleCatalogFeed(t, svc)
 	flagged := func() bool {
 		t.Helper()
-		rows, err := svc.TrackFacts(ctx, uc)
+		rows, err := svc.Reads.TrackFacts(ctx, uc)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -39,11 +39,11 @@ func TestASweepOverAFailedAdvisoryReadIsNotKept(t *testing.T) {
 		t.Fatal("no Flagged track in the sweep")
 		return false
 	}
-	svc.trackFacts.fallbackHook = failing("advisory tags")
+	svc.Reads.trackFacts.fallbackHook = failing("advisory tags")
 	if flagged() {
 		t.Fatal("a sweep whose advisory read failed still flagged the track")
 	}
-	svc.trackFacts.fallbackHook = nil
+	svc.Reads.trackFacts.fallbackHook = nil
 	if !flagged() {
 		t.Fatal("the sweep made over the failed advisory read was kept")
 	}
@@ -56,12 +56,12 @@ func TestAGenreEnumerationOverAFailedVocabularyReadIsNotKept(t *testing.T) {
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 	settleCatalogFeed(t, f.svc)
-	f.svc.trackFacts.fallbackHook = failing("genre vocabulary")
+	f.svc.Reads.trackFacts.fallbackHook = failing("genre vocabulary")
 	facetsOf(t, f, "genre")
 	if servesFromCache(f.svc, "genre") {
 		t.Fatal("the enumeration made over a failed vocabulary read was kept")
 	}
-	f.svc.trackFacts.fallbackHook = nil
+	f.svc.Reads.trackFacts.fallbackHook = nil
 	var canonical bool
 	for _, b := range facetsOf(t, f, "genre") {
 		canonical = canonical || b.Label == "Hip Hop"
@@ -78,19 +78,19 @@ func TestAFallbackReachesItsWatchers(t *testing.T) {
 	ctx, svc, uc := newAdvisoryFixture(t)
 	kid := &UserCtx{ID: uc.ID, CatalogPID: uc.CatalogPID, AllLibraries: true, Explicit: true,
 		TagDeny: []TagRule{{Key: advisoryTagKey, Value: "1"}}}
-	svc.trackFacts.fallbackHook = failing("tag spellings")
+	svc.Reads.trackFacts.fallbackHook = failing("tag spellings")
 	outer, outerFell := WatchDegraded(ctx)
 	inner, innerFell := WatchDegraded(outer)
-	if _, err := svc.TrackFacts(inner, kid); err != nil {
+	if _, err := svc.Reads.TrackFacts(inner, kid); err != nil {
 		t.Fatal(err)
 	}
 	if !innerFell() || !outerFell() {
 		t.Fatalf("a sweep over a failed spelling read: inner %v, outer %v; want both told", innerFell(), outerFell())
 	}
 
-	svc.trackFacts.fallbackHook = nil
+	svc.Reads.trackFacts.fallbackHook = nil
 	well, wellFell := WatchDegraded(ctx)
-	if _, err := svc.TrackFacts(well, kid); err != nil {
+	if _, err := svc.Reads.TrackFacts(well, kid); err != nil {
 		t.Fatal(err)
 	}
 	if wellFell() {
@@ -99,10 +99,10 @@ func TestAFallbackReachesItsWatchers(t *testing.T) {
 
 	// A vocabulary edit moves the spellings memo's generation, so the next
 	// rule compiles from a fresh read.
-	svc.genres.version.Add(1)
-	svc.trackFacts.fallbackHook = failing("tag spellings")
+	svc.Reads.genres.version.Add(1)
+	svc.Reads.trackFacts.fallbackHook = failing("tag spellings")
 	listing, listingFell := WatchDegraded(ctx)
-	if _, err := svc.Browse(listing, kid, "recently-added", ItemFilter{MediaType: "music"}, 0, "", 50); err != nil {
+	if _, err := svc.Reads.Browse(listing, kid, "recently-added", ItemFilter{MediaType: "music"}, 0, "", 50); err != nil {
 		t.Fatal(err)
 	}
 	if !listingFell() {
@@ -119,8 +119,8 @@ func TestTheFollowSetAndTagReadsReportTheirFallbacks(t *testing.T) {
 	cancel()
 
 	follows, followsFell := WatchDegraded(gone)
-	subs := svc.newSubscriptionFilter(uc)
-	subs.ensure(follows, svc)
+	subs := svc.Podcasts.newSubscriptionFilter(uc)
+	subs.ensure(follows, svc.Podcasts)
 	if !subs.failed || !followsFell() {
 		t.Fatalf("a follow set that could not be read: failed %v, watcher told %v; want both", subs.failed, followsFell())
 	}
@@ -133,7 +133,7 @@ func TestTheFollowSetAndTagReadsReportTheirFallbacks(t *testing.T) {
 		t.Fatal(err)
 	}
 	tags, tagsFell := WatchDegraded(gone)
-	if allowed := svc.allowedByContent(tags, kid, it); allowed || !tagsFell() {
+	if allowed := svc.Grants.allowedByContent(tags, kid, it); allowed || !tagsFell() {
 		t.Fatalf("a tag read that failed: allowed %v, watcher told %v; want refused and told", allowed, tagsFell())
 	}
 }

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"maps"
 	"slices"
 	"time"
@@ -13,7 +12,6 @@ import (
 	"github.com/colespringer/waxbin/model"
 
 	"github.com/colespringer/waxdeck/server/internal/connect"
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // The connect subsystem's service-layer glue: queue hydration for
@@ -25,14 +23,14 @@ import (
 // QueueEntries hydrates queue entries for the pids, in order,
 // enforcing the caller's visibility. Any invisible or unknown pid
 // fails the whole call: a queue is one decision, never a partial load.
-func (l *Library) QueueEntries(ctx context.Context, userID string, pids []string) ([]connect.QueueEntry, error) {
-	uc, err := l.userCtxByID(ctx, userID)
+func (l *Playback) QueueEntries(ctx context.Context, userID string, pids []string) ([]connect.QueueEntry, error) {
+	uc, err := l.Grants.UserCtxByID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]connect.QueueEntry, 0, len(pids))
 	for _, pid := range pids {
-		it, err := l.getVisibleItem(ctx, uc, pid)
+		it, err := l.Grants.getVisibleItem(ctx, uc, pid)
 		if err != nil {
 			return nil, err
 		}
@@ -51,10 +49,10 @@ func (l *Library) QueueEntries(ctx context.Context, userID string, pids []string
 // see, as QueueEntries resolves them: inside its library grants and
 // content rules. An account that cannot be read sees none, and a read
 // that fails answers none: the caller shows an empty slot for each.
-func (l *Library) QueueEntriesVisible(userID string, pids []string) map[string]bool {
+func (l *Playback) QueueEntriesVisible(userID string, pids []string) map[string]bool {
 	ctx := context.Background()
 	out := make(map[string]bool, len(pids))
-	uc, err := l.userCtxByID(ctx, userID)
+	uc, err := l.Grants.UserCtxByID(ctx, userID)
 	if err != nil {
 		return out
 	}
@@ -70,12 +68,12 @@ func (l *Library) QueueEntriesVisible(userID string, pids []string) map[string]b
 			bare = append(bare, pid)
 		}
 	}
-	views, err := l.readItems(ctx, bare)
+	views, err := l.Reads.readItems(ctx, bare)
 	if err != nil {
 		l.log.Warn("reading a shared session's queue for a receiver", "err", err)
 		return out
 	}
-	verdicts, err := l.tagVerdicts(ctx, uc, slices.Collect(maps.Values(views)))
+	verdicts, err := l.Grants.tagVerdicts(ctx, uc, slices.Collect(maps.Values(views)))
 	if err != nil {
 		l.log.Warn("reading a shared session's queue for a receiver", "err", err)
 		return out
@@ -86,32 +84,11 @@ func (l *Library) QueueEntriesVisible(userID string, pids []string) map[string]b
 			continue
 		}
 		if v := views[pid]; v != nil && prefixFitsKind(prefix, v.Kind) &&
-			l.viewVisible(ctx, uc, v) && l.contentAllows(ctx, uc, verdicts, v) {
+			l.Grants.viewVisible(ctx, uc, v) && l.Grants.contentAllows(ctx, uc, verdicts, v) {
 			out[api] = true
 		}
 	}
 	return out
-}
-
-// UserCtxByID rebuilds a user context from a bare user id (the connect
-// core carries ids, not principals; the api layer's media resolver
-// needs the context back for visibility-checked stream resolution).
-func (l *Library) UserCtxByID(ctx context.Context, userID string) (*UserCtx, error) {
-	return l.userCtxByID(ctx, userID)
-}
-
-// userCtxByID refuses a disabled or pending account as if it did not
-// exist: every caller acts for an account that has to be able to sign in.
-// A read that failed is not an answer, so it stays an internal error.
-func (l *Library) userCtxByID(ctx context.Context, userID string) (*UserCtx, error) {
-	u, err := l.db.UserByID(ctx, userID)
-	if err != nil && !errors.Is(err, wdb.ErrNotFound) {
-		return nil, &Error{Kind: KindInternal, Err: err}
-	}
-	if u == nil || u.Disabled || u.Pending {
-		return nil, errNotFound("no such user")
-	}
-	return l.UserCtx(ctx, u)
 }
 
 // PlayerProgress buffers a position tick for a remote session. The
@@ -121,16 +98,16 @@ func (l *Library) userCtxByID(ctx context.Context, userID string) (*UserCtx, err
 // playing remote session, and resolving fresh keeps organize moves
 // and permission changes honest mid-session. A cache here would buy
 // microseconds and cost an invalidation contract.
-func (l *Library) PlayerProgress(userID, pid string, positionMS int64) {
+func (l *Playback) PlayerProgress(userID, pid string, positionMS int64) {
 	// Progress is a buffered facade tick keyed by catalog user; resolve
 	// lazily and drop on failure (the periodic checkpoint is durable).
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	uc, err := l.userCtxByID(ctx, userID)
+	uc, err := l.Grants.UserCtxByID(ctx, userID)
 	if err != nil {
 		return
 	}
-	it, err := l.getVisibleItem(ctx, uc, pid)
+	it, err := l.Grants.getVisibleItem(ctx, uc, pid)
 	if err != nil {
 		return
 	}
@@ -149,8 +126,8 @@ func (l *Library) PlayerProgress(userID, pid string, positionMS int64) {
 
 // PlayerCheckpoint persists a remote session's position now (pause,
 // stop, track change) and emits the play-state event.
-func (l *Library) PlayerCheckpoint(ctx context.Context, userID, pid string, positionMS int64) {
-	uc, err := l.userCtxByID(ctx, userID)
+func (l *Playback) PlayerCheckpoint(ctx context.Context, userID, pid string, positionMS int64) {
+	uc, err := l.Grants.UserCtxByID(ctx, userID)
 	if err != nil {
 		return
 	}
@@ -161,14 +138,14 @@ func (l *Library) PlayerCheckpoint(ctx context.Context, userID, pid string, posi
 
 // PlayerSetQueue mirrors the active queue into the catalog's per-user
 // play queue, so queue state survives WaxDeck itself.
-func (l *Library) PlayerSetQueue(ctx context.Context, userID string, pids []string) {
-	uc, err := l.userCtxByID(ctx, userID)
+func (l *Playback) PlayerSetQueue(ctx context.Context, userID string, pids []string) {
+	uc, err := l.Grants.UserCtxByID(ctx, userID)
 	if err != nil {
 		return
 	}
 	catalogPIDs := make([]model.PID, 0, len(pids))
 	for _, pid := range pids {
-		it, err := l.getVisibleItem(ctx, uc, pid)
+		it, err := l.Grants.getVisibleItem(ctx, uc, pid)
 		if err != nil {
 			continue
 		}
@@ -181,8 +158,8 @@ func (l *Library) PlayerSetQueue(ctx context.Context, userID string, pids []stri
 
 // PlayerListen ingests a listen accumulated by a remote session,
 // riding the same dedupe-correct path client reports use.
-func (l *Library) PlayerListen(ctx context.Context, userID, pid string, msPlayed int64, startedAt time.Time) {
-	uc, err := l.userCtxByID(ctx, userID)
+func (l *Playback) PlayerListen(ctx context.Context, userID, pid string, msPlayed int64, startedAt time.Time) {
+	uc, err := l.Grants.UserCtxByID(ctx, userID)
 	if err != nil {
 		return
 	}

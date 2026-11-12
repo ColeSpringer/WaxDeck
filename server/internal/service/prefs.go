@@ -135,7 +135,7 @@ func canonicalPIDList(pids []string, prefixes map[string]bool, noun, want string
 }
 
 // Prefs returns the acting user's stored preferences.
-func (l *Library) Prefs(ctx context.Context, uc *UserCtx) (Prefs, error) {
+func (l *Identity) Prefs(ctx context.Context, uc *UserCtx) (Prefs, error) {
 	doc, err := l.db.PrefsJSON(ctx, uc.ID)
 	if err != nil {
 		return Prefs{}, &Error{Kind: KindInternal, Err: err}
@@ -149,7 +149,7 @@ func (l *Library) Prefs(ctx context.Context, uc *UserCtx) (Prefs, error) {
 // arrived over the control socket. A read that fails answers defaults
 // rather than an error, because both callers are doing something else
 // and neither has an outcome a preference should be able to fail.
-func (l *Library) PrefsForUser(ctx context.Context, userID string) Prefs {
+func (l *Identity) PrefsForUser(ctx context.Context, userID string) Prefs {
 	doc, err := l.db.PrefsJSON(ctx, userID)
 	if err != nil {
 		l.log.Warn("reading prefs", "user", userID, "err", err)
@@ -158,7 +158,7 @@ func (l *Library) PrefsForUser(ctx context.Context, userID string) Prefs {
 	return l.decodePrefs(doc, userID)
 }
 
-func (l *Library) decodePrefs(doc, userID string) Prefs {
+func (l *Identity) decodePrefs(doc, userID string) Prefs {
 	if doc == "" {
 		return Prefs{}
 	}
@@ -174,7 +174,7 @@ func (l *Library) decodePrefs(doc, userID string) Prefs {
 
 // PutPrefs validates and replaces the acting user's preferences,
 // returning the stored result.
-func (l *Library) PutPrefs(ctx context.Context, uc *UserCtx, p Prefs) (Prefs, error) {
+func (l *Identity) PutPrefs(ctx context.Context, uc *UserCtx, p Prefs) (Prefs, error) {
 	if p.Timezone != "" {
 		if _, err := time.LoadLocation(p.Timezone); err != nil {
 			return Prefs{}, errInvalid("unknown timezone " + p.Timezone)

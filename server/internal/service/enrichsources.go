@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/colespringer/waxbin/enrich"
+
+	"github.com/colespringer/waxdeck/server/internal/providers"
 )
 
 // EnrichmentSource is one provider's place in the operator's order,
@@ -140,8 +142,25 @@ func (s *enrichSources) live() []enrich.Provider {
 	return out
 }
 
+// sourceServes reports a switched-on source serving capability c at target.
+func (l *Enrichment) sourceServes(c enrich.Capability, target enrich.TargetType) bool {
+	for _, src := range l.sources.resolved() {
+		if !src.Enabled {
+			continue
+		}
+		p := l.sources.provider(src.Name)
+		if p == nil {
+			p = l.sources.builtin(src.Name)
+		}
+		if p != nil && providers.CapabilitiesAt(p, target).Has(c) {
+			return true
+		}
+	}
+	return false
+}
+
 // loadEnrichSources reads the saved order.
-func (l *Library) loadEnrichSources(ctx context.Context) {
+func (l *Enrichment) loadEnrichSources(ctx context.Context) {
 	l.sources.mu.Lock()
 	defer l.sources.mu.Unlock()
 	if raw, err := l.db.SettingGet(ctx, settingEnrichmentSources); err == nil {
@@ -155,7 +174,7 @@ func (l *Library) loadEnrichSources(ctx context.Context) {
 // PutEnrichmentSources saves the operator's order and switches, answering
 // the status it leaves. The list names every injected provider once and
 // may name the built-ins; one not wired now keeps its saved switch.
-func (l *Library) PutEnrichmentSources(ctx context.Context, uc *UserCtx, list []EnrichmentSource) (EnrichmentStatusDTO, error) {
+func (l *Enrichment) PutEnrichmentSources(ctx context.Context, uc *UserCtx, list []EnrichmentSource) (EnrichmentStatusDTO, error) {
 	if !uc.Admin {
 		return EnrichmentStatusDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -180,21 +199,21 @@ func (l *Library) PutEnrichmentSources(ctx context.Context, uc *UserCtx, list []
 		return EnrichmentStatusDTO{}, errInvalid("the order must name every provider this server adds; missing " + strings.Join(missing, ", "))
 	}
 	// Read first, so a status that cannot be answered saves nothing.
-	st, err := l.enrichmentProgress(ctx)
+	st, err := l.progress(ctx)
 	if err != nil {
 		return EnrichmentStatusDTO{}, err
 	}
 	if err := l.saveEnrichSources(ctx, list); err != nil {
 		return EnrichmentStatusDTO{}, err
 	}
-	l.Audit(ctx, uc, "enrichment.sources", AuditTarget{Kind: "settings"}, map[string]any{"sources": list})
+	l.Audit.Record(ctx, uc, "enrichment.sources", AuditTarget{Kind: "settings"}, map[string]any{"sources": list})
 	l.fillEnrichmentRoster(&st)
 	return st, nil
 }
 
 // saveEnrichSources stores list, keeping the saved entries of sources not
 // wired now that it leaves out, so each comes back as it was left.
-func (l *Library) saveEnrichSources(ctx context.Context, list []EnrichmentSource) error {
+func (l *Enrichment) saveEnrichSources(ctx context.Context, list []EnrichmentSource) error {
 	l.sources.mu.Lock()
 	defer l.sources.mu.Unlock()
 	saved := slices.Clone(list)

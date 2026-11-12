@@ -11,7 +11,7 @@ import (
 
 func (s *Server) GetItemFiles(ctx context.Context, req GetItemFilesRequestObject) (GetItemFilesResponseObject, error) {
 	uc := userCtx(ctx)
-	files, err := s.svc.ItemFiles(ctx, uc, req.Pid)
+	files, err := s.svc.Reads.ItemFiles(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (s *Server) DeleteItemFiles(ctx context.Context, req DeleteItemFilesRequest
 	if bad != "" {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", "bad file pid "+bad)
 	}
-	res, err := s.svc.DeleteItemFiles(ctx, uc, req.Pid, filePIDs, mode, derefBool(req.Body.DryRun))
+	res, err := s.svc.Tools.DeleteItemFiles(ctx, uc, req.Pid, filePIDs, mode, derefBool(req.Body.DryRun))
 	if err != nil {
 		if service.KindOf(err) == service.KindInvalid && errors.Is(err, service.ErrCueRipPart) {
 			return nil, refuseParams(http.StatusBadRequest, "invalid-request", serviceMessage(err), cueRipParams(err))

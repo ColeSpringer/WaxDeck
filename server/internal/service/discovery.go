@@ -93,7 +93,7 @@ type SonicPathResult struct {
 
 // itemAnalysisKey resolves the key an item's vector is stored under;
 // empty when its file cannot be read.
-func (l *Library) itemAnalysisKey(ctx context.Context, it *model.ItemView) string {
+func (l *Similarity) itemAnalysisKey(ctx context.Context, it *model.ItemView) string {
 	f, err := l.lib.File(ctx, it.FilePID)
 	if err != nil {
 		return ""
@@ -102,8 +102,8 @@ func (l *Library) itemAnalysisKey(ctx context.Context, it *model.ItemView) strin
 }
 
 // SimilarTracksFor answers tracks similar to a seed track.
-func (l *Library) SimilarTracksFor(ctx context.Context, uc *UserCtx, apiItemPID string, limit int) (SimilarTracksResult, error) {
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+func (l *Similarity) SimilarTracksFor(ctx context.Context, uc *UserCtx, apiItemPID string, limit int) (SimilarTracksResult, error) {
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return SimilarTracksResult{}, err
 	}
@@ -133,7 +133,7 @@ func (l *Library) SimilarTracksFor(ctx context.Context, uc *UserCtx, apiItemPID 
 }
 
 // InstantMix builds a mix from a track pid, an artist pid, or a genre.
-func (l *Library) InstantMix(ctx context.Context, uc *UserCtx, in InstantMixInput) (InstantMixResult, error) {
+func (l *Similarity) InstantMix(ctx context.Context, uc *UserCtx, in InstantMixInput) (InstantMixResult, error) {
 	if (in.SeedPID == "") == (in.Genre == "") {
 		return InstantMixResult{}, errInvalid("exactly one of seedPid and genre must be set")
 	}
@@ -186,8 +186,8 @@ func (l *Library) InstantMix(ctx context.Context, uc *UserCtx, in InstantMixInpu
 	return res, nil
 }
 
-func (l *Library) trackMix(ctx context.Context, uc *UserCtx, apiItemPID string, adv float64, size int, exclude *exclusionSet) (InstantMixResult, error) {
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+func (l *Similarity) trackMix(ctx context.Context, uc *UserCtx, apiItemPID string, adv float64, size int, exclude *exclusionSet) (InstantMixResult, error) {
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return InstantMixResult{}, err
 	}
@@ -213,7 +213,7 @@ func (l *Library) trackMix(ctx context.Context, uc *UserCtx, apiItemPID string, 
 	return InstantMixResult{Basis: BasisMetadata, Items: items}, nil
 }
 
-func (l *Library) artistMix(ctx context.Context, uc *UserCtx, apiArtistPID string, adv float64, size int, exclude *exclusionSet) (InstantMixResult, error) {
+func (l *Similarity) artistMix(ctx context.Context, uc *UserCtx, apiArtistPID string, adv float64, size int, exclude *exclusionSet) (InstantMixResult, error) {
 	_, pid, _ := parseAPIPID(apiArtistPID)
 	// The entity lookup validates the pid and gives the canonical name
 	// for the metadata fallback; the artist_pid facet field resolves the
@@ -266,7 +266,7 @@ func (l *Library) artistMix(ctx context.Context, uc *UserCtx, apiArtistPID strin
 // tracks anchor the sonic centroid, with a metadata blend as the
 // zero-embedding fallback. The album_pid facet field resolves the
 // members by entity identity rather than a display-string match.
-func (l *Library) albumMix(ctx context.Context, uc *UserCtx, apiAlbumPID string, adv float64, size int, exclude *exclusionSet) (InstantMixResult, error) {
+func (l *Similarity) albumMix(ctx context.Context, uc *UserCtx, apiAlbumPID string, adv float64, size int, exclude *exclusionSet) (InstantMixResult, error) {
 	_, pid, _ := parseAPIPID(apiAlbumPID)
 	if _, err := l.lib.EntityByPID(ctx, read.EntityAlbum, pid); err != nil {
 		return InstantMixResult{}, classify(err)
@@ -312,7 +312,7 @@ func (l *Library) albumMix(ctx context.Context, uc *UserCtx, apiAlbumPID string,
 	return InstantMixResult{Basis: BasisMetadata, Items: items}, nil
 }
 
-func (l *Library) genreMix(ctx context.Context, uc *UserCtx, genre string, adv float64, size int, exclude *exclusionSet) (InstantMixResult, error) {
+func (l *Similarity) genreMix(ctx context.Context, uc *UserCtx, genre string, adv float64, size int, exclude *exclusionSet) (InstantMixResult, error) {
 	tracks, err := l.tracksWhere(ctx, uc, "genre", genre, 500)
 	if err != nil {
 		return InstantMixResult{}, err
@@ -352,12 +352,12 @@ func (l *Library) genreMix(ctx context.Context, uc *UserCtx, genre string, adv f
 
 // SonicPathFor answers a listening path between two tracks. Paths have
 // no metadata fallback: both endpoints need embeddings.
-func (l *Library) SonicPathFor(ctx context.Context, uc *UserCtx, fromPID, toPID string, length int) (SonicPathResult, error) {
-	from, err := l.getVisibleItem(ctx, uc, fromPID)
+func (l *Similarity) SonicPathFor(ctx context.Context, uc *UserCtx, fromPID, toPID string, length int) (SonicPathResult, error) {
+	from, err := l.Grants.getVisibleItem(ctx, uc, fromPID)
 	if err != nil {
 		return SonicPathResult{}, err
 	}
-	to, err := l.getVisibleItem(ctx, uc, toPID)
+	to, err := l.Grants.getVisibleItem(ctx, uc, toPID)
 	if err != nil {
 		return SonicPathResult{}, err
 	}
@@ -387,7 +387,7 @@ func (l *Library) SonicPathFor(ctx context.Context, uc *UserCtx, fromPID, toPID 
 // sonicSample picks size tracks near a seed vector. Adventurousness
 // widens the candidate pool and jitters the ranking: 0 keeps the
 // nearest neighbors in order, 1 samples far into the pool.
-func (l *Library) sonicSample(ctx context.Context, uc *UserCtx, vec []float32, seedEssences map[string]bool, adv float64, size int, exclude *exclusionSet) ([]ItemSummary, error) {
+func (l *Similarity) sonicSample(ctx context.Context, uc *UserCtx, vec []float32, seedEssences map[string]bool, adv float64, size int, exclude *exclusionSet) ([]ItemSummary, error) {
 	pool := int(float64(size) * (2 + 8*adv))
 	edges := l.sim.SimilarToVector(vec, pool, seedEssences)
 	if len(edges) == 0 {
@@ -414,7 +414,7 @@ func (l *Library) sonicSample(ctx context.Context, uc *UserCtx, vec []float32, s
 // edgesToSummaries resolves essences to visible items in order, capped
 // at limit. Items gone from the catalog, outside the caller's
 // visibility, or in the exclude set drop silently.
-func (l *Library) edgesToSummaries(ctx context.Context, uc *UserCtx, edges []similarity.Edge, limit int, exclude *exclusionSet) ([]ItemSummary, error) {
+func (l *Similarity) edgesToSummaries(ctx context.Context, uc *UserCtx, edges []similarity.Edge, limit int, exclude *exclusionSet) ([]ItemSummary, error) {
 	essences := make([]string, 0, len(edges))
 	for _, e := range edges {
 		essences = append(essences, e.Neighbor)
@@ -463,10 +463,10 @@ func (l *Library) edgesToSummaries(ctx context.Context, uc *UserCtx, edges []sim
 		if archived(v) {
 			continue
 		}
-		if !uc.AllLibraries && !l.viewVisible(ctx, uc, v) {
+		if !uc.AllLibraries && !l.Grants.viewVisible(ctx, uc, v) {
 			continue
 		}
-		if !l.allowedByContent(ctx, uc, v) {
+		if !l.Grants.allowedByContent(ctx, uc, v) {
 			continue
 		}
 		out = append(out, summary(v))
@@ -478,8 +478,8 @@ func (l *Library) edgesToSummaries(ctx context.Context, uc *UserCtx, edges []sim
 // one text field exactly (case-insensitively, matching the engine's text
 // semantics), capped. The caller's grants and content rules ride the
 // query, so the cap counts tracks the caller can have.
-func (l *Library) tracksWhere(ctx context.Context, uc *UserCtx, field, value string, cap int) ([]*model.ItemView, error) {
-	q := l.scopedTo(ctx, uc, visibleItems().
+func (l *Similarity) tracksWhere(ctx context.Context, uc *UserCtx, field, value string, cap int) ([]*model.ItemView, error) {
+	q := l.Grants.scopedTo(ctx, uc, visibleItems().
 		Where("kind", query.OpIs, string(model.KindTrack)).
 		Where(field, query.OpIs, value).
 		OrderBy("title", false)).Build()
@@ -505,7 +505,7 @@ func (l *Library) tracksWhere(ctx context.Context, uc *UserCtx, field, value str
 // metadataMix is the zero-setup fallback: a shuffled blend of same-
 // artist, same-genre, and random-catalog tracks whose proportions
 // follow the adventurousness knob.
-func (l *Library) metadataMix(ctx context.Context, uc *UserCtx, genre, artist string, adv float64, size int, exclude *exclusionSet) ([]ItemSummary, error) {
+func (l *Similarity) metadataMix(ctx context.Context, uc *UserCtx, genre, artist string, adv float64, size int, exclude *exclusionSet) ([]ItemSummary, error) {
 	var artistPool, genrePool, randomPool []*model.ItemView
 	if artist != "" {
 		pool, err := l.tracksWhere(ctx, uc, "artist", artist, 100)
@@ -528,7 +528,7 @@ func (l *Library) metadataMix(ctx context.Context, uc *UserCtx, genre, artist st
 		UserPID: model.PID(uc.CatalogPID),
 		Seed:    rand.Int63(),
 		Limit:   300,
-		Query: l.scopedTo(ctx, uc, visibleItems().
+		Query: l.Grants.scopedTo(ctx, uc, visibleItems().
 			Where("kind", query.OpIs, string(model.KindTrack))).Build(),
 	})
 	if err != nil {

@@ -209,17 +209,17 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), engine harnessEn
 	if engine != engineNone {
 		h.engineAway.Store(engine == engineAwayAtStart)
 		bridge = newFakeFlowBridge(t, ctx, h, cfg, media, svc, log)
-		svc.SetFlowJobs(bridge)
+		svc.Tools.SetFlowJobs(bridge)
 		// As the process wires it: the limits are unset here, so nothing
 		// is refused, but the counting is real - which is what the
 		// admin activity surface reads and what a timeline slot's whole
 		// life runs through.
-		bridge.SetTranscodeGate(svc.TranscodeGate())
+		bridge.SetTranscodeGate(svc.Playback.TranscodeGate())
 	}
 	h.bridge = bridge
 
 	hub := events.New(svc)
-	svc.SetRadioInvalidator(hub.MarkRadio)
+	svc.Radio.SetRadioInvalidator(hub.MarkRadio)
 	svc.SetCatalogResyncer(hub.MarkCatalogReplaced)
 	group.Go(ctx, "event-hub", hub.Run)
 
@@ -230,7 +230,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), engine harnessEn
 		Sink:             &ConnectSink{Svc: svc},
 		Bases:            connect.Bases{LAN: h.lanBase, Loopback: h.lanBase},
 		InvalidatePlayer: hub.MarkPlayerAll,
-		EntriesVisible:   svc.QueueEntriesVisible,
+		EntriesVisible:   svc.Playback.QueueEntriesVisible,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -502,7 +502,7 @@ func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg servic
 		APIKey:   "test-flow-key",
 		Roots:    flowRoots,
 		Tokens:   media,
-		Resolver: svc,
+		Resolver: svc.Playback,
 		// The fake answers a mint at once unless pendingTimeline, whose
 		// job never finishes: no test waits a real mint's wait out.
 		TimelineInlineWait: 50 * time.Millisecond,

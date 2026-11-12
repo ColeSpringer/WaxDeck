@@ -95,21 +95,11 @@ type trackFactsCache struct {
 }
 
 // changesSince reads the change log after since.
-func (l *Library) changesSince(ctx context.Context, since int64) ([]model.Change, error) {
+func (l *Reads) changesSince(ctx context.Context, since int64) ([]model.Change, error) {
 	if hook := l.trackFacts.changesHook; hook != nil {
 		return hook(ctx, since)
 	}
 	return l.lib.Changes(ctx, since)
-}
-
-// CatalogTailSeq is the catalog's feed position under the generation
-// mint count, packed high so it only grows, across a replaced catalog
-// too. Holds while tail < 2^40. Every change-log row moves it, a play
-// or a star included; CatalogContentSeq is the one only content moves.
-func (l *Library) CatalogTailSeq() int64 {
-	l.feed.mu.Lock()
-	defer l.feed.mu.Unlock()
-	return l.feed.mints<<40 | l.feed.tail
 }
 
 // stateOnlyChanges are the change-log rows that leave the catalog's
@@ -159,7 +149,7 @@ type watchState struct {
 
 // watchLook catches the watch up with the change log: one statement when
 // nothing was written since the last look.
-func (l *Library) watchLook(ctx context.Context) (watchState, bool) {
+func (l *Reads) watchLook(ctx context.Context) (watchState, bool) {
 	arrived := time.Now()
 	w := &l.trackFacts.watch
 	w.mu.Lock()
@@ -178,7 +168,7 @@ func (l *Library) watchLook(ctx context.Context) (watchState, bool) {
 	if err != nil {
 		return fail()
 	}
-	gen := l.catalogGeneration()
+	gen := l.library.catalogGeneration()
 	if !w.primed || w.gen != gen || head < w.seq {
 		// Nothing was cached before the first look; after a replaced
 		// catalog everything may differ.
@@ -222,37 +212,37 @@ func (l *Library) watchLook(ctx context.Context) (watchState, bool) {
 }
 
 // latestChangeSeq reads the change log's head.
-func (l *Library) latestChangeSeq(ctx context.Context) (int64, error) {
+func (l *Reads) latestChangeSeq(ctx context.Context) (int64, error) {
 	if hook := l.trackFacts.headHook; hook != nil {
 		return hook(ctx)
 	}
 	return l.lib.LatestChangeSeq(ctx)
 }
 
-// feedKey is CatalogTailSeq, or the test hook standing in for it.
-func (l *Library) feedKey() int64 {
+// feedKey is Library.CatalogTailSeq, or the test hook standing in for it.
+func (l *Reads) feedKey() int64 {
 	if hook := l.trackFacts.feedHook; hook != nil {
 		return hook()
 	}
-	return l.CatalogTailSeq()
+	return l.library.CatalogTailSeq()
 }
 
-// CatalogContentSeq is CatalogTailSeq moved only by the rows that change
-// the catalog's content: the key the caches of what the compatibility
-// surface lists hold their entries under, which a play anywhere would
-// otherwise empty. While the feed trails the log it answers the feed's
-// position instead: what a restricted build reads besides the catalog
-// (the tag spellings a content rule matches) follows the feed, so no
-// build is filed under a position newer than its inputs, and the answer
-// moves again once the feed catches up. It never goes back: a log it
-// cannot read answers the last position it gave, or the start of a
-// catalog replaced since.
-func (l *Library) CatalogContentSeq(ctx context.Context) int64 {
+// CatalogContentSeq is Library.CatalogTailSeq moved only by the rows
+// that change the catalog's content: the key the caches of what the
+// compatibility surface lists hold their entries under, which a play
+// anywhere would otherwise empty. While the feed trails the log it
+// answers the feed's position instead: what a restricted build reads
+// besides the catalog (the tag spellings a content rule matches)
+// follows the feed, so no build is filed under a position newer than
+// its inputs, and the answer moves again once the feed catches up. It
+// never goes back: a log it cannot read answers the last position it
+// gave, or the start of a catalog replaced since.
+func (l *Reads) CatalogContentSeq(ctx context.Context) int64 {
 	feed := l.feedKey()
 	answered := &l.trackFacts.watch.answered
 	st, ok := l.watchLook(ctx)
 	if !ok {
-		return max(answered.Load(), l.catalogGeneration()<<40)
+		return max(answered.Load(), l.library.catalogGeneration()<<40)
 	}
 	key := min(st.gen<<40|st.content, feed)
 	for {
@@ -270,20 +260,12 @@ func (l *Library) CatalogContentSeq(ctx context.Context) int64 {
 // every play-state row counted too, which is what a fold of a listener's
 // played or most played list holds for. False when the log could not be
 // read, and then nothing may be filed under the answer.
-func (l *Library) CatalogPlaysSeq(ctx context.Context) (int64, bool) {
+func (l *Reads) CatalogPlaysSeq(ctx context.Context) (int64, bool) {
 	st, ok := l.watchLook(ctx)
 	if !ok {
 		return 0, false
 	}
 	return st.gen<<40 | st.plays, true
-}
-
-// catalogGeneration counts the catalog's generations: a reset, a restore
-// or a repair moves it, and nothing short of one does.
-func (l *Library) catalogGeneration() int64 {
-	l.feed.mu.Lock()
-	defer l.feed.mu.Unlock()
-	return l.feed.mints
 }
 
 // TrackFacts sweeps every music track visible to the caller. Only the
@@ -293,7 +275,7 @@ func (l *Library) catalogGeneration() int64 {
 // rows. Everyone else pays the sweep each time, keeping visibility
 // exact; the adapter's own index cache in front of this keys restricted
 // builds on the caller's grants and rules.
-func (l *Library) TrackFacts(ctx context.Context, uc *UserCtx) ([]TrackFacts, error) {
+func (l *Reads) TrackFacts(ctx context.Context, uc *UserCtx) ([]TrackFacts, error) {
 	tail := l.CatalogContentSeq(ctx)
 	ruleFree := uc.Admin || (len(uc.TagAllow) == 0 && len(uc.TagDeny) == 0)
 	cacheable := uc.AllLibraries && ruleFree
@@ -325,7 +307,7 @@ func (l *Library) TrackFacts(ctx context.Context, uc *UserCtx) ([]TrackFacts, er
 // publishTrackFacts holds a sweep made at tail, unless one made at a
 // newer position is held already: the position never goes back, so the
 // sweep that finished last can be the older one.
-func (l *Library) publishTrackFacts(tail int64, rows []TrackFacts) {
+func (l *Reads) publishTrackFacts(tail int64, rows []TrackFacts) {
 	l.trackFacts.mu.Lock()
 	defer l.trackFacts.mu.Unlock()
 	if l.trackFacts.valid && l.trackFacts.tail > tail {
@@ -334,14 +316,14 @@ func (l *Library) publishTrackFacts(tail int64, rows []TrackFacts) {
 	l.trackFacts.tail, l.trackFacts.valid, l.trackFacts.rows = tail, true, rows
 }
 
-func (l *Library) sweepTrackFacts(ctx context.Context, uc *UserCtx) ([]TrackFacts, error) {
+func (l *Reads) sweepTrackFacts(ctx context.Context, uc *UserCtx) ([]TrackFacts, error) {
 	explicit := l.explicitTrackPIDs(ctx)
 	// The caller's tag rules ride the query, as they do on the
 	// first-party listing path: viewVisible below covers library grants
 	// only, and without the node a tag-deny account would browse tracks
 	// through the compatibility surface that every other surface hides
 	// and the stream refuses.
-	q := visibleTracks().WhereNode(l.contentRuleNode(ctx, uc)).Build()
+	q := visibleTracks().WhereNode(l.Grants.contentRuleNode(ctx, uc)).Build()
 	var out []TrackFacts
 	cursor := read.Cursor("")
 	for {
@@ -352,7 +334,7 @@ func (l *Library) sweepTrackFacts(ctx context.Context, uc *UserCtx) ([]TrackFact
 		for _, it := range page.Items {
 			// The row's own library, not the located-path cache, which
 			// trails the catalog by a poll.
-			if !l.viewVisible(ctx, uc, it) {
+			if !l.Grants.viewVisible(ctx, uc, it) {
 				continue
 			}
 			albumArtist := it.AlbumArtist
@@ -412,7 +394,7 @@ func (l *Library) sweepTrackFacts(ctx context.Context, uc *UserCtx) ([]TrackFact
 // library failed" when the index cannot build (the genre-label
 // fallback in facets is the same call). No per-item visibility pass:
 // the set is only consulted for rows the sweep itself admits.
-func (l *Library) explicitTrackPIDs(ctx context.Context) map[model.PID]bool {
+func (l *Reads) explicitTrackPIDs(ctx context.Context) map[model.PID]bool {
 	out := map[model.PID]bool{}
 	var keys []read.TagKeyCount
 	err := l.fallbackFault("advisory tags")
@@ -453,7 +435,7 @@ type EntityFacts struct {
 // EntityFacts resolves artist and album entity pids, in one batch per
 // kind, keyed by API pid. Pids naming nothing the catalog holds are
 // absent.
-func (l *Library) EntityFacts(ctx context.Context, apiPIDs []string) (map[string]EntityFacts, error) {
+func (l *Reads) EntityFacts(ctx context.Context, apiPIDs []string) (map[string]EntityFacts, error) {
 	byKind := map[read.EntityKind]map[model.PID]string{}
 	for _, api := range apiPIDs {
 		prefix, pid, ok := parseAPIPID(api)
@@ -535,12 +517,12 @@ type heldFileFacts struct {
 // holding an answer for at most fileFactsTTL. A file that cannot be read
 // is absent; the facts decorate a response the caller already scoped, so
 // nothing here checks visibility and nothing fails it.
-func (l *Library) FileFacts(ctx context.Context, apiFilePIDs []string) map[string]FileFacts {
+func (l *Reads) FileFacts(ctx context.Context, apiFilePIDs []string) map[string]FileFacts {
 	type miss struct {
 		api string
 		pid model.PID
 	}
-	gen, now := l.catalogGeneration(), time.Now()
+	gen, now := l.library.catalogGeneration(), time.Now()
 	c := &l.trackFacts.files
 	out := make(map[string]FileFacts, len(apiFilePIDs))
 	var misses []miss

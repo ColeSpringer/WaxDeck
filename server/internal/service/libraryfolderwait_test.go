@@ -22,8 +22,8 @@ func TestACreateAtAFolderThatDoesNotAnswerFailsAlone(t *testing.T) {
 	// Registered after the service's own cleanup, so it runs first and the
 	// stand-in returns before the service waits out its workers.
 	t.Cleanup(func() { close(answer) })
-	svc.creates.wait = 200 * time.Millisecond
-	svc.creates.look = func(path string) folderAnswer {
+	svc.Roots.creates.wait = 200 * time.Millisecond
+	svc.Roots.creates.look = func(path string) folderAnswer {
 		if path == hung {
 			looks.Add(1)
 			<-answer
@@ -33,7 +33,7 @@ func TestACreateAtAFolderThatDoesNotAnswerFailsAlone(t *testing.T) {
 	create := func(name, path string) <-chan error {
 		done := make(chan error, 1)
 		go func() {
-			_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: name, Path: path, Managed: true})
+			_, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: name, Path: path, Managed: true})
 			done <- err
 		}()
 		return done

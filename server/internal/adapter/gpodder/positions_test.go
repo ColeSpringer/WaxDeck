@@ -15,7 +15,7 @@ import (
 // episodePID finds an episode of a show the account follows by its title.
 func (e *env) episodePID(feed, title string) (show, episode string) {
 	e.t.Helper()
-	subs, _, err := e.svc.Subscriptions(e.ctx, e.uc, "", 50, false)
+	subs, _, err := e.svc.Podcasts.Subscriptions(e.ctx, e.uc, "", 50, false)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -23,7 +23,7 @@ func (e *env) episodePID(feed, title string) (show, episode string) {
 		if s.Show.FeedURL != feed {
 			continue
 		}
-		eps, _, err := e.svc.Episodes(e.ctx, e.uc, s.Show.PID, "", 50)
+		eps, _, err := e.svc.Podcasts.Episodes(e.ctx, e.uc, s.Show.PID, "", 50)
 		if err != nil {
 			e.t.Fatal(err)
 		}
@@ -77,7 +77,7 @@ func TestFirstPartyPositionsReachGpodder(t *testing.T) {
 	feed, enclosure := e.feedURLOf(2), e.feed.URL+"/show2.mp3"
 	e.change("phone", []string{feed}, nil)
 	show, ep := e.episodePID(feed, "Show 2 Pilot")
-	if _, err := e.svc.Checkpoint(e.ctx, e.uc, ep, 333_000, nil); err != nil {
+	if _, err := e.svc.Playback.Checkpoint(e.ctx, e.uc, ep, 333_000, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -124,7 +124,7 @@ func TestFirstPartyPositionsReachGpodder(t *testing.T) {
 	// Finishing, even by a mark with no position, says the end.
 	nextSecond()
 	cursor = since()
-	if _, err := e.svc.SetPlayed(e.ctx, e.uc, ep, true, true, nil, nil, nil); err != nil {
+	if _, err := e.svc.Playback.SetPlayed(e.ctx, e.uc, ep, true, true, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	plays = actionsFor(e.actions("since="+cursor), enclosure)
@@ -149,7 +149,7 @@ func TestFirstPartyPositionsReachGpodder(t *testing.T) {
 	}
 
 	// A show the account no longer follows says nothing of its own.
-	if err := e.svc.Unsubscribe(e.ctx, e.uc, show, false); err != nil {
+	if err := e.svc.Podcasts.Unsubscribe(e.ctx, e.uc, show, false); err != nil {
 		t.Fatal(err)
 	}
 	for _, a := range e.actions("since=0").Actions {
@@ -169,7 +169,7 @@ func TestAListenThatFinishesAnEpisodeReachesGpodder(t *testing.T) {
 	_, pilot := e.episodePID(feed2, "Show 2 Pilot")
 	_, one := e.episodePID(e.feedURL(), "Episode One")
 	at := time.Now().UTC().Add(-time.Hour)
-	res, err := e.svc.IngestListens(e.ctx, e.uc, []service.ListenSession{
+	res, err := e.svc.Playback.IngestListens(e.ctx, e.uc, []service.ListenSession{
 		{SessionID: "finish-pilot", PID: pilot, StartedAt: at, MsPlayed: 600_000, Finished: true},
 		{SessionID: "finish-one", PID: one, StartedAt: at, MsPlayed: 60_000, Finished: true},
 	})
@@ -197,7 +197,7 @@ func TestAReplayedPositionReachesTheNextDownload(t *testing.T) {
 	_, ep := e.episodePID(feed, "Show 2 Pilot")
 	cursor := e.actions("since=0").Timestamp
 	recorded := time.Now().Add(-2 * time.Hour).Truncate(time.Second)
-	if _, err := e.svc.Checkpoint(e.ctx, e.uc, ep, 120_000, &recorded); err != nil {
+	if _, err := e.svc.Playback.Checkpoint(e.ctx, e.uc, ep, 120_000, &recorded); err != nil {
 		t.Fatal(err)
 	}
 	plays := actionsFor(e.actions("since="+strconv.FormatInt(cursor, 10)), enclosure)
@@ -257,7 +257,7 @@ func TestAnUploadedPositionIsNeverSaidBack(t *testing.T) {
 		}
 	}
 	_, short := e.episodePID(feed, "Short One")
-	if st, err := e.svc.PlayState(e.ctx, e.uc, short); err != nil || st.PositionMS != 90_000 {
+	if st, err := e.svc.Playback.PlayState(e.ctx, e.uc, short); err != nil || st.PositionMS != 90_000 {
 		t.Fatalf("play state = %+v (%v), want the upload's 90 s", st, err)
 	}
 
@@ -265,7 +265,7 @@ func TestAnUploadedPositionIsNeverSaidBack(t *testing.T) {
 	e.change("phone", []string{feed2}, nil)
 	upload(feed2, enclosure2, 120)
 	_, pilot := e.episodePID(feed2, "Show 2 Pilot")
-	if _, err := e.svc.Checkpoint(e.ctx, e.uc, pilot, 333_000, nil); err != nil {
+	if _, err := e.svc.Playback.Checkpoint(e.ctx, e.uc, pilot, 333_000, nil); err != nil {
 		t.Fatal(err)
 	}
 	plays := actionsFor(e.actions("since=0"), enclosure2)

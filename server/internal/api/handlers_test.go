@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -591,6 +592,35 @@ func TestTokenRefreshRotates(t *testing.T) {
 	}
 	if names != 1 {
 		t.Fatalf("rotator sessions = %d, want 1", names)
+	}
+}
+
+// The self view is rendered from two sources: an account the service
+// answered (a login) and the signed-in principal's own row (the session
+// read, a refresh). One account reads alike from both, rights included.
+func TestTheSelfViewReadsAlikeFromEitherSource(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": "dee", "password": testPassword, "displayName": "Dee", "uploadEnabled": true,
+		"permissions": map[string]any{
+			"download": true, "delete": false, "explicitContent": true,
+			"sharedOutputs": false, "managePodcasts": true,
+		},
+	})
+	wantStatus(t, resp, 201, "mint the account")
+	login := loginAs(t, h.ts, "dee", testPassword)
+	u := login.User
+	if u.DisplayName == nil || !u.UploadEnabled || u.ManagePodcasts == nil || !*u.ManagePodcasts || u.Delete == nil || *u.Delete {
+		t.Fatalf("login's user = %+v, want the minted name and rights", u)
+	}
+	session := decode[SessionInfo](t, get(t, h.ts, "/api/v1/auth/session", login.Token))
+	if session.User == nil || !reflect.DeepEqual(*session.User, u) {
+		t.Errorf("the session's user = %+v, want login's %+v", session.User, u)
+	}
+	refreshed := decode[LoginResponse](t, postJSON(t, h.ts.URL+"/api/v1/auth/refresh", login.Token, ""))
+	if !reflect.DeepEqual(refreshed.User, u) {
+		t.Errorf("the refresh's user = %+v, want login's %+v", refreshed.User, u)
 	}
 }
 

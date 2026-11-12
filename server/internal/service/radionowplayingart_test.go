@@ -65,7 +65,7 @@ func waitForRadioArt(t *testing.T, svc *Library, artist, title string) radioArtE
 	key := radioArtKey(radioSearchField(artist), radioSearchField(title))
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		if entry, ok := svc.cachedRadioArt(key); ok {
+		if entry, ok := svc.Radio.cachedRadioArt(key); ok {
 			return entry
 		}
 		if time.Now().After(deadline) {
@@ -84,12 +84,12 @@ func TestRadioArtIsAskedOncePerTitle(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	resolver := &fakeRadioArt{data: coverPNG(t, 40), mime: "image/png"}
-	svc.radioArtResolver = resolver
+	svc.Radio.radioArtResolver = resolver
 	enableRadioExternalArt(t, ctx, svc)
 
 	// The first poll starts the lookup and answers false: nothing is
 	// cached yet and it must not wait on a paced third party.
-	if key := svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology"); key != "" {
+	if key := svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology"); key != "" {
 		t.Fatalf("the first poll reported key %q before the lookup could land", key)
 	}
 	entry := waitForRadioArt(t, svc, "Charlie Parker", "Ornithology")
@@ -104,12 +104,12 @@ func TestRadioArtIsAskedOncePerTitle(t *testing.T) {
 	// draws. One URL per station drew the first matched track forever.
 	var key string
 	for range 10 {
-		key = svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
+		key = svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
 		if key == "" {
 			t.Fatal("a later poll did not report the cached art")
 		}
 	}
-	if _, err := svc.RadioNowPlayingArt(key); err != nil {
+	if _, err := svc.Radio.NowPlayingArt(key); err != nil {
 		t.Errorf("the reported key does not resolve: %v", err)
 	}
 	// A different announced title is a different key, which is the whole
@@ -133,8 +133,8 @@ func TestRadioArtCachesItsTwoFailuresDifferently(t *testing.T) {
 	ctx, svc, _ := newCatalogFixture(t)
 	enableRadioExternalArt(t, ctx, svc)
 
-	svc.radioArtResolver = &fakeRadioArt{err: ErrNoRadioArt}
-	svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Nobody - Unreleased")
+	svc.Radio.radioArtResolver = &fakeRadioArt{err: ErrNoRadioArt}
+	svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Nobody - Unreleased")
 	miss := waitForRadioArt(t, svc, "Nobody", "Unreleased")
 	if len(miss.art.Bytes) != 0 {
 		t.Fatal("an answered-empty lookup cached bytes")
@@ -143,8 +143,8 @@ func TestRadioArtCachesItsTwoFailuresDifferently(t *testing.T) {
 		t.Errorf("answered-empty cached for %v, want %v", miss.fresh, radioArtMissFreshFor)
 	}
 
-	svc.radioArtResolver = &fakeRadioArt{err: errors.New("503 from upstream")}
-	svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Nobody - Also Unreleased")
+	svc.Radio.radioArtResolver = &fakeRadioArt{err: errors.New("503 from upstream")}
+	svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Nobody - Also Unreleased")
 	failed := waitForRadioArt(t, svc, "Nobody", "Also Unreleased")
 	if failed.fresh != radioArtFailureFreshFor {
 		t.Errorf("a transient failure cached for %v, want %v", failed.fresh, radioArtFailureFreshFor)
@@ -161,11 +161,11 @@ func TestRadioArtMakesNoRequestWhileOff(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	resolver := &fakeRadioArt{data: coverPNG(t, 40), mime: "image/png"}
-	svc.radioArtResolver = resolver
+	svc.Radio.radioArtResolver = resolver
 	disableRadioExternalArt(t, ctx, svc)
 
 	for range 5 {
-		if svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology") != "" {
+		if svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology") != "" {
 			t.Fatal("art was reported with the rung switched off")
 		}
 	}
@@ -208,15 +208,13 @@ func TestRadioArtLookupEndsWithTheProcess(t *testing.T) {
 	}
 	// A bare Library: this is about the worker's context and nothing
 	// else, so a scanned catalog would only slow it down.
-	l := &Library{
-		log:              slog.New(slog.NewTextHandler(io.Discard, nil)),
-		procCtx:          procCtx,
-		workers:          group,
-		radioArtResolver: resolver,
-	}
-	l.toggles.Store(&runtimeToggles{radioExternalArt: true})
+	l := bareLibrary(&core{log: slog.New(slog.NewTextHandler(io.Discard, nil)), workers: group})
+	l.procCtx = procCtx
+	l.Radio.radioArtBudget = time.Minute
+	l.Radio.radioArtResolver = resolver
+	l.Settings.toggles.Store(&runtimeToggles{radioExternalArt: true})
 
-	l.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
+	l.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
 	select {
 	case <-resolver.started:
 	case <-time.After(5 * time.Second):
@@ -246,8 +244,8 @@ func disableRadioExternalArt(t *testing.T, ctx context.Context, svc *Library) {
 	if err := svc.db.SettingSet(ctx, settingRadioExternalArt, "false", time.Now().UnixNano()); err != nil {
 		t.Fatalf("disabling the external rung: %v", err)
 	}
-	svc.loadRuntimeToggles(ctx)
-	if svc.RadioExternalArtEnabled() {
+	svc.Settings.loadRuntimeToggles(ctx)
+	if svc.Settings.RadioExternalArtEnabled() {
 		t.Fatal("the external rung did not go off")
 	}
 }
@@ -257,8 +255,8 @@ func enableRadioExternalArt(t *testing.T, ctx context.Context, svc *Library) {
 	if err := svc.db.SettingSet(ctx, settingRadioExternalArt, "true", time.Now().UnixNano()); err != nil {
 		t.Fatalf("enabling the external rung: %v", err)
 	}
-	svc.loadRuntimeToggles(ctx)
-	if !svc.RadioExternalArtEnabled() {
+	svc.Settings.loadRuntimeToggles(ctx)
+	if !svc.Settings.RadioExternalArtEnabled() {
 		t.Fatal("the external rung did not come on")
 	}
 }
@@ -270,9 +268,9 @@ func setRadioExternalArt(t *testing.T, ctx context.Context, svc *Library, on boo
 	if err := svc.db.SettingSet(ctx, settingRadioExternalArt, strconv.FormatBool(on), time.Now().UnixNano()); err != nil {
 		t.Fatalf("setting the external rung: %v", err)
 	}
-	svc.loadRuntimeToggles(ctx)
+	svc.Settings.loadRuntimeToggles(ctx)
 	if !on {
-		svc.forgetRadioArt()
+		svc.Radio.forgetRadioArt()
 	}
 }
 
@@ -303,10 +301,10 @@ func TestRadioArtQueriesWhatItKeysOn(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	resolver := &fakeRadioArt{data: coverPNG(t, 40), mime: "image/png"}
-	svc.radioArtResolver = resolver
+	svc.Radio.radioArtResolver = resolver
 	enableRadioExternalArt(t, ctx, svc)
 
-	svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology (Official Audio)")
+	svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology (Official Audio)")
 	waitForRadioArt(t, svc, "Charlie Parker", "Ornithology")
 
 	asked := resolver.queries()
@@ -318,7 +316,7 @@ func TestRadioArtQueriesWhatItKeysOn(t *testing.T) {
 	}
 
 	// The clean spelling is the same entry, so it costs no second call.
-	if key := svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology"); key == "" {
+	if key := svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology"); key == "" {
 		t.Error("the clean spelling did not resolve to the entry the noisy one filled")
 	}
 	if got := resolver.calls.Load(); got != 1 {
@@ -332,21 +330,21 @@ func TestRadioArtQueriesWhatItKeysOn(t *testing.T) {
 // well.
 func TestRadioArtCacheIsBoundedByBytes(t *testing.T) {
 	t.Parallel()
-	l := &Library{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	l := bareLibrary(&core{log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	big := make([]byte, radioArtCacheBytes/4)
 	for i := range 12 {
-		l.storeRadioArt(radioArtKey("artist", string(rune('a'+i))), radioArtEntry{
+		l.Radio.storeRadioArt(radioArtKey("artist", string(rune('a'+i))), radioArtEntry{
 			art:     radioLogoFromBytes(big, "image/png"),
 			fetched: time.Now(),
 			fresh:   radioArtFreshFor,
 		})
 	}
-	if l.radioArtCache.bytes > radioArtCacheBytes {
-		t.Errorf("cache holds %d bytes, over the %d budget", l.radioArtCache.bytes, radioArtCacheBytes)
+	if l.Radio.radioArtCache.bytes > radioArtCacheBytes {
+		t.Errorf("cache holds %d bytes, over the %d budget", l.Radio.radioArtCache.bytes, radioArtCacheBytes)
 	}
-	if len(l.radioArtCache.entries) != len(l.radioArtCache.order) {
+	if len(l.Radio.radioArtCache.entries) != len(l.Radio.radioArtCache.order) {
 		t.Errorf("the map holds %d entries and the order list %d",
-			len(l.radioArtCache.entries), len(l.radioArtCache.order))
+			len(l.Radio.radioArtCache.entries), len(l.Radio.radioArtCache.order))
 	}
 }
 
@@ -356,19 +354,19 @@ func TestRadioArtCacheIsBoundedByBytes(t *testing.T) {
 // resident for the life of the process.
 func TestRadioArtDropsStaleOnRead(t *testing.T) {
 	t.Parallel()
-	l := &Library{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	l := bareLibrary(&core{log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	key := radioArtKey("artist", "title")
-	l.storeRadioArt(key, radioArtEntry{
+	l.Radio.storeRadioArt(key, radioArtEntry{
 		art:     radioLogoFromBytes(coverPNG(t, 40), "image/png"),
 		fetched: time.Now().Add(-2 * radioArtFreshFor),
 		fresh:   radioArtFreshFor,
 	})
-	if _, ok := l.cachedRadioArt(key); ok {
+	if _, ok := l.Radio.cachedRadioArt(key); ok {
 		t.Fatal("a stale entry answered as a hit")
 	}
-	if len(l.radioArtCache.entries) != 0 || l.radioArtCache.bytes != 0 {
+	if len(l.Radio.radioArtCache.entries) != 0 || l.Radio.radioArtCache.bytes != 0 {
 		t.Errorf("the stale entry survived the read: %d entries, %d bytes",
-			len(l.radioArtCache.entries), l.radioArtCache.bytes)
+			len(l.Radio.radioArtCache.entries), l.Radio.radioArtCache.bytes)
 	}
 }
 
@@ -380,33 +378,33 @@ func TestRadioArtIsNotServedWhileOff(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	resolver := &fakeRadioArt{data: coverPNG(t, 40), mime: "image/png"}
-	svc.radioArtResolver = resolver
+	svc.Radio.radioArtResolver = resolver
 	enableRadioExternalArt(t, ctx, svc)
 
-	svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
+	svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
 	waitForRadioArt(t, svc, "Charlie Parker", "Ornithology")
-	key := svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
+	key := svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
 	if key == "" {
 		t.Fatal("the lookup never landed")
 	}
-	if _, err := svc.RadioNowPlayingArt(key); err != nil {
+	if _, err := svc.Radio.NowPlayingArt(key); err != nil {
 		t.Fatalf("the cover does not serve while the rung is on: %v", err)
 	}
 
-	cur, err := svc.AdminSettingsGet(ctx)
+	cur, err := svc.Settings.AdminSettingsGet(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	cur.RadioExternalArt = false
-	if _, err := svc.AdminSettingsPut(ctx, nil, everySetting(cur)); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, nil, everySetting(cur)); err != nil {
 		t.Fatalf("switching the rung off: %v", err)
 	}
-	if _, err := svc.RadioNowPlayingArt(key); KindOf(err) != KindNotFound {
+	if _, err := svc.Radio.NowPlayingArt(key); KindOf(err) != KindNotFound {
 		t.Errorf("a cached cover still served with the rung off: %v", err)
 	}
 	// And the bytes are gone, not merely unreachable.
-	if len(svc.radioArtCache.entries) != 0 {
-		t.Errorf("%d cached covers survived the switch", len(svc.radioArtCache.entries))
+	if len(svc.Radio.radioArtCache.entries) != 0 {
+		t.Errorf("%d cached covers survived the switch", len(svc.Radio.radioArtCache.entries))
 	}
 }
 
@@ -427,9 +425,9 @@ func waitForRadioArtLookupToSettle(t *testing.T, svc *Library, key string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		svc.radioArtCache.mu.Lock()
-		inFlight := svc.radioArtCache.inFlight[key]
-		svc.radioArtCache.mu.Unlock()
+		svc.Radio.radioArtCache.mu.Lock()
+		inFlight := svc.Radio.radioArtCache.inFlight[key]
+		svc.Radio.radioArtCache.mu.Unlock()
 		if !inFlight {
 			return
 		}
@@ -447,15 +445,15 @@ func TestRadioArtBacksOffWhenTheBudgetIsSpent(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	enableRadioExternalArt(t, ctx, svc)
-	svc.radioArtBudget = 20 * time.Millisecond
+	svc.Radio.radioArtBudget = 20 * time.Millisecond
 	resolver := &deadlineRadioArt{}
-	svc.radioArtResolver = resolver
+	svc.Radio.radioArtResolver = resolver
 
 	key := radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology"))
-	svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
+	svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
 	waitForRadioArtLookupToSettle(t, svc, key)
 
-	entry, ok := svc.cachedRadioArt(key)
+	entry, ok := svc.Radio.cachedRadioArt(key)
 	if !ok {
 		t.Fatal("a budget timeout cached nothing, so every poll starts another walk")
 	}
@@ -468,7 +466,7 @@ func TestRadioArtBacksOffWhenTheBudgetIsSpent(t *testing.T) {
 	}
 	// The backoff holds the retry off while it stands, so the poll behind
 	// it does not start a second walk.
-	svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
+	svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
 	if got := resolver.calls.Load(); got != 1 {
 		t.Fatalf("upstream was asked %d times, want 1 while the backoff stands", got)
 	}
@@ -480,9 +478,9 @@ func TestRadioArtBacksOffWhenUpstreamFails(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	enableRadioExternalArt(t, ctx, svc)
-	svc.radioArtResolver = &fakeRadioArt{err: errors.New("502 from the archive")}
+	svc.Radio.radioArtResolver = &fakeRadioArt{err: errors.New("502 from the archive")}
 
-	svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Nobody - Unreachable")
+	svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Nobody - Unreachable")
 	failed := waitForRadioArt(t, svc, "Nobody", "Unreachable")
 	if failed.fresh != radioArtFailureFreshFor {
 		t.Errorf("a reach failure cached for %v, want %v", failed.fresh, radioArtFailureFreshFor)
@@ -495,9 +493,9 @@ func TestRadioArtWaitsLongerAfterARefusal(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	enableRadioExternalArt(t, ctx, svc)
-	svc.radioArtResolver = &fakeRadioArt{err: fmt.Errorf("deezer: %w", providers.ErrThrottled)}
+	svc.Radio.radioArtResolver = &fakeRadioArt{err: fmt.Errorf("deezer: %w", providers.ErrThrottled)}
 
-	svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Nobody - Refused")
+	svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Nobody - Refused")
 	refused := waitForRadioArt(t, svc, "Nobody", "Refused")
 	if refused.fresh != radioArtRefusalFreshFor || refused.fresh <= radioArtFailureFreshFor {
 		t.Errorf("a refusal cached for %v, want %v", refused.fresh, radioArtRefusalFreshFor)
@@ -512,17 +510,17 @@ func TestRadioArtStoresNothingWhenTheToggleWentOffMidLookup(t *testing.T) {
 	ctx, svc, _ := newCatalogFixture(t)
 	enableRadioExternalArt(t, ctx, svc)
 	gate := make(chan struct{})
-	svc.radioArtResolver = &gatedRadioArt{gate: gate, data: coverPNG(t, 40), mime: "image/png"}
+	svc.Radio.radioArtResolver = &gatedRadioArt{gate: gate, data: coverPNG(t, 40), mime: "image/png"}
 	var woke atomic.Int64
-	svc.SetRadioInvalidator(func(string) { woke.Add(1) })
+	svc.Radio.SetRadioInvalidator(func(string) { woke.Add(1) })
 
 	key := radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology"))
-	svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
+	svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
 	setRadioExternalArt(t, ctx, svc, false)
 	close(gate)
 	waitForRadioArtLookupToSettle(t, svc, key)
 
-	if entry, ok := svc.cachedRadioArt(key); ok {
+	if entry, ok := svc.Radio.cachedRadioArt(key); ok {
 		t.Fatalf("%d bytes landed after the rung was switched off", len(entry.art.Bytes))
 	}
 	if got := woke.Load(); got != 0 {
@@ -539,19 +537,19 @@ func TestRadioArtWakesListenersWhenACoverLands(t *testing.T) {
 	enableRadioExternalArt(t, ctx, svc)
 	var woke atomic.Int64
 	var wokeFor atomic.Value
-	svc.SetRadioInvalidator(func(station string) {
+	svc.Radio.SetRadioInvalidator(func(station string) {
 		woke.Add(1)
 		wokeFor.Store(station)
 	})
-	svc.radioArtResolver = &fakeRadioArt{data: coverPNG(t, 40), mime: "image/png"}
+	svc.Radio.radioArtResolver = &fakeRadioArt{data: coverPNG(t, 40), mime: "image/png"}
 
 	key := radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology"))
-	svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
+	svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
 	// Settled rather than cached: the store and the wake are two
 	// statements, and a wait on the first can read the counter before the
 	// second runs. The claim is released after both.
 	waitForRadioArtLookupToSettle(t, svc, key)
-	if entry, _ := svc.cachedRadioArt(key); len(entry.art.Bytes) == 0 {
+	if entry, _ := svc.Radio.cachedRadioArt(key); len(entry.art.Bytes) == 0 {
 		t.Fatal("the cover never landed")
 	}
 	if got := woke.Load(); got != 1 {
@@ -573,10 +571,10 @@ func TestRadioArtWakesEveryStationThatAsked(t *testing.T) {
 	ctx, svc, _ := newCatalogFixture(t)
 	enableRadioExternalArt(t, ctx, svc)
 	gate := make(chan struct{})
-	svc.radioArtResolver = &gatedRadioArt{gate: gate, data: coverPNG(t, 40), mime: "image/png"}
+	svc.Radio.radioArtResolver = &gatedRadioArt{gate: gate, data: coverPNG(t, 40), mime: "image/png"}
 	var mu sync.Mutex
 	woke := map[string]int{}
-	svc.SetRadioInvalidator(func(station string) {
+	svc.Radio.SetRadioInvalidator(func(station string) {
 		mu.Lock()
 		woke[station]++
 		mu.Unlock()
@@ -584,8 +582,8 @@ func TestRadioArtWakesEveryStationThatAsked(t *testing.T) {
 
 	key := radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology"))
 	const other = "rs-01JZX5N8QW3F4V9T2B7KDSTATN2"
-	svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
-	svc.EnsureRadioNowPlayingArt(other, "Other FM", "Charlie Parker - Ornithology")
+	svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
+	svc.Radio.EnsureRadioNowPlayingArt(other, "Other FM", "Charlie Parker - Ornithology")
 	close(gate)
 	waitForRadioArtLookupToSettle(t, svc, key)
 
@@ -604,11 +602,11 @@ func TestRadioArtDoesNotWakeListenersOnAMiss(t *testing.T) {
 	ctx, svc, _ := newCatalogFixture(t)
 	enableRadioExternalArt(t, ctx, svc)
 	var woke atomic.Int64
-	svc.SetRadioInvalidator(func(string) { woke.Add(1) })
-	svc.radioArtResolver = &fakeRadioArt{err: ErrNoRadioArt}
+	svc.Radio.SetRadioInvalidator(func(string) { woke.Add(1) })
+	svc.Radio.radioArtResolver = &fakeRadioArt{err: ErrNoRadioArt}
 
 	key := radioArtKey(radioSearchField("Nobody"), radioSearchField("Unreleased"))
-	svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Nobody - Unreleased")
+	svc.Radio.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Nobody - Unreleased")
 	waitForRadioArtLookupToSettle(t, svc, key)
 	if got := woke.Load(); got != 0 {
 		t.Fatalf("woke listeners %d times on a miss, want 0", got)
@@ -632,7 +630,7 @@ func TestRadioArtForgetReachesTheResolver(t *testing.T) {
 	ctx, svc, _ := newCatalogFixture(t)
 	enableRadioExternalArt(t, ctx, svc)
 	resolver := &forgetfulRadioArt{}
-	svc.radioArtResolver = resolver
+	svc.Radio.radioArtResolver = resolver
 
 	setRadioExternalArt(t, ctx, svc, false)
 
@@ -652,9 +650,9 @@ func TestAnnouncedArtFailureWakesTheStation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			_, svc, _ := newCatalogFixture(t)
-			svc.allowPrivateRadioHosts = true
+			svc.Radio.allowPrivateRadioHosts = true
 			var woke atomic.Int64
-			svc.SetRadioInvalidator(func(string) { woke.Add(1) })
+			svc.Radio.SetRadioInvalidator(func(string) { woke.Add(1) })
 			host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				if mime == "" {
 					w.WriteHeader(http.StatusServiceUnavailable)
@@ -665,7 +663,7 @@ func TestAnnouncedArtFailureWakesTheStation(t *testing.T) {
 			}))
 			t.Cleanup(host.Close)
 
-			svc.EnsureRadioAnnouncedArt(testStationPID, host.URL+"/cover", "Fixture - Song")
+			svc.Radio.EnsureRadioAnnouncedArt(testStationPID, host.URL+"/cover", "Fixture - Song")
 			waitForRadioArtLookupToSettle(t, svc, announcedArtKey(host.URL+"/cover", "Fixture - Song"))
 			if got := woke.Load(); got != 1 {
 				t.Fatalf("woke %d times, want the station woken once", got)

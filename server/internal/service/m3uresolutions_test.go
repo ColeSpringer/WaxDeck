@@ -13,7 +13,7 @@ import (
 // countM3UResolves counts the catalog's resolves of M3U8 documents.
 func countM3UResolves(svc *Library) func() int64 {
 	var n atomic.Int64
-	svc.m3uResolveHook = func() { n.Add(1) }
+	svc.Playlists.m3uResolveHook = func() { n.Add(1) }
 	return n.Load
 }
 
@@ -23,18 +23,18 @@ func TestAnM3UPreviewAndItsImportResolveOnce(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	track := fixtureItemPIDs(t, ctx, svc, uc)[0]
-	it, err := svc.getVisibleItem(ctx, uc, track)
+	it, err := svc.Grants.getVisibleItem(ctx, uc, track)
 	if err != nil {
 		t.Fatal(err)
 	}
 	doc := "#EXTM3U\n" + it.DisplayPath + "\nnowhere/missing.flac\n"
 	resolves := countM3UResolves(svc)
 
-	preview, err := svc.PreviewPlaylistM3U(ctx, uc, doc)
+	preview, err := svc.Playlists.PreviewPlaylistM3U(ctx, uc, doc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	imported, err := svc.ImportPlaylistM3U(ctx, uc, "Previewed first", "", doc)
+	imported, err := svc.Playlists.ImportPlaylistM3U(ctx, uc, "Previewed first", "", doc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestOneM3UResolutionServesCallersOfDifferentReach(t *testing.T) {
 	// First: the library it adds is a change to the catalog.
 	blind := blindReader(t, ctx, svc, uc)
 	track := fixtureItemPIDs(t, ctx, svc, uc)[0]
-	it, err := svc.getVisibleItem(ctx, uc, track)
+	it, err := svc.Grants.getVisibleItem(ctx, uc, track)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestOneM3UResolutionServesCallersOfDifferentReach(t *testing.T) {
 		as      *UserCtx
 		matched int
 	}{{"the administrator", uc, 1}, {"a reader granted another library", blind, 0}, {"the administrator again", uc, 1}} {
-		got, err := svc.PreviewPlaylistM3U(ctx, c.as, doc)
+		got, err := svc.Playlists.PreviewPlaylistM3U(ctx, c.as, doc)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -95,17 +95,17 @@ func TestACatalogChangeResolvesAnM3UAfresh(t *testing.T) {
 	doc := "#EXTM3U\n" + tracks["Kept"].path + "\n" + tracks["Gone"].path + "\n"
 	resolves := countM3UResolves(svc)
 
-	preview, err := svc.PreviewPlaylistM3U(ctx, admin, doc)
+	preview, err := svc.Playlists.PreviewPlaylistM3U(ctx, admin, doc)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if preview.Matched != 2 {
 		t.Fatalf("the preview = %+v, want both lines matched", preview)
 	}
-	if _, err := svc.DeleteItems(ctx, admin, []string{tracks["Gone"].pid}, "trash", false); err != nil {
+	if _, err := svc.Tools.DeleteItems(ctx, admin, []string{tracks["Gone"].pid}, "trash", false); err != nil {
 		t.Fatal(err)
 	}
-	imported, err := svc.ImportPlaylistM3U(ctx, admin, "After the trash", "", doc)
+	imported, err := svc.Playlists.ImportPlaylistM3U(ctx, admin, "After the trash", "", doc)
 	if err != nil {
 		t.Fatal(err)
 	}

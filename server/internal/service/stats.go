@@ -155,8 +155,8 @@ var statsRanges = map[string]time.Duration{
 }
 
 // userLocation resolves the caller's calendar timezone.
-func (l *Library) userLocation(ctx context.Context, uc *UserCtx) (*time.Location, string) {
-	p, err := l.Prefs(ctx, uc)
+func (l *Reads) userLocation(ctx context.Context, uc *UserCtx) (*time.Location, string) {
+	p, err := l.Identity.Prefs(ctx, uc)
 	if err != nil || p.Timezone == "" {
 		return time.UTC, "UTC"
 	}
@@ -168,7 +168,7 @@ func (l *Library) userLocation(ctx context.Context, uc *UserCtx) (*time.Location
 }
 
 // ListeningStats aggregates the caller's listening over a range.
-func (l *Library) ListeningStats(ctx context.Context, uc *UserCtx, rng, bucket string) (ListeningStats, error) {
+func (l *Reads) ListeningStats(ctx context.Context, uc *UserCtx, rng, bucket string) (ListeningStats, error) {
 	if _, ok := statsRanges[rng]; !ok && rng != "all" {
 		return ListeningStats{}, errInvalid("unknown range " + rng)
 	}
@@ -252,7 +252,7 @@ func dayNumber(t time.Time) int {
 // ListeningHeatmap answers one calendar year of per-day listening plus
 // streaks. Streaks scan the user's whole history so runs cross year
 // boundaries honestly.
-func (l *Library) ListeningHeatmap(ctx context.Context, uc *UserCtx, year int) (ListeningHeatmap, error) {
+func (l *Reads) ListeningHeatmap(ctx context.Context, uc *UserCtx, year int) (ListeningHeatmap, error) {
 	loc, tzName := l.userLocation(ctx, uc)
 	if year == 0 {
 		year = time.Now().In(loc).Year()
@@ -315,7 +315,7 @@ type itemTotals struct {
 }
 
 // TopListFor answers one ranked top list over a range.
-func (l *Library) TopListFor(ctx context.Context, uc *UserCtx, kind, rng string, limit int) (TopList, error) {
+func (l *Reads) TopListFor(ctx context.Context, uc *UserCtx, kind, rng string, limit int) (TopList, error) {
 	if _, ok := statsRanges[rng]; !ok && rng != "all" {
 		return TopList{}, errInvalid("unknown range " + rng)
 	}
@@ -382,7 +382,7 @@ func (l *Library) TopListFor(ctx context.Context, uc *UserCtx, kind, rng string,
 //
 // Best effort. A read that failed leaves every station unnamed, which is
 // what a deleted one already looks like, rather than failing the page.
-func (l *Library) stationNames(ctx context.Context) map[string]string {
+func (l *Reads) stationNames(ctx context.Context) map[string]string {
 	rows, err := l.db.ListRadioStations(ctx)
 	if err != nil {
 		l.log.Debug("reading stations for listening stats", "err", err)
@@ -402,7 +402,7 @@ func (l *Library) stationNames(ctx context.Context) map[string]string {
 // handle, for the reason a deleted track keeps none - a cover URL for a
 // row nothing answers for is a 404 per entry, and the client draws its
 // own placeholder from the domain either way.
-func (l *Library) stationTotals(ctx context.Context, totals map[string]*itemTotals, limit int) ([]TopEntry, error) {
+func (l *Reads) stationTotals(ctx context.Context, totals map[string]*itemTotals, limit int) ([]TopEntry, error) {
 	if len(totals) == 0 {
 		return nil, nil
 	}
@@ -421,7 +421,7 @@ func (l *Library) stationTotals(ctx context.Context, totals map[string]*itemTota
 
 // groupTotals resolves item metadata and folds per-item totals into
 // name groups (or items themselves for kind "tracks").
-func (l *Library) groupTotals(ctx context.Context, totals map[string]*itemTotals, kind string, limit int) ([]TopEntry, error) {
+func (l *Reads) groupTotals(ctx context.Context, totals map[string]*itemTotals, kind string, limit int) ([]TopEntry, error) {
 	if len(totals) == 0 {
 		return nil, nil
 	}
@@ -543,7 +543,7 @@ func rankTopEntries(entries []TopEntry, limit int) []TopEntry {
 }
 
 // ListenLog pages the caller's session log newest first.
-func (l *Library) ListenLog(ctx context.Context, uc *UserCtx, client, cursor string, limit int) (ListenLogPage, error) {
+func (l *Reads) ListenLog(ctx context.Context, uc *UserCtx, client, cursor string, limit int) (ListenLogPage, error) {
 	beforeNS, beforeID, err := decodeLogCursor(cursor)
 	if err != nil {
 		return ListenLogPage{}, errInvalid("malformed cursor")
@@ -674,7 +674,7 @@ func yearWindow(year int, loc *time.Location) (from, to time.Time) {
 }
 
 // UserYearInReview computes the caller's recap for one year.
-func (l *Library) UserYearInReview(ctx context.Context, uc *UserCtx, year int) (YearInReview, error) {
+func (l *Reads) UserYearInReview(ctx context.Context, uc *UserCtx, year int) (YearInReview, error) {
 	loc, tzName := l.userLocation(ctx, uc)
 	if year == 0 {
 		year = time.Now().In(loc).Year()
@@ -771,7 +771,7 @@ func (l *Library) UserYearInReview(ctx context.Context, uc *UserCtx, year int) (
 // arrivalsInReach counts the tracks and books that entered the catalog
 // in a UTC year among those the caller may enumerate. A count that cannot
 // be taken is zero, as the catalog recap's failure is.
-func (l *Library) arrivalsInReach(ctx context.Context, uc *UserCtx, year int) int {
+func (l *Reads) arrivalsInReach(ctx context.Context, uc *UserCtx, year int) int {
 	from, to := yearWindow(year, time.UTC)
 	q := l.facetScopeBuilder(ctx, uc).
 		WhereValues("kind", query.OpIn, string(model.KindTrack), string(model.KindBook)).
@@ -810,7 +810,7 @@ func longestRun(days map[int]bool) int {
 // ServerWideYearInReview aggregates every enrolled user's year. Each
 // participant's sessions bucket in their own timezone; opted-out users
 // are absent from every figure.
-func (l *Library) ServerWideYearInReview(ctx context.Context, uc *UserCtx, year int) (ServerYearInReview, error) {
+func (l *Reads) ServerWideYearInReview(ctx context.Context, uc *UserCtx, year int) (ServerYearInReview, error) {
 	if year == 0 {
 		year = time.Now().Year()
 	}
@@ -897,7 +897,7 @@ func (l *Library) ServerWideYearInReview(ctx context.Context, uc *UserCtx, year 
 // or tag rules hide. A track in the trash or gone from the catalog
 // stays, as it does for a reader of full reach: the trash hides nothing
 // a grant allows, and a gone track names nothing.
-func (l *Library) dropUnseen(ctx context.Context, uc *UserCtx, totals map[string]*itemTotals) error {
+func (l *Reads) dropUnseen(ctx context.Context, uc *UserCtx, totals map[string]*itemTotals) error {
 	if fullReach(uc) || len(totals) == 0 {
 		return nil
 	}
@@ -911,12 +911,12 @@ func (l *Library) dropUnseen(ctx context.Context, uc *UserCtx, totals map[string
 	if err != nil {
 		return err
 	}
-	allowed, err := l.tagVerdicts(ctx, uc, slices.Collect(maps.Values(views)))
+	allowed, err := l.Grants.tagVerdicts(ctx, uc, slices.Collect(maps.Values(views)))
 	if err != nil {
 		return err
 	}
 	for pid, v := range views {
-		if !l.viewVisible(ctx, uc, v) || !l.contentAllows(ctx, uc, allowed, v) {
+		if !l.Grants.viewVisible(ctx, uc, v) || !l.Grants.contentAllows(ctx, uc, allowed, v) {
 			delete(totals, string(pid))
 		}
 	}

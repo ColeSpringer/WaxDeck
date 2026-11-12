@@ -218,7 +218,7 @@ func parseJellyfinTime(s string) time.Time {
 // counts, last-played times and resume positions onto the target
 // account. Only items carrying state are matched: a walk that resolved
 // every song in a library would be pure cost.
-func (l *Library) runJellyfinImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, secret string) (migrationSummary, error) {
+func (l *Migrate) runJellyfinImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, secret string) (migrationSummary, error) {
 	sum := migrationSummary{Source: p.Source, DryRun: p.DryRun, Samples: migrationSamples{Unmatched: []string{}}}
 	client := newJellyfinClient(p.ServerURL)
 	// A password logs in; an API key authorizes but names nobody, so the
@@ -233,7 +233,7 @@ func (l *Library) runJellyfinImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 	} else if err := client.login(ctx, p.Username, secret); err != nil {
 		return sum, migrateClientErr(err)
 	}
-	prog := newToolProgress(l, t)
+	prog := newToolProgress(l.Tools, t)
 
 	// Every audio item carrying state, in the order the server lists
 	// them, so the summary and its samples come out deterministic.
@@ -316,7 +316,7 @@ func (l *Library) runJellyfinImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 			// lands in server-now; the catalog orders star writes by
 			// recorded time and nil is what says "as of now".
 			ok, err := write(func() error {
-				_, err := l.SetStar(ctx, uc, pid, true, nil)
+				_, err := l.Playback.SetStar(ctx, uc, pid, true, nil)
 				return err
 			})
 			if err != nil {
@@ -345,7 +345,7 @@ func (l *Library) runJellyfinImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 		}
 		if p.Progress && it.UserData.PlaybackPositionTicks > 0 {
 			ok, err := write(func() error {
-				_, err := l.Checkpoint(ctx, uc, pid, it.UserData.PlaybackPositionTicks/10000, nil)
+				_, err := l.Playback.Checkpoint(ctx, uc, pid, it.UserData.PlaybackPositionTicks/10000, nil)
 				return err
 			})
 			if err != nil {
@@ -377,7 +377,7 @@ func (l *Library) runJellyfinImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 // is named by the songs that say they belong to it - so this pass costs
 // one listing per entity type, and one more only for a group none of
 // whose walked songs matches for sure.
-func (l *Library) importJellyfinEntityStars(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, client *jellyfinClient, prog *toolProgress, walked []jellyfinItem, sum *migrationSummary) error {
+func (l *Migrate) importJellyfinEntityStars(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, client *jellyfinClient, prog *toolProgress, walked []jellyfinItem, sum *migrationSummary) error {
 	var albums, artists []jellyfinItem
 	if err := client.items(ctx, "MusicAlbum,MusicArtist", url.Values{"Filters": {"IsFavorite"}},
 		func(it jellyfinItem) error {
@@ -494,7 +494,7 @@ func (l *Library) importJellyfinEntityStars(ctx context.Context, t *wdb.ToolTask
 			*count++
 			return nil
 		}
-		if _, err := l.SetEntityStar(ctx, uc, apiPID(prefix, pid), true, nil); err != nil {
+		if _, err := l.Identity.SetEntityStar(ctx, uc, apiPID(prefix, pid), true, nil); err != nil {
 			if migrateWriteSkippable(err) {
 				l.log.Warn("migration entity star skipped", "task", t.ID, "entity", label, "err", err)
 				return nil

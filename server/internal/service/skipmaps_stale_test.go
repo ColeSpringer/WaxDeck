@@ -53,7 +53,7 @@ func newRefetchShow(t *testing.T, audio ...[]byte) refetchShow {
 		cfg.AllowPrivateFeedHosts = true
 		cfg.Logger = slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	})
-	svc.SetFlowJobs(mappingJobs{stubFlowJobs{jobs: true, version: "v1"}})
+	svc.Tools.SetFlowJobs(mappingJobs{stubFlowJobs{jobs: true, version: "v1"}})
 	var downloads atomic.Int32
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, ".mp3") {
@@ -67,11 +67,11 @@ func newRefetchShow(t *testing.T, audio ...[]byte) refetchShow {
 			`<enclosure url="http://%s/episode.mp3" type="audio/mpeg" length="1"/></item></channel></rss>`, r.Host)
 	}))
 	t.Cleanup(ts.Close)
-	sub, _, err := svc.Subscribe(ctx, admin, SubscribeRequest{URL: ts.URL + "/feed.xml"})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, admin, SubscribeRequest{URL: ts.URL + "/feed.xml"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	eps, _, err := svc.Episodes(ctx, admin, sub.Show.PID, "", 10)
+	eps, _, err := svc.Podcasts.Episodes(ctx, admin, sub.Show.PID, "", 10)
 	if err != nil || len(eps) != 1 {
 		t.Fatalf("episodes = %+v (%v), want one", eps, err)
 	}
@@ -98,24 +98,24 @@ func podcastAudio(t *testing.T, d time.Duration) []byte {
 // fetch lands the episode, which queues its analysis.
 func (s refetchShow) fetch(t *testing.T) {
 	t.Helper()
-	if err := s.svc.QueueEpisodeFetch(s.ctx, s.admin, s.episode); err != nil {
+	if err := s.svc.Podcasts.QueueEpisodeFetch(s.ctx, s.admin, s.episode); err != nil {
 		t.Fatal(err)
 	}
-	if !s.svc.DrainFetchQueue(s.ctx) || !s.downloaded(t) {
+	if !s.svc.Podcasts.DrainFetchQueue(s.ctx) || !s.downloaded(t) {
 		t.Fatal("the fetch did not land")
 	}
 }
 
 func (s refetchShow) unfetch(t *testing.T) {
 	t.Helper()
-	if err := s.svc.RemoveEpisodeDownload(s.ctx, s.admin, s.episode); err != nil {
+	if err := s.svc.Podcasts.RemoveEpisodeDownload(s.ctx, s.admin, s.episode); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func (s refetchShow) downloaded(t *testing.T) bool {
 	t.Helper()
-	eps, _, err := s.svc.Episodes(s.ctx, s.admin, s.show, "", 10)
+	eps, _, err := s.svc.Podcasts.Episodes(s.ctx, s.admin, s.show, "", 10)
 	if err != nil || len(eps) != 1 {
 		t.Fatalf("episodes = %+v (%v), want one", eps, err)
 	}
@@ -146,26 +146,26 @@ func TestAStaleAnalysisLeavesARefetchedEpisodeDownloaded(t *testing.T) {
 	s := newRefetchShow(t, podcastAudio(t, time.Second))
 	s.fetch(t)
 	s.unfetch(t)
-	if err := s.svc.QueueEpisodeFetch(s.ctx, s.admin, s.episode); err != nil {
+	if err := s.svc.Podcasts.QueueEpisodeFetch(s.ctx, s.admin, s.episode); err != nil {
 		t.Fatal(err)
 	}
 
 	landed := false
-	s.svc.markMissingHook = func(ctx context.Context, pid model.PID) (model.MarkMissingOutcome, error) {
-		s.svc.markMissingHook = nil
+	s.svc.Tools.markMissingHook = func(ctx context.Context, pid model.PID) (model.MarkMissingOutcome, error) {
+		s.svc.Tools.markMissingHook = nil
 		// MarkMissing's check: an unfetched episode has no file to stat, so
 		// the state its write reads decides, and the refetch commits first.
 		if refs, err := s.svc.lib.ItemFiles(ctx, pid); err != nil || len(refs) != 0 {
 			t.Errorf("the unfetched episode's files = %+v (%v), want none", refs, err)
 		}
-		landed = s.svc.DrainFetchQueue(ctx)
+		landed = s.svc.Podcasts.DrainFetchQueue(ctx)
 		// The write alone.
 		return s.svc.lib.MarkMissing(ctx, pid, waxbin.MarkMissingOptions{Force: true})
 	}
-	if !s.svc.DrainAnalysisQueue(s.ctx) {
+	if !s.svc.Tools.DrainAnalysisQueue(s.ctx) {
 		t.Fatal("the first landing queued no analysis")
 	}
-	if !landed && !s.svc.DrainFetchQueue(s.ctx) {
+	if !landed && !s.svc.Podcasts.DrainFetchQueue(s.ctx) {
 		t.Fatal("the refetch did not land")
 	}
 	if !s.downloaded(t) {
@@ -176,9 +176,9 @@ func TestAStaleAnalysisLeavesARefetchedEpisodeDownloaded(t *testing.T) {
 	}
 
 	// The refetch still gets its skip map.
-	for s.svc.DrainAnalysisQueue(s.ctx) {
+	for s.svc.Tools.DrainAnalysisQueue(s.ctx) {
 	}
-	sm, err := s.svc.SkipMapFor(s.ctx, s.admin, s.episode, 0)
+	sm, err := s.svc.Tools.SkipMapFor(s.ctx, s.admin, s.episode, 0)
 	if err != nil || sm.State != skipStateReady {
 		t.Errorf("skip map after the refetch's analysis = %+v (%v), want ready", sm, err)
 	}
@@ -200,7 +200,7 @@ func TestAStaleAnalysisNeverMeasuresTheAudioThatReplacedIt(t *testing.T) {
 		t.Fatalf("both downloads have essence %s; the host has to change the audio", now)
 	}
 
-	for s.svc.DrainAnalysisQueue(s.ctx) {
+	for s.svc.Tools.DrainAnalysisQueue(s.ctx) {
 	}
 	if m, err := s.svc.db.SilenceMapFor(s.ctx, was); !errors.Is(err, wdb.ErrNotFound) {
 		t.Errorf("the replaced audio's silence map = %+v (%v), want none: it measured the download that replaced it", m, err)
@@ -221,7 +221,7 @@ func TestASilenceMapOvertakenByARewriteIsFiledNowhere(t *testing.T) {
 		return oneSpan(ctx, path)
 	})
 
-	for s.svc.DrainAnalysisQueue(s.ctx) {
+	for s.svc.Tools.DrainAnalysisQueue(s.ctx) {
 	}
 	if m, err := s.svc.db.SilenceMapFor(s.ctx, was); !errors.Is(err, wdb.ErrNotFound) {
 		t.Errorf("the replaced audio's silence map = %+v (%v), want none: it may measure the audio that replaced it", m, err)

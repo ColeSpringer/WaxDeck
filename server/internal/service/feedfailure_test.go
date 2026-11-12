@@ -145,7 +145,7 @@ func TestFeedFailureReasonOfTheRealClients(t *testing.T) {
 		{"nothing listening", svc, dead + "/t.vtt", reasonUnreachable},
 	}
 	for _, c := range transcripts {
-		_, err := c.lib.fetchTranscript(ctx, c.url, "", feedLogin{})
+		_, err := c.lib.Podcasts.fetchTranscript(ctx, c.url, "", feedLogin{})
 		if err == nil {
 			t.Errorf("transcript %s: fetched", c.name)
 			continue
@@ -275,7 +275,7 @@ func TestAFeedFailureLogsNoFeedURL(t *testing.T) {
 	})
 	host := feedHost(t)
 	secret := host.URL + "/status/404/s3cr3t-token"
-	_, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: secret})
+	_, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: secret})
 	if FeedFailureReason(err) != reasonHostMissing {
 		t.Fatalf("subscribe = %v, want host-missing", err)
 	}
@@ -315,7 +315,7 @@ func TestAFeedFailureLogsItsCause(t *testing.T) {
 		{tlsHost.URL + "/s3cr3t/feed.xml", "cause=tls"},
 	} {
 		before := len(logged.String())
-		if _, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: c.url}); FeedFailureReason(err) == "" {
+		if _, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: c.url}); FeedFailureReason(err) == "" {
 			t.Fatalf("subscribe to %s = %v, want a feed-side failure", c.cause, err)
 		}
 		line := logged.String()[before:]

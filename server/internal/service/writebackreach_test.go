@@ -29,7 +29,7 @@ func newCopyReach(t *testing.T) copyReach {
 	otherDir := t.TempDir()
 	ctx, svc, admin := managedUploadFixture(t, Root{Name: "other", Path: otherDir})
 	var lib, other Root
-	for _, r := range svc.libraryRoots() {
+	for _, r := range svc.Roots.libraryRoots() {
 		switch r.Name {
 		case "lib":
 			lib = r
@@ -37,14 +37,14 @@ func newCopyReach(t *testing.T) copyReach {
 			other = r
 		}
 	}
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "bob", Password: "correct-horse", AccessMode: "granted",
 		LibraryPIDs: []string{apiPID(PrefixLibrary, model.PID(lib.PID))}, UploadEnabled: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	bob, err := svc.UserCtx(ctx, acct.User)
+	bob, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,17 +101,17 @@ func TestAWriteBackFailureReachesOnlyWhoMayReadItsFile(t *testing.T) {
 		{FilePID: string(c.copy.FilePID), Path: copy, Reason: "writing tags to " + copy + ": read-only file system"},
 		{Reason: "no backing file path is known"},
 	}
-	if got := c.svc.WriteBackFailuresFor(c.ctx, c.admin, fs); !slices.Equal(got, fs) {
+	if got := c.svc.Editor.WriteBackFailuresFor(c.ctx, c.admin, fs); !slices.Equal(got, fs) {
 		t.Fatalf("administrator reads %+v, want the failures whole", got)
 	}
-	got := c.svc.WriteBackFailuresFor(c.ctx, c.bob, fs)
+	got := c.svc.Editor.WriteBackFailuresFor(c.ctx, c.bob, fs)
 	if len(got) != 2 || got[0].FilePID != string(c.primary.FilePID) || got[1].FilePID != "" {
 		t.Fatalf("bob reads %+v, want his own file's failure and the one naming no file", got)
 	}
 	if got[0].Path != filepath.Base(primary) || strings.Contains(got[0].Reason, filepath.Dir(primary)) || strings.Contains(got[0].Reason, "meta.") {
 		t.Fatalf("bob reads %+v, want the file's name and plain words", got[0])
 	}
-	if again := c.svc.WriteBackFailuresFor(c.ctx, c.bob, got); !slices.Equal(again, got) {
+	if again := c.svc.Editor.WriteBackFailuresFor(c.ctx, c.bob, got); !slices.Equal(again, got) {
 		t.Fatalf("narrowed twice = %+v, want %+v", again, got)
 	}
 }
@@ -121,23 +121,23 @@ func TestAWriteBackFailureReachesOnlyWhoMayReadItsFile(t *testing.T) {
 // write-back it refused, nor its file.
 func TestAKindChangesReportKeepsAnUngrantedCopyOutOfItsStartersSight(t *testing.T) {
 	c := newCopyReach(t)
-	if err := c.svc.LibraryReadOnlySet(c.ctx, c.admin, apiPID(PrefixLibrary, model.PID(c.other.PID)), true); err != nil {
+	if err := c.svc.Settings.LibraryReadOnlySet(c.ctx, c.admin, apiPID(PrefixLibrary, model.PID(c.other.PID)), true); err != nil {
 		t.Fatal(err)
 	}
-	started, err := c.svc.SetItemsKind(c.ctx, c.bob, []string{itemAPIPID(c.item)}, "audiobook", true)
+	started, err := c.svc.Reads.SetItemsKind(c.ctx, c.bob, []string{itemAPIPID(c.item)}, "audiobook", true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, jobPID, _ := parseAPIPID(started.PID)
 	waitForJob(t, c.ctx, c.svc, jobPID)
-	admin, err := c.svc.JobStatusFor(c.ctx, c.admin, started.PID)
+	admin, err := c.svc.Jobs.StatusFor(c.ctx, c.admin, started.PID)
 	if err != nil || admin.SetKind == nil {
 		t.Fatalf("administrator's read = %+v, %v", admin, err)
 	}
 	if !slices.ContainsFunc(admin.SetKind.WriteBackFailures, func(f WriteBackFailureDTO) bool { return f.FilePID == string(c.copy.FilePID) }) {
 		t.Fatalf("the copy's write was not refused: %+v", admin.SetKind.WriteBackFailures)
 	}
-	bob, err := c.svc.JobStatusFor(c.ctx, c.bob, started.PID)
+	bob, err := c.svc.Jobs.StatusFor(c.ctx, c.bob, started.PID)
 	if err != nil || bob.SetKind == nil {
 		t.Fatalf("bob's read = %+v, %v", bob, err)
 	}
@@ -158,10 +158,10 @@ func TestADecisionsWarningsNameOnlyFilesItsReaderSees(t *testing.T) {
 			{FilePID: c.copy.FilePID, Path: string(c.copy.Path), Reason: "on-disk tag write-back is unavailable in a read-only library"},
 		}},
 	}}
-	if got := c.svc.writeBackWarnings(c.ctx, c.admin, res, nil); len(got) != 2 {
+	if got := c.svc.Ingest.writeBackWarnings(c.ctx, c.admin, res, nil); len(got) != 2 {
 		t.Fatalf("administrator's warnings = %q, want both files", got)
 	}
-	got := c.svc.writeBackWarnings(c.ctx, c.bob, res, nil)
+	got := c.svc.Ingest.writeBackWarnings(c.ctx, c.bob, res, nil)
 	if len(got) != 1 || !strings.HasPrefix(got[0], filepath.Base(string(c.primary.Path))+":") {
 		t.Fatalf("bob's warnings = %q, want his own file's alone", got)
 	}
@@ -171,16 +171,16 @@ func TestADecisionsWarningsNameOnlyFilesItsReaderSees(t *testing.T) {
 // the library a copy sits in, leave that copy out, as its file list does.
 func TestTheEditorsFileIssuesLeaveOutAnUngrantedCopy(t *testing.T) {
 	c := newCopyReach(t)
-	if err := c.svc.LibraryReadOnlySet(c.ctx, c.admin, apiPID(PrefixLibrary, model.PID(c.other.PID)), true); err != nil {
+	if err := c.svc.Settings.LibraryReadOnlySet(c.ctx, c.admin, apiPID(PrefixLibrary, model.PID(c.other.PID)), true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.svc.EditItemMetadata(c.ctx, c.admin, itemAPIPID(c.item), map[string]string{"title": "Reach Again"},
+	if _, err := c.svc.Editor.EditItemMetadata(c.ctx, c.admin, itemAPIPID(c.item), map[string]string{"title": "Reach Again"},
 		MetadataEditParams{WriteBack: true}); err != nil {
 		t.Fatal(err)
 	}
 	names := func(uc *UserCtx) []string {
 		t.Helper()
-		doc, err := c.svc.ItemMetadataFor(c.ctx, uc, itemAPIPID(c.item))
+		doc, err := c.svc.Editor.ItemMetadataFor(c.ctx, uc, itemAPIPID(c.item))
 		if err != nil {
 			t.Fatal(err)
 		}

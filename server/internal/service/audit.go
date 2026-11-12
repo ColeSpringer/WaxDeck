@@ -9,6 +9,11 @@ import (
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
+// Audit is the audit log.
+type Audit struct{ *core }
+
+func newAudit(c *core, _ Config) *Audit { return &Audit{core: c} }
+
 // AuditTarget names what an audited action acted on. Name is captured
 // at write time so the entry outlives the target.
 type AuditTarget struct {
@@ -36,12 +41,12 @@ type AuditPage struct {
 	Next   string
 }
 
-// Audit records an administrative or destructive action. A nil actor
+// Record records an administrative or destructive action. A nil actor
 // means the server itself (scheduled jobs, startup restore). Recording
 // is deliberately best-effort: the action already happened, and failing
 // it over its record would trade a consistent audit trail for an
 // inconsistent system.
-func (l *Library) Audit(ctx context.Context, actor *UserCtx, action string, target AuditTarget, detail map[string]any) {
+func (l *Audit) Record(ctx context.Context, actor *UserCtx, action string, target AuditTarget, detail map[string]any) {
 	e := wdb.AuditEvent{
 		Action:      action,
 		TargetKind:  target.Kind,
@@ -74,7 +79,7 @@ func actorName(actor *UserCtx) string {
 
 // usernameOf resolves a user id to its username, falling back to the
 // id itself (better an id in the log than nothing).
-func (l *Library) usernameOf(ctx context.Context, userID string) string {
+func (l *Audit) usernameOf(ctx context.Context, userID string) string {
 	u, err := l.db.UserByID(ctx, userID)
 	if err != nil {
 		return userID
@@ -82,9 +87,17 @@ func (l *Library) usernameOf(ctx context.Context, userID string) string {
 	return u.Username
 }
 
-// AuditEvents pages the audit log newest first, with optional filters.
+// AuditFilter narrows a page of audit events. Action ending in a dot
+// matches as a prefix (`playlist.` selects every playlist action).
+type AuditFilter struct {
+	Action    string
+	ActorID   string
+	TargetPID string
+}
+
+// Events pages the audit log newest first, with optional filters.
 // The cursor is the previous page's last event id.
-func (l *Library) AuditEvents(ctx context.Context, filter wdb.AuditFilter, cursor string, limit int) (AuditPage, error) {
+func (l *Audit) Events(ctx context.Context, filter AuditFilter, cursor string, limit int) (AuditPage, error) {
 	var before int64
 	if cursor != "" {
 		n, err := strconv.ParseInt(cursor, 10, 64)
@@ -93,7 +106,7 @@ func (l *Library) AuditEvents(ctx context.Context, filter wdb.AuditFilter, curso
 		}
 		before = n
 	}
-	rows, err := l.db.ListAudit(ctx, filter, before, limit+1)
+	rows, err := l.db.ListAudit(ctx, wdb.AuditFilter(filter), before, limit+1)
 	if err != nil {
 		return AuditPage{}, &Error{Kind: KindInternal, Err: err}
 	}

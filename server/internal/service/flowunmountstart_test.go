@@ -24,12 +24,12 @@ func TestALibraryRemovedWhileDownLeavesTheSidecarConfigBeforeTheEngineAnswers(t 
 	t.Parallel()
 	dataDir, booksDir := t.TempDir(), t.TempDir()
 	ctx, svc, uc, stop := openServiceAt(t, dataDir, nil)
-	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: booksDir})
+	lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: booksDir})
 	if err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
 	stop()
@@ -50,7 +50,7 @@ func TestALibraryRemovedWhileDownLeavesTheSidecarConfigBeforeTheEngineAnswers(t 
 	sidecar, srv := newFakeSidecar(t, configPath, "")
 	// The bridge's starting roots, as main seeds them.
 	var table []flow.Root
-	for _, r := range svc.RootTable() {
+	for _, r := range svc.Roots.Table() {
 		table = append(table, flow.Root{Name: r.Name, Path: r.Path})
 	}
 	bridge, err := flow.New(ctx, flow.Config{
@@ -59,7 +59,7 @@ func TestALibraryRemovedWhileDownLeavesTheSidecarConfigBeforeTheEngineAnswers(t 
 		Roots:      flow.SeedRoots([]flow.Root{{Name: "configured", Path: configured}}, table, configPath),
 		ConfigPath: configPath,
 		Tokens:     auth.NewMediaTokens([]byte("test-secret-test-secret-test-sec"), 0),
-		Resolver:   svc,
+		Resolver:   svc.Playback,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +67,7 @@ func TestALibraryRemovedWhileDownLeavesTheSidecarConfigBeforeTheEngineAnswers(t 
 	if names := bridge.RootNames(); slices.Contains(names, "books") {
 		t.Fatalf("the start maps %v, want the removed library left out", names)
 	}
-	svc.FollowEngine(ctx, bridge)
+	svc.Roots.FollowEngine(ctx, bridge)
 	waitFor(t, func() bool { return len(owedUnmounts(t, ctx, svc)) == 0 }, "the owed unmount taken by the wired bridge")
 	if names := sidecarConfigNames(t, configPath); !slices.Equal(names, []string{"configured"}) {
 		t.Fatalf("the config lists %v before the engine answered, want the removed library gone", names)

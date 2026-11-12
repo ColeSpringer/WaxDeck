@@ -119,11 +119,11 @@ func TestAnExpiringLinkEndsTransfersThatAreWaiting(t *testing.T) {
 	t.Parallel()
 	h := newPodcastHarness(t)
 	ep := episodesByTitle(t, h, newEndlessFeed(t, 1, 0).feedURL())["Episode 1"]
-	owner, err := h.svc.UserCtxByID(context.Background(), adminUserID(t, h))
+	owner, err := h.svc.Grants.UserCtxByID(context.Background(), adminUserID(t, h))
 	if err != nil {
 		t.Fatal(err)
 	}
-	info, err := h.svc.CreateShare(context.Background(), owner, ep.Pid, 4*time.Second, false, 0)
+	info, err := h.svc.Reads.CreateShare(context.Background(), owner, ep.Pid, 4*time.Second, false, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

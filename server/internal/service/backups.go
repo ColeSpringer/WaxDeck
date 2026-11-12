@@ -60,14 +60,14 @@ type backupCatalog interface {
 	Backup(ctx context.Context, dest string, opts port.BackupOptions) error
 }
 
-// backupAuditor records backup and restore actions; *Library satisfies
+// backupAuditor records backup and restore actions; *Audit satisfies
 // it.
 type backupAuditor interface {
-	Audit(ctx context.Context, actor *UserCtx, action string, target AuditTarget, detail map[string]any)
+	Record(ctx context.Context, actor *UserCtx, action string, target AuditTarget, detail map[string]any)
 }
 
 // backupNotifier announces backup outcomes on the server notification
-// scope; *Library satisfies it.
+// scope; *Integrations satisfies it.
 type backupNotifier interface {
 	EmitServerNotification(ctx context.Context, event, title, body string)
 }
@@ -129,6 +129,18 @@ type stagedMarker struct {
 	Warnings         []string         `json:"warnings,omitempty"`
 }
 
+// Backup is one backup's record.
+type Backup struct {
+	ID           string
+	State        string
+	Origin       string
+	FileName     string
+	SizeBytes    int64
+	Error        string
+	CreatedAtNS  int64
+	FinishedAtNS int64
+}
+
 // Backups is the backup and staged-restore service. It is constructed
 // beside the Library service (which does not hold the data dir) and
 // works through narrow seams so tests need no catalog.
@@ -160,7 +172,7 @@ type Backups struct {
 // marker at its top level). prober may be nil until the key preflight
 // is wired; staging then reports the gap as a warning.
 func NewBackups(l *Library, dataDir string, prober KeyProber) *Backups {
-	b := newBackups(l.db, l.lib, l, l, l.log, dataDir, prober)
+	b := newBackups(l.db, l.lib, l.Audit, l.Integrations, l.log, dataDir, prober)
 	b.catalogStamp = func(ctx context.Context) (uint32, error) { return catalogFileStamp(ctx, l.catalogPath) }
 	return b
 }
@@ -190,12 +202,12 @@ func (b *Backups) archivePath(fileName string) string {
 // Create claims the single running-backup slot and returns the running
 // row. The caller's worker loop performs the actual archive write by
 // invoking Run with the returned id; Create itself does no file work.
-func (b *Backups) Create(ctx context.Context, actor *UserCtx, origin string) (wdb.Backup, error) {
+func (b *Backups) Create(ctx context.Context, actor *UserCtx, origin string) (Backup, error) {
 	if origin != originManual && origin != originScheduled {
-		return wdb.Backup{}, errInvalid("backup origin must be manual or scheduled")
+		return Backup{}, errInvalid("backup origin must be manual or scheduled")
 	}
 	if err := os.MkdirAll(b.backupsDir(), 0o700); err != nil {
-		return wdb.Backup{}, &Error{Kind: KindInternal, Err: err}
+		return Backup{}, &Error{Kind: KindInternal, Err: err}
 	}
 	now := b.now().UTC()
 	row := wdb.Backup{
@@ -207,14 +219,14 @@ func (b *Backups) Create(ctx context.Context, actor *UserCtx, origin string) (wd
 	}
 	if err := b.db.ClaimBackupSlot(ctx, row); err != nil {
 		if errors.Is(err, wdb.ErrConflict) {
-			return wdb.Backup{}, &Error{Kind: KindConflict, Msg: "a backup is already running"}
+			return Backup{}, &Error{Kind: KindConflict, Msg: "a backup is already running"}
 		}
-		return wdb.Backup{}, &Error{Kind: KindInternal, Err: err}
+		return Backup{}, &Error{Kind: KindInternal, Err: err}
 	}
-	b.audit.Audit(ctx, actor, "backup.create",
+	b.audit.Record(ctx, actor, "backup.create",
 		AuditTarget{Kind: "backup", PID: row.ID, Name: row.FileName},
 		map[string]any{"origin": origin})
-	return row, nil
+	return Backup(row), nil
 }
 
 // uniqueBackupFileName renders the timestamped archive name, stepping a
@@ -281,7 +293,7 @@ func (b *Backups) Run(ctx context.Context, id string) error {
 	if err := b.db.UpdateBackup(ctx, row); err != nil {
 		b.log.Warn("recording backup outcome", "backup", row.ID, "err", err)
 	}
-	b.audit.Audit(ctx, nil, "backup.finish",
+	b.audit.Record(ctx, nil, "backup.finish",
 		AuditTarget{Kind: "backup", PID: row.ID, Name: row.FileName},
 		map[string]any{"origin": row.Origin, "state": row.State,
 			"sizeBytes": row.SizeBytes, "error": row.Error})
@@ -584,7 +596,7 @@ func (b *Backups) applyRetention(ctx context.Context) error {
 			names = append(names, d.FileName)
 			ids = append(ids, d.ID)
 		}
-		b.audit.Audit(ctx, nil, "backup.retention", AuditTarget{Kind: "backup"},
+		b.audit.Record(ctx, nil, "backup.retention", AuditTarget{Kind: "backup"},
 			map[string]any{"deleted": ids, "fileNames": names,
 				"keepCount": keepCount, "keepBytes": keepBytes})
 	}
@@ -617,24 +629,28 @@ func (b *Backups) removeBackup(ctx context.Context, row wdb.Backup) error {
 }
 
 // List returns every backup row, newest first.
-func (b *Backups) List(ctx context.Context) ([]wdb.Backup, error) {
+func (b *Backups) List(ctx context.Context) ([]Backup, error) {
 	rows, err := b.db.ListBackups(ctx)
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
 	}
-	return rows, nil
+	out := make([]Backup, len(rows))
+	for i, row := range rows {
+		out[i] = Backup(row)
+	}
+	return out, nil
 }
 
 // Get returns one backup row.
-func (b *Backups) Get(ctx context.Context, id string) (wdb.Backup, error) {
+func (b *Backups) Get(ctx context.Context, id string) (Backup, error) {
 	row, err := b.db.BackupByID(ctx, id)
 	if errors.Is(err, wdb.ErrNotFound) {
-		return wdb.Backup{}, errNotFound("no backup with id " + id)
+		return Backup{}, errNotFound("no backup with id " + id)
 	}
 	if err != nil {
-		return wdb.Backup{}, &Error{Kind: KindInternal, Err: err}
+		return Backup{}, &Error{Kind: KindInternal, Err: err}
 	}
-	return row, nil
+	return Backup(row), nil
 }
 
 // Delete removes a backup's archive and row. It refuses while the
@@ -652,10 +668,10 @@ func (b *Backups) Delete(ctx context.Context, actor *UserCtx, id string) error {
 	} else if ok && m.BackupID == id {
 		return &Error{Kind: KindConflict, Msg: "a staged restore references this backup; cancel it first"}
 	}
-	if err := b.removeBackup(ctx, row); err != nil {
+	if err := b.removeBackup(ctx, wdb.Backup(row)); err != nil {
 		return &Error{Kind: KindInternal, Err: err}
 	}
-	b.audit.Audit(ctx, actor, "backup.delete",
+	b.audit.Record(ctx, actor, "backup.delete",
 		AuditTarget{Kind: "backup", PID: row.ID, Name: row.FileName},
 		map[string]any{"origin": row.Origin, "sizeBytes": row.SizeBytes})
 	return nil
@@ -681,14 +697,14 @@ func (b *Backups) ArchivePath(ctx context.Context, id string) (string, error) {
 // Import lands an uploaded archive: stream to a temp file, validate it
 // is a WaxDeck backup, rename it in, and record the row. maxBytes
 // bounds the stream when positive.
-func (b *Backups) Import(ctx context.Context, actor *UserCtx, r io.Reader, maxBytes int64) (wdb.Backup, error) {
+func (b *Backups) Import(ctx context.Context, actor *UserCtx, r io.Reader, maxBytes int64) (Backup, error) {
 	dir := b.backupsDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return wdb.Backup{}, &Error{Kind: KindInternal, Err: err}
+		return Backup{}, &Error{Kind: KindInternal, Err: err}
 	}
 	tmp, err := os.CreateTemp(dir, ".import-*.tmp")
 	if err != nil {
-		return wdb.Backup{}, &Error{Kind: KindInternal, Err: err}
+		return Backup{}, &Error{Kind: KindInternal, Err: err}
 	}
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName)
@@ -699,22 +715,22 @@ func (b *Backups) Import(ctx context.Context, actor *UserCtx, r io.Reader, maxBy
 	n, err := io.Copy(tmp, src)
 	if err != nil {
 		tmp.Close()
-		return wdb.Backup{}, &Error{Kind: KindInternal, Err: err}
+		return Backup{}, &Error{Kind: KindInternal, Err: err}
 	}
 	if maxBytes > 0 && n > maxBytes {
 		tmp.Close()
-		return wdb.Backup{}, &Error{Kind: KindQuota,
+		return Backup{}, &Error{Kind: KindQuota,
 			Msg: fmt.Sprintf("the archive exceeds the %d byte import limit", maxBytes)}
 	}
 	if err := tmp.Sync(); err != nil {
 		tmp.Close()
-		return wdb.Backup{}, &Error{Kind: KindInternal, Err: err}
+		return Backup{}, &Error{Kind: KindInternal, Err: err}
 	}
 	if err := tmp.Close(); err != nil {
-		return wdb.Backup{}, &Error{Kind: KindInternal, Err: err}
+		return Backup{}, &Error{Kind: KindInternal, Err: err}
 	}
 	if _, err := readArchiveManifest(tmpName); err != nil {
-		return wdb.Backup{}, &Error{Kind: KindInvalid,
+		return Backup{}, &Error{Kind: KindInvalid,
 			Msg: "not a WaxDeck backup archive: " + err.Error()}
 	}
 
@@ -728,7 +744,7 @@ func (b *Backups) Import(ctx context.Context, actor *UserCtx, r io.Reader, maxBy
 		fileName = fmt.Sprintf("%s-%d.zip", base, i)
 	}
 	if err := os.Rename(tmpName, b.archivePath(fileName)); err != nil {
-		return wdb.Backup{}, &Error{Kind: KindInternal, Err: err}
+		return Backup{}, &Error{Kind: KindInternal, Err: err}
 	}
 	backupFsyncDir(dir)
 
@@ -742,12 +758,12 @@ func (b *Backups) Import(ctx context.Context, actor *UserCtx, r io.Reader, maxBy
 		FinishedAtNS: now.UnixNano(),
 	}
 	if err := b.db.InsertBackup(ctx, row); err != nil {
-		return wdb.Backup{}, &Error{Kind: KindInternal, Err: err}
+		return Backup{}, &Error{Kind: KindInternal, Err: err}
 	}
-	b.audit.Audit(ctx, actor, "backup.import",
+	b.audit.Record(ctx, actor, "backup.import",
 		AuditTarget{Kind: "backup", PID: row.ID, Name: row.FileName},
 		map[string]any{"sizeBytes": n})
-	return row, nil
+	return Backup(row), nil
 }
 
 // StageRestore runs the restore preflight for a finished backup and
@@ -805,7 +821,7 @@ func (b *Backups) StageRestore(ctx context.Context, actor *UserCtx, id string) (
 	if err := b.writeStagedMarker(marker); err != nil {
 		return RestorePlan{}, &Error{Kind: KindInternal, Err: err}
 	}
-	b.audit.Audit(ctx, actor, "restore.stage",
+	b.audit.Record(ctx, actor, "restore.stage",
 		AuditTarget{Kind: "backup", PID: id, Name: row.FileName},
 		map[string]any{"keyfilePresent": plan.KeyfilePresent,
 			"keyfileMatches": plan.KeyfileMatches,
@@ -903,7 +919,7 @@ func (b *Backups) CancelStagedRestore(ctx context.Context, actor *UserCtx) error
 		return &Error{Kind: KindInternal, Err: err}
 	}
 	backupFsyncDir(b.dataDir)
-	b.audit.Audit(ctx, actor, "restore.cancel",
+	b.audit.Record(ctx, actor, "restore.cancel",
 		AuditTarget{Kind: "backup", PID: m.BackupID, Name: m.FileName}, nil)
 	return nil
 }
@@ -919,14 +935,14 @@ func (b *Backups) PostRestoreSweep(ctx context.Context, rep RestoreReportLike) e
 	if len(rep.SetAside) > 0 {
 		detail["setAside"] = rep.SetAside
 	}
-	b.audit.Audit(ctx, nil, "restore.apply",
+	b.audit.Record(ctx, nil, "restore.apply",
 		AuditTarget{Kind: "backup", PID: rep.BackupID, Name: rep.FileName}, detail)
 	if len(rep.Casualties) > 0 {
 		list := make([]map[string]string, 0, len(rep.Casualties))
 		for _, c := range rep.Casualties {
 			list = append(list, map[string]string{"kind": c.Kind, "name": c.Name})
 		}
-		b.audit.Audit(ctx, nil, "restore.credentials-pending",
+		b.audit.Record(ctx, nil, "restore.credentials-pending",
 			AuditTarget{Kind: "backup", PID: rep.BackupID, Name: rep.FileName},
 			map[string]any{"casualties": list})
 	}

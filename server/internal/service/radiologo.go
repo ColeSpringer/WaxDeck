@@ -21,7 +21,7 @@ import (
 //
 // The whole thing is an SSRF surface and is treated as one. The target
 // is a host somebody typed into an add-station box, so every request
-// here rides l.radioClient(): private addresses refused at dial time
+// here rides l.client(): private addresses refused at dial time
 // after DNS resolution (so rebinding does not help), redirects bounded,
 // response headers deadlined. The bytes then go through fetchRadioLogo,
 // which caps the read and decides the type from the body rather than
@@ -52,10 +52,10 @@ const (
 // discoverRadioLogo finds and fetches a logo for a station whose row
 // names none, answering the first candidate that produces a usable
 // image.
-func (l *Library) discoverRadioLogo(ctx context.Context, homepage, streamURL string) (RadioLogo, error) {
+func (l *Radio) discoverRadioLogo(ctx context.Context, homepage, streamURL string) (RadioLogo, error) {
 	ctx, cancel := context.WithTimeout(ctx, radioLogoDiscoveryBudget)
 	defer cancel()
-	candidates := l.radioLogoCandidates(ctx, homepage, streamURL)
+	candidates := l.logoCandidates(ctx, homepage, streamURL)
 	var lastErr error = errNotFound("no logo could be discovered")
 	for _, candidate := range candidates {
 		logo, err := l.fetchRadioLogo(ctx, candidate)
@@ -72,7 +72,7 @@ func (l *Library) discoverRadioLogo(ctx context.Context, homepage, streamURL str
 	return RadioLogo{}, lastErr
 }
 
-// radioLogoCandidates proposes logo URLs, best first: the icons the
+// logoCandidates proposes logo URLs, best first: the icons the
 // homepage declares, then the conventional /favicon.ico at the
 // homepage's origin, then the same at the stream's host.
 //
@@ -80,7 +80,7 @@ func (l *Library) discoverRadioLogo(ctx context.Context, homepage, streamURL str
 // often comes off a shared CDN whose favicon belongs to the CDN - but it
 // is the only lead a By-URL station with no website gives, and a wrong
 // mark is corrected by editing the station.
-func (l *Library) radioLogoCandidates(ctx context.Context, homepage, streamURL string) []string {
+func (l *Radio) logoCandidates(ctx context.Context, homepage, streamURL string) []string {
 	var declared iconLinks
 	page := parseRadioHomepage(homepage)
 	if page != nil {
@@ -161,7 +161,7 @@ func parseRadioHomepage(homepage string) *url.URL {
 // declaredIcons reads the icon URLs a page declares, resolved absolute
 // and kept in tiers. A page that will not load answers nothing, which
 // leaves the conventional guesses to carry the discovery.
-func (l *Library) declaredIcons(ctx context.Context, page *url.URL) iconLinks {
+func (l *Radio) declaredIcons(ctx context.Context, page *url.URL) iconLinks {
 	callCtx, cancel := context.WithTimeout(ctx, radioLogoTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(callCtx, http.MethodGet, page.String(), nil)
@@ -170,7 +170,7 @@ func (l *Library) declaredIcons(ctx context.Context, page *url.URL) iconLinks {
 	}
 	req.Header.Set("User-Agent", l.UserAgent())
 	req.Header.Set("Accept", "text/html")
-	resp, err := l.radioClient().Do(req)
+	resp, err := l.client().Do(req)
 	if err != nil {
 		return iconLinks{}
 	}

@@ -67,8 +67,8 @@ type acquireItem struct {
 // source's highest-quality audio; "opus"/"mp3"/"m4a"/"flac" transcode).
 // identify is the submission's identification choice, nil for the
 // account default.
-func (l *Library) StartAcquisition(ctx context.Context, uc *UserCtx, rawURL, mediaType, libraryPID, format string, identify *bool) (ToolTaskDTO, error) {
-	if err := l.CheckWritable(ctx, ""); err != nil {
+func (l *Ingest) StartAcquisition(ctx context.Context, uc *UserCtx, rawURL, mediaType, libraryPID, format string, identify *bool) (ToolTaskDTO, error) {
+	if err := l.Settings.CheckWritable(ctx, ""); err != nil {
 		return ToolTaskDTO{}, err
 	}
 	if err := l.requireUploader(uc); err != nil {
@@ -110,7 +110,7 @@ func (l *Library) StartAcquisition(ctx context.Context, uc *UserCtx, rawURL, med
 		return ToolTaskDTO{}, errInvalid("no managed " + mediaType +
 			" library to receive the files; an administrator must mark a library root managed (WAXDECK_MANAGED_ROOTS)")
 	}
-	return l.insertToolTask(ctx, uc, taskTypeAcquire, "", toolTaskParams{
+	return l.Tools.insertToolTask(ctx, uc, taskTypeAcquire, "", toolTaskParams{
 		URL:        parsed.String(),
 		MediaType:  mediaType,
 		LibraryPID: libraryPID,
@@ -140,12 +140,12 @@ func normalizeAcquireFormat(format string) (string, bool) {
 // A failure after files already staged finalizes entries for what
 // arrived and fails terminally, so a retry never downloads the same
 // bytes twice; only a failure before any byte moved stays transient.
-func (l *Library) runAcquire(ctx context.Context, t *wdb.ToolTask, p toolTaskParams) ([]string, error) {
-	user, err := l.db.UserByID(ctx, t.UserID)
+func (l *Ingest) runAcquire(ctx context.Context, t *wdb.ToolTask, p toolTaskParams) ([]string, error) {
+	uc, err := l.Tools.taskAccount(ctx, t.UserID, "the acquiring account")
 	if err != nil {
-		return nil, fmt.Errorf("%w: the acquiring account is gone", errToolPermanent)
+		return nil, err
 	}
-	if !user.UploadEnabled && !hasRole(user.Roles, "admin") {
+	if !uc.UploadEnabled {
 		return nil, fmt.Errorf("%w: upload rights were revoked", errToolPermanent)
 	}
 
@@ -164,7 +164,7 @@ func (l *Library) runAcquire(ctx context.Context, t *wdb.ToolTask, p toolTaskPar
 		items = items[:acquireMaxItems]
 	}
 
-	entryIDs, staged, _, fetchErr, entriesErr := l.fetchAcquireBatch(ctx, t, p, provider, items, user, 90, false)
+	entryIDs, staged, _, fetchErr, entriesErr := l.fetchAcquireBatch(ctx, t, p, provider, items, uc, 90, false)
 	if entriesErr != nil {
 		// The files staged; opening their review entries did not. Plain
 		// rather than wrapped permanent, matching the pre-extraction
@@ -204,7 +204,7 @@ func (l *Library) runAcquire(ctx context.Context, t *wdb.ToolTask, p toolTaskPar
 // over their own errors, the batch-stopping fetch error, and the
 // entry-opening error - separately, because the two mean different
 // things to the caller's retry policy.
-func (l *Library) fetchAcquireBatch(ctx context.Context, t *wdb.ToolTask, p toolTaskParams, provider source.Provider, items []acquireItem, user *wdb.User, progressCap float64, skipItemErrors bool) (entryIDs []string, staged, skipped int, fetchErr, entriesErr error) {
+func (l *Ingest) fetchAcquireBatch(ctx context.Context, t *wdb.ToolTask, p toolTaskParams, provider source.Provider, items []acquireItem, uc *UserCtx, progressCap float64, skipItemErrors bool) (entryIDs []string, staged, skipped int, fetchErr, entriesErr error) {
 	var (
 		docs      []reviewTrackDoc
 		rowByPath = map[string]string{}
@@ -214,10 +214,10 @@ func (l *Library) fetchAcquireBatch(ctx context.Context, t *wdb.ToolTask, p tool
 			fetchErr = ctx.Err()
 			break
 		}
-		if user.UploadQuotaBytes > 0 {
+		if uc.UploadQuotaBytes > 0 {
 			used, err := l.db.UploadBytesInUse(ctx, t.UserID)
-			if err == nil && used >= user.UploadQuotaBytes {
-				fetchErr = fmt.Errorf("%w: the pending-upload limit is full (%d bytes waiting for review)", errToolPermanent, user.UploadQuotaBytes)
+			if err == nil && used >= uc.UploadQuotaBytes {
+				fetchErr = fmt.Errorf("%w: the pending-upload limit is full (%d bytes waiting for review)", errToolPermanent, uc.UploadQuotaBytes)
 				break
 			}
 		}
@@ -246,7 +246,7 @@ func (l *Library) fetchAcquireBatch(ctx context.Context, t *wdb.ToolTask, p tool
 		rowByPath[doc.Path] = uploadID
 		t.ProgressPct = float64(i+1) / float64(len(items)) * progressCap
 		if uerr := l.db.UpdateToolTask(ctx, *t); uerr == nil {
-			l.notifyToolTaskProgress(ctx, t.ID)
+			l.Tools.notifyToolTaskProgress(ctx, t.ID)
 		}
 	}
 	if len(docs) == 0 {
@@ -269,8 +269,8 @@ func (l *Library) fetchAcquireBatch(ctx context.Context, t *wdb.ToolTask, p tool
 // check cannot stop DNS rebinding, which only a per-dial guard inside
 // a provider's own client can. The private-feed-hosts flag opts LAN
 // sources back in, matching the feed surface.
-func (l *Library) guardAcquireHost(ctx context.Context, host string) error {
-	if l.allowPrivateFeedHosts {
+func (l *Ingest) guardAcquireHost(ctx context.Context, host string) error {
+	if l.Podcasts.allowPrivateFeedHosts {
 		return nil
 	}
 	// Stricter than the write-time courtesy check (hostResolvesPrivate)
@@ -291,8 +291,8 @@ func (l *Library) guardAcquireHost(ctx context.Context, host string) error {
 // can see accepts the given item kind, which is the precondition for
 // importing an acquired or uploaded file (the catalog places files
 // only into managed roots).
-func (l *Library) hasManagedDestination(ctx context.Context, uc *UserCtx, kind model.Kind) (bool, error) {
-	roots := l.libraryRoots()
+func (l *Ingest) hasManagedDestination(ctx context.Context, uc *UserCtx, kind model.Kind) (bool, error) {
+	roots := l.Roots.libraryRoots()
 	managed := make(map[string]bool, len(roots))
 	for _, r := range roots {
 		if r.Managed {
@@ -340,7 +340,7 @@ func kindIsPermanent(k ErrorKind) bool {
 // acquireList resolves the URL to its download list: a playlist or
 // channel enumerates, anything else is a single item for the first
 // provider that will fetch it.
-func (l *Library) acquireList(ctx context.Context, rawURL string) (source.Provider, []acquireItem, error) {
+func (l *Ingest) acquireList(ctx context.Context, rawURL string) (source.Provider, []acquireItem, error) {
 	var firstErr error
 	for _, p := range l.sourceProviders {
 		enumerate := p.Enumerate
@@ -379,7 +379,7 @@ func (l *Library) acquireList(ctx context.Context, rawURL string) (source.Provid
 
 // fetchAcquireItem downloads one item into upload staging with the
 // crash-safe write discipline and records its upload session.
-func (l *Library) fetchAcquireItem(ctx context.Context, provider source.Provider, t *wdb.ToolTask, p toolTaskParams, item acquireItem, index int) (reviewTrackDoc, string, error) {
+func (l *Ingest) fetchAcquireItem(ctx context.Context, provider source.Provider, t *wdb.ToolTask, p toolTaskParams, item acquireItem, index int) (reviewTrackDoc, string, error) {
 	uploadID := "up-" + ulid.Make().String()
 	dir := filepath.Join(l.stagingDir, uploadID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -507,7 +507,7 @@ func suggestedQueryFor(mediaType string, unit match.Unit) *reviewOverride {
 
 // openAcquireEntries groups the staged files into album units and
 // opens one review entry per unit, linking the upload sessions.
-func (l *Library) openAcquireEntries(ctx context.Context, t *wdb.ToolTask, p toolTaskParams, docs []reviewTrackDoc, rowByPath map[string]string) ([]string, error) {
+func (l *Ingest) openAcquireEntries(ctx context.Context, t *wdb.ToolTask, p toolTaskParams, docs []reviewTrackDoc, rowByPath map[string]string) ([]string, error) {
 	tracks := make([]match.Track, 0, len(docs))
 	docByPath := make(map[string]reviewTrackDoc, len(docs))
 	for _, d := range docs {

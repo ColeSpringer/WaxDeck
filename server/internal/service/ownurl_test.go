@@ -25,11 +25,11 @@ func openOwnURLFixture(t *testing.T) (context.Context, *Library, *UserCtx, *User
 	})
 	account := func(name string) *UserCtx {
 		t.Helper()
-		acct, err := svc.CreateAccount(ctx, AccountCreate{Username: name, Password: "correct-horse"})
+		acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: name, Password: "correct-horse"})
 		if err != nil {
 			t.Fatal(err)
 		}
-		uc, err := svc.UserCtx(ctx, acct.User)
+		uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -41,7 +41,7 @@ func openOwnURLFixture(t *testing.T) (context.Context, *Library, *UserCtx, *User
 // exportedURLs are the feed addresses an OPML export names.
 func exportedURLs(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) []string {
 	t.Helper()
-	doc, err := svc.ExportOPML(ctx, uc)
+	doc, err := svc.Podcasts.ExportOPML(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,12 +68,12 @@ func exportedURLs(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) 
 func followerViews(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, show string) map[string]string {
 	t.Helper()
 	out := map[string]string{}
-	detail, err := svc.PodcastDetailFor(ctx, uc, show)
+	detail, err := svc.Podcasts.DetailFor(ctx, uc, show)
 	if err != nil {
 		t.Fatal(err)
 	}
 	out["the show detail"] = detail.Show.FeedURL
-	subs, _, err := svc.Subscriptions(ctx, uc, "", 50, false)
+	subs, _, err := svc.Podcasts.Subscriptions(ctx, uc, "", 50, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func followerViews(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx,
 func TestAFollowerIsShownItsOwnAddress(t *testing.T) {
 	ctx, svc, admin, bob, carol, host := openOwnURLFixture(t)
 	mine, theirs := host.URL+"/mine.xml", host.URL+"/theirs.xml"
-	sub, _, err := svc.Subscribe(ctx, admin, SubscribeRequest{URL: mine})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, admin, SubscribeRequest{URL: mine})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestAFollowerIsShownItsOwnAddress(t *testing.T) {
 			break
 		}
 	}
-	if _, _, err := svc.Subscribe(ctx, bob, SubscribeRequest{URL: theirs}); err != nil {
+	if _, _, err := svc.Podcasts.Subscribe(ctx, bob, SubscribeRequest{URL: theirs}); err != nil {
 		t.Fatal(err)
 	}
 	_, bare, _ := parseAPIPID(sub.Show.PID)
@@ -154,7 +154,7 @@ func TestAFollowerIsShownItsOwnAddress(t *testing.T) {
 	if got := followerViews(t, ctx, svc, bob, sub.Show.PID)["the show detail"]; got != theirs {
 		t.Errorf("the other follower is shown %q, want its own %s", got, theirs)
 	}
-	detail, err := svc.PodcastDetailFor(ctx, carol, sub.Show.PID)
+	detail, err := svc.Podcasts.DetailFor(ctx, carol, sub.Show.PID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,14 +169,14 @@ func TestAFollowerIsShownItsOwnAddress(t *testing.T) {
 func TestAPrivateShowIsGivenToItsFollowersByTheirOwnAddress(t *testing.T) {
 	ctx, svc, admin, bob, carol, host := openOwnURLFixture(t)
 	mine, theirs := host.URL+"/mine.xml", host.URL+"/theirs.xml"
-	sub, _, err := svc.Subscribe(ctx, admin, SubscribeRequest{URL: mine})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, admin, SubscribeRequest{URL: mine})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.PutSubscriptionSettings(ctx, admin, sub.Show.PID, SubscriptionSettings{Private: true}); err != nil {
+	if _, err := svc.Podcasts.PutSubscriptionSettings(ctx, admin, sub.Show.PID, SubscriptionSettings{Private: true}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := svc.Subscribe(ctx, bob, SubscribeRequest{URL: theirs}); err != nil {
+	if _, _, err := svc.Podcasts.Subscribe(ctx, bob, SubscribeRequest{URL: theirs}); err != nil {
 		t.Fatal(err)
 	}
 	for _, f := range []struct {
@@ -194,7 +194,7 @@ func TestAPrivateShowIsGivenToItsFollowersByTheirOwnAddress(t *testing.T) {
 			t.Errorf("%s's export names %v, want its own %s", f.who, got, f.want)
 		}
 	}
-	detail, err := svc.PodcastDetailFor(ctx, carol, sub.Show.PID)
+	detail, err := svc.Podcasts.DetailFor(ctx, carol, sub.Show.PID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestAPrivateShowIsGivenToItsFollowersByTheirOwnAddress(t *testing.T) {
 // alone: the login stays sealed on the server.
 func TestACredentialedShowIsExportedWithoutItsLogin(t *testing.T) {
 	c := newCredentialedShow(t)
-	doc, err := c.svc.ExportOPML(c.ctx, c.admin)
+	doc, err := c.svc.Podcasts.ExportOPML(c.ctx, c.admin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,21 +252,21 @@ func TestASubscribeByAnAddressCarryingASecretMakesTheShowPrivate(t *testing.T) {
 		{host.URL + "/%d.xml#token=abc", false},
 	} {
 		address := fmt.Sprintf(tc.address, i)
-		sub, _, err := svc.Subscribe(ctx, admin, SubscribeRequest{URL: address})
+		sub, _, err := svc.Podcasts.Subscribe(ctx, admin, SubscribeRequest{URL: address})
 		if err != nil {
 			t.Fatalf("subscribing by %s: %v", address, err)
 		}
-		pod, err := svc.getShow(ctx, sub.Show.PID)
+		pod, err := svc.Podcasts.getShow(ctx, sub.Show.PID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := svc.showIsPrivate(ctx, pod); got != tc.private {
+		if got := svc.Podcasts.showIsPrivate(ctx, pod); got != tc.private {
 			t.Errorf("subscribed by %s, the show is private = %v, want %v", address, got, tc.private)
 		}
 		if sub.Settings.Private != tc.private {
 			t.Errorf("subscribed by %s, the subscription is private = %v, want %v", address, sub.Settings.Private, tc.private)
 		}
-		detail, err := svc.PodcastDetailFor(ctx, carol, sub.Show.PID)
+		detail, err := svc.Podcasts.DetailFor(ctx, carol, sub.Show.PID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -295,7 +295,7 @@ func TestARefusedSubscribeLeavesNoSecretAddressPublic(t *testing.T) {
 </channel></rss>`, r.Host)
 	}))
 	t.Cleanup(host.Close)
-	sub, _, err := svc.Subscribe(ctx, admin, SubscribeRequest{URL: host.URL + "/feed.xml"})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, admin, SubscribeRequest{URL: host.URL + "/feed.xml"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,11 +303,11 @@ func TestARefusedSubscribeLeavesNoSecretAddressPublic(t *testing.T) {
 		t.Helper()
 		perms := DefaultPermissions()
 		perms.Explicit = explicit
-		acct, err := svc.CreateAccount(ctx, AccountCreate{Username: name, Password: "correct-horse", Permissions: &perms})
+		acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: name, Password: "correct-horse", Permissions: &perms})
 		if err != nil {
 			t.Fatal(err)
 		}
-		uc, err := svc.UserCtx(ctx, acct.User)
+		uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -315,10 +315,10 @@ func TestARefusedSubscribeLeavesNoSecretAddressPublic(t *testing.T) {
 	}
 	kid, carol := account("kid", false), account("carol", true)
 	secret := host.URL + "/feed.xml?token=kidsecret"
-	if _, _, err := svc.Subscribe(ctx, kid, SubscribeRequest{URL: secret}); KindOf(err) != KindForbidden {
+	if _, _, err := svc.Podcasts.Subscribe(ctx, kid, SubscribeRequest{URL: secret}); KindOf(err) != KindForbidden {
 		t.Fatalf("the kid's subscribe = %v, want the explicit show refused", err)
 	}
-	detail, err := svc.PodcastDetailFor(ctx, carol, sub.Show.PID)
+	detail, err := svc.Podcasts.DetailFor(ctx, carol, sub.Show.PID)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -154,7 +154,7 @@ func TestWatcherCatalogsAManualDrop(t *testing.T) {
 	t.Parallel()
 	ctx, svc, libDir := newWatchFixture(t)
 	select {
-	case <-svc.watchReady:
+	case <-svc.Roots.watchReady:
 	case <-time.After(10 * time.Second):
 		t.Fatal("the watcher never armed")
 	}

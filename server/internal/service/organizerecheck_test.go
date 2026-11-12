@@ -12,7 +12,7 @@ import (
 func TestAScopedApplyRechecksItsOwnItems(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, stray := fillerLibrary(t)
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	before, err := svc.db.HealthRuleCounts(ctx)
@@ -20,12 +20,12 @@ func TestAScopedApplyRechecksItsOwnItems(t *testing.T) {
 		t.Fatalf("path-mismatch = %d (%v), want the misplaced files", before[rulePathMismatch], err)
 	}
 	var whole atomic.Int32
-	svc.pathPlanHook = func(pids []string) {
+	svc.Health.pathPlanHook = func(pids []string) {
 		if pids == nil {
 			whole.Add(1)
 		}
 	}
-	rep, err := svc.ApplyOrganize(ctx, uc, "", []string{stray})
+	rep, err := svc.Health.ApplyOrganize(ctx, uc, "", []string{stray})
 	if err != nil || rep.Moved != 1 {
 		t.Fatalf("apply = %+v (%v), want the stray moved", rep, err)
 	}
@@ -50,16 +50,16 @@ func TestAScopedApplyRechecksItsOwnItems(t *testing.T) {
 func TestAnUnscopedApplyRechecksTheFailingItems(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, _ := managedTrackFixture(t)
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	var whole atomic.Int32
-	svc.pathPlanHook = func(pids []string) {
+	svc.Health.pathPlanHook = func(pids []string) {
 		if pids == nil {
 			whole.Add(1)
 		}
 	}
-	if rep, err := svc.ApplyOrganize(ctx, uc, "", nil); err != nil || rep.Moved != 1 {
+	if rep, err := svc.Health.ApplyOrganize(ctx, uc, "", nil); err != nil || rep.Moved != 1 {
 		t.Fatalf("apply = %+v (%v), want the track moved", rep, err)
 	}
 	if n := whole.Load(); n != 0 {
@@ -87,8 +87,8 @@ func TestAScopedApplyOfUnflaggedItemsLeavesTheHealthAlone(t *testing.T) {
 	}
 	before := events()
 	var plans atomic.Int32
-	svc.pathPlanHook = func([]string) { plans.Add(1) }
-	if rep, err := svc.ApplyOrganize(ctx, uc, "", []string{pid}); err != nil || rep.Moved != 1 {
+	svc.Health.pathPlanHook = func([]string) { plans.Add(1) }
+	if rep, err := svc.Health.ApplyOrganize(ctx, uc, "", []string{pid}); err != nil || rep.Moved != 1 {
 		t.Fatalf("apply = %+v (%v), want the track moved", rep, err)
 	}
 	if n := plans.Load(); n != 0 {

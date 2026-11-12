@@ -888,7 +888,7 @@ func TestRadioArtworkWakesAListeningSocket(t *testing.T) {
 	}
 
 	// Subscribed to radio alone, so nothing else can answer for it.
-	h.svc.EnsureRadioAnnouncedArt(station, art.URL+"/nowplaying.png", "Charlie Parker - Ornithology")
+	h.svc.Radio.EnsureRadioAnnouncedArt(station, art.URL+"/nowplaying.png", "Charlie Parker - Ornithology")
 
 	deadline := time.Now().Add(10 * time.Second)
 	rctx, rcancel := context.WithDeadline(ctx, deadline)
@@ -937,7 +937,7 @@ func TestRadioFirstTitleEndsWithTheLookupsCoverWhenTheStationImageRepeats(t *tes
 		t.Fatalf("create status = %d", resp.StatusCode)
 	}
 	st := decode[RadioStation](t, resp)
-	h.svc.NoteRadioMeta(st.Pid, "Charlie Parker - Ornithology", logo.URL+"/station.png")
+	h.svc.Radio.NoteRadioMeta(st.Pid, "Charlie Parker - Ornithology", logo.URL+"/station.png")
 
 	deadline := time.Now().Add(10 * time.Second)
 	for {

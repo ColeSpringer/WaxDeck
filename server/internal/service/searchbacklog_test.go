@@ -27,7 +27,7 @@ func newGrantedSearcher(t *testing.T, episodes, tracks int) grantedSearcher {
 	t.Helper()
 	feed := &stubFeed{kind: model.SourceRSS, n: episodes, prefix: "Wax"}
 	f := openStubFeeds(t, feed)
-	f.svc.searchCandidates = 3
+	f.svc.Reads.searchCandidates = 3
 	held := f.subscribe(t, "https://feeds.example/held", "rss")
 	all := showEpisodePIDs(t, f, held.Show.PID)
 	fetched := all[len(all)-1]
@@ -43,7 +43,7 @@ func newGrantedSearcher(t *testing.T, episodes, tracks int) grantedSearcher {
 	}
 	if tracks > 0 {
 		var music string
-		for _, r := range f.svc.libraryRoots() {
+		for _, r := range f.svc.Roots.libraryRoots() {
 			if r.Name == "lib" {
 				music = r.Path
 			}
@@ -62,22 +62,22 @@ func newGrantedSearcher(t *testing.T, episodes, tracks int) grantedSearcher {
 			t.Fatal(err)
 		}
 	}
-	podcastLib, _ := f.svc.podcastLibrary(f.ctx)
+	podcastLib, _ := f.svc.Grants.podcastLibrary(f.ctx)
 	if podcastLib == "" {
 		t.Fatal("no podcast library after a fetch")
 	}
-	acct, err := f.svc.CreateAccount(f.ctx, AccountCreate{
+	acct, err := f.svc.Identity.CreateAccount(f.ctx, AccountCreate{
 		Username: "listener", Password: "correct-horse", AccessMode: "granted",
 		LibraryPIDs: []string{apiPID(PrefixLibrary, model.PID(podcastLib))},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	listener, err := f.svc.UserCtx(f.ctx, acct.User)
+	listener, err := f.svc.Grants.UserCtxFor(f.ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := f.svc.Subscribe(f.ctx, listener, SubscribeRequest{URL: "https://feeds.example/held", SourceType: "rss"}); err != nil {
+	if _, _, err := f.svc.Podcasts.Subscribe(f.ctx, listener, SubscribeRequest{URL: "https://feeds.example/held", SourceType: "rss"}); err != nil {
 		t.Fatal(err)
 	}
 	return grantedSearcher{f: f, listener: listener, show: held.Show.PID, fetched: fetched}
@@ -85,7 +85,7 @@ func newGrantedSearcher(t *testing.T, episodes, tracks int) grantedSearcher {
 
 func (g grantedSearcher) search(t *testing.T) SearchResults {
 	t.Helper()
-	res, err := g.f.svc.Search(g.f.ctx, g.listener, "Wax", 20)
+	res, err := g.f.svc.Reads.Search(g.f.ctx, g.listener, "Wax", 20)
 	if err != nil {
 		t.Fatal(err)
 	}

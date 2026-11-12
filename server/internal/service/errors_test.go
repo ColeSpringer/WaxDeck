@@ -113,7 +113,9 @@ func TestClassifiedMessagesDropOperationNames(t *testing.T) {
 // reads the server's paths in it; its owner reads them cut.
 func TestATaskFailureReadsWithoutOperationNames(t *testing.T) {
 	t.Parallel()
-	l := &Library{stagingDir: "/srv/waxdeck/staging", roots: []Root{{Path: "/srv/music"}}}
+	l := bareLibrary(&core{})
+	l.Ingest.stagingDir = "/srv/waxdeck/staging"
+	l.Roots.roots = []Root{{Path: "/srv/music"}}
 	for _, c := range []struct {
 		name          string
 		err           error
@@ -136,10 +138,10 @@ func TestATaskFailureReadsWithoutOperationNames(t *testing.T) {
 			t.Errorf("%s: recorded %q, want %q", c.name, stored, c.stored)
 		}
 		task := wdb.ToolTask{Error: stored}
-		if got := l.toolTaskFor(&UserCtx{Admin: true}, task).Error; got != c.stored {
+		if got := l.Tools.taskFor(&UserCtx{Admin: true}, task).Error; got != c.stored {
 			t.Errorf("%s: an administrator reads %q, want %q", c.name, got, c.stored)
 		}
-		if got := l.toolTaskFor(&UserCtx{}, task).Error; got != c.owner {
+		if got := l.Tools.taskFor(&UserCtx{}, task).Error; got != c.owner {
 			t.Errorf("%s: its owner reads %q, want %q", c.name, got, c.owner)
 		}
 	}
@@ -150,7 +152,9 @@ func TestATaskFailureReadsWithoutOperationNames(t *testing.T) {
 // cut, and a bare root reads as the library only where the path ends.
 func TestStoragePathsAreCutWhole(t *testing.T) {
 	t.Parallel()
-	l := &Library{stagingDir: "/srv/waxdeck/staging", roots: []Root{{Path: "/srv/media"}, {Path: "/srv/media-extra"}}}
+	l := bareLibrary(&core{})
+	l.Ingest.stagingDir = "/srv/waxdeck/staging"
+	l.Roots.roots = []Root{{Path: "/srv/media"}, {Path: "/srv/media-extra"}}
 	for in, want := range map[string]string{
 		"open /srv/media-extra/Rock/a.flac: permission denied": "open Rock/a.flac: permission denied",
 		"open /srv/media/Rock/a.flac: permission denied":       "open Rock/a.flac: permission denied",
@@ -160,7 +164,7 @@ func TestStoragePathsAreCutWhole(t *testing.T) {
 		"/srv/media and /srv/media.old, then /srv/media":       "the library and /srv/media.old, then the library",
 		"stat /srv/mediaé: denied":                             "stat /srv/mediaé: denied",
 	} {
-		if got := l.scrubStoragePaths(in); got != want {
+		if got := l.Ingest.scrubStoragePaths(in); got != want {
 			t.Errorf("scrub(%q) = %q, want %q", in, got, want)
 		}
 	}
@@ -220,8 +224,8 @@ func TestASlashBetweenWordsIsNotAPath(t *testing.T) {
 // as every other write does then, not that the catalog is read-only.
 func TestAKindChangeDuringAHandOffAnswersMaintenance(t *testing.T) {
 	t.Parallel()
-	l := &Library{log: slog.New(slog.DiscardHandler)}
-	if got := l.kindRefusal(waxerr.New(waxerr.CodeUnsupported, "store.writeTx", "store is closed")); KindOf(got) != KindMaintenance {
+	l := bareLibrary(&core{log: slog.New(slog.DiscardHandler)})
+	if got := l.Reads.kindRefusal(waxerr.New(waxerr.CodeUnsupported, "store.writeTx", "store is closed")); KindOf(got) != KindMaintenance {
 		t.Fatalf("refusal = %v (%s), want maintenance", got, KindOf(got))
 	}
 }
@@ -251,17 +255,18 @@ func TestACatalogRefusalNamesFilesNotDirectories(t *testing.T) {
 // only that; one in a library they are reads in plain words.
 func TestAFailureInAnUngrantedLibrarySaysOnlyThat(t *testing.T) {
 	t.Parallel()
-	l := &Library{roots: []Root{{Path: "/srv/granted", PID: "LA"}, {Path: "/srv/hidden", PID: "LB"}}}
+	l := bareLibrary(&core{})
+	l.Roots.roots = []Root{{Path: "/srv/granted", PID: "LA"}, {Path: "/srv/hidden", PID: "LB"}}
 	reader := &UserCtx{Libraries: map[string]bool{"LA": true}}
 	hidden := "meta.Writer.Apply: writing tags to /srv/hidden/Secret/copy.mp3: permission denied"
-	if got := l.failureWordsFor(reader, hidden); got != "it failed on a file in a library you are not granted" {
+	if got := l.Jobs.failureWordsFor(reader, hidden); got != "it failed on a file in a library you are not granted" {
 		t.Errorf("hidden failure reads %q", got)
 	}
 	own := "meta.Writer.Apply: writing tags to /srv/granted/Mine/own.mp3: permission denied"
-	if got := l.failureWordsFor(reader, own); got != "writing tags to Mine/own.mp3: permission denied" {
+	if got := l.Jobs.failureWordsFor(reader, own); got != "writing tags to Mine/own.mp3: permission denied" {
 		t.Errorf("own failure reads %q", got)
 	}
-	if got := l.failureWordsFor(&UserCtx{AllLibraries: true}, hidden); got != "writing tags to Secret/copy.mp3: permission denied" {
+	if got := l.Jobs.failureWordsFor(&UserCtx{AllLibraries: true}, hidden); got != "writing tags to Secret/copy.mp3: permission denied" {
 		t.Errorf("a reader of every library reads %q", got)
 	}
 }

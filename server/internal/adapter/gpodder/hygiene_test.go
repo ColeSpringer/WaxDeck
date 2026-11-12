@@ -65,7 +65,7 @@ func (e *env) hasDevice(id string) bool {
 // removedDevices is the account's inbox rows for devices let go.
 func (e *env) removedDevices() []service.InboxNotification {
 	e.t.Helper()
-	page, err := e.svc.Notifications(e.ctx, e.uc, "", 100)
+	page, err := e.svc.Integrations.Notifications(e.ctx, e.uc, "", 100)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -237,7 +237,7 @@ func TestAFarFutureSinceAnswersNothing(t *testing.T) {
 	e := newEnv(t)
 	e.change("phone", []string{e.feedURLOf(2)}, nil)
 	_, ep := e.episodePID(e.feedURLOf(2), "Show 2 Pilot")
-	if _, err := e.svc.Checkpoint(e.ctx, e.uc, ep, 30_000, nil); err != nil {
+	if _, err := e.svc.Playback.Checkpoint(e.ctx, e.uc, ep, 30_000, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, since := range []string{"9223372037", "9223372036854775807"} {
@@ -272,7 +272,7 @@ func TestStoredFieldsAreBounded(t *testing.T) {
 	long := "https://feeds.example/" + strings.Repeat("x", 2048)
 	e.put("desk", "txt", long+"\n")
 	e.wantList("after a list naming an over-long URL")
-	if events, _, err := e.svc.GpodderSubChangesSince(e.ctx, e.uc, "", 0); err != nil || len(events) != 0 {
+	if events, _, err := e.svc.Podcasts.GpodderSubChangesSince(e.ctx, e.uc, "", 0); err != nil || len(events) != 0 {
 		t.Fatalf("change log = %+v (%v), want nothing", events, err)
 	}
 	action := func(podcast, episode, act, device string) string {

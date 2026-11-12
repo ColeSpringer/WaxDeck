@@ -13,16 +13,16 @@ import (
 // libraries holding its members is granted, and hidden otherwise.
 func TestEntityInLibraries(t *testing.T) {
 	t.Parallel()
-	l := &Library{}
+	l := bareLibrary(&core{})
 	info := &read.EntityInfo{LibraryPIDs: []model.PID{"libA", "libB"}}
 
-	if !l.entityInLibraries(info, &UserCtx{Libraries: map[string]bool{"libB": true}}) {
+	if !l.Reads.entityInLibraries(info, &UserCtx{Libraries: map[string]bool{"libB": true}}) {
 		t.Fatal("an entity with a granted member library should be visible")
 	}
-	if l.entityInLibraries(info, &UserCtx{Libraries: map[string]bool{"libC": true}}) {
+	if l.Reads.entityInLibraries(info, &UserCtx{Libraries: map[string]bool{"libC": true}}) {
 		t.Fatal("an entity with no granted member library should be hidden")
 	}
-	if l.entityInLibraries(&read.EntityInfo{}, &UserCtx{Libraries: map[string]bool{"libA": true}}) {
+	if l.Reads.entityInLibraries(&read.EntityInfo{}, &UserCtx{Libraries: map[string]bool{"libA": true}}) {
 		t.Fatal("an entity attributed to no library should be hidden")
 	}
 }
@@ -36,7 +36,7 @@ func TestRestrictedEntitySearchAttribution(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 
-	libs, err := svc.Libraries(ctx)
+	libs, err := svc.Roots.Libraries(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestRestrictedEntitySearchAttribution(t *testing.T) {
 		ID: uc.ID, CatalogPID: uc.CatalogPID,
 		Libraries: map[string]bool{strings.TrimPrefix(libs[0].PID, PrefixLibrary+"-"): true},
 	}
-	res, err := svc.Search(ctx, granted, "Signal Garden", 10)
+	res, err := svc.Reads.Search(ctx, granted, "Signal Garden", 10)
 	if err != nil {
 		t.Fatalf("granted search: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestRestrictedEntitySearchAttribution(t *testing.T) {
 
 	// The same search under a grant for a different library keeps
 	// nothing: every hit attributes to a library outside the grant.
-	other, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "other", Path: t.TempDir()})
+	other, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "other", Path: t.TempDir()})
 	if err != nil {
 		t.Fatalf("adding a second library: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestRestrictedEntitySearchAttribution(t *testing.T) {
 		ID: uc.ID, CatalogPID: uc.CatalogPID,
 		Libraries: map[string]bool{strings.TrimPrefix(other.PID, PrefixLibrary+"-"): true},
 	}
-	res, err = svc.Search(ctx, elsewhere, "Signal Garden", 10)
+	res, err = svc.Reads.Search(ctx, elsewhere, "Signal Garden", 10)
 	if err != nil {
 		t.Fatalf("ungranted search: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestAlbumMixSeed(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 
-	res, err := svc.Search(ctx, uc, "Signal Garden", 10)
+	res, err := svc.Reads.Search(ctx, uc, "Signal Garden", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestAlbumMixSeed(t *testing.T) {
 
 	// An album seed resolves the album's own tracks by entity identity
 	// (album_pid), not a display-string match.
-	mix, err := svc.InstantMix(ctx, uc, InstantMixInput{SeedPID: albumPID, Size: 10})
+	mix, err := svc.Similarity.InstantMix(ctx, uc, InstantMixInput{SeedPID: albumPID, Size: 10})
 	if err != nil {
 		t.Fatalf("album-seeded mix: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestAlbumShareResolvesMembers(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 
-	res, err := svc.Search(ctx, uc, "Signal Garden", 10)
+	res, err := svc.Reads.Search(ctx, uc, "Signal Garden", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestAlbumShareResolvesMembers(t *testing.T) {
 	}
 	albumPID := res.Albums[0].PID
 
-	info, err := svc.CreateShare(ctx, uc, albumPID, 0, false, 0)
+	info, err := svc.Reads.CreateShare(ctx, uc, albumPID, 0, false, 0)
 	if err != nil {
 		t.Fatalf("sharing an album: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestAlbumShareResolvesMembers(t *testing.T) {
 	}
 
 	// Resolved for anonymous serving, the share opens the album's tracks.
-	pub, err := svc.ResolveShare(ctx, strings.TrimPrefix(info.ID, "sh-"))
+	pub, err := svc.Reads.ResolveShare(ctx, strings.TrimPrefix(info.ID, "sh-"))
 	if err != nil {
 		t.Fatalf("resolving album share: %v", err)
 	}

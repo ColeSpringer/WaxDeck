@@ -2,8 +2,6 @@ package service
 
 import (
 	"testing"
-
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // A merge is audited under the administrator who queued it, by id, even
@@ -12,26 +10,26 @@ import (
 func TestAMergeIsAuditedUnderItsStarterOnceDisabled(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _, book, _, _ := bookToolFixture(t, false)
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "second", Password: "long-enough-pw", Roles: []string{"admin"}})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "second", Password: "long-enough-pw", Roles: []string{"admin"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := svc.UserCtx(ctx, acct.User)
+	second, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
-	task, err := svc.StartBookMerge(ctx, second, apiPID(PrefixBook, book), nil, false)
+	task, err := svc.Tools.StartBookMerge(ctx, second, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	off := true
-	if _, err := svc.UpdateAccount(ctx, second.ID, AccountUpdate{Disabled: &off}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, second.ID, AccountUpdate{Disabled: &off}); err != nil {
 		t.Fatal(err)
 	}
 	if err := attempt(t, ctx, svc, 1); err != nil {
 		t.Fatalf("the merge = %v, want it finished", err)
 	}
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "book.merge"}, "", 10)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: "book.merge"}, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}

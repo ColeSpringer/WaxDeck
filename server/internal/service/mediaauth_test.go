@@ -23,61 +23,61 @@ func TestAuthorizeMediaFollowsTheAccount(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
 	track := fixtureItemPIDs(t, ctx, svc, admin)[0]
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "listener", Password: "correct-horse"})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "listener", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := acct.User.ID
 	stream := auth.MediaClaims{User: id, Purpose: auth.PurposeStream, PID: track}
-	if err := svc.AuthorizeMedia(ctx, stream); err != nil {
+	if err := svc.Identity.AuthorizeMedia(ctx, stream); err != nil {
 		t.Fatalf("a live account: %v", err)
 	}
 
 	off, on := true, false
-	if _, err := svc.UpdateAccount(ctx, id, AccountUpdate{Disabled: &off}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, id, AccountUpdate{Disabled: &off}); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.AuthorizeMedia(ctx, stream); !errors.Is(err, auth.ErrMediaRevoked) {
+	if err := svc.Identity.AuthorizeMedia(ctx, stream); !errors.Is(err, auth.ErrMediaRevoked) {
 		t.Errorf("a disabled account = %v, want the token revoked", err)
 	}
-	if _, err := svc.UpdateAccount(ctx, id, AccountUpdate{Disabled: &on}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, id, AccountUpdate{Disabled: &on}); err != nil {
 		t.Fatal(err)
 	}
 
-	elsewhere, err := svc.AddLibrary(ctx, admin, AddLibraryInput{Name: "other", Path: t.TempDir()})
+	elsewhere, err := svc.Roots.AddLibrary(ctx, admin, AddLibraryInput{Name: "other", Path: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	granted := "granted"
-	if _, err := svc.UpdateAccount(ctx, id, AccountUpdate{AccessMode: &granted, LibraryPIDs: []string{elsewhere.PID}}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, id, AccountUpdate{AccessMode: &granted, LibraryPIDs: []string{elsewhere.PID}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.AuthorizeMedia(ctx, stream); KindOf(err) != KindNotFound {
+	if err := svc.Identity.AuthorizeMedia(ctx, stream); KindOf(err) != KindNotFound {
 		t.Errorf("an item outside the narrowed grant = %v, want not-found", err)
 	}
 	all := "all"
-	if _, err := svc.UpdateAccount(ctx, id, AccountUpdate{AccessMode: &all}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, id, AccountUpdate{AccessMode: &all}); err != nil {
 		t.Fatal(err)
 	}
 
 	perms := DefaultPermissions()
 	perms.Download = false
-	if _, err := svc.UpdateAccount(ctx, id, AccountUpdate{Permissions: &perms}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, id, AccountUpdate{Permissions: &perms}); err != nil {
 		t.Fatal(err)
 	}
 	download := stream
 	download.Purpose = auth.PurposeDownload
-	if err := svc.AuthorizeMedia(ctx, download); KindOf(err) != KindForbidden {
+	if err := svc.Identity.AuthorizeMedia(ctx, download); KindOf(err) != KindForbidden {
 		t.Errorf("a download without the right = %v, want forbidden", err)
 	}
-	if err := svc.AuthorizeMedia(ctx, stream); err != nil {
+	if err := svc.Identity.AuthorizeMedia(ctx, stream); err != nil {
 		t.Errorf("a stream without the download right: %v", err)
 	}
 
-	if _, err := svc.DeleteAccount(ctx, nil, id, AccountDeletion{}); err != nil {
+	if _, err := svc.Identity.DeleteAccount(ctx, nil, id, AccountDeletion{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.AuthorizeMedia(ctx, stream); !errors.Is(err, auth.ErrMediaRevoked) {
+	if err := svc.Identity.AuthorizeMedia(ctx, stream); !errors.Is(err, auth.ErrMediaRevoked) {
 		t.Errorf("a deleted account = %v, want the token revoked", err)
 	}
 }
@@ -102,14 +102,14 @@ func TestAuthorizeMediaFollowsTheCredential(t *testing.T) {
 	}
 
 	live := session(admin.ID, time.Now().Add(time.Hour))
-	if err := svc.AuthorizeMedia(ctx, claims("se:"+live)); err != nil {
+	if err := svc.Identity.AuthorizeMedia(ctx, claims("se:"+live)); err != nil {
 		t.Errorf("a live session: %v", err)
 	}
 	if err := svc.db.DeleteSession(ctx, live); err != nil {
 		t.Fatal(err)
 	}
 	expired := session(admin.ID, time.Now().Add(-time.Minute))
-	other, err := svc.CreateAccount(ctx, AccountCreate{Username: "other", Password: "correct-horse"})
+	other, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "other", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestAuthorizeMediaFollowsTheCredential(t *testing.T) {
 		"a revoked app password":   "ap:01JZX5N8QW3F4V9T2B7KDEXAMPL",
 		"a reach the account left": "re:999",
 	} {
-		if err := svc.AuthorizeMedia(ctx, claims(cred)); !errors.Is(err, auth.ErrMediaRevoked) {
+		if err := svc.Identity.AuthorizeMedia(ctx, claims(cred)); !errors.Is(err, auth.ErrMediaRevoked) {
 			t.Errorf("%s = %v, want the token revoked", name, err)
 		}
 	}
@@ -133,50 +133,50 @@ func TestAuthorizeMediaFollowsTheCredential(t *testing.T) {
 	if _, err := svc.db.InsertAppPassword(ctx, pw, 10); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.AuthorizeMedia(ctx, claims("ap:"+pw.ID)); err != nil {
+	if err := svc.Identity.AuthorizeMedia(ctx, claims("ap:"+pw.ID)); err != nil {
 		t.Errorf("a live app password: %v", err)
 	}
-	if err := svc.RevokeAppPassword(ctx, admin, apiPID(PrefixAppPassword, model.PID(pw.ID))); err != nil {
+	if err := svc.Identity.RevokeAppPassword(ctx, admin, apiPID(PrefixAppPassword, model.PID(pw.ID))); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.AuthorizeMedia(ctx, claims("ap:"+pw.ID)); !errors.Is(err, auth.ErrMediaRevoked) {
+	if err := svc.Identity.AuthorizeMedia(ctx, claims("ap:"+pw.ID)); !errors.Is(err, auth.ErrMediaRevoked) {
 		t.Errorf("a revoked app password = %v, want the token revoked", err)
 	}
 
-	reach, _, err := svc.TimelineReach(ctx, admin.ID)
+	reach, _, err := svc.Identity.TimelineReach(ctx, admin.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.AuthorizeMedia(ctx, claims(reach)); err != nil {
+	if err := svc.Identity.AuthorizeMedia(ctx, claims(reach)); err != nil {
 		t.Errorf("the account's current reach: %v", err)
 	}
 	// A timeline the REST API minted names its session beside its reach,
 	// and both have to hold.
 	still := session(admin.ID, time.Now().Add(time.Hour))
-	if err := svc.AuthorizeMedia(ctx, claims(reach+",se:"+still)); err != nil {
+	if err := svc.Identity.AuthorizeMedia(ctx, claims(reach+",se:"+still)); err != nil {
 		t.Errorf("a live reach and session: %v", err)
 	}
 	for name, cred := range map[string]string{
 		"a revoked session beside a live reach": reach + ",se:" + live,
 		"an empty part beside a live reach":     reach + ",",
 	} {
-		if err := svc.AuthorizeMedia(ctx, claims(cred)); !errors.Is(err, auth.ErrMediaRevoked) {
+		if err := svc.Identity.AuthorizeMedia(ctx, claims(cred)); !errors.Is(err, auth.ErrMediaRevoked) {
 			t.Errorf("%s = %v, want the token revoked", name, err)
 		}
 	}
 	perms := DefaultPermissions()
 	perms.TagDeny = []TagRule{{Key: "MOOD", Value: "calm"}}
-	if _, err := svc.UpdateAccount(ctx, other.User.ID, AccountUpdate{Permissions: &perms}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, other.User.ID, AccountUpdate{Permissions: &perms}); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.AuthorizeMedia(ctx, claims(reach)); err != nil {
+	if err := svc.Identity.AuthorizeMedia(ctx, claims(reach)); err != nil {
 		t.Errorf("another account's rule change moved this one's reach: %v", err)
 	}
 	granted := "granted"
-	if _, err := svc.UpdateAccount(ctx, admin.ID, AccountUpdate{Roles: []string{"admin"}, AccessMode: &granted}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, admin.ID, AccountUpdate{Roles: []string{"admin"}, AccessMode: &granted}); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.AuthorizeMedia(ctx, claims(reach)); !errors.Is(err, auth.ErrMediaRevoked) {
+	if err := svc.Identity.AuthorizeMedia(ctx, claims(reach)); !errors.Is(err, auth.ErrMediaRevoked) {
 		t.Errorf("a reach the account has since changed = %v, want the token revoked", err)
 	}
 }
@@ -192,8 +192,8 @@ func TestEpochsCountEveryBump(t *testing.T) {
 		bump func(context.Context, string)
 		read func(context.Context, string) (int64, error)
 	}{
-		"reach": {svc.bumpReachEpoch, svc.reachEpoch},
-		"grant": {svc.bumpGrantEpoch, svc.grantEpoch},
+		"reach": {svc.Identity.bumpReachEpoch, svc.Identity.reachEpoch},
+		"grant": {svc.Grants.bumpGrantEpoch, svc.Grants.grantEpoch},
 	}
 	const bumps = 24
 	for name, e := range epochs {
@@ -218,15 +218,15 @@ func TestEpochsCountEveryBump(t *testing.T) {
 func TestRefusedAccountUpdateMovesNoEpoch(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
-	reach, _ := svc.reachEpoch(ctx, admin.ID)
-	grant, _ := svc.grantEpoch(ctx, admin.ID)
-	if _, err := svc.UpdateAccount(ctx, admin.ID, AccountUpdate{Roles: []string{}}); KindOf(err) != KindConflict {
+	reach, _ := svc.Identity.reachEpoch(ctx, admin.ID)
+	grant, _ := svc.Grants.grantEpoch(ctx, admin.ID)
+	if _, err := svc.Identity.UpdateAccount(ctx, admin.ID, AccountUpdate{Roles: []string{}}); KindOf(err) != KindConflict {
 		t.Fatalf("demoting the last administrator = %v, want a conflict", err)
 	}
-	if got, _ := svc.reachEpoch(ctx, admin.ID); got != reach {
+	if got, _ := svc.Identity.reachEpoch(ctx, admin.ID); got != reach {
 		t.Errorf("reach epoch = %d after a refused update, want %d", got, reach)
 	}
-	if got, _ := svc.grantEpoch(ctx, admin.ID); got != grant {
+	if got, _ := svc.Grants.grantEpoch(ctx, admin.ID); got != grant {
 		t.Errorf("grant epoch = %d after a refused update, want %d", got, grant)
 	}
 }
@@ -246,13 +246,13 @@ func TestAuthorizeMediaDoesNotReadAFailedCheckAsRevoked(t *testing.T) {
 	}
 	stalled, cancel := context.WithCancel(ctx)
 	cancel()
-	err := svc.AuthorizeMedia(stalled, auth.MediaClaims{
+	err := svc.Identity.AuthorizeMedia(stalled, auth.MediaClaims{
 		User: admin.ID, Cred: "se:" + s.ID, Purpose: auth.PurposeStream, PID: track,
 	})
 	if err == nil || errors.Is(err, auth.ErrMediaRevoked) || KindOf(err) == KindNotFound {
 		t.Errorf("a stalled account read = %v, want a failure that is not a refusal", err)
 	}
-	if err := svc.credentialAlive(stalled, admin.ID, "se:"+s.ID); err == nil || errors.Is(err, auth.ErrMediaRevoked) {
+	if err := svc.Identity.credentialAlive(stalled, admin.ID, "se:"+s.ID); err == nil || errors.Is(err, auth.ErrMediaRevoked) {
 		t.Errorf("a stalled session read = %v, want a failure that is not a refusal", err)
 	}
 }
@@ -265,11 +265,11 @@ func TestAuthorizeMediaDecidesEveryPurposeByName(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
 	for _, purpose := range []string{auth.PurposeProbe, auth.PurposeHLS} {
-		if err := svc.AuthorizeMedia(ctx, auth.MediaClaims{User: admin.ID, Purpose: purpose, PID: "tl-x"}); err != nil {
+		if err := svc.Identity.AuthorizeMedia(ctx, auth.MediaClaims{User: admin.ID, Purpose: purpose, PID: "tl-x"}); err != nil {
 			t.Errorf("%s = %v, want it admitted", purpose, err)
 		}
 	}
-	if err := svc.AuthorizeMedia(ctx, auth.MediaClaims{User: admin.ID, Purpose: "unheard-of", PID: "tr-x"}); err == nil {
+	if err := svc.Identity.AuthorizeMedia(ctx, auth.MediaClaims{User: admin.ID, Purpose: "unheard-of", PID: "tr-x"}); err == nil {
 		t.Error("an unknown purpose was admitted")
 	}
 }
@@ -280,10 +280,10 @@ func TestAuthorizeMediaChecksAnItemRenderingLikeItsStream(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
 	track := fixtureItemPIDs(t, ctx, svc, admin)[0]
-	if err := svc.AuthorizeMedia(ctx, auth.MediaClaims{User: admin.ID, Purpose: auth.PurposeHLS, PID: track}); err != nil {
+	if err := svc.Identity.AuthorizeMedia(ctx, auth.MediaClaims{User: admin.ID, Purpose: auth.PurposeHLS, PID: track}); err != nil {
 		t.Errorf("a visible item's rendering = %v, want it admitted", err)
 	}
-	err := svc.AuthorizeMedia(ctx, auth.MediaClaims{User: admin.ID, Purpose: auth.PurposeHLS, PID: "tr-01NOSUCHTRACK0000000000000"})
+	err := svc.Identity.AuthorizeMedia(ctx, auth.MediaClaims{User: admin.ID, Purpose: auth.PurposeHLS, PID: "tr-01NOSUCHTRACK0000000000000"})
 	if KindOf(err) != KindNotFound {
 		t.Errorf("an unknown item's rendering = %v, want not found", err)
 	}
@@ -296,20 +296,20 @@ func TestOidcRoleChangeMovesTheEpochs(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	ident := OidcIdentity{Provider: "idp", Subject: "s-1", Username: "claimed", Roles: []string{"admin"}}
-	acct, err := svc.ResolveOidcAccount(ctx, ident)
+	acct, err := svc.Identity.ResolveOidcAccount(ctx, ident)
 	if err != nil {
 		t.Fatal(err)
 	}
-	reach, _ := svc.reachEpoch(ctx, acct.User.ID)
-	grant, _ := svc.grantEpoch(ctx, acct.User.ID)
+	reach, _ := svc.Identity.reachEpoch(ctx, acct.User.ID)
+	grant, _ := svc.Grants.grantEpoch(ctx, acct.User.ID)
 	ident.Roles = []string{"user"}
-	if _, err := svc.ResolveOidcAccount(ctx, ident); err != nil {
+	if _, err := svc.Identity.ResolveOidcAccount(ctx, ident); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := svc.reachEpoch(ctx, acct.User.ID); got == reach {
+	if got, _ := svc.Identity.reachEpoch(ctx, acct.User.ID); got == reach {
 		t.Error("a claim demotion left the reach epoch where it was")
 	}
-	if got, _ := svc.grantEpoch(ctx, acct.User.ID); got == grant {
+	if got, _ := svc.Grants.grantEpoch(ctx, acct.User.ID); got == grant {
 		t.Error("a claim demotion left the grant epoch where it was")
 	}
 }
@@ -322,7 +322,7 @@ func TestGateNamesMaintenanceForTheBridge(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
 	track := fixtureItemPIDs(t, ctx, svc, admin)[0]
-	gate := svc.TranscodeGate()
+	gate := svc.Playback.TranscodeGate()
 	claims := auth.MediaClaims{User: admin.ID, Purpose: auth.PurposeStream, PID: track}
 	if err := gate.AuthorizeMedia(ctx, auth.MediaClaims{User: admin.ID, Purpose: auth.PurposeStream, PID: "tr-01NOSUCHTRACK0000000000000"}); !errors.Is(err, flow.ErrMediaRefused) {
 		t.Errorf("an unknown item = %v, want a refusal", err)
@@ -350,8 +350,8 @@ func TestUnreadableEpochFailsClosed(t *testing.T) {
 		key  string
 		read func(context.Context, string) (int64, error)
 	}{
-		"reach": {syncKeyReachEpoch, svc.reachEpoch},
-		"grant": {syncKeyGrantEpoch, svc.grantEpoch},
+		"reach": {syncKeyReachEpoch, svc.Identity.reachEpoch},
+		"grant": {syncKeyGrantEpoch, svc.Grants.grantEpoch},
 	} {
 		if err := svc.db.SyncStateSet(ctx, e.key+admin.ID, "not-a-number"); err != nil {
 			t.Fatal(err)

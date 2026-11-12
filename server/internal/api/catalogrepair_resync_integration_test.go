@@ -13,7 +13,7 @@ func TestACatalogRepairSendsMirrorsBackToASnapshot(t *testing.T) {
 	h := newHarness(t)
 	_, before := h.mirror(t, 100)
 	decodeStatus[ToolTask](t, h.postJSON(t, "/api/v1/admin/catalog/repair", nil), 202, "repair")
-	for h.svc.DrainLongToolTasks(context.Background()) {
+	for h.svc.Tools.DrainLongToolTasks(context.Background()) {
 	}
 	e := decodeStatus[Error](t, get(t, h.ts, "/api/v1/sync/catalog?since="+before, h.token), 410, "a cursor from before the repair")
 	if e.Code != "sync-reset" {

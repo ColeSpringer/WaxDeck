@@ -26,6 +26,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/colespringer/waxbin"
@@ -35,9 +37,42 @@ import (
 	"github.com/colespringer/waxbin/read"
 	"github.com/colespringer/waxbin/trash"
 
+	"github.com/colespringer/waxdeck/server/internal/auth"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/genre"
 )
+
+// Health is library health, its fixes, and organizing files.
+type Health struct {
+	*core
+	// pathPlanHook runs as the path rule plans the items it is given, nil
+	// for the whole library, and historyReadHook as the organize history
+	// reads the catalog's journal, in a test; nothing in the server sets
+	// them.
+	pathPlanHook    func(pids []string)
+	historyReadHook func()
+	// jobOriginInsertHook stands in for recording who started a job, and
+	// awaitJobHook for waiting a catalog job out, in a test; nothing in the
+	// server sets them.
+	jobOriginInsertHook func(context.Context, wdb.JobOrigin) error
+	awaitJobHook        func(ctx context.Context, pid model.PID, silence time.Duration, tick func(context.Context)) (*model.Job, error)
+	// profilesMu serializes a saved profile's round trip.
+	profilesMu sync.Mutex
+	// runProfiles is the profile each organize run the history last listed
+	// laid out by, which a finished run never changes; history the
+	// journal's listing those runs come from.
+	runProfilesMu sync.Mutex
+	runProfiles   map[model.PID]string
+	history       organizeHistory
+	// sweeping is a health sweep in progress.
+	sweeping atomic.Bool
+	// sweepFailed is the last sweep having failed, until one lands.
+	sweepFailed atomic.Bool
+	// cursorSealer seals listing cursors (Config.CursorSealer).
+	cursorSealer *auth.Sealer
+}
+
+func newHealth(c *core, _ Config) *Health { return &Health{core: c} }
 
 const (
 	// healthStateKey holds the sweep's aggregate JSON (healthState) in
@@ -47,7 +82,7 @@ const (
 	healthSweepReqKey = "health:sweep-requested"
 
 	// healthSweepInterval is how stale the last sweep may get before
-	// HealthSweepDue asks the worker for another.
+	// SweepDue asks the worker for another.
 	healthSweepInterval = 24 * time.Hour
 
 	// smallArtMinSide is the minimum width and height source art must
@@ -254,8 +289,8 @@ const duplicateGroupCap = 200
 // rules in the health index, prunes rows the pass did not touch (items
 // now clean, deleted, or newly exempt), and writes the aggregate state.
 // It runs synchronously; the main-registered health worker calls it on
-// its ticker (see HealthSweepDue), never a bare goroutine.
-func (l *Library) SweepHealth(ctx context.Context) error {
+// its ticker (see SweepDue), never a bare goroutine.
+func (l *Health) SweepHealth(ctx context.Context) error {
 	sweepStart := time.Now().UnixNano()
 
 	unofficial, err := l.unofficialItems(ctx)
@@ -278,7 +313,7 @@ func (l *Library) SweepHealth(ctx context.Context) error {
 	// The genre vocabulary is loaded once for the whole sweep. A failure
 	// leaves it nil, which skips genre-whitelist for this pass rather
 	// than aborting every other rule for every item.
-	norm, err := l.genreNormalizer(ctx)
+	norm, err := l.Reads.genreNormalizer(ctx)
 	if err != nil {
 		l.log.Warn("health: genre vocabulary unavailable; skipping genre-whitelist this sweep", "err", err)
 		norm = nil
@@ -354,7 +389,7 @@ func (l *Library) SweepHealth(ctx context.Context) error {
 // itemHealthRules grades one item. Unofficial-marked items (and podcast
 // episodes, which are not canonical-release content either) answer only
 // for corrupt audio and unsynced tag writes.
-func (l *Library) itemHealthRules(ctx context.Context, it *model.ItemView, exempt bool, fileRules []string, planned bool, lyricsPresent map[model.PID]bool, norm *genre.Normalizer) []string {
+func (l *Health) itemHealthRules(ctx context.Context, it *model.ItemView, exempt bool, fileRules []string, planned bool, lyricsPresent map[model.PID]bool, norm *genre.Normalizer) []string {
 	var rules []string
 	for _, r := range fileRules {
 		if (exempt || it.Kind == model.KindEpisode) && r == ruleLegacyTags {
@@ -433,7 +468,7 @@ func (l *Library) itemHealthRules(ctx context.Context, it *model.ItemView, exemp
 // read per item. (has_lyrics is item-own, matching the point read it
 // replaces; the art rules stay on the resolve, which walks the fallback
 // chain that the own-only has_art field cannot express.)
-func (l *Library) lyricsPresence(ctx context.Context) (map[model.PID]bool, error) {
+func (l *Health) lyricsPresence(ctx context.Context) (map[model.PID]bool, error) {
 	present := make(map[model.PID]bool)
 	q := query.New(query.EntityItems).
 		Where("kind", query.OpIs, string(model.KindTrack)).
@@ -458,7 +493,7 @@ func (l *Library) lyricsPresence(ctx context.Context) (map[model.PID]bool, error
 // unofficialItems collects the pids carrying the RELEASESTATUS
 // unofficial or bootleg custom tag, in one query per value rather than
 // one ItemTags read per item.
-func (l *Library) unofficialItems(ctx context.Context) (map[model.PID]bool, error) {
+func (l *Health) unofficialItems(ctx context.Context) (map[model.PID]bool, error) {
 	out := map[model.PID]bool{}
 	for _, v := range []string{releaseStatusUnofficial, releaseStatusBootleg} {
 		items, err := l.lib.Query(ctx, query.New(query.EntityItems).
@@ -486,7 +521,7 @@ type fileFinding struct {
 // fileDiagnosticRules runs the audit's per-file checks once per sweep, keyed
 // by file pid (or path for a finding naming none). A finding's message is
 // "code: path[: detail]" upstream, so its leading word selects the rule.
-func (l *Library) fileDiagnosticRules(ctx context.Context) (map[string]*fileFinding, error) {
+func (l *Health) fileDiagnosticRules(ctx context.Context) (map[string]*fileFinding, error) {
 	rep, err := l.lib.Audit(ctx, waxbin.AuditOptions{
 		Only:   []model.AuditCheck{model.CheckFileDiagnostic, model.CheckCorruptAudio, model.CheckDurationMismatch},
 		Sample: 1 << 20,
@@ -561,7 +596,7 @@ func (ff *fileFinding) duration() *DurationMismatchDTO {
 
 // itemFileRules gathers an item's file findings, its own file's or every
 // part's for a multi-file book, and the lengths of the file furthest off.
-func (l *Library) itemFileRules(ctx context.Context, it *model.ItemView, findings map[string]*fileFinding) ([]string, *DurationMismatchDTO) {
+func (l *Health) itemFileRules(ctx context.Context, it *model.ItemView, findings map[string]*fileFinding) ([]string, *DurationMismatchDTO) {
 	if len(findings) == 0 {
 		return nil, nil
 	}
@@ -581,7 +616,7 @@ func (l *Library) itemFileRules(ctx context.Context, it *model.ItemView, finding
 // multi-part book's parts. Copies follow them and are no part of the
 // grade: a finding on one belongs to the copy, not to a part it would
 // misnumber.
-func (l *Library) gradedFiles(ctx context.Context, it *model.ItemView) []model.ItemFileRef {
+func (l *Health) gradedFiles(ctx context.Context, it *model.ItemView) []model.ItemFileRef {
 	if it.Kind == model.KindBook {
 		parts, err := l.lib.ItemFiles(ctx, it.PID)
 		parts = slices.DeleteFunc(parts, func(f model.ItemFileRef) bool { return f.Role == fileRoleAlternate })
@@ -594,7 +629,7 @@ func (l *Library) gradedFiles(ctx context.Context, it *model.ItemView) []model.I
 
 // itemFindings reads an item's files' findings: their rules, the worst
 // duration mismatch, and the keys owed to them.
-func (l *Library) itemFindings(ctx context.Context, it *model.ItemView, findings map[string]*fileFinding) ([]string, *DurationMismatchDTO, []string) {
+func (l *Health) itemFindings(ctx context.Context, it *model.ItemView, findings map[string]*fileFinding) ([]string, *DurationMismatchDTO, []string) {
 	if parts := l.gradedFiles(ctx, it); len(parts) > 1 {
 		var rules, owed []string
 		var worst *DurationMismatchDTO
@@ -630,7 +665,7 @@ func (l *Library) itemFindings(ctx context.Context, it *model.ItemView, findings
 // owedBesideNormalized drops the owed keys whose catalog value a clean-up
 // pass set: those rewrite the catalog alone by design, and the file keeps
 // what it says.
-func (l *Library) owedBesideNormalized(ctx context.Context, pid model.PID, keys []string) ([]string, error) {
+func (l *Health) owedBesideNormalized(ctx context.Context, pid model.PID, keys []string) ([]string, error) {
 	if len(keys) == 0 {
 		return nil, nil
 	}
@@ -651,7 +686,7 @@ func (l *Library) owedBesideNormalized(ctx context.Context, pid model.PID, keys 
 // and returns the items a pass would move, backing the path-mismatch
 // rule. Best-effort: a server with no managed library (in-place roots
 // only) has no canonical layout to mismatch, so the rule is skipped.
-func (l *Library) plannedMoves(ctx context.Context) map[model.PID]bool {
+func (l *Health) plannedMoves(ctx context.Context) map[model.PID]bool {
 	moves, err := l.readPlannedMoves(ctx)
 	if err != nil {
 		l.log.Debug("health: organize plan for path-mismatch", "err", err)
@@ -662,7 +697,7 @@ func (l *Library) plannedMoves(ctx context.Context) map[model.PID]bool {
 
 // readPlannedMoves is plannedMoves with its failure. Each library plans
 // under its own profile.
-func (l *Library) readPlannedMoves(ctx context.Context) (map[model.PID]bool, error) {
+func (l *Health) readPlannedMoves(ctx context.Context) (map[model.PID]bool, error) {
 	if l.pathPlanHook != nil {
 		l.pathPlanHook(nil)
 	}
@@ -694,12 +729,12 @@ func misplaced(a *organize.Action) bool {
 	return false
 }
 
-// HealthSummaryFor reads the dashboard aggregate: the stored sweep
+// SummaryFor reads the dashboard aggregate: the stored sweep
 // state (absent means the first sweep has not landed, reported as
 // warming up) plus live per-rule counts from the health index. A caller
 // who does not see everything reads the counts, totals and score over
 // the items it is offered instead.
-func (l *Library) HealthSummaryFor(ctx context.Context, uc *UserCtx) (HealthSummaryDTO, error) {
+func (l *Health) SummaryFor(ctx context.Context, uc *UserCtx) (HealthSummaryDTO, error) {
 	out := HealthSummaryDTO{WarmingUp: true}
 	raw, err := l.db.SettingGet(ctx, healthStateKey)
 	switch {
@@ -732,7 +767,7 @@ func (l *Library) HealthSummaryFor(ctx context.Context, uc *UserCtx) (HealthSumm
 		// The totals and the score stay zero while warming up, as the
 		// stored state's do.
 		if !out.WarmingUp {
-			evaluated, err := l.healthEvaluatedFor(ctx, uc)
+			evaluated, err := l.evaluatedFor(ctx, uc)
 			if err != nil {
 				return HealthSummaryDTO{}, err
 			}
@@ -745,7 +780,7 @@ func (l *Library) HealthSummaryFor(ctx context.Context, uc *UserCtx) (HealthSumm
 		return HealthSummaryDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
 	for _, rule := range healthRules {
-		fixable, blocked := l.healthFixability(rule)
+		fixable, blocked := l.fixability(rule)
 		out.Rules = append(out.Rules, HealthRuleCountDTO{
 			Rule:       rule,
 			Label:      healthRuleLabels[rule],
@@ -765,7 +800,7 @@ func (l *Library) HealthSummaryFor(ctx context.Context, uc *UserCtx) (HealthSumm
 // restricted to one rule, and only those the caller's listings offer:
 // inside their library grants and content rules. A caller who sees
 // everything reads every row.
-func (l *Library) ListHealthIssuesFor(ctx context.Context, uc *UserCtx, rule, cursor string, limit int) ([]HealthIssueDTO, string, error) {
+func (l *Health) ListHealthIssuesFor(ctx context.Context, uc *UserCtx, rule, cursor string, limit int) ([]HealthIssueDTO, string, error) {
 	afterCount, afterTitle, afterPID := 0, "", ""
 	if cursor != "" {
 		c, t, p, ok := l.openHealthCursor(ctx, cursor)
@@ -859,7 +894,7 @@ const (
 // offeredHealthCounts walks the whole health index for a caller who does
 // not see everything and answers, over the rows offeredHealthRows keeps,
 // each rule's failing count and the summed failure weight.
-func (l *Library) offeredHealthCounts(ctx context.Context, uc *UserCtx) (map[string]int, float64, error) {
+func (l *Health) offeredHealthCounts(ctx context.Context, uc *UserCtx) (map[string]int, float64, error) {
 	counts := map[string]int{}
 	var failWeight float64
 	afterCount, afterTitle, afterPID := 0, "", ""
@@ -894,15 +929,15 @@ func (l *Library) offeredHealthCounts(ctx context.Context, uc *UserCtx) (map[str
 	return counts, failWeight, nil
 }
 
-// healthEvaluatedFor counts the items a sweep grades, the present ones,
+// evaluatedFor counts the items a sweep grades, the present ones,
 // that the caller is offered as offeredHealthRows reads it: its grants,
 // tag rules and explicit toggle.
-func (l *Library) healthEvaluatedFor(ctx context.Context, uc *UserCtx) (int, error) {
+func (l *Health) evaluatedFor(ctx context.Context, uc *UserCtx) (int, error) {
 	b := visibleItems().Where("state", query.OpIs, string(model.StatePresent))
-	for _, n := range l.contentNarrow(ctx, uc) {
+	for _, n := range l.Grants.contentNarrow(ctx, uc) {
 		b = b.WhereNode(n)
 	}
-	if grants := l.grantNode(ctx, uc); grants != nil {
+	if grants := l.Grants.node(ctx, uc); grants != nil {
 		b = b.WhereNode(grants)
 	}
 	n, err := l.lib.Count(ctx, b.Build(), "")
@@ -915,7 +950,7 @@ func (l *Library) healthEvaluatedFor(ctx context.Context, uc *UserCtx) (int, err
 // offeredHealthRows keeps the rows whose items the caller's listings
 // offer: inside their library grants and content rules, and not in the
 // trash. An item the catalog no longer holds is not offered.
-func (l *Library) offeredHealthRows(ctx context.Context, uc *UserCtx, rows []wdb.HealthRow) ([]wdb.HealthRow, error) {
+func (l *Health) offeredHealthRows(ctx context.Context, uc *UserCtx, rows []wdb.HealthRow) ([]wdb.HealthRow, error) {
 	pids := make([]model.PID, len(rows))
 	for i, r := range rows {
 		pids[i] = model.PID(r.ItemPID)
@@ -924,13 +959,13 @@ func (l *Library) offeredHealthRows(ctx context.Context, uc *UserCtx, rows []wdb
 	if err != nil {
 		return nil, err
 	}
-	verdicts, err := l.tagVerdicts(ctx, uc, slices.Collect(maps.Values(views)))
+	verdicts, err := l.Grants.tagVerdicts(ctx, uc, slices.Collect(maps.Values(views)))
 	if err != nil {
 		return nil, err
 	}
 	kept := make([]wdb.HealthRow, 0, len(rows))
 	for _, r := range rows {
-		if v, ok := views[model.PID(r.ItemPID)]; ok && l.offersWith(ctx, uc, verdicts, v) {
+		if v, ok := views[model.PID(r.ItemPID)]; ok && l.Grants.offersWith(ctx, uc, verdicts, v) {
 			kept = append(kept, r)
 		}
 	}
@@ -977,7 +1012,7 @@ func healthTitleDigest(title string) []byte {
 // read, which is usually one the caller may not see: the position comes
 // back with the next request, and nothing of the row, its title's length
 // included, goes to anyone.
-func (l *Library) sealHealthCursor(count int, title, pid string) (string, error) {
+func (l *Health) sealHealthCursor(count int, title, pid string) (string, error) {
 	if len(pid) != healthCursorPID || count < 0 || count > math.MaxUint32 {
 		return "", &Error{Kind: KindInternal, Msg: "an issues cursor cannot stand on row " + pid}
 	}
@@ -1003,7 +1038,7 @@ func (l *Library) sealHealthCursor(count int, title, pid string) (string, error)
 // still stands as the cursor left it (its count and its title's digest
 // unchanged); otherwise the position is the title's first bytes, which
 // at worst reads a few rows sharing them twice, and never skips one.
-func (l *Library) openHealthCursor(ctx context.Context, s string) (count int, title, pid string, ok bool) {
+func (l *Health) openHealthCursor(ctx context.Context, s string) (count int, title, pid string, ok bool) {
 	rest, sealed := strings.CutPrefix(s, sealedHealthCursor)
 	if !sealed {
 		return decodeHealthCursor(s)
@@ -1057,7 +1092,7 @@ func decodeHealthCursor(s string) (count int, title, pid string, ok bool) {
 // immediately; the main-registered health worker sees the flag on its
 // next tick and runs RunHealthSweep. The flag names who asked and when,
 // so a request made while a sweep runs outlives that sweep.
-func (l *Library) QueueHealthSweep(ctx context.Context, uc *UserCtx) error {
+func (l *Health) QueueHealthSweep(ctx context.Context, uc *UserCtx) error {
 	if !uc.Admin {
 		return &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -1065,12 +1100,12 @@ func (l *Library) QueueHealthSweep(ctx context.Context, uc *UserCtx) error {
 	if err := l.db.SettingSet(ctx, healthSweepReqKey, uc.ID+"@"+strconv.FormatInt(now, 10), now); err != nil {
 		return &Error{Kind: KindInternal, Err: err}
 	}
-	l.emitEveryoneEvent(ctx, eventHealth)
+	l.Jobs.emitEveryoneEvent(ctx, eventHealth)
 	return nil
 }
 
 // sweepRequest is the pending request's flag, empty when none is.
-func (l *Library) sweepRequest(ctx context.Context) string {
+func (l *Health) sweepRequest(ctx context.Context) string {
 	v, err := l.db.SettingGet(ctx, healthSweepReqKey)
 	if err != nil {
 		return ""
@@ -1080,14 +1115,14 @@ func (l *Library) sweepRequest(ctx context.Context) string {
 
 // SweepRequested reports whether an admin has asked for an off-schedule
 // sweep.
-func (l *Library) SweepRequested(ctx context.Context) bool {
+func (l *Health) SweepRequested(ctx context.Context) bool {
 	return l.sweepRequest(ctx) != ""
 }
 
 // RunHealthSweep is the health worker's sweep: it shows as sweeping while
 // it runs, answers the request it found waiting once it lands, and tells
 // every account the summary moved.
-func (l *Library) RunHealthSweep(ctx context.Context) error {
+func (l *Health) RunHealthSweep(ctx context.Context) error {
 	req := l.sweepRequest(ctx)
 	l.sweeping.Store(true)
 	err := l.SweepHealth(ctx)
@@ -1098,7 +1133,7 @@ func (l *Library) RunHealthSweep(ctx context.Context) error {
 // sweepEnded settles a sweep that answered req (empty when none asked): a
 // failure answers it too, one cut short by a stop or a hand-off keeps it.
 // Accounts hear of a landing, a requested end, and a run's first failure.
-func (l *Library) sweepEnded(ctx context.Context, req string, err error) {
+func (l *Health) sweepEnded(ctx context.Context, req string, err error) {
 	stopping := err != nil && (ctx.Err() != nil || KindOf(err) == KindMaintenance)
 	if req != "" && !stopping {
 		if derr := l.db.SettingDeleteIf(ctx, healthSweepReqKey, req); derr != nil {
@@ -1110,17 +1145,17 @@ func (l *Library) sweepEnded(ctx context.Context, req string, err error) {
 		return
 	}
 	if failedBefore := l.sweepFailed.Swap(err != nil); err == nil || !failedBefore || req != "" {
-		l.emitEveryoneEvent(ctx, eventHealth)
+		l.Jobs.emitEveryoneEvent(ctx, eventHealth)
 	}
 }
 
-// HealthSweepDue reports whether the main-registered health worker
+// SweepDue reports whether the main-registered health worker
 // should sweep now: an explicit request is pending, no sweep has ever
 // completed, or the last one is older than healthSweepInterval. Main's
 // ticker loop calls this, then RunHealthSweep, synchronously on the
 // supervised worker.
-func (l *Library) HealthSweepDue(ctx context.Context) bool {
-	if l.Maintenance() {
+func (l *Health) SweepDue(ctx context.Context) bool {
+	if l.library.Maintenance() {
 		return false
 	}
 	if l.SweepRequested(ctx) {
@@ -1140,7 +1175,7 @@ func (l *Library) HealthSweepDue(ctx context.Context) bool {
 // ListDuplicateGroups runs the catalog's duplicate audits and maps the
 // findings to merge-ready groups, survivor first, capped at
 // duplicateGroupCap.
-func (l *Library) ListDuplicateGroups(ctx context.Context, uc *UserCtx) ([]DuplicateGroupDTO, error) {
+func (l *Health) ListDuplicateGroups(ctx context.Context, uc *UserCtx) ([]DuplicateGroupDTO, error) {
 	if !uc.Admin {
 		return nil, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -1218,7 +1253,7 @@ func duplicateReason(msg string) string {
 }
 
 // MergeDuplicates merges the losers into the survivor atomically.
-func (l *Library) MergeDuplicates(ctx context.Context, uc *UserCtx, entityType, survivorPid string, loserPids []string) (MergeResultDTO, error) {
+func (l *Health) MergeDuplicates(ctx context.Context, uc *UserCtx, entityType, survivorPid string, loserPids []string) (MergeResultDTO, error) {
 	if !uc.Admin {
 		return MergeResultDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -1257,7 +1292,7 @@ func (l *Library) MergeDuplicates(ctx context.Context, uc *UserCtx, entityType, 
 		res.ChildrenMoved += r.Children
 		res.Folds = append(res.Folds, r.Folds...)
 	}
-	l.Audit(ctx, uc, "entity.merge",
+	l.Audit.Record(ctx, uc, "entity.merge",
 		AuditTarget{Kind: entityType, PID: survivorPid},
 		map[string]any{"losers": loserPids, "childrenMoved": res.ChildrenMoved, "folds": res.Folds})
 	return res, nil
@@ -1277,7 +1312,7 @@ func bareEntityPID(s string) (model.PID, bool) {
 // ListUpgradeGroups reports same-recording different-encoding groups,
 // best quality first within each: an item holding a lesser encoding of
 // its recording, then items the fingerprint index ties together.
-func (l *Library) ListUpgradeGroups(ctx context.Context, uc *UserCtx) ([]UpgradeGroupDTO, error) {
+func (l *Health) ListUpgradeGroups(ctx context.Context, uc *UserCtx) ([]UpgradeGroupDTO, error) {
 	if !uc.Admin {
 		return nil, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -1356,7 +1391,7 @@ type UpgradeResolveDTO struct {
 // ResolveUpgrade keeps one encoding and moves the named inferior ones to
 // the trash (recoverable within the retention window): items across
 // items, files within one.
-func (l *Library) ResolveUpgrade(ctx context.Context, uc *UserCtx, req UpgradeResolveDTO) (int, error) {
+func (l *Health) ResolveUpgrade(ctx context.Context, uc *UserCtx, req UpgradeResolveDTO) (int, error) {
 	if !uc.Admin {
 		return 0, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -1374,7 +1409,7 @@ func (l *Library) ResolveUpgrade(ctx context.Context, uc *UserCtx, req UpgradeRe
 	case len(req.RemoveItemPIDs) == 0:
 		return 0, errInvalid("removeItemPids or removeFilePids are required")
 	}
-	if err := l.CheckWritable(ctx, ""); err != nil {
+	if err := l.Settings.CheckWritable(ctx, ""); err != nil {
 		return 0, err
 	}
 	removes := make([]model.PID, 0, len(req.RemoveItemPIDs))
@@ -1409,7 +1444,7 @@ func (l *Library) ResolveUpgrade(ctx context.Context, uc *UserCtx, req UpgradeRe
 			return 0, classify(err)
 		}
 		for _, ref := range refs {
-			if err := l.CheckWritable(ctx, string(ref.LibraryPID)); err != nil {
+			if err := l.Settings.CheckWritable(ctx, string(ref.LibraryPID)); err != nil {
 				return 0, err
 			}
 		}
@@ -1441,12 +1476,12 @@ func (l *Library) ResolveUpgrade(ctx context.Context, uc *UserCtx, req UpgradeRe
 				removed = append(removed, apiOf[pid])
 			}
 		}
-		l.Audit(ctx, uc, "items.delete",
+		l.Audit.Record(ctx, uc, "items.delete",
 			AuditTarget{Kind: "item", PID: req.KeepItemPID},
 			run.record(map[string]any{"reason": "quality-upgrade", "removed": removed, "trashed": run.trashed()},
 				func(item model.PID) string { return apiOf[item] }))
 	case errors.Is(err, errNothingDeleted):
-		l.Audit(ctx, uc, "items.delete.refused",
+		l.Audit.Record(ctx, uc, "items.delete.refused",
 			AuditTarget{Kind: "item", PID: req.KeepItemPID},
 			map[string]any{"reason": "quality-upgrade", "removed": req.RemoveItemPIDs, "error": err.Error()})
 	}
@@ -1462,7 +1497,7 @@ func (l *Library) ResolveUpgrade(ctx context.Context, uc *UserCtx, req UpgradeRe
 // encoding, and the alternates go before the primary for the same
 // reason. A copy in a read-only library stays when the kept encoding is
 // in a writable one, which the catalog promotes first.
-func (l *Library) resolveUpgradeFiles(ctx context.Context, uc *UserCtx, item model.PID, req UpgradeResolveDTO) (int, error) {
+func (l *Health) resolveUpgradeFiles(ctx context.Context, uc *UserCtx, item model.PID, req UpgradeResolveDTO) (int, error) {
 	if req.KeepFilePID == "" {
 		return 0, errInvalid("keepFilePid is required with removeFilePids")
 	}
@@ -1504,14 +1539,14 @@ func (l *Library) resolveUpgradeFiles(ctx context.Context, uc *UserCtx, item mod
 	for _, fp := range req.RemoveFilePIDs {
 		named[fp] = true
 	}
-	keeperWritable := l.CheckWritable(ctx, string(byPID[req.KeepFilePID].LibraryPID)) == nil
+	keeperWritable := l.Settings.CheckWritable(ctx, string(byPID[req.KeepFilePID].LibraryPID)) == nil
 	var files []model.PID
 	for _, primaryLast := range []bool{false, true} {
 		for _, ref := range refs {
 			if !going[string(ref.FilePID)] || (ref.Role == fileRoleAlternate) == primaryLast {
 				continue
 			}
-			if err := l.CheckWritable(ctx, string(ref.LibraryPID)); err != nil {
+			if err := l.Settings.CheckWritable(ctx, string(ref.LibraryPID)); err != nil {
 				if keeperWritable && !named[string(ref.FilePID)] && KindOf(err) == KindReadOnly {
 					continue
 				}
@@ -1532,12 +1567,12 @@ func (l *Library) resolveUpgradeFiles(ctx context.Context, uc *UserCtx, item mod
 			_, stayed := run.stayed[f]
 			return stayed
 		})
-		l.Audit(ctx, uc, "items.delete-files",
+		l.Audit.Record(ctx, uc, "items.delete-files",
 			AuditTarget{Kind: "item", PID: req.KeepItemPID},
 			run.record(map[string]any{"reason": "quality-upgrade", "kept": req.KeepFilePID, "removed": removed, "trashed": run.trashed()},
 				func(model.PID) string { return req.KeepItemPID }))
 	case errors.Is(err, errNothingDeleted):
-		l.Audit(ctx, uc, "items.delete-files.refused",
+		l.Audit.Record(ctx, uc, "items.delete-files.refused",
 			AuditTarget{Kind: "item", PID: req.KeepItemPID},
 			map[string]any{"reason": "quality-upgrade", "kept": req.KeepFilePID, "removed": files, "error": err.Error()})
 	}
@@ -1597,7 +1632,7 @@ func (r upgradeRun) record(detail map[string]any, itemPID func(model.PID) string
 // other tracks too; a run that moved nothing is refused as a delete
 // is, and a move that fails after others went refuses the resolve with
 // how many did, rather than answering a smaller count as success.
-func (l *Library) applyUpgradeDelete(ctx context.Context, plan *trash.Plan, item model.PID) (upgradeRun, error) {
+func (l *Health) applyUpgradeDelete(ctx context.Context, plan *trash.Plan, item model.PID) (upgradeRun, error) {
 	for _, a := range plan.Actions {
 		if a.Skip {
 			return upgradeRun{}, &Error{Kind: KindConflict, Msg: filepath.Base(a.Src) + ": " + a.Reason}
@@ -1606,12 +1641,12 @@ func (l *Library) applyUpgradeDelete(ctx context.Context, plan *trash.Plan, item
 			return upgradeRun{}, errCueRipPart()
 		}
 	}
-	rep, stayed, err := l.applyDeletion(ctx, plan)
+	rep, stayed, err := l.Tools.applyDeletion(ctx, plan)
 	if err != nil {
 		return upgradeRun{}, err
 	}
 	run := upgradeRun{plan: plan, rep: rep, stayed: stayed}
-	if refused := l.deletionRefused(plan, rep, stayed); refused != nil {
+	if refused := l.Tools.deletionRefused(plan, rep, stayed); refused != nil {
 		return run, refused
 	}
 	if left := rep.Errored + rep.Skipped; left > 0 {

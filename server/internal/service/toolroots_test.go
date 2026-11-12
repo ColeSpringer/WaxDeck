@@ -14,12 +14,12 @@ func TestBookToolsFindAFilesRootAsTheServerDoes(t *testing.T) {
 	t.Parallel()
 	podcasts := filepath.Join(t.TempDir(), "Podcasts")
 	_, svc, _ := openEnrichFixture(t, func(c *Config) { c.PodcastDir = podcasts })
-	lib := svc.libraryRoots()[0]
+	lib := svc.Roots.libraryRoots()[0]
 	root := filepath.Clean(lib.Path)
 
 	for _, top := range []string{root, podcasts} {
 		book := filepath.Base(top)
-		got := svc.splitFolder(filepath.Join(top, book+".m4b"), book, true)
+		got := svc.Tools.splitFolder(filepath.Join(top, book+".m4b"), book, true)
 		if want := filepath.Join(top, book+splitMark); got != want {
 			t.Errorf("a kept split at the top of %s goes to %s, want %s", top, got, want)
 		}
@@ -34,7 +34,7 @@ func TestBookToolsFindAFilesRootAsTheServerDoes(t *testing.T) {
 		filepath.Join(podcasts, "Show", "episode.mp3"):   "",
 		filepath.Join(other, "Author", "Book", "01.m4b"): "",
 	} {
-		if got := svc.libraryNameOf(path); got != want {
+		if got := svc.Tools.libraryNameOf(path); got != want {
 			t.Errorf("library of %s = %q, want %q", path, got, want)
 		}
 	}

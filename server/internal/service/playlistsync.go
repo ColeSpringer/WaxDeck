@@ -16,7 +16,6 @@ import (
 	waxbin "github.com/colespringer/waxbin"
 	waxart "github.com/colespringer/waxbin/art"
 	"github.com/colespringer/waxbin/model"
-	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/source"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -82,7 +81,17 @@ type PlaylistSourceDTO struct {
 	LastAttemptNS       int64
 	LastSyncedNS        int64
 	HasRun              bool
-	LastCounts          wdb.PlaylistSyncCounts
+	LastCounts          PlaylistSyncCounts
+}
+
+// PlaylistSyncCounts is one completed sync run's accounting.
+type PlaylistSyncCounts struct {
+	Added       int
+	Removed     int
+	Trashed     int
+	Queued      int
+	Unavailable int
+	Missing     int
 }
 
 // PlaylistSourceUpdateDTO is a binding to store, replacing any previous
@@ -131,8 +140,8 @@ type playlistSyncOutcome struct {
 // hasPlaylistSnapshotter reports whether any source provider can list
 // a playlist in full order - the gate the sync endpoints and sweeper
 // check before doing anything.
-func (l *Library) hasPlaylistSnapshotter() bool {
-	for _, p := range l.sourceProviders {
+func (l *Playlists) hasPlaylistSnapshotter() bool {
+	for _, p := range l.Ingest.sourceProviders {
 		if _, ok := p.(syncsource.Snapshotter); ok {
 			return true
 		}
@@ -143,8 +152,8 @@ func (l *Library) hasPlaylistSnapshotter() bool {
 // firstSnapshotterSourceType is the source label of the first
 // snapshot-capable provider, for the paths that need a label before
 // any URL has been probed.
-func (l *Library) firstSnapshotterSourceType() string {
-	for _, p := range l.sourceProviders {
+func (l *Playlists) firstSnapshotterSourceType() string {
+	for _, p := range l.Ingest.sourceProviders {
 		if _, ok := p.(syncsource.Snapshotter); ok {
 			return string(p.SourceType())
 		}
@@ -152,15 +161,15 @@ func (l *Library) firstSnapshotterSourceType() string {
 	return ""
 }
 
-// playlistSnapshotFor lists a playlist URL through whichever snapshot-
+// snapshotFor lists a playlist URL through whichever snapshot-
 // capable provider answers for it, the way acquireList probes each
 // provider against the actual URL rather than trusting registration
 // order. The provider that answered is returned beside the snapshot,
 // since it is the one whose Fetch the download step must use.
-func (l *Library) playlistSnapshotFor(ctx context.Context, url string, opts syncsource.SnapshotOptions) (source.Provider, *syncsource.PlaylistSnapshot, error) {
+func (l *Playlists) snapshotFor(ctx context.Context, url string, opts syncsource.SnapshotOptions) (source.Provider, *syncsource.PlaylistSnapshot, error) {
 	var firstErr error
 	tried := false
-	for _, p := range l.sourceProviders {
+	for _, p := range l.Ingest.sourceProviders {
 		s, ok := p.(syncsource.Snapshotter)
 		if !ok {
 			continue
@@ -182,7 +191,7 @@ func (l *Library) playlistSnapshotFor(ctx context.Context, url string, opts sync
 }
 
 // GetPlaylistSource reads a playlist's binding. Owner only.
-func (l *Library) GetPlaylistSource(ctx context.Context, uc *UserCtx, apiPlaylistPID string) (PlaylistSourceDTO, error) {
+func (l *Playlists) GetPlaylistSource(ctx context.Context, uc *UserCtx, apiPlaylistPID string) (PlaylistSourceDTO, error) {
 	pl, err := l.resolveOwnedPlaylist(ctx, uc, apiPlaylistPID)
 	if err != nil {
 		return PlaylistSourceDTO{}, err
@@ -206,7 +215,7 @@ func (l *Library) GetPlaylistSource(ctx context.Context, uc *UserCtx, apiPlaylis
 // source, refs, identity and cover are kept and only the settings
 // change. Owner only; static playlists only; selecting mirror-trash
 // needs the delete right.
-func (l *Library) SetPlaylistSource(ctx context.Context, uc *UserCtx, apiPlaylistPID string, in PlaylistSourceUpdateDTO) (PlaylistSourceDTO, error) {
+func (l *Playlists) SetPlaylistSource(ctx context.Context, uc *UserCtx, apiPlaylistPID string, in PlaylistSourceUpdateDTO) (PlaylistSourceDTO, error) {
 	pl, err := l.resolveOwnedPlaylist(ctx, uc, apiPlaylistPID)
 	if err != nil {
 		return PlaylistSourceDTO{}, err
@@ -263,7 +272,7 @@ func (l *Library) SetPlaylistSource(ctx context.Context, uc *UserCtx, apiPlaylis
 		// with nothing left to refresh it.
 		l.releaseSourcePlaylistCover(ctx, pl)
 	}
-	l.Audit(ctx, uc, "playlist.source.bind",
+	l.Audit.Record(ctx, uc, "playlist.source.bind",
 		AuditTarget{Kind: "playlist", PID: apiPlaylistPID, Name: pl.Name},
 		map[string]any{"source": row.Source, "mode": row.Mode, "live": row.Live})
 	return playlistSourceDTO(row), nil
@@ -331,7 +340,7 @@ func validateResavedPlaylistSourceSettings(live bool, in PlaylistSourceUpdateDTO
 // before the next sweeper tick. An interval that changed alone keeps
 // the stamp, so a shortened interval is measured from the last real
 // attempt rather than from the save.
-func (l *Library) resavePlaylistSourceSettings(
+func (l *Playlists) resavePlaylistSourceSettings(
 	ctx context.Context,
 	uc *UserCtx,
 	pl *model.Playlist,
@@ -359,7 +368,7 @@ func (l *Library) resavePlaylistSourceSettings(
 	if err := l.db.PutPlaylistSource(ctx, row); err != nil {
 		return PlaylistSourceDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
-	l.Audit(ctx, uc, "playlist.source.mode",
+	l.Audit.Record(ctx, uc, "playlist.source.mode",
 		AuditTarget{Kind: "playlist", PID: apiPlaylistPID, Name: pl.Name},
 		map[string]any{"source": row.Source, "mode": row.Mode, "live": row.Live})
 	return playlistSourceDTO(row), nil
@@ -367,7 +376,7 @@ func (l *Library) resavePlaylistSourceSettings(
 
 // UnbindPlaylistSource removes a binding; the playlist and its members
 // stay as they are.
-func (l *Library) UnbindPlaylistSource(ctx context.Context, uc *UserCtx, apiPlaylistPID string) error {
+func (l *Playlists) UnbindPlaylistSource(ctx context.Context, uc *UserCtx, apiPlaylistPID string) error {
 	pl, err := l.resolveOwnedPlaylist(ctx, uc, apiPlaylistPID)
 	if err != nil {
 		return err
@@ -384,7 +393,7 @@ func (l *Library) UnbindPlaylistSource(ctx context.Context, uc *UserCtx, apiPlay
 	// binding gone it would stand frozen forever, so the slot goes back
 	// to the mosaic. A custom cover is untouched.
 	l.releaseSourcePlaylistCover(ctx, pl)
-	l.Audit(ctx, uc, "playlist.source.unbind",
+	l.Audit.Record(ctx, uc, "playlist.source.unbind",
 		AuditTarget{Kind: "playlist", PID: apiPlaylistPID, Name: pl.Name}, nil)
 	return nil
 }
@@ -393,7 +402,7 @@ func (l *Library) UnbindPlaylistSource(ctx context.Context, uc *UserCtx, apiPlay
 // sync makes, writing nothing. With an update body it previews those
 // prospective settings (the sheet's dry run before a bind commits);
 // without one it previews the stored binding.
-func (l *Library) PreviewPlaylistSync(ctx context.Context, uc *UserCtx, apiPlaylistPID string, in *PlaylistSourceUpdateDTO) (PlaylistSyncPreviewDTO, error) {
+func (l *Playlists) PreviewPlaylistSync(ctx context.Context, uc *UserCtx, apiPlaylistPID string, in *PlaylistSourceUpdateDTO) (PlaylistSyncPreviewDTO, error) {
 	pl, err := l.resolveOwnedPlaylist(ctx, uc, apiPlaylistPID)
 	if err != nil {
 		return PlaylistSyncPreviewDTO{}, err
@@ -461,8 +470,8 @@ func (l *Library) PreviewPlaylistSync(ctx context.Context, uc *UserCtx, apiPlayl
 // SyncPlaylistSourceNow queues a sync run for the stored binding,
 // answering a run already in flight with that task rather than a second
 // one.
-func (l *Library) SyncPlaylistSourceNow(ctx context.Context, uc *UserCtx, apiPlaylistPID string) (ToolTaskDTO, error) {
-	if err := l.CheckWritable(ctx, ""); err != nil {
+func (l *Playlists) SyncPlaylistSourceNow(ctx context.Context, uc *UserCtx, apiPlaylistPID string) (ToolTaskDTO, error) {
+	if err := l.Settings.CheckWritable(ctx, ""); err != nil {
 		return ToolTaskDTO{}, err
 	}
 	pl, err := l.resolveOwnedPlaylist(ctx, uc, apiPlaylistPID)
@@ -484,7 +493,7 @@ func (l *Library) SyncPlaylistSourceNow(ctx context.Context, uc *UserCtx, apiPla
 	} else if !errors.Is(err, wdb.ErrNotFound) {
 		return ToolTaskDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
-	return l.insertToolTask(ctx, uc, taskTypePlaylistSync, apiPlaylistPID, toolTaskParams{
+	return l.Tools.insertToolTask(ctx, uc, taskTypePlaylistSync, apiPlaylistPID, toolTaskParams{
 		PlaylistPID: apiPlaylistPID,
 	})
 }
@@ -493,11 +502,11 @@ func (l *Library) SyncPlaylistSourceNow(ctx context.Context, uc *UserCtx, apiPla
 // whose interval elapsed. Called by the playlist-sync sweeper; it
 // self-gates, so the worker spawns unconditionally at the composition
 // root and a music-only or bridge-less instance simply idles.
-func (l *Library) SyncDuePlaylistSources(ctx context.Context) {
+func (l *Playlists) SyncDuePlaylistSources(ctx context.Context) {
 	if !l.hasPlaylistSnapshotter() {
 		return
 	}
-	if err := l.CheckWritable(ctx, ""); err != nil {
+	if err := l.Settings.CheckWritable(ctx, ""); err != nil {
 		return
 	}
 	rows, err := l.db.DuePlaylistSources(ctx, time.Now().UnixNano())
@@ -523,9 +532,13 @@ func (l *Library) SyncDuePlaylistSources(ctx context.Context) {
 			continue
 		}
 		// The catalog's OwnerName column carries the account id.
-		uc := l.taskUserCtx(ctx, pl.OwnerName)
-		if uc == nil {
+		uc, err := l.Grants.UserCtxByID(ctx, pl.OwnerName)
+		if KindOf(err) == KindNotFound {
 			l.log.Warn("synced playlist owner is gone or disabled", "playlist", b.PlaylistPID)
+			continue
+		}
+		if err != nil {
+			l.log.Warn("reading synced playlist owner", "playlist", b.PlaylistPID, "err", err)
 			continue
 		}
 		apiPlaylistPID := apiPID(PrefixPlaylist, pl.PID)
@@ -535,7 +548,7 @@ func (l *Library) SyncDuePlaylistSources(ctx context.Context) {
 			l.log.Warn("checking for a running playlist sync", "playlist", b.PlaylistPID, "err", err)
 			continue
 		}
-		if _, err := l.insertToolTask(ctx, uc, taskTypePlaylistSync, apiPlaylistPID, toolTaskParams{
+		if _, err := l.Tools.insertToolTask(ctx, uc, taskTypePlaylistSync, apiPlaylistPID, toolTaskParams{
 			PlaylistPID: apiPlaylistPID,
 		}); err != nil {
 			l.log.Warn("queuing playlist sync", "playlist", b.PlaylistPID, "err", err)
@@ -547,10 +560,10 @@ func (l *Library) SyncDuePlaylistSources(ctx context.Context) {
 // membership, then download what is new. Failure accounting rides the
 // binding row (feedwork pattern), and the auto-disable edge notifies
 // exactly once.
-func (l *Library) runPlaylistSync(ctx context.Context, t *wdb.ToolTask, p toolTaskParams) ([]string, error) {
-	uc := l.taskUserCtx(ctx, t.UserID)
-	if uc == nil {
-		return nil, fmt.Errorf("%w: the playlist owner's account is gone or disabled", errToolPermanent)
+func (l *Playlists) runPlaylistSync(ctx context.Context, t *wdb.ToolTask, p toolTaskParams) ([]string, error) {
+	uc, err := l.Tools.taskAccount(ctx, t.UserID, "the playlist owner's account")
+	if err != nil {
+		return nil, err
 	}
 	pl, err := l.resolveOwnedPlaylist(ctx, uc, p.PlaylistPID)
 	if err != nil {
@@ -660,7 +673,7 @@ func validatePlaylistSourceSettings(in PlaylistSourceUpdateDTO) error {
 // resolveLive probes a live source over the network for its identity,
 // title, and cover; a preview skips it, since the reconcile that
 // follows enumerates anyway.
-func (l *Library) buildPlaylistSourceRow(ctx context.Context, pl *model.Playlist, in PlaylistSourceUpdateDTO, resolveLive bool) (wdb.PlaylistSourceRow, error) {
+func (l *Playlists) buildPlaylistSourceRow(ctx context.Context, pl *model.Playlist, in PlaylistSourceUpdateDTO, resolveLive bool) (wdb.PlaylistSourceRow, error) {
 	now := time.Now().UnixNano()
 	row := wdb.PlaylistSourceRow{
 		PlaylistPID: string(pl.PID),
@@ -676,7 +689,7 @@ func (l *Library) buildPlaylistSourceRow(ctx context.Context, pl *model.Playlist
 		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 			return row, errInvalid("url must be an http or https URL")
 		}
-		if err := l.guardAcquireHost(ctx, parsed.Hostname()); err != nil {
+		if err := l.Ingest.guardAcquireHost(ctx, parsed.Hostname()); err != nil {
 			return row, err
 		}
 		row.Live = true
@@ -692,7 +705,7 @@ func (l *Library) buildPlaylistSourceRow(ctx context.Context, pl *model.Playlist
 			// whose source label the binding records. A URL that is
 			// not a playlist any provider knows fails here, before
 			// anything is stored.
-			provider, snap, err := l.playlistSnapshotFor(ctx, row.URL, syncsource.SnapshotOptions{MaxEntries: 8, EnrichLimit: 4})
+			provider, snap, err := l.snapshotFor(ctx, row.URL, syncsource.SnapshotOptions{MaxEntries: 8, EnrichLimit: 4})
 			if err != nil {
 				if KindOf(err) != "" {
 					return row, err
@@ -731,7 +744,7 @@ func playlistSourceDTO(b wdb.PlaylistSourceRow) PlaylistSourceDTO {
 		LastAttemptNS:       b.LastAttemptNS,
 		LastSyncedNS:        b.LastSyncedNS,
 		HasRun:              b.LastSyncedNS > 0,
-		LastCounts:          b.LastCounts,
+		LastCounts:          PlaylistSyncCounts(b.LastCounts),
 	}
 	if b.RefsJSON != "" {
 		var refs []PortableRefDTO
@@ -759,7 +772,7 @@ type syncedSourceEntry struct {
 // run: enumerate (or re-match), verify the map, compute the mode's
 // target membership, and - unless dryRun - replace, trash, and queue
 // downloads. dryRun writes nothing at all.
-func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, pl *model.Playlist, b wdb.PlaylistSourceRow, dryRun bool) (playlistSyncOutcome, error) {
+func (l *Playlists) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, pl *model.Playlist, b wdb.PlaylistSourceRow, dryRun bool) (playlistSyncOutcome, error) {
 	var out playlistSyncOutcome
 	if !dryRun && t == nil {
 		// Defense in depth: every non-dry caller is a task run, and the
@@ -785,7 +798,7 @@ func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, 
 	)
 	if b.Live {
 		var snap *syncsource.PlaylistSnapshot
-		provider, snap, err = l.playlistSnapshotFor(ctx, b.URL, syncsource.SnapshotOptions{MaxEntries: playlistSyncMaxEntries})
+		provider, snap, err = l.snapshotFor(ctx, b.URL, syncsource.SnapshotOptions{MaxEntries: playlistSyncMaxEntries})
 		if err != nil {
 			return out, err
 		}
@@ -1092,7 +1105,7 @@ func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, 
 			// take, and the catalog refuses a plan that names one: its
 			// entry stays owed until the flag is lifted, rather than
 			// failing the run for every other entry.
-			if l.checkPathWritable(ctx, string(it.Path)) != nil {
+			if l.Settings.checkPathWritable(ctx, string(it.Path)) != nil {
 				continue
 			}
 			trashSeen[pid] = true
@@ -1208,7 +1221,7 @@ func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, 
 	}
 
 	if len(toTrash) > 0 {
-		stayed, err := l.trashSyncedItems(ctx, toTrash)
+		stayed, err := l.Tools.trashSyncedItems(ctx, toTrash)
 		if err != nil {
 			return out, fmt.Errorf("trashing removed entries: %w", err)
 		}
@@ -1238,14 +1251,17 @@ func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, 
 	}
 
 	if len(downloads) > 0 {
-		user, err := l.db.UserByID(ctx, uc.ID)
+		// Read again rather than carried from the run's start: listing a
+		// source can take minutes, and an upload right, a quota or an
+		// account taken away meanwhile has to stop the downloads.
+		owner, err := l.Tools.taskAccount(ctx, uc.ID, "the playlist owner's account")
 		if err != nil {
-			return out, fmt.Errorf("%w: the playlist owner's account is gone", errToolPermanent)
+			return out, err
 		}
-		if !user.UploadEnabled && !hasRole(user.Roles, "admin") {
+		if !owner.UploadEnabled {
 			return out, fmt.Errorf("%w: the playlist owner cannot upload, so new entries cannot be downloaded", errToolPermanent)
 		}
-		has, err := l.hasManagedDestination(ctx, uc, model.KindTrack)
+		has, err := l.Ingest.hasManagedDestination(ctx, owner, model.KindTrack)
 		if err != nil {
 			return out, err
 		}
@@ -1268,13 +1284,13 @@ func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, 
 		}
 		dp := toolTaskParams{
 			MediaType:        "music",
-			IdentifyDeclined: !l.resolveIdentify(ctx, uc.ID, nil),
+			IdentifyDeclined: !l.Ingest.resolveIdentify(ctx, uc.ID, nil),
 		}
 		// Per-item fetch failures skip rather than fail the run: one
 		// age-gated video past the enrichment budget must not starve
 		// the entries behind it forever. A skipped entry has no map
 		// row, so the next run simply tries it again.
-		entryIDs, staged, skipped, fetchErr, entriesErr := l.fetchAcquireBatch(ctx, t, dp, provider, downloads, user, 95, true)
+		entryIDs, staged, skipped, fetchErr, entriesErr := l.Ingest.fetchAcquireBatch(ctx, t, dp, provider, downloads, owner, 95, true)
 		out.entryIDs = entryIDs
 		out.counts.Queued = staged
 		out.counts.Unavailable += skipped
@@ -1293,7 +1309,7 @@ func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, 
 // audio essence, so the portable-ref ladder finds the survivor) and
 // forgetting rows nothing resolves, so their entries read as new.
 // Returns the item views for everything that resolved, keyed by pid.
-func (l *Library) verifySourceMap(ctx context.Context, sourceKind string, mapRows map[string]wdb.PlaylistSourceMapRow, dryRun bool) (map[model.PID]*model.ItemView, error) {
+func (l *Playlists) verifySourceMap(ctx context.Context, sourceKind string, mapRows map[string]wdb.PlaylistSourceMapRow, dryRun bool) (map[model.PID]*model.ItemView, error) {
 	var pids []model.PID
 	for _, m := range mapRows {
 		if m.ItemPID != "" {
@@ -1361,7 +1377,7 @@ const (
 // rejected row is forgotten so the map stops naming a download that no
 // longer exists; the rejected verdict is the caller's cue to tombstone
 // the entry for its playlist.
-func (l *Library) sourceDownloadState(ctx context.Context, sourceKind, entryID string, m wdb.PlaylistSourceMapRow, dryRun bool) syncDownloadState {
+func (l *Playlists) sourceDownloadState(ctx context.Context, sourceKind, entryID string, m wdb.PlaylistSourceMapRow, dryRun bool) syncDownloadState {
 	if m.UploadID == "" {
 		return syncDownloadGone
 	}
@@ -1395,8 +1411,8 @@ func (l *Library) sourceDownloadState(ctx context.Context, sourceKind, entryID s
 // syncMemberFilter is the owner's view of a synced list's candidates:
 // their grants, subscriptions and content rules, archived items kept for
 // the reconciler to read as removals.
-func (l *Library) syncMemberFilter(uc *UserCtx) memberFilter {
-	return memberFilter{uc: uc, subs: l.newSubscriptionFilter(uc), keepArchived: true}
+func (l *Playlists) syncMemberFilter(uc *UserCtx) memberFilter {
+	return memberFilter{uc: uc, subs: l.Podcasts.newSubscriptionFilter(uc), keepArchived: true}
 }
 
 // setSyncedMembers writes a run's target order. Not through the reorder
@@ -1406,7 +1422,7 @@ func (l *Library) syncMemberFilter(uc *UserCtx) memberFilter {
 // member its owner cannot see in place, so a hidden member is no reason
 // to stall the run. The lost-update guard stays: an edit since the run
 // read the list wins, and the run backs off.
-func (l *Library) setSyncedMembers(ctx context.Context, uc *UserCtx, pl *model.Playlist, target []model.PID) error {
+func (l *Playlists) setSyncedMembers(ctx context.Context, uc *UserCtx, pl *model.Playlist, target []model.PID) error {
 	fresh, err := l.lib.Playlists().Get(ctx, pl.PID)
 	if err != nil {
 		return classify(err)
@@ -1421,18 +1437,11 @@ func (l *Library) setSyncedMembers(ctx context.Context, uc *UserCtx, pl *model.P
 	return nil
 }
 
-// itemViewsByPID batch-reads item views by pid, archived items
-// included: the reconciler must see a trashed member as "the owner
-// removed this", never as "vanished, download it again".
-func (l *Library) itemViewsByPID(ctx context.Context, pids []model.PID) (map[model.PID]*model.ItemView, error) {
-	return l.itemsAmong(ctx, pids, func() *query.Builder { return query.New(query.EntityItems) })
-}
-
 // syncSourcePlaylistCover stores the source's own thumbnail as the
 // playlist cover, preferred over the member mosaic and yielding to a
 // user's upload. Best-effort: a fetch failure leaves whatever cover
 // stands.
-func (l *Library) syncSourcePlaylistCover(ctx context.Context, pl *model.Playlist, coverURL string) {
+func (l *Playlists) syncSourcePlaylistCover(ctx context.Context, pl *model.Playlist, coverURL string) {
 	rec, err := l.db.PlaylistCoverFor(ctx, string(pl.PID))
 	switch {
 	case err == nil:
@@ -1490,7 +1499,7 @@ func (l *Library) syncSourcePlaylistCover(ctx context.Context, pl *model.Playlis
 // releaseSourcePlaylistCover hands a source-origin cover's slot back to
 // the mosaic: the provenance row goes, then the regeneration paints
 // over the stored image. Any other origin is left exactly as it is.
-func (l *Library) releaseSourcePlaylistCover(ctx context.Context, pl *model.Playlist) {
+func (l *Playlists) releaseSourcePlaylistCover(ctx context.Context, pl *model.Playlist) {
 	rec, err := l.db.PlaylistCoverFor(ctx, string(pl.PID))
 	if err != nil || rec.Origin != wdb.CoverSource {
 		return
@@ -1508,7 +1517,7 @@ func (l *Library) releaseSourcePlaylistCover(ctx context.Context, pl *model.Play
 // hardened outbound client: the URL is third-party data, and a redirect
 // must not walk the sweeper onto a private address the front door
 // refused.
-func (l *Library) fetchSyncedCoverImage(ctx context.Context, rawURL string) ([]byte, string, error) {
+func (l *Playlists) fetchSyncedCoverImage(ctx context.Context, rawURL string) ([]byte, string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme != "https" {
 		return nil, "", fmt.Errorf("cover url must be https")
@@ -1518,7 +1527,7 @@ func (l *Library) fetchSyncedCoverImage(ctx context.Context, rawURL string) ([]b
 		return nil, "", err
 	}
 	req.Header.Set("User-Agent", l.UserAgent())
-	client := *l.transcriptClient()
+	client := *l.Podcasts.transcriptClient()
 	capped := client.CheckRedirect
 	client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
 		if next.URL.Scheme != "https" {
@@ -1561,7 +1570,7 @@ func (l *Library) fetchSyncedCoverImage(ctx context.Context, rawURL string) ([]b
 // notifyPlaylistSynced announces a run that changed the playlist: one
 // notification to the owner plus the sync-event marker of the same
 // name.
-func (l *Library) notifyPlaylistSynced(ctx context.Context, ownerID string, pl *model.Playlist, c wdb.PlaylistSyncCounts) {
+func (l *Playlists) notifyPlaylistSynced(ctx context.Context, ownerID string, pl *model.Playlist, c wdb.PlaylistSyncCounts) {
 	var parts []string
 	if c.Added > 0 {
 		parts = append(parts, fmt.Sprintf("%d added", c.Added))
@@ -1576,15 +1585,15 @@ func (l *Library) notifyPlaylistSynced(ctx context.Context, ownerID string, pl *
 		parts = append(parts, fmt.Sprintf("%d downloading", c.Queued))
 	}
 	body := fmt.Sprintf("%q synced from its source: %s.", pl.Name, strings.Join(parts, ", "))
-	l.EmitNotificationFor(ctx, "playlist-synced", "Playlist synced", body,
+	l.Integrations.EmitNotificationFor(ctx, "playlist-synced", "Playlist synced", body,
 		apiPID(PrefixPlaylist, pl.PID), []string{ownerID})
 	l.emitUserEvent(ctx, ownerID, eventPlaylistSynced, apiPID(PrefixPlaylist, pl.PID))
 }
 
 // notifyPlaylistSyncDisabled announces the auto-disable edge, once.
-func (l *Library) notifyPlaylistSyncDisabled(ctx context.Context, ownerID string, pl *model.Playlist) {
+func (l *Playlists) notifyPlaylistSyncDisabled(ctx context.Context, ownerID string, pl *model.Playlist) {
 	body := fmt.Sprintf("%q kept failing to sync from its source, so its schedule was suspended. A successful manual sync turns it back on.", pl.Name)
-	l.EmitNotificationFor(ctx, "playlist-synced", "Playlist sync suspended", body,
+	l.Integrations.EmitNotificationFor(ctx, "playlist-synced", "Playlist sync suspended", body,
 		apiPID(PrefixPlaylist, pl.PID), []string{ownerID})
 	l.emitUserEvent(ctx, ownerID, eventPlaylistSynced, apiPID(PrefixPlaylist, pl.PID))
 }

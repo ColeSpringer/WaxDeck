@@ -12,7 +12,7 @@ import (
 
 func (s *Server) GetPlaylistSource(ctx context.Context, req GetPlaylistSourceRequestObject) (GetPlaylistSourceResponseObject, error) {
 	uc := userCtx(ctx)
-	src, err := s.svc.GetPlaylistSource(ctx, uc, req.Pid)
+	src, err := s.svc.Playlists.GetPlaylistSource(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -24,7 +24,7 @@ func (s *Server) SetPlaylistSource(ctx context.Context, req SetPlaylistSourceReq
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	src, err := s.svc.SetPlaylistSource(ctx, uc, req.Pid, playlistSourceUpdateFromWire(*req.Body))
+	src, err := s.svc.Playlists.SetPlaylistSource(ctx, uc, req.Pid, playlistSourceUpdateFromWire(*req.Body))
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +33,7 @@ func (s *Server) SetPlaylistSource(ctx context.Context, req SetPlaylistSourceReq
 
 func (s *Server) UnbindPlaylistSource(ctx context.Context, req UnbindPlaylistSourceRequestObject) (UnbindPlaylistSourceResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.UnbindPlaylistSource(ctx, uc, req.Pid); err != nil {
+	if err := s.svc.Playlists.UnbindPlaylistSource(ctx, uc, req.Pid); err != nil {
 		return nil, err
 	}
 	return UnbindPlaylistSource204Response{}, nil
@@ -51,7 +51,7 @@ func (s *Server) PreviewPlaylistSync(ctx context.Context, req PreviewPlaylistSyn
 		dto := playlistSourceUpdateFromWire(*req.Body)
 		in = &dto
 	}
-	preview, err := s.svc.PreviewPlaylistSync(ctx, uc, req.Pid, in)
+	preview, err := s.svc.Playlists.PreviewPlaylistSync(ctx, uc, req.Pid, in)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (s *Server) PreviewPlaylistSync(ctx context.Context, req PreviewPlaylistSyn
 
 func (s *Server) SyncPlaylistSource(ctx context.Context, req SyncPlaylistSourceRequestObject) (SyncPlaylistSourceResponseObject, error) {
 	uc := userCtx(ctx)
-	task, err := s.svc.SyncPlaylistSourceNow(ctx, uc, req.Pid)
+	task, err := s.svc.Playlists.SyncPlaylistSourceNow(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}

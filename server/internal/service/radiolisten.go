@@ -44,7 +44,7 @@ type radioListenPoint struct {
 	elapsed    time.Duration
 }
 
-func (p radioListenPoint) writeTo(ctx context.Context, l *Library) {
+func (p radioListenPoint) writeTo(ctx context.Context, l *Radio) {
 	l.writeRadioListen(ctx, p)
 }
 
@@ -64,7 +64,7 @@ func (radioListenPoint) kind() string { return "listen" }
 // The caller is the goroutine relaying that listener's audio, so
 // nothing here may touch SQLite; the listener's context is deliberately
 // not carried into the write, for the reason [ScrobbleRadioPlay] gives.
-func (l *Library) RecordRadioListen(_ context.Context, userID, sessionID, apiStationPID string, startedAt time.Time, elapsed time.Duration) {
+func (l *Radio) RecordRadioListen(_ context.Context, userID, sessionID, apiStationPID string, startedAt time.Time, elapsed time.Duration) {
 	if elapsed < l.radioListenFloor {
 		return
 	}
@@ -78,7 +78,7 @@ func (l *Library) RecordRadioListen(_ context.Context, userID, sessionID, apiSta
 }
 
 // writeRadioListen records or extends one tune-in's row.
-func (l *Library) writeRadioListen(ctx context.Context, p radioListenPoint) {
+func (l *Radio) writeRadioListen(ctx context.Context, p radioListenPoint) {
 	prefix, pid, ok := parseAPIPID(p.stationPID)
 	if !ok || prefix != PrefixRadioStation {
 		return

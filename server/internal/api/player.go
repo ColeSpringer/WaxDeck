@@ -29,7 +29,7 @@ type ConnectResolver struct {
 
 // Entries hydrates queue entries, enforcing visibility per pid.
 func (r *ConnectResolver) Entries(ctx context.Context, userID string, pids []string) ([]connect.QueueEntry, error) {
-	entries, err := r.Svc.QueueEntries(ctx, userID, pids)
+	entries, err := r.Svc.Playback.QueueEntries(ctx, userID, pids)
 	if err != nil {
 		if service.KindOf(err) == service.KindNotFound {
 			return nil, connect.ErrNotFound
@@ -69,7 +69,7 @@ type delivery struct {
 // watchers see, what the listener resumes at - stays in book
 // milliseconds.
 func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entries []connect.QueueEntry, target connect.EndpointTarget, base string, ttl time.Duration) ([]connect.MediaItem, error) {
-	uc, err := r.Svc.UserCtxByID(ctx, userID)
+	uc, err := r.Svc.Grants.UserCtxByID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entrie
 		// A multi-file audiobook lays out as one item per part,
 		// resolved together: the item and the book are read once
 		// between them however many parts there are.
-		pieces, err := r.Svc.BookPieces(ctx, uc, e.PID)
+		pieces, err := r.Svc.Playback.BookPieces(ctx, uc, e.PID)
 		if err != nil {
 			return nil, err
 		}
@@ -129,7 +129,7 @@ func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entrie
 		}
 		// Resolved once for the book rather than once per part: it is
 		// the listener's setting for the book, not for a file in it.
-		voiceBoost := r.Svc.EffectiveVoiceBoost(ctx, uc, e.PID)
+		voiceBoost := r.Svc.Playback.EffectiveVoiceBoost(ctx, uc, e.PID)
 		for _, piece := range pieces {
 			item, err := r.partItem(ctx, userID, e, piece, d, voiceBoost)
 			if err != nil {
@@ -160,7 +160,7 @@ func (r *ConnectResolver) wholeItem(ctx context.Context, uc *service.UserCtx, us
 			TTL:           d.ttl,
 			ForceFormat:   d.force,
 			DeviceFormats: d.formats,
-			VoiceBoost:    r.Svc.EffectiveVoiceBoost(ctx, uc, e.PID),
+			VoiceBoost:    r.Svc.Playback.EffectiveVoiceBoost(ctx, uc, e.PID),
 		})
 		switch {
 		case err == nil:
@@ -175,7 +175,7 @@ func (r *ConnectResolver) wholeItem(ctx context.Context, uc *service.UserCtx, us
 		}
 		// The engine went away since it was asked: the original, below.
 	}
-	res, err := r.Svc.DirectPlayInfo(ctx, uc, e.PID, "")
+	res, err := r.Svc.Playback.DirectPlayInfo(ctx, uc, e.PID, "")
 	if err != nil {
 		if u, mime, ok := r.enclosureItem(ctx, userID, e.PID, d.ttl, d.force, err); ok {
 			item.URL, item.MimeType = d.base+u, mime
@@ -278,12 +278,12 @@ func (r *ConnectResolver) Timeline(ctx context.Context, userID string, entries [
 	// The session owner's, not the caller's: a household member with
 	// permission to drive somebody else's cast session must not have
 	// their own crossfade rewrite how it sounds mid-queue.
-	prefs := r.Svc.PrefsForUser(ctx, userID)
+	prefs := r.Svc.Identity.PrefsForUser(ctx, userID)
 	// The queue is the session's stored one, hydrated against the
 	// owner's reach when it was set; a grant or rule may have narrowed
 	// since. An entry the owner can no longer see mints no timeline, and
 	// the per-item load, which refuses it, answers instead.
-	reach, uc, err := r.Svc.TimelineReach(ctx, userID)
+	reach, uc, err := r.Svc.Identity.TimelineReach(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +294,7 @@ func (r *ConnectResolver) Timeline(ctx context.Context, userID string, entries [
 	}
 	members := make([]flow.TimelineMember, 0, len(entries))
 	for _, e := range entries {
-		book, err := r.Svc.VisibleBook(ctx, uc, e.PID)
+		book, err := r.Svc.Grants.VisibleBook(ctx, uc, e.PID)
 		if err != nil {
 			if service.KindOf(err) == service.KindNotFound {
 				return nil, nil
@@ -302,7 +302,7 @@ func (r *ConnectResolver) Timeline(ctx context.Context, userID string, entries [
 			return nil, err
 		}
 		if book {
-			parts, err := r.Svc.BookParts(ctx, e.PID)
+			parts, err := r.Svc.Playback.BookParts(ctx, e.PID)
 			if err != nil {
 				return nil, err
 			}
@@ -310,7 +310,7 @@ func (r *ConnectResolver) Timeline(ctx context.Context, userID string, entries [
 				return nil, nil
 			}
 		}
-		src, err := r.Svc.StreamSource(ctx, e.PID, "")
+		src, err := r.Svc.Playback.StreamSource(ctx, e.PID, "")
 		if err != nil {
 			return nil, nil
 		}
@@ -320,7 +320,7 @@ func (r *ConnectResolver) Timeline(ctx context.Context, userID string, entries [
 			return nil, nil
 		}
 		if opts.ReplayGain {
-			r.Svc.FillLoudness(ctx, &src)
+			r.Svc.Playback.FillLoudness(ctx, &src)
 		}
 		members = append(members, flow.TimelineMember{PID: e.PID, Src: src})
 	}
@@ -362,19 +362,19 @@ type ConnectSink struct {
 }
 
 func (s *ConnectSink) Progress(userID, pid string, positionMS int64) {
-	s.Svc.PlayerProgress(userID, pid, positionMS)
+	s.Svc.Playback.PlayerProgress(userID, pid, positionMS)
 }
 
 func (s *ConnectSink) Checkpoint(ctx context.Context, userID, pid string, positionMS int64) {
-	s.Svc.PlayerCheckpoint(ctx, userID, pid, positionMS)
+	s.Svc.Playback.PlayerCheckpoint(ctx, userID, pid, positionMS)
 }
 
 func (s *ConnectSink) SetQueue(ctx context.Context, userID string, pids []string) {
-	s.Svc.PlayerSetQueue(ctx, userID, pids)
+	s.Svc.Playback.PlayerSetQueue(ctx, userID, pids)
 }
 
 func (s *ConnectSink) Listen(ctx context.Context, userID, pid string, msPlayed int64, startedAt time.Time) {
-	s.Svc.PlayerListen(ctx, userID, pid, msPlayed, startedAt)
+	s.Svc.Playback.PlayerListen(ctx, userID, pid, msPlayed, startedAt)
 }
 
 // --- REST handlers ---------------------------------------------------------------
@@ -672,7 +672,7 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 	}
 	// The rules come with the reach rather than off the principal, whose
 	// copy of the account was read before either.
-	cred, uc, err := s.svc.TimelineReach(ctx, p.User.ID)
+	cred, uc, err := s.svc.Identity.TimelineReach(ctx, p.User.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -683,15 +683,15 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 	opts := flow.TimelineOptions{
 		Cred:             cred,
 		CrossfadeSeconds: crossfade,
-		ReplayGain:       s.svc.PrefsForUser(ctx, p.User.ID).ReplayGain,
+		ReplayGain:       s.svc.Identity.PrefsForUser(ctx, p.User.ID).ReplayGain,
 		Formats:          formats,
 	}
 	members := make([]flow.TimelineMember, 0, len(body.ItemPids))
 	for _, pid := range body.ItemPids {
-		if err := s.svc.VisibleItem(ctx, uc, pid); err != nil {
+		if err := s.svc.Grants.VisibleItem(ctx, uc, pid); err != nil {
 			return nil, refuse(http.StatusNotFound, "not-found", "no item with pid "+pid)
 		}
-		src, err := s.svc.StreamSource(ctx, pid, "")
+		src, err := s.svc.Playback.StreamSource(ctx, pid, "")
 		if err != nil {
 			return nil, refuse(http.StatusConflict, "conflict", "this item cannot join a timeline: "+pid)
 		}
@@ -699,7 +699,7 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 			return nil, refuse(http.StatusConflict, "conflict", "virtual tracks cannot join a timeline: "+pid)
 		}
 		if opts.ReplayGain {
-			s.svc.FillLoudness(ctx, &src)
+			s.svc.Playback.FillLoudness(ctx, &src)
 		}
 		members = append(members, flow.TimelineMember{PID: pid, Src: src})
 	}

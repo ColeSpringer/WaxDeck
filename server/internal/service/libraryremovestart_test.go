@@ -58,11 +58,11 @@ func whileDown(t *testing.T, dataDir string, fn func(context.Context, *waxbin.Li
 // grantsOf is what the account and the invite are granted.
 func grantsOf(t *testing.T, ctx context.Context, svc *Library, userID, inviteID string) ([]string, []string) {
 	t.Helper()
-	acct, err := svc.Account(ctx, userID)
+	acct, err := svc.Identity.Account(ctx, userID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	invites, err := svc.Invites(ctx)
+	invites, err := svc.Identity.Invites(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestARemovalSettledAtStartUnmountsOnceTheBridgeIsWired(t *testing.T) {
 	ctx, svc, uc, stop := openServiceAt(t, dataDir, func(c *Config) {
 		c.Logger = slog.New(slog.NewTextHandler(&logged, nil))
 	})
-	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()})
+	lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestARemovalSettledAtStartUnmountsOnceTheBridgeIsWired(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool {
-		_, err = svc.RemoveLibrary(ctx, uc, lib.PID)
+		_, err = svc.Roots.RemoveLibrary(ctx, uc, lib.PID)
 		return err == nil
 	}, "the removal to start once the create's scan ends")
 	waitFor(t, func() bool { return strings.Contains(logged.String(), "following up a library's removal") },
@@ -108,14 +108,14 @@ func TestARemovalSettledAtStartUnmountsOnceTheBridgeIsWired(t *testing.T) {
 	ctx, svc, _, stop = openServiceAt(t, dataDir, nil)
 	waitFor(t, func() bool { return removalAudit(t, ctx, svc, lib.PID) != nil }, "the follow-up at the next start")
 	flow := &fakeFlowRoots{names: []string{"configured", "books"}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	waitFor(t, func() bool { return slices.Equal(flow.removedNames(), []string{"books"}) },
 		"the bridge to let go of books once wired")
 	stop()
 
 	_, svc, _, _ = openServiceAt(t, dataDir, nil)
 	again := &fakeFlowRoots{}
-	svc.SetFlowRoots(again)
+	svc.Roots.SetFlowRoots(again)
 	waitFor(t, func() bool { return again.taught("configured", filepath.Join(dataDir, "configured")) },
 		"the next start's bridge synced")
 	if removed := again.removedNames(); len(removed) != 0 {
@@ -130,13 +130,13 @@ func TestAMountTheSidecarKeptIsTakenOffAtTheNextSync(t *testing.T) {
 	dataDir := t.TempDir()
 	ctx, svc, uc, _ := openServiceAt(t, dataDir, nil)
 	flow := &fakeFlowRoots{names: []string{"configured"}, removeErr: errors.New("the reload was refused")}
-	svc.SetFlowRoots(flow)
-	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()})
+	svc.Roots.SetFlowRoots(flow)
+	lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool {
-		_, err = svc.RemoveLibrary(ctx, uc, lib.PID)
+		_, err = svc.Roots.RemoveLibrary(ctx, uc, lib.PID)
 		return err == nil
 	}, "the removal to start once the create's scan ends")
 	waitFor(t, func() bool { return removalAudit(t, ctx, svc, lib.PID) != nil }, "the removal audited")
@@ -151,7 +151,7 @@ func TestAMountTheSidecarKeptIsTakenOffAtTheNextSync(t *testing.T) {
 		flow.mu.Lock()
 		flow.removeErr, flow.names, flow.synced, flow.removed = nil, nil, nil, nil
 		flow.mu.Unlock()
-		svc.SetFlowRoots(flow)
+		svc.Roots.SetFlowRoots(flow)
 		waitFor(t, func() bool { return flow.taught("configured", configured) }, "the bridge synced")
 		return flow.removedNames()
 	}
@@ -171,12 +171,12 @@ func TestAServerWithNoEngineOwesTheBridgeNothing(t *testing.T) {
 	dataDir := t.TempDir()
 	ctx, svc, uc, stop := openServiceAt(t, dataDir, nil)
 	remove := func(name string) {
-		lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: name, Path: t.TempDir()})
+		lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: name, Path: t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
 		}
 		waitFor(t, func() bool {
-			_, err = svc.RemoveLibrary(ctx, uc, lib.PID)
+			_, err = svc.Roots.RemoveLibrary(ctx, uc, lib.PID)
 			return err == nil
 		}, "the removal to start once the create's scan ends")
 		waitFor(t, func() bool { return removalAudit(t, ctx, svc, lib.PID) != nil }, "the removal audited")
@@ -185,7 +185,7 @@ func TestAServerWithNoEngineOwesTheBridgeNothing(t *testing.T) {
 	if owed := owedUnmounts(t, ctx, svc); !slices.Equal(owed, []string{"books"}) {
 		t.Fatalf("owed before the server said it has no engine = %v, want books", owed)
 	}
-	svc.SetFlowRoots(nil)
+	svc.Roots.SetFlowRoots(nil)
 	waitFor(t, func() bool { return len(owedUnmounts(t, ctx, svc)) == 0 }, "the owed unmount let go")
 	remove("tapes")
 	if owed := owedUnmounts(t, ctx, svc); len(owed) != 0 {
@@ -195,7 +195,7 @@ func TestAServerWithNoEngineOwesTheBridgeNothing(t *testing.T) {
 
 	_, svc, _, _ = openServiceAt(t, dataDir, nil)
 	flow := &fakeFlowRoots{}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	waitFor(t, func() bool { return flow.taught("configured", filepath.Join(dataDir, "configured")) }, "the bridge synced")
 	if removed := flow.removedNames(); len(removed) != 0 {
 		t.Errorf("a bridge wired later was asked to let go of %v, want nothing", removed)
@@ -210,17 +210,17 @@ func TestALibraryRemovedWhileTheServerWasDownIsCleanedAtStart(t *testing.T) {
 	t.Parallel()
 	dataDir := t.TempDir()
 	ctx, svc, uc, stop := openServiceAt(t, dataDir, nil)
-	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()})
+	lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	member := memberCtx(t, ctx, svc, "member", lib.PID)
-	invite, err := svc.CreateInvite(ctx, uc, InviteCreate{AccessMode: "granted", LibraryPIDs: []string{lib.PID}})
+	invite, err := svc.Identity.CreateInvite(ctx, uc, InviteCreate{AccessMode: "granted", LibraryPIDs: []string{lib.PID}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
 	stop()
@@ -249,7 +249,7 @@ func TestALibraryRemovedWhileTheServerWasDownIsCleanedAtStart(t *testing.T) {
 		t.Errorf("audit = %+v, want none for a removal this server did not start", audit)
 	}
 	flow := &fakeFlowRoots{names: []string{"configured", "books"}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	waitFor(t, func() bool { return slices.Equal(flow.removedNames(), []string{"books"}) },
 		"the bridge to let go of books once wired")
 }
@@ -261,13 +261,13 @@ func TestAStartCleanupLeavesANewerLibraryAtTheFolder(t *testing.T) {
 	t.Parallel()
 	dataDir, dir := t.TempDir(), t.TempDir()
 	ctx, svc, uc, stop := openServiceAt(t, dataDir, nil)
-	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: dir})
+	lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
 	member := memberCtx(t, ctx, svc, "member", lib.PID)
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
 	stop()
@@ -289,14 +289,14 @@ func TestAStartCleanupLeavesANewerLibraryAtTheFolder(t *testing.T) {
 	if newer.PID == lib.PID || newer.Name != "books" {
 		t.Errorf("the folder lists %+v, want a newer library named books", newer)
 	}
-	if acct, err := svc.Account(ctx, member.ID); err != nil || len(acct.LibraryPIDs) != 0 {
+	if acct, err := svc.Identity.Account(ctx, member.ID); err != nil || len(acct.LibraryPIDs) != 0 {
 		t.Errorf("the member's grants = %v (%v), want the removed library's gone", acct.LibraryPIDs, err)
 	}
 	if lines := strings.Count(logged.String(), "cleaned up after a library the catalog no longer holds"); lines != 1 {
 		t.Errorf("cleanup lines = %d in %q, want one for the removed library", lines, logged.String())
 	}
 	flow := &fakeFlowRoots{names: []string{"books"}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	waitFor(t, func() bool { return flow.taught("configured", filepath.Join(dataDir, "configured")) }, "the bridge synced")
 	if removed := flow.removedNames(); len(removed) != 0 {
 		t.Errorf("the bridge was asked to let go of %v, want the newer library's mount kept", removed)
@@ -362,12 +362,12 @@ func TestANameTakenInAnotherFolderIsMountedThere(t *testing.T) {
 				}
 			}
 			ctx, svc, uc, stop := openServiceAt(t, dataDir, nil)
-			lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "music", Path: oldDir})
+			lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "music", Path: oldDir})
 			if err != nil {
 				t.Fatal(err)
 			}
 			waitFor(t, func() bool {
-				running, err := svc.catalogJobRunning(ctx)
+				running, err := svc.Jobs.catalogJobRunning(ctx)
 				return err == nil && !running
 			}, "the create's scan to end")
 			stop()
@@ -393,7 +393,7 @@ func TestANameTakenInAnotherFolderIsMountedThere(t *testing.T) {
 				t.Fatalf("the newer library = %+v, want it named music", newer)
 			}
 			flow := &mappingFlowRoots{mapped: map[string]string{"configured": filepath.Join(dataDir, "configured"), "music": oldDir}}
-			svc.SetFlowRoots(flow)
+			svc.Roots.SetFlowRoots(flow)
 			waitFor(t, func() bool {
 				mapped, _ := flow.state()
 				return mapped["music"] == newDir
@@ -418,18 +418,18 @@ func TestARemovalWhoseNameWasTakenElsewhereMovesTheMount(t *testing.T) {
 			ctx, svc, uc, _ := openServiceAt(t, dataDir, nil)
 			flow := &mappingFlowRoots{mapped: map[string]string{"configured": filepath.Join(dataDir, "configured")}, refuse: wired}
 			if wired {
-				svc.SetFlowRoots(flow)
+				svc.Roots.SetFlowRoots(flow)
 			}
 			music, oldDir, rep := takenOut(t, ctx, svc, uc, "music")
 			flow.mu.Lock()
 			flow.refuse = false
 			flow.mu.Unlock()
-			svc.refreshLibraryState(ctx)
+			svc.Roots.refreshLibraryState(ctx)
 			newDir := t.TempDir()
-			if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "music", Path: newDir}); err != nil {
+			if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "music", Path: newDir}); err != nil {
 				t.Fatal(err)
 			}
-			svc.settleJobOrigin(ctx, endedRemoval(t, ctx, svc, uc, music, oldDir, model.JobDone, rep))
+			svc.Jobs.settleJobOrigin(ctx, endedRemoval(t, ctx, svc, uc, music, oldDir, model.JobDone, rep))
 			if audit := removalAudit(t, ctx, svc, music.PID); audit == nil {
 				t.Fatal("the removal was not followed up")
 			}
@@ -437,7 +437,7 @@ func TestARemovalWhoseNameWasTakenElsewhereMovesTheMount(t *testing.T) {
 				flow.mu.Lock()
 				flow.mapped["music"] = oldDir
 				flow.mu.Unlock()
-				svc.SetFlowRoots(flow)
+				svc.Roots.SetFlowRoots(flow)
 			}
 			waitFor(t, func() bool {
 				mapped, told := flow.state()
@@ -473,11 +473,11 @@ func TestARemovedLibrarysMatchingSettingsGo(t *testing.T) {
 	ctx, svc, uc, stop := openServiceAt(t, dataDir, nil)
 	var libs []LibraryInfo
 	for _, name := range []string{"online", "offline"} {
-		lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: name, Path: t.TempDir()})
+		lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: name, Path: t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := svc.SetLibraryMatching(ctx, uc, lib.PID, LibraryMatching{Mode: matchingReview, SinglesAutoApply: true}); err != nil {
+		if err := svc.Ingest.SetLibraryMatching(ctx, uc, lib.PID, LibraryMatching{Mode: matchingReview, SinglesAutoApply: true}); err != nil {
 			t.Fatal(err)
 		}
 		libs = append(libs, lib)
@@ -487,7 +487,7 @@ func TestARemovedLibrarysMatchingSettingsGo(t *testing.T) {
 		t.Fatalf("settings naming the library = %v, want its mode and its singles switch", keys)
 	}
 	waitFor(t, func() bool {
-		_, err := svc.RemoveLibrary(ctx, uc, online.PID)
+		_, err := svc.Roots.RemoveLibrary(ctx, uc, online.PID)
 		return err == nil
 	}, "the removal to start once the creates' scans end")
 	waitFor(t, func() bool { return removalAudit(t, ctx, svc, online.PID) != nil }, "the removal followed up")
@@ -495,7 +495,7 @@ func TestARemovedLibrarysMatchingSettingsGo(t *testing.T) {
 		t.Errorf("settings naming the removed library = %v, want none", keys)
 	}
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the catalog's jobs to end")
 	stop()

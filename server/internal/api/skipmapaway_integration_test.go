@@ -9,7 +9,7 @@ import (
 
 // drainAnalyses runs the analysis worker inline until it finds nothing.
 func drainAnalyses(h *harness) {
-	for h.svc.DrainAnalysisQueue(context.Background()) {
+	for h.svc.Tools.DrainAnalysisQueue(context.Background()) {
 	}
 }
 

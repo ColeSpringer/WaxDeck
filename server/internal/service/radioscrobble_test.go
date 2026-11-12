@@ -48,7 +48,7 @@ func watchRadioScrobbles(t *testing.T, svc *Library) func() {
 	t.Helper()
 	written := make(chan struct{}, 16)
 	hook := func() { written <- struct{}{} }
-	svc.radioWriteDone.Store(&hook)
+	svc.Radio.radioWriteDone.Store(&hook)
 	return func() {
 		t.Helper()
 		select {
@@ -63,18 +63,18 @@ func TestScrobbleRadioPlayEnqueues(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 	settled := watchRadioScrobbles(t, svc)
-	st, err := svc.CreateRadioStation(ctx, admin, RadioStationEdit{
+	st, err := svc.Radio.CreateRadioStation(ctx, admin, RadioStationEdit{
 		Name: "Groove Salad", StreamURL: "https://ice.example.net/groove",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.storeScrobbleConnection(ctx, admin.ID, ScrobblerListenBrainz, "token", "sam", ""); err != nil {
+	if err := svc.Integrations.storeScrobbleConnection(ctx, admin.ID, ScrobblerListenBrainz, "token", "sam", ""); err != nil {
 		t.Fatal(err)
 	}
 
 	started := time.Now().Add(-2 * time.Minute)
-	svc.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Massive Attack - Teardrop", started)
+	svc.Radio.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Massive Attack - Teardrop", started)
 	settled()
 
 	row, err := svc.db.LeaseScrobble(ctx, time.Now().UnixNano(), int64(time.Minute), 3)
@@ -88,18 +88,18 @@ func TestScrobbleRadioPlayEnqueues(t *testing.T) {
 	}
 
 	// Junk titles queue nothing.
-	svc.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Groove Salad", started)
+	svc.Radio.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Groove Salad", started)
 	settled()
 	if _, err := svc.db.LeaseScrobble(ctx, time.Now().UnixNano(), int64(time.Minute), 3); err == nil {
 		t.Fatal("station-slogan title must not scrobble")
 	}
 
 	// Users without connections queue nothing (no error, no row).
-	other, err := svc.CreateAccount(ctx, AccountCreate{Username: "quiet", Password: "password123"})
+	other, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "quiet", Password: "password123"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.ScrobbleRadioPlay(ctx, other.User.ID, st.PID, "Massive Attack - Teardrop", started)
+	svc.Radio.ScrobbleRadioPlay(ctx, other.User.ID, st.PID, "Massive Attack - Teardrop", started)
 	settled()
 	if _, err := svc.db.LeaseScrobble(ctx, time.Now().UnixNano(), int64(time.Minute), 3); err == nil {
 		t.Fatal("no-connection listener must not scrobble")
@@ -107,18 +107,18 @@ func TestScrobbleRadioPlayEnqueues(t *testing.T) {
 
 	// Opting out silences radio for a listener who still scrobbles
 	// everything else.
-	if _, err := svc.PutPrefs(ctx, admin, Prefs{RadioScrobbleOptOut: true}); err != nil {
+	if _, err := svc.Identity.PutPrefs(ctx, admin, Prefs{RadioScrobbleOptOut: true}); err != nil {
 		t.Fatal(err)
 	}
-	svc.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Massive Attack - Teardrop", started)
+	svc.Radio.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Massive Attack - Teardrop", started)
 	settled()
 	if _, err := svc.db.LeaseScrobble(ctx, time.Now().UnixNano(), int64(time.Minute), 3); err == nil {
 		t.Fatal("opted-out listener must not scrobble radio")
 	}
-	if _, err := svc.PutPrefs(ctx, admin, Prefs{}); err != nil {
+	if _, err := svc.Identity.PutPrefs(ctx, admin, Prefs{}); err != nil {
 		t.Fatal(err)
 	}
-	svc.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Massive Attack - Teardrop", started)
+	svc.Radio.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Massive Attack - Teardrop", started)
 	settled()
 	if _, err := svc.db.LeaseScrobble(ctx, time.Now().UnixNano(), int64(time.Minute), 3); err != nil {
 		t.Fatalf("opting back in must scrobble again: %v", err)
@@ -130,7 +130,7 @@ func TestScrobbleRadioPlayEnqueues(t *testing.T) {
 func TestScrobbleRadioPlayNeverBlocks(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
-	st, err := svc.CreateRadioStation(ctx, admin, RadioStationEdit{
+	st, err := svc.Radio.CreateRadioStation(ctx, admin, RadioStationEdit{
 		Name: "Groove Salad", StreamURL: "https://ice.example.net/groove",
 	})
 	if err != nil {
@@ -146,11 +146,11 @@ func TestScrobbleRadioPlayNeverBlocks(t *testing.T) {
 		once.Do(func() { close(stuck) })
 		<-release
 	}
-	svc.radioWriteDone.Store(&hook)
+	svc.Radio.radioWriteDone.Store(&hook)
 	defer close(release)
 
 	started := time.Now().Add(-2 * time.Minute)
-	svc.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Massive Attack - Teardrop", started)
+	svc.Radio.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Massive Attack - Teardrop", started)
 	select {
 	case <-stuck:
 	case <-time.After(10 * time.Second):
@@ -163,7 +163,7 @@ func TestScrobbleRadioPlayNeverBlocks(t *testing.T) {
 	go func() {
 		defer close(done)
 		for i := 0; i < radioWriteQueue*2; i++ {
-			svc.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Boards of Canada - Roygbiv", started)
+			svc.Radio.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Boards of Canada - Roygbiv", started)
 		}
 	}()
 	select {
@@ -179,13 +179,13 @@ func TestScrobbleRadioPlayNeverBlocks(t *testing.T) {
 func TestRadioScrobbleWriterDrainsAtShutdown(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
-	st, err := svc.CreateRadioStation(ctx, admin, RadioStationEdit{
+	st, err := svc.Radio.CreateRadioStation(ctx, admin, RadioStationEdit{
 		Name: "Groove Salad", StreamURL: "https://ice.example.net/groove",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.storeScrobbleConnection(ctx, admin.ID, ScrobblerListenBrainz, "token", "sam", ""); err != nil {
+	if err := svc.Integrations.storeScrobbleConnection(ctx, admin.ID, ScrobblerListenBrainz, "token", "sam", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -201,24 +201,24 @@ func TestRadioScrobbleWriterDrainsAtShutdown(t *testing.T) {
 			<-release
 		}
 	}
-	svc.radioWriteDone.Store(&hook)
+	svc.Radio.radioWriteDone.Store(&hook)
 	defer close(release)
 
 	started := time.Now().Add(-2 * time.Minute)
-	svc.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Massive Attack - Teardrop", started)
+	svc.Radio.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Massive Attack - Teardrop", started)
 	select {
 	case <-stuck:
 	case <-time.After(10 * time.Second):
 		t.Fatal("writer never picked up the first segment")
 	}
-	svc.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Boards of Canada - Roygbiv", started)
-	svc.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Aphex Twin - Xtal", started)
+	svc.Radio.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Boards of Canada - Roygbiv", started)
+	svc.Radio.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Aphex Twin - Xtal", started)
 
 	// What shutdown does: the context the writer runs on ends while the
 	// queue still holds segments.
 	dead, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := svc.writeRadioBookkeeping(dead); err != nil {
+	if err := svc.Radio.writeRadioBookkeeping(dead); err != nil {
 		t.Fatalf("writer: %v", err)
 	}
 
@@ -247,36 +247,36 @@ func TestScrobbleRadioPlayMutedStation(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 	settled := watchRadioScrobbles(t, svc)
-	talk, err := svc.CreateRadioStation(ctx, admin, RadioStationEdit{
+	talk, err := svc.Radio.CreateRadioStation(ctx, admin, RadioStationEdit{
 		Name: "Talk One", StreamURL: "https://ice.example.net/talk",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	music, err := svc.CreateRadioStation(ctx, admin, RadioStationEdit{
+	music, err := svc.Radio.CreateRadioStation(ctx, admin, RadioStationEdit{
 		Name: "Groove Salad", StreamURL: "https://ice.example.net/groove",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.storeScrobbleConnection(ctx, admin.ID, ScrobblerListenBrainz, "token", "sam", ""); err != nil {
+	if err := svc.Integrations.storeScrobbleConnection(ctx, admin.ID, ScrobblerListenBrainz, "token", "sam", ""); err != nil {
 		t.Fatal(err)
 	}
 	// Lower case on the way in, canonical in the document: the pid a
 	// stream URL carries is not the one the store holds.
 	muted := Prefs{RadioScrobbleMutedStations: []string{strings.ToLower(talk.PID)}}
-	if _, err := svc.PutPrefs(ctx, admin, muted); err != nil {
+	if _, err := svc.Identity.PutPrefs(ctx, admin, muted); err != nil {
 		t.Fatal(err)
 	}
 
 	started := time.Now().Add(-2 * time.Minute)
-	svc.ScrobbleRadioPlay(ctx, admin.ID, talk.PID, "Massive Attack - Teardrop", started)
+	svc.Radio.ScrobbleRadioPlay(ctx, admin.ID, talk.PID, "Massive Attack - Teardrop", started)
 	settled()
 	if _, err := svc.db.LeaseScrobble(ctx, time.Now().UnixNano(), int64(time.Minute), 3); err == nil {
 		t.Fatal("a muted station must not scrobble")
 	}
 
-	svc.ScrobbleRadioPlay(ctx, admin.ID, music.PID, "Massive Attack - Teardrop", started)
+	svc.Radio.ScrobbleRadioPlay(ctx, admin.ID, music.PID, "Massive Attack - Teardrop", started)
 	settled()
 	if _, err := svc.db.LeaseScrobble(ctx, time.Now().UnixNano(), int64(time.Minute), 3); err != nil {
 		t.Fatalf("an unmuted station must still scrobble: %v", err)
@@ -284,10 +284,10 @@ func TestScrobbleRadioPlayMutedStation(t *testing.T) {
 
 	// The account-wide switch still wins over an empty mute list.
 	off := Prefs{RadioScrobbleOptOut: true}
-	if _, err := svc.PutPrefs(ctx, admin, off); err != nil {
+	if _, err := svc.Identity.PutPrefs(ctx, admin, off); err != nil {
 		t.Fatal(err)
 	}
-	svc.ScrobbleRadioPlay(ctx, admin.ID, music.PID, "Massive Attack - Teardrop", started)
+	svc.Radio.ScrobbleRadioPlay(ctx, admin.ID, music.PID, "Massive Attack - Teardrop", started)
 	settled()
 	if _, err := svc.db.LeaseScrobble(ctx, time.Now().UnixNano(), int64(time.Minute), 3); err == nil {
 		t.Fatal("the account-wide opt-out must still win")

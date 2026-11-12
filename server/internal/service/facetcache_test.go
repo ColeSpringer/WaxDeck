@@ -14,7 +14,7 @@ func TestAPlayLeavesTheEnumerationCacheWarm(t *testing.T) {
 	settleCatalogFeed(t, svc)
 	artists := func() map[string]int {
 		t.Helper()
-		page, err := svc.Facets(ctx, uc, FacetQuery{Dimension: "artist", Limit: 500})
+		page, err := svc.Reads.Facets(ctx, uc, FacetQuery{Dimension: "artist", Limit: 500})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -33,7 +33,7 @@ func TestAPlayLeavesTheEnumerationCacheWarm(t *testing.T) {
 
 	amber, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
 	tail := svc.CatalogTailSeq()
-	if _, err := svc.Checkpoint(ctx, uc, amber, 1000, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, amber, 1000, nil); err != nil {
 		t.Fatal(err)
 	}
 	for deadline := time.Now().Add(10 * time.Second); svc.CatalogTailSeq() == tail; {
@@ -46,7 +46,7 @@ func TestAPlayLeavesTheEnumerationCacheWarm(t *testing.T) {
 		t.Fatal("a play emptied the enumeration cache")
 	}
 
-	if _, err := svc.EditItemMetadata(ctx, uc, amber, map[string]string{"artist": "Brass Nine"}, MetadataEditParams{}); err != nil {
+	if _, err := svc.Editor.EditItemMetadata(ctx, uc, amber, map[string]string{"artist": "Brass Nine"}, MetadataEditParams{}); err != nil {
 		t.Fatal(err)
 	}
 	for deadline := time.Now().Add(10 * time.Second); servesFromCache(svc, "artist"); {
@@ -78,14 +78,14 @@ func TestADenyRuleCatchesAValueATrackGainsLater(t *testing.T) {
 		TagDeny: []TagRule{{Key: advisoryTagKey, Value: "1"}}}
 	shows := func(title string) (listed, swept bool) {
 		t.Helper()
-		page, err := svc.Items(ctx, kid, ItemFilter{MediaType: "music"}, "", 50)
+		page, err := svc.Reads.Items(ctx, kid, ItemFilter{MediaType: "music"}, "", 50)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, it := range page.Items {
 			listed = listed || it.Title == title
 		}
-		facts, err := svc.TrackFacts(ctx, kid)
+		facts, err := svc.Reads.TrackFacts(ctx, kid)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -95,9 +95,9 @@ func TestADenyRuleCatchesAValueATrackGainsLater(t *testing.T) {
 		return listed, swept
 	}
 	memo := func() facetGeneration {
-		svc.tagValues.mu.Lock()
-		defer svc.tagValues.mu.Unlock()
-		return svc.tagValues.gen
+		svc.Reads.tagValues.mu.Lock()
+		defer svc.Reads.tagValues.mu.Unlock()
+		return svc.Reads.tagValues.gen
 	}
 	if listed, swept := shows("Amber Waves"); !listed || !swept {
 		t.Fatalf("before any track carries the value: listed %v, swept %v; want both", listed, swept)
@@ -106,7 +106,7 @@ func TestADenyRuleCatchesAValueATrackGainsLater(t *testing.T) {
 
 	amber, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
 	tail := svc.CatalogTailSeq()
-	if _, err := svc.Checkpoint(ctx, uc, amber, 1000, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, amber, 1000, nil); err != nil {
 		t.Fatal(err)
 	}
 	for deadline := time.Now().Add(10 * time.Second); svc.CatalogTailSeq() == tail; {
@@ -120,7 +120,7 @@ func TestADenyRuleCatchesAValueATrackGainsLater(t *testing.T) {
 		t.Fatalf("a play moved the spellings memo from %+v to %+v", filled, got)
 	}
 
-	if _, err := svc.SetItemTag(ctx, uc, amber, advisoryTagKey, []string{"1"}, MetadataEditParams{}); err != nil {
+	if _, err := svc.Editor.SetItemTag(ctx, uc, amber, advisoryTagKey, []string{"1"}, MetadataEditParams{}); err != nil {
 		t.Fatal(err)
 	}
 	settleCatalogFeed(t, svc)

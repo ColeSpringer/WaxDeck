@@ -63,7 +63,7 @@ type appSecretEntry struct {
 }
 
 // AppPasswords lists the caller's app passwords, newest first.
-func (l *Library) AppPasswords(ctx context.Context, uc *UserCtx) ([]AppPassword, error) {
+func (l *Identity) AppPasswords(ctx context.Context, uc *UserCtx) ([]AppPassword, error) {
 	rows, err := l.db.AppPasswordsByUser(ctx, uc.ID)
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
@@ -80,7 +80,7 @@ func (l *Library) AppPasswords(ctx context.Context, uc *UserCtx) ([]AppPassword,
 
 // CreateAppPassword mints and stores a new app password for the
 // caller, returning the secret exactly once.
-func (l *Library) CreateAppPassword(ctx context.Context, uc *UserCtx, label string) (AppPasswordSecret, error) {
+func (l *Identity) CreateAppPassword(ctx context.Context, uc *UserCtx, label string) (AppPasswordSecret, error) {
 	label = strings.TrimSpace(label)
 	if label == "" {
 		return AppPasswordSecret{}, errInvalid("label is required")
@@ -134,7 +134,7 @@ func (l *Library) CreateAppPassword(ctx context.Context, uc *UserCtx, label stri
 // RevokeAppPassword deletes one of the caller's app passwords and drops
 // any cached unsealed secret, so the next compatibility request fails
 // immediately.
-func (l *Library) RevokeAppPassword(ctx context.Context, uc *UserCtx, apiID string) error {
+func (l *Identity) RevokeAppPassword(ctx context.Context, uc *UserCtx, apiID string) error {
 	prefix, pid, ok := parseAPIPID(apiID)
 	if !ok || prefix != PrefixAppPassword {
 		return errNotFound("no app password with id " + apiID)
@@ -156,7 +156,7 @@ func (l *Library) RevokeAppPassword(ctx context.Context, uc *UserCtx, apiID stri
 // username plus md5(secret+salt). It returns the account and the id of
 // the app password that matched, or nil on any failure (unknown user,
 // disabled account, no matching password), never distinguishing them.
-func (l *Library) VerifyAppPasswordToken(ctx context.Context, username, token, salt string) (*wdb.User, string, error) {
+func (l *Identity) VerifyAppPasswordToken(ctx context.Context, username, token, salt string) (*User, string, error) {
 	u, err := l.db.UserByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
@@ -172,7 +172,33 @@ func (l *Library) VerifyAppPasswordToken(ctx context.Context, username, token, s
 		sum := md5.Sum([]byte(entry.secret + salt))
 		if subtle.ConstantTimeCompare([]byte(hex.EncodeToString(sum[:])), []byte(want)) == 1 {
 			l.touchAppPassword(ctx, entry)
-			return u, entry.id, nil
+			return userOf(u), entry.id, nil
+		}
+	}
+	return nil, "", nil
+}
+
+// VerifyAppPasswordBasic authenticates the HTTP Basic scheme: username
+// plus an app password secret presented in the clear. The login
+// password never works here. It returns the account and the id of the
+// app password that matched, or nil on any failure (unknown user,
+// disabled account, no matching password), never distinguishing them;
+// the secret comparison is constant time per candidate.
+func (l *Identity) VerifyAppPasswordBasic(ctx context.Context, username, password string) (*User, string, error) {
+	u, err := l.db.UserByUsername(ctx, username)
+	if err != nil {
+		if errors.Is(err, wdb.ErrNotFound) {
+			return nil, "", nil
+		}
+		return nil, "", &Error{Kind: KindInternal, Err: err}
+	}
+	if u.Disabled {
+		return nil, "", nil
+	}
+	for _, entry := range l.userAppSecrets(ctx, u.ID) {
+		if subtle.ConstantTimeCompare([]byte(entry.secret), []byte(password)) == 1 {
+			l.touchAppPassword(ctx, entry)
+			return userOf(u), entry.id, nil
 		}
 	}
 	return nil, "", nil
@@ -181,7 +207,7 @@ func (l *Library) VerifyAppPasswordToken(ctx context.Context, username, token, s
 // VerifyAppPasswordKey authenticates the OpenSubsonic apiKey scheme:
 // the app password secret presented directly. It returns the account and
 // the app password's id.
-func (l *Library) VerifyAppPasswordKey(ctx context.Context, apiKey string) (*wdb.User, string, error) {
+func (l *Identity) VerifyAppPasswordKey(ctx context.Context, apiKey string) (*User, string, error) {
 	hash := sha256.Sum256([]byte(apiKey))
 	ap, err := l.db.AppPasswordBySecretHash(ctx, hash[:])
 	if err != nil {
@@ -201,7 +227,7 @@ func (l *Library) VerifyAppPasswordKey(ctx context.Context, apiKey string) (*wdb
 		return nil, "", nil
 	}
 	l.touchAppPassword(ctx, appSecretIdentity{id: ap.ID})
-	return u, ap.ID, nil
+	return userOf(u), ap.ID, nil
 }
 
 // appSecretIdentity is the cache-independent identity of a verified
@@ -216,7 +242,7 @@ type appSecretIdentity struct {
 // the cache lock so a miss never serializes unrelated authentications
 // behind AES; a concurrent miss unseals twice to the same value, which
 // is cheaper than holding the lock.
-func (l *Library) userAppSecrets(ctx context.Context, userID string) []appSecretIdentity {
+func (l *Identity) userAppSecrets(ctx context.Context, userID string) []appSecretIdentity {
 	rows, err := l.db.AppPasswordsByUser(ctx, userID)
 	if err != nil {
 		l.log.Warn("listing app passwords", "err", err)
@@ -284,7 +310,7 @@ func (l *Library) userAppSecrets(ctx context.Context, userID string) []appSecret
 
 // touchAppPassword records a successful use, coarsely (once a minute
 // per credential) so polling clients do not churn the write connection.
-func (l *Library) touchAppPassword(ctx context.Context, ident appSecretIdentity) {
+func (l *Identity) touchAppPassword(ctx context.Context, ident appSecretIdentity) {
 	l.appSecrets.mu.Lock()
 	if l.appSecrets.entries == nil {
 		l.appSecrets.entries = make(map[string]appSecretEntry)

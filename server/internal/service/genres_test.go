@@ -87,13 +87,13 @@ func newGenreFixture(t *testing.T) genreFixture {
 	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
 		t.Fatalf("scanning fixture library: %v", err)
 	}
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "admin", Password: "correct-horse", Roles: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func (f genreFixture) sweepToQuiet(t *testing.T) GenreSweepReport {
 	t.Helper()
 	var last GenreSweepReport
 	for i := 0; i < 20; i++ {
-		rep, err := f.svc.SweepGenres(f.ctx)
+		rep, err := f.svc.Reads.SweepGenres(f.ctx)
 		if err != nil {
 			t.Fatalf("genre sweep: %v", err)
 		}
@@ -128,7 +128,7 @@ func (f genreFixture) genreOf(t *testing.T, title string) string {
 
 func (f genreFixture) itemNamed(t *testing.T, title string) *model.ItemView {
 	t.Helper()
-	page, err := f.svc.Items(f.ctx, f.uc, ItemFilter{}, "", 100)
+	page, err := f.svc.Reads.Items(f.ctx, f.uc, ItemFilter{}, "", 100)
 	if err != nil {
 		t.Fatalf("listing items: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestSweeperFoldsSynonymsOntoOneBucket(t *testing.T) {
 		}
 	}
 
-	page, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Limit: 100})
+	page, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Limit: 100})
 	if err != nil {
 		t.Fatalf("enumerating genres: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestCanonicalLabelBeatsScanOrder(t *testing.T) {
 
 	// The stored entity really is the lowercase spelling: without the
 	// canonical label this assertion would be what the browse tab shows.
-	res, err := f.svc.lib.Facet(f.ctx, f.svc.facetScopeBuilder(f.ctx, f.uc).Build(), "genre", "", 0, model.PID(f.uc.CatalogPID))
+	res, err := f.svc.lib.Facet(f.ctx, f.svc.Reads.facetScopeBuilder(f.ctx, f.uc).Build(), "genre", "", 0, model.PID(f.uc.CatalogPID))
 	if err != nil {
 		t.Fatalf("raw facet: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestCanonicalLabelBeatsScanOrder(t *testing.T) {
 		t.Fatalf("the catalog's genre row is named %q; the fixture meant it to keep the first-scanned spelling", stored)
 	}
 
-	page, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Limit: 100})
+	page, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Limit: 100})
 	if err != nil {
 		t.Fatalf("enumerating genres: %v", err)
 	}
@@ -228,13 +228,13 @@ func TestSweeperSkipsLockedGenres(t *testing.T) {
 	t.Parallel()
 	f := newGenreFixture(t)
 	it := f.itemNamed(t, "Synonym")
-	if _, err := f.svc.SetItemLocks(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), []string{"genre"}, true); err != nil {
+	if _, err := f.svc.Editor.SetItemLocks(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), []string{"genre"}, true); err != nil {
 		t.Fatalf("locking the genre field: %v", err)
 	}
 
 	var locked int
 	for i := 0; i < 20; i++ {
-		rep, err := f.svc.SweepGenres(f.ctx)
+		rep, err := f.svc.Reads.SweepGenres(f.ctx)
 		if err != nil {
 			t.Fatalf("genre sweep: %v", err)
 		}
@@ -269,10 +269,10 @@ func TestUnmappedGenrePassesThrough(t *testing.T) {
 		t.Fatalf("an already-canonical genre was rewritten to %q", got)
 	}
 
-	if err := f.svc.SweepHealth(f.ctx); err != nil {
+	if err := f.svc.Health.SweepHealth(f.ctx); err != nil {
 		t.Fatalf("health sweep: %v", err)
 	}
-	issues, _, err := f.svc.ListHealthIssuesFor(f.ctx, f.uc, ruleGenreWhitelist, "", 50)
+	issues, _, err := f.svc.Health.ListHealthIssuesFor(f.ctx, f.uc, ruleGenreWhitelist, "", 50)
 	if err != nil {
 		t.Fatalf("listing genre-whitelist issues: %v", err)
 	}
@@ -317,7 +317,7 @@ func TestGenreNormalizeTaskDryRunThenApply(t *testing.T) {
 	t.Parallel()
 	f := newGenreFixture(t)
 
-	dry, err := f.svc.StartGenreNormalize(f.ctx, f.uc, true)
+	dry, err := f.svc.Reads.StartGenreNormalize(f.ctx, f.uc, true)
 	if err != nil {
 		t.Fatalf("queuing the dry run: %v", err)
 	}
@@ -333,7 +333,7 @@ func TestGenreNormalizeTaskDryRunThenApply(t *testing.T) {
 		t.Fatalf("the dry run wrote: Synonym is now %q", got)
 	}
 
-	apply, err := f.svc.StartGenreNormalize(f.ctx, f.uc, false)
+	apply, err := f.svc.Reads.StartGenreNormalize(f.ctx, f.uc, false)
 	if err != nil {
 		t.Fatalf("queuing the apply: %v", err)
 	}
@@ -347,15 +347,44 @@ func TestGenreNormalizeTaskDryRunThenApply(t *testing.T) {
 	}
 }
 
+// A normalization pass is audited under the administrator who queued it,
+// by id, even once that account is disabled: a pass that rewrote the
+// catalog's genres is on the record whoever still holds the account.
+func TestANormalizationIsAuditedUnderItsStarterOnceDisabled(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	_, second := memberAs(t, f.ctx, f.svc, AccountCreate{Username: "second", Roles: []string{"admin"}})
+	task, err := f.svc.Reads.StartGenreNormalize(f.ctx, second, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	off := true
+	if _, err := f.svc.Identity.UpdateAccount(f.ctx, second.ID, AccountUpdate{Disabled: &off}); err != nil {
+		t.Fatal(err)
+	}
+	f.drainTasks(t)
+	f.taskSummary(t, task.ID)
+	page, err := f.svc.Audit.Events(f.ctx, AuditFilter{Action: "genre.normalize"}, "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 1 {
+		t.Fatalf("audits of the pass = %d, want one", len(page.Events))
+	}
+	if got := page.Events[0].ActorID; got != second.ID {
+		t.Errorf("the pass's audit actor = %q, want %q", got, second.ID)
+	}
+}
+
 func (f genreFixture) drainTasks(t *testing.T) {
 	t.Helper()
-	for i := 0; i < 20 && f.svc.DrainToolTasks(f.ctx); i++ {
+	for i := 0; i < 20 && f.svc.Tools.DrainToolTasks(f.ctx); i++ {
 	}
 }
 
 func (f genreFixture) taskSummary(t *testing.T, taskID string) map[string]any {
 	t.Helper()
-	task, err := f.svc.GetToolTaskFor(f.ctx, f.uc, taskID)
+	task, err := f.svc.Tools.GetToolTaskFor(f.ctx, f.uc, taskID)
 	if err != nil {
 		t.Fatalf("reading task %s: %v", taskID, err)
 	}
@@ -373,11 +402,11 @@ func TestDryRunAccountsForLockedGenres(t *testing.T) {
 	t.Parallel()
 	f := newGenreFixture(t)
 	it := f.itemNamed(t, "Synonym")
-	if _, err := f.svc.SetItemLocks(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), []string{"genre"}, true); err != nil {
+	if _, err := f.svc.Editor.SetItemLocks(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), []string{"genre"}, true); err != nil {
 		t.Fatalf("locking the genre field: %v", err)
 	}
 
-	dry, err := f.svc.StartGenreNormalize(f.ctx, f.uc, true)
+	dry, err := f.svc.Reads.StartGenreNormalize(f.ctx, f.uc, true)
 	if err != nil {
 		t.Fatalf("queuing the dry run: %v", err)
 	}
@@ -389,7 +418,7 @@ func TestDryRunAccountsForLockedGenres(t *testing.T) {
 		t.Fatalf("the dry run reported %v locked items; the fixture locked one", report["locked"])
 	}
 
-	apply, err := f.svc.StartGenreNormalize(f.ctx, f.uc, false)
+	apply, err := f.svc.Reads.StartGenreNormalize(f.ctx, f.uc, false)
 	if err != nil {
 		t.Fatalf("queuing the apply: %v", err)
 	}
@@ -413,7 +442,7 @@ func TestGenreTreeReplaceAndReset(t *testing.T) {
 	t.Parallel()
 	f := newGenreFixture(t)
 
-	tree, err := f.svc.GenreTreeFor(f.ctx, f.uc)
+	tree, err := f.svc.Reads.GenreTreeFor(f.ctx, f.uc)
 	if err != nil {
 		t.Fatalf("reading the tree: %v", err)
 	}
@@ -422,7 +451,7 @@ func TestGenreTreeReplaceAndReset(t *testing.T) {
 	}
 	shipped := len(tree.Genres)
 
-	if _, err := f.svc.PutGenreTree(f.ctx, f.uc, []GenreNodeDTO{
+	if _, err := f.svc.Reads.PutGenreTree(f.ctx, f.uc, []GenreNodeDTO{
 		{Name: "Hip Hop", Aliases: []string{"Rap"}},
 		{Name: "Grime", Aliases: []string{"rap"}},
 	}); err == nil {
@@ -431,7 +460,7 @@ func TestGenreTreeReplaceAndReset(t *testing.T) {
 		t.Fatalf("an ambiguous vocabulary answered %v, want invalid-request", KindOf(err))
 	}
 
-	stored, err := f.svc.PutGenreTree(f.ctx, f.uc, []GenreNodeDTO{
+	stored, err := f.svc.Reads.PutGenreTree(f.ctx, f.uc, []GenreNodeDTO{
 		{Name: "Sea Shanty"},
 		{Name: "Sea Shanty Revival", Parent: "Sea Shanty", Aliases: []string{"Shanty Revival"}},
 	})
@@ -449,7 +478,7 @@ func TestGenreTreeReplaceAndReset(t *testing.T) {
 		t.Fatalf("Synonym normalized to %q under a vocabulary with no Hip Hop", got)
 	}
 
-	back, err := f.svc.PutGenreTree(f.ctx, f.uc, nil)
+	back, err := f.svc.Reads.PutGenreTree(f.ctx, f.uc, nil)
 	if err != nil {
 		t.Fatalf("clearing the vocabulary: %v", err)
 	}
@@ -488,11 +517,11 @@ func TestItemGenresAreSplit(t *testing.T) {
 	t.Parallel()
 	f := newGenreFixture(t)
 	it := f.itemNamed(t, "Lowercase")
-	if _, err := f.svc.EditItemMetadata(f.ctx, f.uc, apiPID(PrefixTrack, it.PID),
+	if _, err := f.svc.Editor.EditItemMetadata(f.ctx, f.uc, apiPID(PrefixTrack, it.PID),
 		map[string]string{"genre": "R&B; Soul"}, MetadataEditParams{Lock: true}); err != nil {
 		t.Fatal(err)
 	}
-	d, err := f.svc.Item(f.ctx, f.uc, apiPID(PrefixTrack, it.PID))
+	d, err := f.svc.Reads.Item(f.ctx, f.uc, apiPID(PrefixTrack, it.PID))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -111,7 +111,7 @@ func (s grantsScene) jukebox(t *testing.T) string {
 func TestHealthSummaryCountsTheCallersReach(t *testing.T) {
 	t.Parallel()
 	s := newGrantsScene(t)
-	if err := s.h.svc.RunHealthSweep(context.Background()); err != nil {
+	if err := s.h.svc.Health.RunHealthSweep(context.Background()); err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
 	summary := func(token string) HealthSummary {

@@ -111,7 +111,7 @@ func (c *m3uResolutions) expireLocked() {
 // m3uMatches is the catalog's resolution of an M3U8 document: the one held
 // for this document at the catalog's current position, else a fresh one,
 // held for the next caller.
-func (l *Library) m3uMatches(ctx context.Context, content string) ([]playlist.M3UMatch, error) {
+func (l *Playlists) m3uMatches(ctx context.Context, content string) ([]playlist.M3UMatch, error) {
 	// Read before the resolve: a change landing during it moves the
 	// position past the one this resolution is held under.
 	pos, ok := l.m3uPosition(ctx)
@@ -134,7 +134,7 @@ func (l *Library) m3uMatches(ctx context.Context, content string) ([]playlist.M3
 // m3uPosition is the catalog position a resolution is held under: the
 // last change to the catalog's content, its generation included. False
 // when the change log could not be read; nothing is then reused or held.
-func (l *Library) m3uPosition(ctx context.Context) (int64, bool) {
-	st, ok := l.watchLook(ctx)
+func (l *Playlists) m3uPosition(ctx context.Context) (int64, bool) {
+	st, ok := l.Reads.watchLook(ctx)
 	return st.gen<<40 | st.content, ok
 }

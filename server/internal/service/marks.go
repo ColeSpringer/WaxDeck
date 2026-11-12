@@ -38,7 +38,7 @@ const entityRatingReadCap = 500
 
 // ItemMarks reads the caller's marks for the items, keyed by API pid, in
 // one catalog batch. Untouched items and malformed pids are absent.
-func (l *Library) ItemMarks(ctx context.Context, uc *UserCtx, apiItemPIDs []string) (map[string]ItemMark, error) {
+func (l *Reads) ItemMarks(ctx context.Context, uc *UserCtx, apiItemPIDs []string) (map[string]ItemMark, error) {
 	back := make(map[model.PID]string, len(apiItemPIDs))
 	pids := make([]model.PID, 0, len(apiItemPIDs))
 	for _, api := range apiItemPIDs {
@@ -129,7 +129,7 @@ func entityWants(apiEntityPIDs []string) []entityWant {
 // starredStates reads the caller's starred artists or albums for each
 // kind wants names, keyed by entity pid: one read per kind. The states
 // carry the ratings too, which spares a point read for each.
-func (l *Library) starredStates(ctx context.Context, uc *UserCtx, wants []entityWant) (map[model.PID]model.EntityPlayState, error) {
+func (l *Reads) starredStates(ctx context.Context, uc *UserCtx, wants []entityWant) (map[model.PID]model.EntityPlayState, error) {
 	kinds := map[model.MergeEntity]bool{}
 	for _, w := range wants {
 		kinds[w.kind] = true
@@ -153,7 +153,7 @@ func (l *Library) starredStates(ctx context.Context, uc *UserCtx, wants []entity
 // through EntityRatings' memo. Entities with neither are absent, as are
 // pids that name no artist or album. A rating read that fails still
 // answers the stars, beside the error.
-func (l *Library) EntityMarks(ctx context.Context, uc *UserCtx, apiEntityPIDs []string) (map[string]EntityMark, error) {
+func (l *Reads) EntityMarks(ctx context.Context, uc *UserCtx, apiEntityPIDs []string) (map[string]EntityMark, error) {
 	wants := entityWants(apiEntityPIDs)
 	out := make(map[string]EntityMark, len(wants))
 	if len(wants) == 0 {
@@ -184,7 +184,7 @@ func (l *Library) EntityMarks(ctx context.Context, uc *UserCtx, apiEntityPIDs []
 // catalog's starred order, each with its marks: one read, which carries
 // the ratings too. No visibility check, as the header says; the caller
 // shows only the ones its own scoped view holds.
-func (l *Library) StarredAlbumMarks(ctx context.Context, uc *UserCtx) ([]string, map[string]EntityMark, error) {
+func (l *Reads) StarredAlbumMarks(ctx context.Context, uc *UserCtx) ([]string, map[string]EntityMark, error) {
 	states, err := l.lib.StarredEntities(ctx, model.PID(uc.CatalogPID), model.MergeAlbum)
 	if err != nil {
 		return nil, nil, classify(err)
@@ -210,7 +210,7 @@ func (l *Library) StarredAlbumMarks(ctx context.Context, uc *UserCtx) ([]string,
 // entity again, an artist or album change in the catalog (a merge moves
 // every user's ratings), or a replaced catalog, and a list asked for
 // again costs no reads while the memo has room for it.
-func (l *Library) EntityRatings(ctx context.Context, uc *UserCtx, apiEntityPIDs []string) (map[string]int, error) {
+func (l *Reads) EntityRatings(ctx context.Context, uc *UserCtx, apiEntityPIDs []string) (map[string]int, error) {
 	wants := entityWants(apiEntityPIDs)
 	if len(wants) == 0 {
 		return map[string]int{}, nil
@@ -232,12 +232,12 @@ const ratingMemoFlush = 200
 // as they go and when one fails, so a retry continues where this left
 // off. An entity the catalog no longer holds is unrated, and is read
 // again next time rather than remembered.
-func (l *Library) ratingsFor(ctx context.Context, uc *UserCtx, wants []entityWant, starred map[model.PID]model.EntityPlayState) (map[string]int, error) {
+func (l *Reads) ratingsFor(ctx context.Context, uc *UserCtx, wants []entityWant, starred map[model.PID]model.EntityPlayState) (map[string]int, error) {
 	out := make(map[string]int)
 	// A look that could not tell may have missed a merge, so this call
 	// reads the catalog itself and keeps nothing.
 	epoch, watched := l.entityEpoch(ctx)
-	stamp := ratingStamp{gen: l.catalogGeneration(), entities: epoch}
+	stamp := ratingStamp{gen: l.library.catalogGeneration(), entities: epoch}
 	memo := &l.trackFacts.ratings
 	pids := make([]model.PID, len(wants))
 	for i, w := range wants {
@@ -296,7 +296,7 @@ func stateRating(st *model.EntityPlayState) *int {
 }
 
 // entityState reads one entity's state for the caller.
-func (l *Library) entityState(ctx context.Context, user model.PID, kind model.MergeEntity, pid model.PID) (*model.EntityPlayState, error) {
+func (l *Reads) entityState(ctx context.Context, user model.PID, kind model.MergeEntity, pid model.PID) (*model.EntityPlayState, error) {
 	if hook := l.trackFacts.entityReadHook; hook != nil {
 		return hook(ctx, user, kind, pid)
 	}
@@ -305,7 +305,7 @@ func (l *Library) entityState(ctx context.Context, user model.PID, kind model.Me
 
 // entityEpoch answers how many artist or album changes the catalog
 // watch has seen, and false when its look could not tell.
-func (l *Library) entityEpoch(ctx context.Context) (uint64, bool) {
+func (l *Reads) entityEpoch(ctx context.Context) (uint64, bool) {
 	st, ok := l.watchLook(ctx)
 	return st.entities, ok
 }

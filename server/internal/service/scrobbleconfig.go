@@ -34,7 +34,7 @@ type LastfmServerConfig struct {
 // loadLastfmClient builds (or clears) the Last.fm client from the
 // stored credentials, falling back to the environment pair. Called at
 // Open and after every credential change.
-func (l *Library) loadLastfmClient(ctx context.Context) {
+func (l *Integrations) loadLastfmClient(ctx context.Context) {
 	key, secret, _ := l.lastfmCredentials(ctx)
 	if key == "" || secret == "" {
 		l.lastfmPtr.Store(&lastfmSlot{})
@@ -48,7 +48,7 @@ func (l *Library) loadLastfmClient(ctx context.Context) {
 type lastfmSlot struct{ client *scrobble.Lastfm }
 
 // lastfmClient returns the live client, nil when unconfigured.
-func (l *Library) lastfmClient() *scrobble.Lastfm {
+func (l *Integrations) lastfmClient() *scrobble.Lastfm {
 	if slot, ok := l.lastfmPtr.Load().(*lastfmSlot); ok && slot != nil {
 		return slot.client
 	}
@@ -56,7 +56,7 @@ func (l *Library) lastfmClient() *scrobble.Lastfm {
 }
 
 // lastfmCredentials resolves the effective pair and its source.
-func (l *Library) lastfmCredentials(ctx context.Context) (key, secret, source string) {
+func (l *Integrations) lastfmCredentials(ctx context.Context) (key, secret, source string) {
 	storedKey, keyErr := l.db.SettingGet(ctx, settingLastfmAPIKey)
 	storedSecret, secErr := l.db.SettingGet(ctx, settingLastfmSecret)
 	if keyErr == nil && secErr == nil && storedKey != "" {
@@ -75,7 +75,7 @@ func (l *Library) lastfmCredentials(ctx context.Context) (key, secret, source st
 }
 
 // LastfmConfigGet reports the credential state for the admin surface.
-func (l *Library) LastfmConfigGet(ctx context.Context) LastfmServerConfig {
+func (l *Integrations) LastfmConfigGet(ctx context.Context) LastfmServerConfig {
 	key, secret, source := l.lastfmCredentials(ctx)
 	return LastfmServerConfig{
 		Configured: key != "" && secret != "",
@@ -92,7 +92,7 @@ func (l *Library) LastfmConfigGet(ctx context.Context) LastfmServerConfig {
 // Last.fm connections (session keys bind to the application that
 // minted them); their delivery rows surface it and reconnecting fixes
 // it, so the change is allowed, not refused.
-func (l *Library) LastfmConfigPut(ctx context.Context, actor *UserCtx, apiKey, secret string) (LastfmServerConfig, error) {
+func (l *Integrations) LastfmConfigPut(ctx context.Context, actor *UserCtx, apiKey, secret string) (LastfmServerConfig, error) {
 	switch {
 	case apiKey == "" && secret == "":
 		if err := l.db.SettingDelete(ctx, settingLastfmAPIKey); err != nil {
@@ -125,7 +125,7 @@ func (l *Library) LastfmConfigPut(ctx context.Context, actor *UserCtx, apiKey, s
 	}
 	l.loadLastfmClient(ctx)
 	out := l.LastfmConfigGet(ctx)
-	l.Audit(ctx, actor, "scrobbling.lastfm-config", AuditTarget{Kind: "settings"},
+	l.Audit.Record(ctx, actor, "scrobbling.lastfm-config", AuditTarget{Kind: "settings"},
 		map[string]any{"configured": out.Configured, "source": out.Source})
 	return out, nil
 }

@@ -47,14 +47,14 @@ func TestGuardedClientsDialDirectly(t *testing.T) {
 
 func tryGuardedClients(t *testing.T) {
 	_, svc, _ := newCatalogFixture(t)
-	svc.allowPrivateFeedHosts = true
-	svc.allowPrivateRadioHosts = true
-	svc.allowPrivateNotifyHosts = true
+	svc.Podcasts.allowPrivateFeedHosts = true
+	svc.Radio.allowPrivateRadioHosts = true
+	svc.Integrations.allowPrivateNotifyHosts = true
 	clients := map[string]*http.Client{
-		"transcripts and chapters": svc.transcriptClient(),
-		"the enclosure relay":      svc.enclosureClient(),
-		"radio":                    svc.radioClient(),
-		"notification delivery":    svc.guardedNotifyClient(),
+		"transcripts and chapters": svc.Podcasts.transcriptClient(),
+		"the enclosure relay":      svc.Podcasts.enclosureClient(),
+		"radio":                    svc.Radio.client(),
+		"notification delivery":    svc.Integrations.guardedNotifyClient(),
 		"scrobbling":               scrobbleHTTPClient(true),
 	}
 	for name, client := range clients {
@@ -78,8 +78,8 @@ func TestTheRelayClientBoundsResponseHeaders(t *testing.T) {
 	}))
 	t.Cleanup(ts.Close)
 	_, svc, _ := newCatalogFixture(t)
-	svc.allowPrivateFeedHosts = true
-	resp, err := svc.enclosureClient().Get(ts.URL + "/episode.mp3")
+	svc.Podcasts.allowPrivateFeedHosts = true
+	resp, err := svc.Podcasts.enclosureClient().Get(ts.URL + "/episode.mp3")
 	if err == nil {
 		resp.Body.Close()
 		t.Fatal("a 128 KiB header block was read whole")

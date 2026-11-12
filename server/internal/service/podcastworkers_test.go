@@ -76,7 +76,7 @@ func TestASyncFailureCountsOnlyWhenTheFeedIsAtFault(t *testing.T) {
 	src.armed = true
 
 	for _, c := range cases {
-		_, err := svc.syncShow(ctx, shows[c.url], syncOwn)
+		_, err := svc.Podcasts.syncShow(ctx, shows[c.url], syncOwn)
 		if got := KindOf(err); got != c.kind {
 			t.Errorf("%s: sync answered %q (%v), want %q", c.url, got, err, c.kind)
 		}
@@ -95,7 +95,7 @@ func TestASyncFailureCountsOnlyWhenTheFeedIsAtFault(t *testing.T) {
 	// A show the catalog no longer holds, as after a catalog reset, is
 	// still stamped, so it is not asked for every minute.
 	gone := model.PID("01JZX5N8QW3F4V9T2B7KD3M9R6")
-	if _, err := svc.syncShow(ctx, gone, syncOwn); KindOf(err) != KindNotFound {
+	if _, err := svc.Podcasts.syncShow(ctx, gone, syncOwn); KindOf(err) != KindNotFound {
 		t.Errorf("a vanished show answered %v, want not-found", err)
 	}
 	if st, err := store.FeedStateFor(ctx, string(gone)); err != nil || st.LastAttemptNS == 0 || st.ConsecutiveFailures != 0 {
@@ -179,7 +179,7 @@ func openSyncFixture(t *testing.T, src source.Provider) (context.Context, *Libra
 // a feed is invalid (the refusal subscribing shows), the rest by kind.
 func TestFeedErrorsAnswerByWhoseFaultTheyAre(t *testing.T) {
 	t.Parallel()
-	l := &Library{}
+	l := bareLibrary(&core{})
 	feedErr := func(err error) error {
 		return &source.ProviderError{SourceType: model.SourceRSS, Op: "enumerate", Err: err}
 	}
@@ -195,7 +195,7 @@ func TestFeedErrorsAnswerByWhoseFaultTheyAre(t *testing.T) {
 		{"a raw database error", errors.New("database or disk is full"), KindInternal},
 		{"a switched-off source", waxerr.New(waxerr.CodeUnsupported, "podcast", "no provider for youtube"), KindUnsupported},
 	} {
-		if got := KindOf(l.classifyFeedErr(context.Background(), c.err)); got != c.want {
+		if got := KindOf(l.Podcasts.classifyFeedErr(context.Background(), c.err)); got != c.want {
 			t.Errorf("%s answered %q, want %q", c.name, got, c.want)
 		}
 	}

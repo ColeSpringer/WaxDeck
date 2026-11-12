@@ -69,10 +69,10 @@ type absItem struct {
 // resolve by ASIN/ISBN first and author/title descriptively after;
 // multi-file books need no special handling because a catalog book's
 // position is a book-timeline millisecond by contract.
-func (l *Library) runABSImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, secret string) (migrationSummary, error) {
+func (l *Migrate) runABSImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, secret string) (migrationSummary, error) {
 	sum := migrationSummary{Source: p.Source, DryRun: p.DryRun, Samples: migrationSamples{Unmatched: []string{}}}
 	client := newABSClient(p.ServerURL, secret)
-	prog := newToolProgress(l, t)
+	prog := newToolProgress(l.Tools, t)
 	var me struct {
 		MediaProgress []absMediaProgress `json:"mediaProgress"`
 	}
@@ -143,7 +143,7 @@ func (l *Library) runABSImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx
 			recordedAt = &ts
 		}
 		if !p.DryRun {
-			applied, err := l.Checkpoint(ctx, uc, apiPID(PrefixBook, it.PID), posMS, recordedAt)
+			applied, err := l.Playback.Checkpoint(ctx, uc, apiPID(PrefixBook, it.PID), posMS, recordedAt)
 			if err != nil {
 				if !migrateWriteSkippable(err) {
 					return sum, err

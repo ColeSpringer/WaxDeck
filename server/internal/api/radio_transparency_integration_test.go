@@ -495,7 +495,7 @@ func TestRadioNowPlayingItemPidNeedsACover(t *testing.T) {
 		return decode[RadioPlayInfo](t, get(t, h.ts, "/api/v1/radio/stations/"+st.Pid+"/play-info", h.token))
 	}
 
-	h.svc.NoteRadioMeta(st.Pid, "Fixture Artist - Alpha Song", host.URL+"/cover.png")
+	h.svc.Radio.NoteRadioMeta(st.Pid, "Fixture Artist - Alpha Song", host.URL+"/cover.png")
 	waitForSavedSnapshotArt(t, h, st.Pid)
 	if info := playInfo(); info.NowPlayingItemPid != nil {
 		t.Fatalf("nowPlayingItemPid = %q for a track with no cover, want absent", *info.NowPlayingItemPid)
@@ -504,7 +504,7 @@ func TestRadioNowPlayingItemPidNeedsACover(t *testing.T) {
 	bravo := pids["Bravo Song"]
 	wantStatus(t, metadataPutBytes(t, h.ts, "/api/v1/items/"+bravo+"/artwork", h.token, tinyPNG(t)),
 		200, "set front")
-	h.svc.NoteRadioMeta(st.Pid, "Fixture Artist - Bravo Song", "")
+	h.svc.Radio.NoteRadioMeta(st.Pid, "Fixture Artist - Bravo Song", "")
 	info := playInfo()
 	if info.NowPlayingItemPid == nil || *info.NowPlayingItemPid != bravo {
 		t.Fatalf("nowPlayingItemPid = %v, want %q", info.NowPlayingItemPid, bravo)

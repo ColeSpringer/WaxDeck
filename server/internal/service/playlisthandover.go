@@ -93,7 +93,7 @@ func ruleNamesPlaylistIn(q query.Query, pids map[model.PID]bool) bool {
 }
 
 // handoverStep gives a test the chance to fail one step of a handover.
-func (l *Library) handoverStep(stage string, pl *model.Playlist) error {
+func (l *Playlists) handoverStep(stage string, pl *model.Playlist) error {
 	if l.handoverHook == nil {
 		return nil
 	}
@@ -105,7 +105,7 @@ func (l *Library) handoverStep(stage string, pl *model.Playlist) error {
 // rule that names one of them would match nothing once it is gone. The
 // answer is the pid of the fixed list that stands in for the playlist, or
 // empty when the playlist itself changed hands.
-func (l *Library) handOverPlaylist(ctx context.Context, victim, taker *wdb.User, pl *model.Playlist, leaving map[model.PID]bool) (model.PID, error) {
+func (l *Playlists) handOverPlaylist(ctx context.Context, victim, taker *wdb.User, pl *model.Playlist, leaving map[model.PID]bool) (model.PID, error) {
 	if err := l.handoverStep("start", pl); err != nil {
 		return "", err
 	}
@@ -113,7 +113,7 @@ func (l *Library) handOverPlaylist(ctx context.Context, victim, taker *wdb.User,
 		(ruleReadsUserState(*pl.Rule) || ruleNamesPlaylistIn(*pl.Rule, leaving)) {
 		return l.handOverAsFixedList(ctx, victim, taker, pl)
 	}
-	if err := l.lib.Playlists().SetOwner(ctx, pl.PID, model.PID(l.catalogPID(taker))); err != nil {
+	if err := l.lib.Playlists().SetOwner(ctx, pl.PID, model.PID(l.Identity.catalogPID(taker))); err != nil {
 		return "", classify(err)
 	}
 	return "", nil
@@ -139,8 +139,8 @@ func handoverMarker(source model.PID) string { return " [handover " + string(sou
 // brings it up to what the playlist evaluates to now. A run that fails
 // takes its copy back while the catalog lets it, and when the catalog does
 // not, leaves the record for the next run.
-func (l *Library) handOverAsFixedList(ctx context.Context, victim, taker *wdb.User, pl *model.Playlist) (model.PID, error) {
-	members, err := l.playlistMembers(ctx, pl)
+func (l *Playlists) handOverAsFixedList(ctx context.Context, victim, taker *wdb.User, pl *model.Playlist) (model.PID, error) {
+	members, err := l.members(ctx, pl)
 	if err != nil {
 		return "", err
 	}
@@ -175,8 +175,8 @@ func (l *Library) handOverAsFixedList(ctx context.Context, victim, taker *wdb.Us
 // is one to take up, else a new one under the marker's name. The new one's
 // intent is recorded before it is made, and the record names it as soon as
 // it exists.
-func (l *Library) fixedCopyOf(ctx context.Context, victim, taker *wdb.User, pl *model.Playlist, pids []model.PID) (*model.Playlist, error) {
-	takerPID := model.PID(l.catalogPID(taker))
+func (l *Playlists) fixedCopyOf(ctx context.Context, victim, taker *wdb.User, pl *model.Playlist, pids []model.PID) (*model.Playlist, error) {
+	takerPID := model.PID(l.Identity.catalogPID(taker))
 	rec, err := l.db.PlaylistHandoverFor(ctx, string(pl.PID))
 	switch {
 	case err == nil:
@@ -270,7 +270,7 @@ func (e *copyLeftError) LeftCopy() string { return apiPID(PrefixPlaylist, e.pid)
 // held by this run's recipient, and holding what the playlist evaluates to
 // now (pids), which is not what it held when it was made if the catalog
 // has changed since. Nil when there is none to take up.
-func (l *Library) earlierCopy(ctx context.Context, rec wdb.PlaylistHandover, pl *model.Playlist, takerPID model.PID, pids []model.PID) (*model.Playlist, error) {
+func (l *Playlists) earlierCopy(ctx context.Context, rec wdb.PlaylistHandover, pl *model.Playlist, takerPID model.PID, pids []model.PID) (*model.Playlist, error) {
 	var fixed *model.Playlist
 	if rec.CopyPID != "" {
 		got, err := l.lib.Playlists().Get(ctx, model.PID(rec.CopyPID))
@@ -308,7 +308,7 @@ func (l *Library) earlierCopy(ctx context.Context, rec wdb.PlaylistHandover, pl 
 // names, when that account is still there. The first of them is the one
 // whose view of the catalog is searched: every shared list is in it, and a
 // catalog user the departing member has or has not is not.
-func (l *Library) handoverHolders(ctx context.Context, rec wdb.PlaylistHandover, taker model.PID) (viewer model.PID, holders map[model.PID]bool) {
+func (l *Playlists) handoverHolders(ctx context.Context, rec wdb.PlaylistHandover, taker model.PID) (viewer model.PID, holders map[model.PID]bool) {
 	holders = map[model.PID]bool{}
 	add := func(pid model.PID) {
 		if pid == "" {
@@ -321,7 +321,7 @@ func (l *Library) handoverHolders(ctx context.Context, rec wdb.PlaylistHandover,
 	}
 	add(taker)
 	if earlier, err := l.db.UserByID(ctx, rec.TakerID); err == nil {
-		add(model.PID(l.catalogPID(earlier)))
+		add(model.PID(l.Identity.catalogPID(earlier)))
 	}
 	return viewer, holders
 }
@@ -331,7 +331,7 @@ func (l *Library) handoverHolders(ctx context.Context, rec wdb.PlaylistHandover,
 // stopped before naming it on record made. A handover only ever makes its
 // copy for its recipient, so no other account's list is it, whatever it is
 // called. The earliest is it, should there be more than one.
-func (l *Library) markedCopy(ctx context.Context, source, viewer model.PID, holders map[model.PID]bool) (*model.Playlist, error) {
+func (l *Playlists) markedCopy(ctx context.Context, source, viewer model.PID, holders map[model.PID]bool) (*model.Playlist, error) {
 	if viewer == "" {
 		return nil, nil
 	}
@@ -352,7 +352,7 @@ func (l *Library) markedCopy(ctx context.Context, source, viewer model.PID, hold
 
 // nameCopy gives a fixed copy the name of the playlist it stands in for,
 // in place of the marker's, once the record names it.
-func (l *Library) nameCopy(ctx context.Context, fixed, pl *model.Playlist) error {
+func (l *Playlists) nameCopy(ctx context.Context, fixed, pl *model.Playlist) error {
 	if fixed.Name == pl.Name {
 		return nil
 	}
@@ -372,7 +372,7 @@ func (l *Library) nameCopy(ctx context.Context, fixed, pl *model.Playlist) error
 // be removed (the catalog that failed is the catalog to ask) it stays on
 // record and the error says so, and the next deletion of the account takes
 // it up or removes it.
-func (l *Library) takeBackCopy(ctx context.Context, pl *model.Playlist, fixed model.PID, cause error) error {
+func (l *Playlists) takeBackCopy(ctx context.Context, pl *model.Playlist, fixed model.PID, cause error) error {
 	bg := context.WithoutCancel(ctx)
 	if err := l.repointPins(bg, fixed, pl.PID); err != nil {
 		l.log.Warn("putting a playlist's pins back", "playlist", pl.PID, "err", err)
@@ -387,7 +387,7 @@ func (l *Library) takeBackCopy(ctx context.Context, pl *model.Playlist, fixed mo
 }
 
 // discardCopy removes a fixed copy; one that is already gone is removed.
-func (l *Library) discardCopy(ctx context.Context, pid model.PID) error {
+func (l *Playlists) discardCopy(ctx context.Context, pid model.PID) error {
 	fixed := &model.Playlist{PID: pid}
 	if err := l.handoverStep("discard", fixed); err != nil {
 		return err
@@ -407,7 +407,7 @@ func (l *Library) discardCopy(ctx context.Context, pid model.PID) error {
 // the copy goes with the rest. The record goes once the copy is dealt with.
 // Each copy is named in out as it is removed or kept, so the record of the
 // deletion says what became of it, whether or not the deletion finishes.
-func (l *Library) settleHandoverLeftovers(ctx context.Context, victim, taker *wdb.User, out *AccountDeleted) error {
+func (l *Playlists) settleHandoverLeftovers(ctx context.Context, victim, taker *wdb.User, out *AccountDeleted) error {
 	records, err := l.db.PlaylistHandoversOf(ctx, victim.ID)
 	if err != nil {
 		return &Error{Kind: KindInternal, Err: err}
@@ -424,7 +424,7 @@ func (l *Library) settleHandoverLeftovers(ctx context.Context, victim, taker *wd
 				}
 				out.FixedCopiesRemoved = append(out.FixedCopiesRemoved, apiPID(PrefixPlaylist, c.PID))
 			} else {
-				if err := l.keepCopy(ctx, c, model.PID(l.catalogPID(taker)), model.PID(rec.SourcePID)); err != nil {
+				if err := l.keepCopy(ctx, c, model.PID(l.Identity.catalogPID(taker)), model.PID(rec.SourcePID)); err != nil {
 					return err
 				}
 				out.FixedCopiesKept = append(out.FixedCopiesKept, apiPID(PrefixPlaylist, c.PID))
@@ -439,7 +439,7 @@ func (l *Library) settleHandoverLeftovers(ctx context.Context, victim, taker *wd
 // leftCopies is the copies a record has left in the catalog: the one it
 // names and the one carrying its playlist's marker, which are the same
 // list unless the run that stopped did so between making it and naming it.
-func (l *Library) leftCopies(ctx context.Context, rec wdb.PlaylistHandover, taker *wdb.User) ([]*model.Playlist, error) {
+func (l *Playlists) leftCopies(ctx context.Context, rec wdb.PlaylistHandover, taker *wdb.User) ([]*model.Playlist, error) {
 	var out []*model.Playlist
 	if rec.CopyPID != "" {
 		switch got, err := l.lib.Playlists().Get(ctx, model.PID(rec.CopyPID)); {
@@ -451,7 +451,7 @@ func (l *Library) leftCopies(ctx context.Context, rec wdb.PlaylistHandover, take
 	}
 	var takerPID model.PID
 	if taker != nil {
-		takerPID = model.PID(l.catalogPID(taker))
+		takerPID = model.PID(l.Identity.catalogPID(taker))
 	}
 	viewer, holders := l.handoverHolders(ctx, rec, takerPID)
 	marked, err := l.markedCopy(ctx, model.PID(rec.SourcePID), viewer, holders)
@@ -467,7 +467,7 @@ func (l *Library) leftCopies(ctx context.Context, rec wdb.PlaylistHandover, take
 
 // keepCopy gives a copy that stays to its recipient, under the name of the
 // playlist it was made from rather than under the marker's.
-func (l *Library) keepCopy(ctx context.Context, fixed *model.Playlist, takerPID, source model.PID) error {
+func (l *Playlists) keepCopy(ctx context.Context, fixed *model.Playlist, takerPID, source model.PID) error {
 	if fixed.OwnerPID != takerPID {
 		if err := l.lib.Playlists().SetOwner(ctx, fixed.PID, takerPID); err != nil {
 			return classify(err)
@@ -484,7 +484,7 @@ func (l *Library) keepCopy(ctx context.Context, fixed *model.Playlist, takerPID,
 // forgetHandover clears a playlist's record once its handover is done or
 // undone. A record that stays is inert, since a pid is never made twice,
 // and goes with the account's deletion.
-func (l *Library) forgetHandover(ctx context.Context, source model.PID) {
+func (l *Playlists) forgetHandover(ctx context.Context, source model.PID) {
 	if err := l.db.DeletePlaylistHandover(ctx, string(source)); err != nil {
 		l.log.Warn("clearing a playlist handover record", "playlist", source, "err", err)
 	}
@@ -492,7 +492,7 @@ func (l *Library) forgetHandover(ctx context.Context, source model.PID) {
 
 // repointPins moves every account's home pin of one playlist to another
 // and tells the accounts whose pins changed.
-func (l *Library) repointPins(ctx context.Context, from, to model.PID) error {
+func (l *Playlists) repointPins(ctx context.Context, from, to model.PID) error {
 	pinners, err := l.db.RepointPlaylistPins(ctx, apiPID(PrefixPlaylist, from), apiPID(PrefixPlaylist, to))
 	if err != nil {
 		return &Error{Kind: KindInternal, Err: err}
@@ -503,8 +503,8 @@ func (l *Library) repointPins(ctx context.Context, from, to model.PID) error {
 	return nil
 }
 
-// playlistGone reports whether the catalog no longer has a playlist.
-func (l *Library) playlistGone(ctx context.Context, pid model.PID) bool {
+// gone reports whether the catalog no longer has a playlist.
+func (l *Playlists) gone(ctx context.Context, pid model.PID) bool {
 	_, err := l.lib.Playlists().Get(ctx, pid)
 	return err != nil && KindOf(classify(err)) == KindNotFound
 }
@@ -513,7 +513,7 @@ func (l *Library) playlistGone(ctx context.Context, pid model.PID) bool {
 // for the old one. A generated cover is left to be drawn again from the
 // same tracks. Failures are logged: a list without its picture is still
 // the list.
-func (l *Library) carryPlaylistCover(ctx context.Context, from, to model.PID) {
+func (l *Playlists) carryPlaylistCover(ctx context.Context, from, to model.PID) {
 	custom := false
 	switch rec, err := l.db.PlaylistCoverFor(ctx, string(from)); {
 	case err == nil:
@@ -557,8 +557,8 @@ func (l *Library) carryPlaylistCover(ctx context.Context, from, to model.PID) {
 
 // hasCatalogUser reports whether the catalog knows the user an account
 // acts as, which is what owning a playlist there takes.
-func (l *Library) hasCatalogUser(ctx context.Context, u *wdb.User) (bool, error) {
-	pid := l.catalogPID(u)
+func (l *Playlists) hasCatalogUser(ctx context.Context, u *wdb.User) (bool, error) {
+	pid := l.Identity.catalogPID(u)
 	if pid == "" {
 		return false, nil
 	}

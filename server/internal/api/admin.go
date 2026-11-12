@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"time"
 
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -23,12 +22,12 @@ func (s *Server) ListAuditEvents(ctx context.Context, req ListAuditEventsRequest
 	if err != nil {
 		return nil, err
 	}
-	filter := wdb.AuditFilter{
+	filter := service.AuditFilter{
 		Action:    deref(req.Params.Action),
 		ActorID:   deref(req.Params.ActorId),
 		TargetPID: deref(req.Params.TargetPid),
 	}
-	page, err := s.svc.AuditEvents(ctx, filter, deref(req.Params.Cursor), limit)
+	page, err := s.svc.Audit.Events(ctx, filter, deref(req.Params.Cursor), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +75,7 @@ func (s *Server) GetAdminSettings(ctx context.Context, _ GetAdminSettingsRequest
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	st, err := s.svc.AdminSettingsGet(ctx)
+	st, err := s.svc.Settings.AdminSettingsGet(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +90,7 @@ func (s *Server) PutAdminSettings(ctx context.Context, req PutAdminSettingsReque
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	st, err := s.svc.AdminSettingsPut(ctx, uc, service.AdminSettingsChange{
+	st, err := s.svc.Settings.AdminSettingsPut(ctx, uc, service.AdminSettingsChange{
 		SignupEnabled:       req.Body.SignupEnabled,
 		ReadOnly:            req.Body.ReadOnly,
 		SonicAnalysis:       req.Body.SonicAnalysis,
@@ -128,7 +127,7 @@ func (s *Server) GetTranscodingLimits(ctx context.Context, _ GetTranscodingLimit
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	lim := s.svc.TranscodingLimitsGet(ctx)
+	lim := s.svc.Settings.TranscodingLimitsGet(ctx)
 	return GetTranscodingLimits200JSONResponse(transcodingLimitsJSON(lim)), nil
 }
 
@@ -136,7 +135,7 @@ func (s *Server) GetTranscodingActivity(ctx context.Context, _ GetTranscodingAct
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	activity := s.svc.ActiveTranscodeSessions()
+	activity := s.svc.Playback.ActiveTranscodeSessions()
 	timelines := activity.Timelines
 	return GetTranscodingActivity200JSONResponse(TranscodingActivity{
 		ActiveSessions:  activity.Sessions,
@@ -152,7 +151,7 @@ func (s *Server) PutTranscodingLimits(ctx context.Context, req PutTranscodingLim
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	lim, err := s.svc.TranscodingLimitsPut(ctx, uc, service.TranscodingLimits{
+	lim, err := s.svc.Settings.TranscodingLimitsPut(ctx, uc, service.TranscodingLimits{
 		MaxConcurrent:         req.Body.MaxConcurrent,
 		MaxConcurrentPerUser:  req.Body.MaxConcurrentPerUser,
 		DefaultMaxBitrateKbps: req.Body.DefaultMaxBitrateKbps,
@@ -177,7 +176,7 @@ func (s *Server) ListSchedules(ctx context.Context, _ ListSchedulesRequestObject
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	rows := s.svc.Schedules(ctx)
+	rows := s.svc.Integrations.Schedules(ctx)
 	out := ScheduleList{Schedules: make([]Schedule, 0, len(rows))}
 	for _, row := range rows {
 		out.Schedules = append(out.Schedules, scheduleJSON(row))
@@ -193,7 +192,7 @@ func (s *Server) PutSchedule(ctx context.Context, req PutScheduleRequestObject) 
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	row, err := s.svc.PutSchedule(ctx, uc, string(req.Kind), req.Body.Cron, req.Body.Enabled)
+	row, err := s.svc.Integrations.PutSchedule(ctx, uc, string(req.Kind), req.Body.Cron, req.Body.Enabled)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +231,7 @@ func (s *Server) ListTrash(ctx context.Context, req ListTrashRequestObject) (Lis
 	if err != nil {
 		return nil, err
 	}
-	entries, err := s.svc.TrashEntries(ctx, uc, derefBool(req.Params.IncludeRestored), limit)
+	entries, err := s.svc.Tools.TrashEntries(ctx, uc, derefBool(req.Params.IncludeRestored), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -267,7 +266,7 @@ func (s *Server) RestoreTrashEntry(ctx context.Context, req RestoreTrashEntryReq
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.svc.RestoreTrashEntry(ctx, uc, string(req.TrashId)); err != nil {
+	if err := s.svc.Tools.RestoreTrashEntry(ctx, uc, string(req.TrashId)); err != nil {
 		kind := service.KindOf(err)
 		if kind == service.KindConflict || kind == service.KindInvalid {
 			return nil, refuse(http.StatusConflict, "conflict", serviceMessage(err))
@@ -282,7 +281,7 @@ func (s *Server) EmptyTrash(ctx context.Context, _ EmptyTrashRequestObject) (Emp
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	rep, err := s.svc.EmptyTrash(ctx, uc)
+	rep, err := s.svc.Tools.EmptyTrash(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +298,7 @@ func (s *Server) PurgeTrashEntry(ctx context.Context, req PurgeTrashEntryRequest
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	reclaimed, err := s.svc.PurgeTrashEntry(ctx, uc, string(req.TrashId))
+	reclaimed, err := s.svc.Tools.PurgeTrashEntry(ctx, uc, string(req.TrashId))
 	if err != nil {
 		// A malformed or unknown trash id both read as "no such entry".
 		if kind := service.KindOf(err); kind == service.KindNotFound || kind == service.KindInvalid {
@@ -367,7 +366,7 @@ func (s *Server) GetEnrichmentCache(ctx context.Context, _ GetEnrichmentCacheReq
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	rep, err := s.svc.EnrichmentCacheStats(ctx, uc)
+	rep, err := s.svc.Enrichment.CacheStats(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +400,7 @@ func (s *Server) PruneEnrichmentCache(ctx context.Context, req PruneEnrichmentCa
 		return nil, errNoBody()
 	}
 	// Forwarded as they arrived: an absent bound and a zero one differ.
-	rep, err := s.svc.PruneEnrichmentCache(ctx, uc, req.Body.OlderThanSeconds, req.Body.MaxBytes)
+	rep, err := s.svc.Enrichment.PruneEnrichmentCache(ctx, uc, req.Body.OlderThanSeconds, req.Body.MaxBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -421,7 +420,7 @@ func (s *Server) DeleteLibraryItems(ctx context.Context, req DeleteLibraryItemsR
 	if req.Body.Mode != nil {
 		mode = string(*req.Body.Mode)
 	}
-	res, err := s.svc.DeleteItems(ctx, uc, req.Body.Pids, mode, derefBool(req.Body.DryRun))
+	res, err := s.svc.Tools.DeleteItems(ctx, uc, req.Body.Pids, mode, derefBool(req.Body.DryRun))
 	if err != nil {
 		if service.KindOf(err) == service.KindInvalid && errors.Is(err, service.ErrCueRipPart) {
 			return nil, refuseParams(http.StatusBadRequest, "invalid-request", serviceMessage(err), cueRipParams(err))
@@ -483,7 +482,7 @@ func (s *Server) ListJobs(ctx context.Context, req ListJobsRequestObject) (ListJ
 	if err != nil {
 		return nil, err
 	}
-	jobs, err := s.svc.Jobs(ctx, uc, limit)
+	jobs, err := s.svc.Jobs.List(ctx, uc, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -499,7 +498,7 @@ func (s *Server) ClearFinishedJobs(ctx context.Context, _ ClearFinishedJobsReque
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	n, err := s.svc.ClearFinishedJobs(ctx, uc)
+	n, err := s.svc.Jobs.ClearFinishedJobs(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -516,7 +515,7 @@ func (s *Server) SetLibraryReadOnly(ctx context.Context, req SetLibraryReadOnlyR
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	if err := s.svc.LibraryReadOnlySet(ctx, uc, req.Pid, req.Body.ReadOnly); err != nil {
+	if err := s.svc.Settings.LibraryReadOnlySet(ctx, uc, req.Pid, req.Body.ReadOnly); err != nil {
 		return nil, err
 	}
 	return SetLibraryReadOnly200JSONResponse(LibraryReadOnly{ReadOnly: req.Body.ReadOnly, LibraryPid: ptr(req.Pid)}), nil
@@ -530,7 +529,7 @@ func (s *Server) SetLibraryFolderFallback(ctx context.Context, req SetLibraryFol
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	if err := s.svc.LibraryFolderFallbackSet(ctx, uc, req.Pid, req.Body.FolderFallback); err != nil {
+	if err := s.svc.Settings.LibraryFolderFallbackSet(ctx, uc, req.Pid, req.Body.FolderFallback); err != nil {
 		return nil, err
 	}
 	return SetLibraryFolderFallback200JSONResponse(LibraryFolderFallback{
@@ -546,7 +545,7 @@ func (s *Server) SetLibraryMedia(ctx context.Context, req SetLibraryMediaRequest
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	lib, err := s.svc.SetLibraryMedia(ctx, uc, req.Pid, string(req.Body.Media))
+	lib, err := s.svc.Roots.SetLibraryMedia(ctx, uc, req.Pid, string(req.Body.Media))
 	if err != nil {
 		return nil, err
 	}
@@ -558,7 +557,7 @@ func (s *Server) SetLibraryProfile(ctx context.Context, req SetLibraryProfileReq
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	lib, err := s.svc.SetLibraryProfile(ctx, uc, req.Pid, req.Body.Profile)
+	lib, err := s.svc.Health.SetLibraryProfile(ctx, uc, req.Pid, req.Body.Profile)
 	if err != nil {
 		return nil, err
 	}
@@ -582,7 +581,7 @@ func (s *Server) CreateLibrary(ctx context.Context, req CreateLibraryRequestObje
 	if req.Body.Media != nil {
 		in.Media = string(*req.Body.Media)
 	}
-	lib, err := s.svc.AddLibrary(ctx, uc, in)
+	lib, err := s.svc.Roots.AddLibrary(ctx, uc, in)
 	if err != nil {
 		return nil, err
 	}
@@ -594,7 +593,7 @@ func (s *Server) RemoveLibrary(ctx context.Context, req RemoveLibraryRequestObje
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	job, err := s.svc.RemoveLibrary(ctx, uc, req.Pid)
+	job, err := s.svc.Roots.RemoveLibrary(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -694,7 +693,7 @@ func (s *Server) StageMigrationExport(ctx context.Context, req StageMigrationExp
 	// before the body is read rather than after it is on disk. A chunked
 	// body says nothing, and the cap on the copy is what bounds it.
 	declared := declaredBodyBytes(ctx)
-	export, err := s.svc.StageMigrationExport(ctx, uc, req.Body, declared)
+	export, err := s.svc.Migrate.StageMigrationExport(ctx, uc, req.Body, declared)
 	if err != nil {
 		return nil, err
 	}
@@ -706,7 +705,7 @@ func (s *Server) DiscardMigrationExport(ctx context.Context, req DiscardMigratio
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.svc.DiscardMigrationExport(ctx, uc, string(req.ExportId)); err != nil {
+	if err := s.svc.Migrate.DiscardMigrationExport(ctx, uc, string(req.ExportId)); err != nil {
 		return nil, err
 	}
 	return DiscardMigrationExport204Response{}, nil
@@ -760,7 +759,7 @@ func (s *Server) CreateMigration(ctx context.Context, req CreateMigrationRequest
 			in.Progress = *o.Progress
 		}
 	}
-	task, err := s.svc.StartMigration(ctx, uc, in)
+	task, err := s.svc.Migrate.StartMigration(ctx, uc, in)
 	if err != nil {
 		return nil, err
 	}
@@ -793,7 +792,7 @@ func (s *Server) GetGenreTree(ctx context.Context, req GetGenreTreeRequestObject
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	tree, err := s.svc.GenreTreeFor(ctx, uc)
+	tree, err := s.svc.Reads.GenreTreeFor(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -816,7 +815,7 @@ func (s *Server) PutGenreTree(ctx context.Context, req PutGenreTreeRequestObject
 		}
 		nodes = append(nodes, node)
 	}
-	tree, err := s.svc.PutGenreTree(ctx, uc, nodes)
+	tree, err := s.svc.Reads.PutGenreTree(ctx, uc, nodes)
 	if err != nil {
 		return nil, err
 	}
@@ -832,7 +831,7 @@ func (s *Server) CreateGenreNormalization(ctx context.Context, req CreateGenreNo
 	if req.Body != nil {
 		dryRun = derefBool(req.Body.DryRun)
 	}
-	task, err := s.svc.StartGenreNormalize(ctx, uc, dryRun)
+	task, err := s.svc.Reads.StartGenreNormalize(ctx, uc, dryRun)
 	if err != nil {
 		return nil, err
 	}
@@ -848,7 +847,7 @@ func (s *Server) CreateGenreNormalization(ctx context.Context, req CreateGenreNo
 func (s *Server) StreamToolTaskEvents(ctx context.Context, req StreamToolTaskEventsRequestObject) (StreamToolTaskEventsResponseObject, error) {
 	uc := userCtx(ctx)
 	p, _ := principalFromContext(ctx)
-	task, err := s.svc.GetToolTaskFor(ctx, uc, string(req.TaskId))
+	task, err := s.svc.Tools.GetToolTaskFor(ctx, uc, string(req.TaskId))
 	if err != nil {
 		return nil, err
 	}
@@ -904,7 +903,7 @@ func (t *taskEventStream) Read(p []byte) (int, error) {
 			if t.s.sessionEnded(t.ctx, t.sessionID) {
 				return 0, io.EOF
 			}
-			uc, err := t.s.svc.UserCtxByID(t.ctx, t.uc.ID)
+			uc, err := t.s.svc.Grants.UserCtxByID(t.ctx, t.uc.ID)
 			if service.KindOf(err) == service.KindNotFound {
 				return 0, io.EOF
 			}
@@ -912,7 +911,7 @@ func (t *taskEventStream) Read(p []byte) (int, error) {
 				t.uc = uc
 			}
 		}
-		cur, err := t.s.svc.GetToolTaskFor(t.ctx, t.uc, t.taskID)
+		cur, err := t.s.svc.Tools.GetToolTaskFor(t.ctx, t.uc, t.taskID)
 		if err != nil {
 			return 0, io.EOF
 		}
@@ -1073,7 +1072,7 @@ func (s *Server) CancelStagedRestore(ctx context.Context, _ CancelStagedRestoreR
 	return CancelStagedRestore204Response{}, nil
 }
 
-func backupJSON(b wdb.Backup) Backup {
+func backupJSON(b service.Backup) Backup {
 	out := Backup{
 		Id:        b.ID,
 		State:     b.State,
@@ -1117,7 +1116,7 @@ func (s *Server) GetScrobblingConfig(ctx context.Context, _ GetScrobblingConfigR
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	return GetScrobblingConfig200JSONResponse(scrobblingConfigJSON(s.svc.LastfmConfigGet(ctx))), nil
+	return GetScrobblingConfig200JSONResponse(scrobblingConfigJSON(s.svc.Integrations.LastfmConfigGet(ctx))), nil
 }
 
 func (s *Server) PutScrobblingConfig(ctx context.Context, req PutScrobblingConfigRequestObject) (PutScrobblingConfigResponseObject, error) {
@@ -1128,7 +1127,7 @@ func (s *Server) PutScrobblingConfig(ctx context.Context, req PutScrobblingConfi
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	cfg, err := s.svc.LastfmConfigPut(ctx, uc, req.Body.LastfmApiKey, req.Body.LastfmSecret)
+	cfg, err := s.svc.Integrations.LastfmConfigPut(ctx, uc, req.Body.LastfmApiKey, req.Body.LastfmSecret)
 	if err != nil {
 		return nil, err
 	}

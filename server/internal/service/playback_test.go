@@ -88,7 +88,7 @@ func TestLastPlayedAtFollowsCountedPlays(t *testing.T) {
 	marked, _ := fixtureTrackPID(t, ctx, svc, uc, "Basalt Steps")
 
 	for _, pid := range []string{played, marked} {
-		st, err := svc.PlayState(ctx, uc, pid)
+		st, err := svc.Playback.PlayState(ctx, uc, pid)
 		if err != nil {
 			t.Fatalf("play state for %s: %v", pid, err)
 		}
@@ -98,7 +98,7 @@ func TestLastPlayedAtFollowsCountedPlays(t *testing.T) {
 	}
 
 	before := time.Now().UTC().Add(-time.Second)
-	res, err := svc.IngestListens(ctx, uc, []ListenSession{{
+	res, err := svc.Playback.IngestListens(ctx, uc, []ListenSession{{
 		SessionID: "s-1",
 		PID:       played,
 		StartedAt: time.Now().UTC(),
@@ -108,7 +108,7 @@ func TestLastPlayedAtFollowsCountedPlays(t *testing.T) {
 	if err != nil || res.Accepted != 1 {
 		t.Fatalf("ingest = %+v (%v), want one accepted", res, err)
 	}
-	st, err := svc.PlayState(ctx, uc, played)
+	st, err := svc.Playback.PlayState(ctx, uc, played)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,10 +119,10 @@ func TestLastPlayedAtFollowsCountedPlays(t *testing.T) {
 		t.Fatalf("lastPlayedAt = %v, want at or after %v", st.LastPlayedAt, before)
 	}
 
-	if _, err := svc.SetPlayed(ctx, uc, marked, true, true, nil, nil, nil); err != nil {
+	if _, err := svc.Playback.SetPlayed(ctx, uc, marked, true, true, nil, nil, nil); err != nil {
 		t.Fatalf("manual played mark: %v", err)
 	}
-	st, err = svc.PlayState(ctx, uc, marked)
+	st, err = svc.Playback.PlayState(ctx, uc, marked)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestItemDetailCarriesRecordingIdentifiers(t *testing.T) {
 	tagged, _ := fixtureTrackPID(t, ctx, svc, uc, "Delta Groove")
 	bare, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
 
-	d, err := svc.Item(ctx, uc, tagged)
+	d, err := svc.Reads.Item(ctx, uc, tagged)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestItemDetailCarriesRecordingIdentifiers(t *testing.T) {
 			d.MBID, d.ISRC, catalogFixtureMBID, catalogFixtureISRC)
 	}
 
-	d, err = svc.Item(ctx, uc, bare)
+	d, err = svc.Reads.Item(ctx, uc, bare)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestIngestResolvesEachItemOnce(t *testing.T) {
 			MsPlayed:  1500,
 		})
 	}
-	rows, rejected, err := svc.resolveListens(ctx, uc, sessions)
+	rows, rejected, err := svc.Playback.resolveListens(ctx, uc, sessions)
 	if err != nil {
 		t.Fatalf("resolveListens: %v", err)
 	}
@@ -241,14 +241,14 @@ func TestIngestBatchRecordsEveryPlay(t *testing.T) {
 	// carries: both ride the same call.
 	sessions = append(sessions, sessions[0])
 
-	res, err := svc.IngestListens(ctx, uc, sessions)
+	res, err := svc.Playback.IngestListens(ctx, uc, sessions)
 	if err != nil {
 		t.Fatalf("ingest: %v", err)
 	}
 	if res.Accepted != 4 || res.Duplicates != 1 || len(res.Rejected) != 0 {
 		t.Fatalf("ingest = %+v, want four accepted and one duplicate", res)
 	}
-	st, err := svc.PlayState(ctx, uc, amber)
+	st, err := svc.Playback.PlayState(ctx, uc, amber)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,9 +296,9 @@ func TestConnectListenLands(t *testing.T) {
 	ctx, svc, uc := newCatalogFixture(t)
 	amber, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
 
-	svc.PlayerListen(ctx, uc.ID, amber, 2000, time.Now().UTC().Add(-2*time.Second))
+	svc.Playback.PlayerListen(ctx, uc.ID, amber, 2000, time.Now().UTC().Add(-2*time.Second))
 
-	st, err := svc.PlayState(ctx, uc, amber)
+	st, err := svc.Playback.PlayState(ctx, uc, amber)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +319,7 @@ func TestListenMarksStampTheSessionsOwnTime(t *testing.T) {
 	pid, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
 
 	lastYear := time.Now().UTC().AddDate(-1, 0, 0).Truncate(time.Second)
-	res, err := svc.IngestListens(ctx, uc, []ListenSession{{
+	res, err := svc.Playback.IngestListens(ctx, uc, []ListenSession{{
 		SessionID: "s-import",
 		PID:       pid,
 		StartedAt: lastYear,
@@ -330,7 +330,7 @@ func TestListenMarksStampTheSessionsOwnTime(t *testing.T) {
 	if err != nil || res.Accepted != 1 {
 		t.Fatalf("ingest = %+v (%v), want one accepted", res, err)
 	}
-	st, err := svc.PlayState(ctx, uc, pid)
+	st, err := svc.Playback.PlayState(ctx, uc, pid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,7 +348,7 @@ func TestListenMarksStampTheSessionsOwnTime(t *testing.T) {
 	// A later live listen still advances it: the stamp follows the
 	// newest play, and this one is newer than last year's.
 	before := time.Now().UTC().Add(-time.Second)
-	res, err = svc.IngestListens(ctx, uc, []ListenSession{{
+	res, err = svc.Playback.IngestListens(ctx, uc, []ListenSession{{
 		SessionID: "s-live",
 		PID:       pid,
 		StartedAt: time.Now().UTC(),
@@ -358,7 +358,7 @@ func TestListenMarksStampTheSessionsOwnTime(t *testing.T) {
 	if err != nil || res.Accepted != 1 {
 		t.Fatalf("live ingest = %+v (%v), want one accepted", res, err)
 	}
-	st, err = svc.PlayState(ctx, uc, pid)
+	st, err = svc.Playback.PlayState(ctx, uc, pid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +370,7 @@ func TestListenMarksStampTheSessionsOwnTime(t *testing.T) {
 	}
 
 	// And the older one arriving last does not drag the stamp back.
-	res, err = svc.IngestListens(ctx, uc, []ListenSession{{
+	res, err = svc.Playback.IngestListens(ctx, uc, []ListenSession{{
 		SessionID: "s-import-late",
 		PID:       pid,
 		StartedAt: lastYear.Add(time.Hour),
@@ -381,7 +381,7 @@ func TestListenMarksStampTheSessionsOwnTime(t *testing.T) {
 	if err != nil || res.Accepted != 1 {
 		t.Fatalf("late ingest = %+v (%v), want one accepted", res, err)
 	}
-	st, err = svc.PlayState(ctx, uc, pid)
+	st, err = svc.Playback.PlayState(ctx, uc, pid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -403,7 +403,7 @@ func TestReplayedCheckpointStampsItsRecordedTime(t *testing.T) {
 	pid, catalogPID := fixtureTrackPID(t, ctx, svc, uc, "Cobalt Sky")
 
 	yesterday := time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Second)
-	applied, err := svc.Checkpoint(ctx, uc, pid, 1200, &yesterday)
+	applied, err := svc.Playback.Checkpoint(ctx, uc, pid, 1200, &yesterday)
 	if err != nil || !applied {
 		t.Fatalf("replayed checkpoint = %v (%v), want applied", applied, err)
 	}
@@ -419,7 +419,7 @@ func TestReplayedCheckpointStampsItsRecordedTime(t *testing.T) {
 	// A live checkpoint after it stamps now, and the catalog's
 	// never-backwards rule means the replay cannot pull it back.
 	before := time.Now().UTC().Add(-time.Second)
-	if _, err := svc.Checkpoint(ctx, uc, pid, 1800, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, pid, 1800, nil); err != nil {
 		t.Fatal(err)
 	}
 	st, err = svc.lib.Playback().State(ctx, model.PID(uc.CatalogPID), catalogPID)

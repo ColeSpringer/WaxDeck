@@ -136,7 +136,7 @@ note.
   primary file, and that is the library WaxDeck's grants read
   (`viewVisible`): a reader granted only the library holding a copy can
   neither list nor open the item. A grant compiled from `library`
-  (`grantNode`) still selects it, so facet buckets and scoped counts
+  (`Grants.node`) still selects it, so facet buckets and scoped counts
   count it for that reader and a listing page can come back short.
   Wanted: an item field reading the primary file's library, as
   `QueryItemsByPrimary` already reads `library`. Shipped workaround:

@@ -16,7 +16,7 @@ func TestPreviewM3UReadsTheMergedLine(t *testing.T) {
 	ctx, svc, uc := newCatalogFixture(t)
 	blind := blindReader(t, ctx, svc, uc)
 	track := fixtureItemPIDs(t, ctx, svc, uc)[0]
-	it, err := svc.getVisibleItem(ctx, uc, track)
+	it, err := svc.Grants.getVisibleItem(ctx, uc, track)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,7 +24,7 @@ func TestPreviewM3UReadsTheMergedLine(t *testing.T) {
 	doc := "#EXTM3U\n" + strings.Join(paths, "\n") + "\n"
 	listed := func() int {
 		t.Helper()
-		page, err := svc.Playlists(ctx, uc, "", "", 200)
+		page, err := svc.Playlists.List(ctx, uc, "", "", 200)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -32,7 +32,7 @@ func TestPreviewM3UReadsTheMergedLine(t *testing.T) {
 	}
 	before := listed()
 
-	got, err := svc.PreviewPlaylistM3U(ctx, uc, doc)
+	got, err := svc.Playlists.PreviewPlaylistM3U(ctx, uc, doc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestPreviewM3UReadsTheMergedLine(t *testing.T) {
 		}
 	}
 
-	theirs, err := svc.PreviewPlaylistM3U(ctx, blind, doc)
+	theirs, err := svc.Playlists.PreviewPlaylistM3U(ctx, blind, doc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestPreviewM3UReadsTheMergedLine(t *testing.T) {
 	// The same path twice in a row is a repeat, not another path to the
 	// item: two entries, in the preview and the import alike.
 	twice := "#EXTM3U\n" + it.DisplayPath + "\n" + it.DisplayPath + "\n"
-	repeat, err := svc.PreviewPlaylistM3U(ctx, uc, twice)
+	repeat, err := svc.Playlists.PreviewPlaylistM3U(ctx, uc, twice)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestPreviewM3UReadsTheMergedLine(t *testing.T) {
 		repeat.Lines[1].Outcome != M3uMatched || repeat.Lines[1].Item == nil || repeat.Lines[1].Item.PID != track {
 		t.Fatalf("a path given twice = %+v, want two matched lines naming %s", repeat, track)
 	}
-	imported, err := svc.ImportPlaylistM3U(ctx, uc, "Twice", "", twice)
+	imported, err := svc.Playlists.ImportPlaylistM3U(ctx, uc, "Twice", "", twice)
 	if err != nil {
 		t.Fatal(err)
 	}

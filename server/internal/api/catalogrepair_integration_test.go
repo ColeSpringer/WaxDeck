@@ -50,7 +50,7 @@ func TestCatalogCheckAndRepair(t *testing.T) {
 		t.Fatalf("the second repair = %+v, want a conflict naming %s", refused, task.Id)
 	}
 
-	for h.svc.DrainLongToolTasks(context.Background()) {
+	for h.svc.Tools.DrainLongToolTasks(context.Background()) {
 	}
 	done := decodeStatus[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+task.Id, h.token), 200, "the repair task")
 	if done.State != "done" || done.Summary == nil {

@@ -9,7 +9,9 @@ func TestUserAgentNamesTheBuild(t *testing.T) {
 		"0.1.0-dev": "WaxDeck/0.1.0-dev (+https://github.com/colespringer/waxdeck)",
 		"":          "WaxDeck/dev (+https://github.com/colespringer/waxdeck)",
 	} {
-		if got := (&Library{version: version}).UserAgent(); got != want {
+		l := bareLibrary(&core{})
+		l.version = version
+		if got := l.UserAgent(); got != want {
 			t.Errorf("version %q: UserAgent() = %q, want %q", version, got, want)
 		}
 	}

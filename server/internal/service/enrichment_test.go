@@ -126,13 +126,13 @@ func TestARunForcesOnlyPhasesItWalks(t *testing.T) {
 	t.Parallel()
 	var painted atomic.Int32
 	ctx, svc, uc, _ := openLyricsFixture(t, &lyricist{name: "a"}, painter(&painted))
-	if _, err := svc.RunEnrichment(ctx, uc, false, []string{"lyrics"}, []string{"group-art"}); KindOf(err) != KindInvalid {
+	if _, err := svc.Enrichment.RunEnrichment(ctx, uc, false, []string{"lyrics"}, []string{"group-art"}); KindOf(err) != KindInvalid {
 		t.Errorf("forcing a phase the run does not walk = %v, want invalid", err)
 	}
-	if _, err := svc.RunEnrichment(ctx, uc, false, nil, []string{"nonsense"}); KindOf(err) != KindInvalid {
+	if _, err := svc.Enrichment.RunEnrichment(ctx, uc, false, nil, []string{"nonsense"}); KindOf(err) != KindInvalid {
 		t.Errorf("walking an unknown phase = %v, want invalid", err)
 	}
-	pid, err := svc.RunEnrichment(ctx, uc, false, []string{"lyrics"}, []string{"lyrics"})
+	pid, err := svc.Enrichment.RunEnrichment(ctx, uc, false, []string{"lyrics"}, []string{"lyrics"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -43,9 +43,9 @@ func TestClientAcceptedFormatMirrorMatchesTheDefaultSet(t *testing.T) {
 	}
 	slices.Sort(got)
 
-	def := &Library{}
-	def.setUploadFormats(nil)
-	want := def.UploadFormats()
+	def := bareLibrary(&core{})
+	def.Ingest.setUploadFormats(nil)
+	want := def.Ingest.UploadFormats()
 	if !slices.Equal(got, want) {
 		t.Errorf("the client mirror and the server default have drifted\n mirror: %v\n server: %v",
 			got, want)

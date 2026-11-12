@@ -30,7 +30,7 @@ var subsonicMusicMedia = map[string]bool{"music": true, "mixed": true}
 
 // MusicFolders lists the caller's music libraries, each under the folder
 // id it was given the first time it was listed.
-func (l *Library) MusicFolders(ctx context.Context, uc *UserCtx) ([]MusicFolder, error) {
+func (l *Playback) MusicFolders(ctx context.Context, uc *UserCtx) ([]MusicFolder, error) {
 	libs, err := l.musicLibraries(ctx, uc)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (l *Library) MusicFolders(ctx context.Context, uc *UserCtx) ([]MusicFolder,
 // MusicFolderLibrary answers the library a folder id names (lb-...). An
 // id never assigned, a library removed since, one the caller is not
 // granted, and one that is not music are all the same not-found.
-func (l *Library) MusicFolderLibrary(ctx context.Context, uc *UserCtx, id int64) (string, error) {
+func (l *Playback) MusicFolderLibrary(ctx context.Context, uc *UserCtx, id int64) (string, error) {
 	missing := errNotFound("no music folder " + strconv.FormatInt(id, 10))
 	pid, ok, err := l.db.MusicFolderLibrary(ctx, id)
 	if err != nil {
@@ -76,8 +76,8 @@ func (l *Library) MusicFolderLibrary(ctx context.Context, uc *UserCtx, id int64)
 
 // musicLibraries is the catalog's libraries narrowed to the caller's
 // grants and to music.
-func (l *Library) musicLibraries(ctx context.Context, uc *UserCtx) ([]LibraryInfo, error) {
-	libs, err := l.Libraries(ctx)
+func (l *Playback) musicLibraries(ctx context.Context, uc *UserCtx) ([]LibraryInfo, error) {
+	libs, err := l.Roots.Libraries(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func (l *Library) musicLibraries(ctx context.Context, uc *UserCtx) ([]LibraryInf
 // among the API pids named, as summaries keyed by the pid asked for:
 // the song entries the Subsonic index does not hold, a book's or a
 // session's. One batch read; a pid naming nothing it may offer is absent.
-func (l *Library) SubsonicItems(ctx context.Context, uc *UserCtx, apiItemPIDs []string) (map[string]ItemSummary, error) {
+func (l *Playback) SubsonicItems(ctx context.Context, uc *UserCtx, apiItemPIDs []string) (map[string]ItemSummary, error) {
 	asked := make(map[model.PID][]string, len(apiItemPIDs))
 	pids := make([]model.PID, 0, len(apiItemPIDs))
 	for _, api := range apiItemPIDs {
@@ -123,13 +123,13 @@ func (l *Library) SubsonicItems(ctx context.Context, uc *UserCtx, apiItemPIDs []
 	if err != nil {
 		return nil, classify(err)
 	}
-	verdicts, err := l.tagVerdicts(ctx, uc, views)
+	verdicts, err := l.Grants.tagVerdicts(ctx, uc, views)
 	if err != nil {
 		return nil, err
 	}
-	subs := l.newSubscriptionFilter(uc)
+	subs := l.Podcasts.newSubscriptionFilter(uc)
 	for _, it := range views {
-		if !l.offersWith(ctx, uc, verdicts, it) || !subs.allowsItem(ctx, l, it) {
+		if !l.Grants.offersWith(ctx, uc, verdicts, it) || !subs.allowsItem(ctx, l.Podcasts, it) {
 			continue
 		}
 		for _, api := range asked[it.PID] {
@@ -163,7 +163,7 @@ func bookmarkIsResume(k model.Kind) bool {
 // named item stands, in ms, for the items that have one, as the bookmark
 // listing places them: resume holds the resume positions the caller has
 // already read, by API pid, and the caller's rows are read here once.
-func (l *Library) SubsonicBookmarkPositions(ctx context.Context, uc *UserCtx, apiItemPIDs []string, resume map[string]int64) (map[string]int64, error) {
+func (l *Playback) SubsonicBookmarkPositions(ctx context.Context, uc *UserCtx, apiItemPIDs []string, resume map[string]int64) (map[string]int64, error) {
 	rows, err := l.db.SubsonicBookmarks(ctx, uc.ID)
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
@@ -192,14 +192,14 @@ func (l *Library) SubsonicBookmarkPositions(ctx context.Context, uc *UserCtx, ap
 // there is one; a finished one has no resume point, so its bookmark past
 // the start is also a row of its own; any other item's is a row of its
 // own, which leaves the item's resume position alone.
-func (l *Library) SaveSubsonicBookmark(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64, comment string) error {
+func (l *Playback) SaveSubsonicBookmark(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64, comment string) error {
 	if positionMS < 0 {
 		return errInvalid("position must not be negative")
 	}
 	if utf8.RuneCountInString(comment) > subsonicCommentMax {
 		return errInvalid("comment must be at most " + strconv.Itoa(subsonicCommentMax) + " characters")
 	}
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return err
 	}
@@ -249,8 +249,8 @@ func (l *Library) SaveSubsonicBookmark(ctx context.Context, uc *UserCtx, apiItem
 
 // DeleteSubsonicBookmark removes the caller's bookmark on a visible item,
 // and for a book or an episode clears the resume position it is.
-func (l *Library) DeleteSubsonicBookmark(ctx context.Context, uc *UserCtx, apiItemPID string) error {
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+func (l *Playback) DeleteSubsonicBookmark(ctx context.Context, uc *UserCtx, apiItemPID string) error {
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return err
 	}
@@ -273,7 +273,7 @@ func (l *Library) DeleteSubsonicBookmark(ctx context.Context, uc *UserCtx, apiIt
 // point and is no bookmark of itself; one with a row and no resume
 // position lists at the position its row holds, as a track's bookmark
 // does once the track becomes a book.
-func (l *Library) SubsonicBookmarks(ctx context.Context, uc *UserCtx) ([]SubsonicBookmark, error) {
+func (l *Playback) SubsonicBookmarks(ctx context.Context, uc *UserCtx) ([]SubsonicBookmark, error) {
 	rows, _, err := l.listableBookmarkRows(ctx, uc)
 	if err != nil {
 		return nil, err
@@ -340,7 +340,7 @@ const hiddenBookmarkCeiling = wdb.SubsonicBookmarkCap
 // or nothing at all, is deleted on the way, as is an older row for an
 // item a newer row names and a hidden row past the ceiling, unless a read
 // sorting the rows fell back: that hides what it could not judge.
-func (l *Library) listableBookmarkRows(ctx context.Context, uc *UserCtx) (map[model.PID]bookmarkRow, []string, error) {
+func (l *Playback) listableBookmarkRows(ctx context.Context, uc *UserCtx) (map[model.PID]bookmarkRow, []string, error) {
 	rows, err := l.db.SubsonicBookmarks(ctx, uc.ID)
 	if err != nil {
 		return nil, nil, &Error{Kind: KindInternal, Err: err}
@@ -367,15 +367,15 @@ func (l *Library) listableBookmarkRows(ctx context.Context, uc *UserCtx) (map[mo
 		if err != nil {
 			return nil, nil, classify(err)
 		}
-		verdicts, err := l.tagVerdicts(sortCtx, uc, views)
+		verdicts, err := l.Grants.tagVerdicts(sortCtx, uc, views)
 		if err != nil {
 			return nil, nil, err
 		}
-		subs := l.newSubscriptionFilter(uc)
+		subs := l.Podcasts.newSubscriptionFilter(uc)
 		for _, it := range views {
 			row := newest[it.PID]
 			delete(newest, it.PID)
-			if !l.offersWith(sortCtx, uc, verdicts, it) || !subs.allowsItem(sortCtx, l, it) {
+			if !l.Grants.offersWith(sortCtx, uc, verdicts, it) || !subs.allowsItem(sortCtx, l.Podcasts, it) {
 				hidden = append(hidden, row.ItemPID)
 				continue
 			}
@@ -400,12 +400,12 @@ func (l *Library) listableBookmarkRows(ctx context.Context, uc *UserCtx) (map[mo
 // positionedSpoken lists the books and episodes the caller has in
 // progress, newest first, at most limit of each, read page items at a
 // time: the catalog's in-progress list, which a finished item has left.
-func (l *Library) positionedSpoken(ctx context.Context, uc *UserCtx, limit, page int) ([]ItemSummary, error) {
+func (l *Playback) positionedSpoken(ctx context.Context, uc *UserCtx, limit, page int) ([]ItemSummary, error) {
 	var out []ItemSummary
 	for _, media := range []string{"audiobook", "podcast"} {
 		listed := 0
 		for cursor := ""; listed < limit; {
-			got, err := l.Browse(ctx, uc, "in-progress", ItemFilter{MediaType: media}, 0, cursor, min(page, limit-listed))
+			got, err := l.Reads.Browse(ctx, uc, "in-progress", ItemFilter{MediaType: media}, 0, cursor, min(page, limit-listed))
 			if err != nil {
 				return nil, err
 			}
@@ -429,7 +429,7 @@ type resumeState struct {
 
 // resumePositions reads the caller's resume positions for the items in
 // one batch, keyed by API pid.
-func (l *Library) resumePositions(ctx context.Context, uc *UserCtx, apiItemPIDs []string) (map[string]resumeState, error) {
+func (l *Playback) resumePositions(ctx context.Context, uc *UserCtx, apiItemPIDs []string) (map[string]resumeState, error) {
 	back := make(map[model.PID]string, len(apiItemPIDs))
 	pids := make([]model.PID, 0, len(apiItemPIDs))
 	for _, api := range apiItemPIDs {

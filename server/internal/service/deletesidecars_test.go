@@ -47,7 +47,7 @@ func TestADeletePlanNamesTheSidecarsThatGoWithItsFiles(t *testing.T) {
 	touchSidecarFiles(t, folder, "track.lrc", "track.jpg", "cover.jpg", "notes.txt", "keep.bin")
 
 	want := []string{"Words/track.jpg", "Words/track.lrc"}
-	plan, err := svc.DeleteItems(ctx, admin, []string{tr.pid}, "trash", true)
+	plan, err := svc.Tools.DeleteItems(ctx, admin, []string{tr.pid}, "trash", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestADeletePlanNamesTheSidecarsThatGoWithItsFiles(t *testing.T) {
 		trashFileStillThere(t, filepath.Join(root, filepath.FromSlash(name)), "a sidecar the dry run only named")
 	}
 
-	res, err := svc.DeleteItems(ctx, admin, []string{tr.pid}, "trash", false)
+	res, err := svc.Tools.DeleteItems(ctx, admin, []string{tr.pid}, "trash", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestASidecarAnotherFileStillUsesIsNotNamedUntilBothGo(t *testing.T) {
 	}
 	flac, mp3 := itemPIDByTitle(t, ctx, svc, admin, "Song Lossless"), itemPIDByTitle(t, ctx, svc, admin, "Song Small")
 
-	one, err := svc.DeleteItems(ctx, admin, []string{flac}, "trash", true)
+	one, err := svc.Tools.DeleteItems(ctx, admin, []string{flac}, "trash", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestASidecarAnotherFileStillUsesIsNotNamedUntilBothGo(t *testing.T) {
 		t.Errorf("one of the pair names %q, want none while the other still uses them", got)
 	}
 
-	both, err := svc.DeleteItems(ctx, admin, []string{flac, mp3}, "trash", true)
+	both, err := svc.Tools.DeleteItems(ctx, admin, []string{flac, mp3}, "trash", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,13 +131,13 @@ func TestASidecarAnotherFileStillUsesIsNotNamedUntilBothGo(t *testing.T) {
 		t.Errorf("%d entries carry the sidecars, want the one whose file goes last", owners)
 	}
 
-	if _, err := svc.DeleteItems(ctx, admin, []string{flac}, "trash", false); err != nil {
+	if _, err := svc.Tools.DeleteItems(ctx, admin, []string{flac}, "trash", false); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"song.lrc", "song.jpg"} {
 		trashFileStillThere(t, filepath.Join(folder, name), name+" after one of the pair went")
 	}
-	res, err := svc.DeleteItems(ctx, admin, []string{mp3}, "trash", false)
+	res, err := svc.Tools.DeleteItems(ctx, admin, []string{mp3}, "trash", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestAPlanNamesOnlyTheSidecarsOfFilesTheCallerDeletes(t *testing.T) {
 	touchSidecarFiles(t, f.homeDir, "stray.lrc")
 	touchSidecarFiles(t, f.copyDir, "stray.jpg")
 
-	admin, err := f.svc.DeleteItems(f.ctx, f.admin, []string{f.pid}, "trash", true)
+	admin, err := f.svc.Tools.DeleteItems(f.ctx, f.admin, []string{f.pid}, "trash", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func TestAPlanNamesOnlyTheSidecarsOfFilesTheCallerDeletes(t *testing.T) {
 		t.Errorf("administrator's plan names %q, want the track's and its copy's: %q", got, want)
 	}
 
-	curator, err := f.svc.DeleteItems(f.ctx, f.caller(true, f.home), []string{f.pid}, "trash", true)
+	curator, err := f.svc.Tools.DeleteItems(f.ctx, f.caller(true, f.home), []string{f.pid}, "trash", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func TestAPlanNamesOnlyTheSidecarsOfFilesTheCallerDeletes(t *testing.T) {
 		t.Errorf("a caller seeing only the home library is told %q, want %q", got, want)
 	}
 
-	one, err := f.svc.DeleteItemFiles(f.ctx, f.admin, f.pid, []string{string(f.copy.FilePID)}, "trash", true)
+	one, err := f.svc.Tools.DeleteItemFiles(f.ctx, f.admin, f.pid, []string{string(f.copy.FilePID)}, "trash", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestAnAppliedDeleteNamesOnlyTheSidecarsThatLeft(t *testing.T) {
 	tr := tracks["Words"]
 	folder := filepath.Join(root, "Words")
 	touchSidecarFiles(t, folder, "track.lrc", "track.jpg")
-	svc.deleteApplyHook = func(context.Context) {
+	svc.Tools.deleteApplyHook = func(context.Context) {
 		// The lyrics stop being a file between the plan and the move.
 		if err := os.Remove(filepath.Join(folder, "track.lrc")); err != nil {
 			t.Error(err)
@@ -204,7 +204,7 @@ func TestAnAppliedDeleteNamesOnlyTheSidecarsThatLeft(t *testing.T) {
 			t.Error(err)
 		}
 	}
-	res, err := svc.DeleteItems(ctx, admin, []string{tr.pid}, "trash", false)
+	res, err := svc.Tools.DeleteItems(ctx, admin, []string{tr.pid}, "trash", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +223,7 @@ func TestAFileThatStaysKeepsItsSidecarsOutOfTheList(t *testing.T) {
 	touchSidecarFiles(t, filepath.Join(root, "Open"), "track.lrc")
 	touchSidecarFiles(t, filepath.Join(root, "Locked"), "track.lrc")
 	lockFolder(t, filepath.Join(root, "Locked"))
-	res, err := svc.DeleteItems(ctx, admin, []string{tracks["Open"].pid, tracks["Locked"].pid}, "trash", false)
+	res, err := svc.Tools.DeleteItems(ctx, admin, []string{tracks["Open"].pid, tracks["Locked"].pid}, "trash", false)
 	if err != nil {
 		t.Fatal(err)
 	}

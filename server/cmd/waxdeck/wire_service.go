@@ -210,7 +210,7 @@ func startEventHub(ctx context.Context, group *supervise.Group, svc *service.Lib
 	hub := events.New(svc)
 	// A station's new song or cover wakes the faces tuned to it, which
 	// would otherwise wait out a poll interval.
-	svc.SetRadioInvalidator(hub.MarkRadio)
+	svc.Radio.SetRadioInvalidator(hub.MarkRadio)
 	// A replaced catalog (a restore) sends every client back to a snapshot.
 	svc.SetCatalogResyncer(hub.MarkCatalogReplaced)
 	group.Go(ctx, "event-hub", hub.Run)

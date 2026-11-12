@@ -25,7 +25,7 @@ import (
 // that wants it for music - timeline leveling - asks by hash through
 // FillLoudness rather than making the whole library pay a second query
 // per play.
-func (l *Library) StreamSource(ctx context.Context, apiItemPID, filePID string) (flow.Source, error) {
+func (l *Playback) StreamSource(ctx context.Context, apiItemPID, filePID string) (flow.Source, error) {
 	_, src, f, err := l.streamItem(ctx, apiItemPID, filePID)
 	if err == nil && src.SpokenWord && f.EssenceHash != "" {
 		l.fillLoudness(ctx, &src)
@@ -42,7 +42,7 @@ func (l *Library) StreamSource(ctx context.Context, apiItemPID, filePID string) 
 // from, off one lookup: the stream source, which says whether the token's
 // stream is the original's bytes, and the file holding them. An item in
 // parts needs filePID, as DownloadSource does.
-func (l *Library) StreamDownloadSource(ctx context.Context, apiItemPID, filePID string) (flow.Source, DownloadFile, error) {
+func (l *Playback) StreamDownloadSource(ctx context.Context, apiItemPID, filePID string) (flow.Source, DownloadFile, error) {
 	it, src, f, err := l.streamItem(ctx, apiItemPID, filePID)
 	if err != nil {
 		return flow.Source{}, DownloadFile{}, err
@@ -62,7 +62,7 @@ func (l *Library) StreamDownloadSource(ctx context.Context, apiItemPID, filePID 
 // streamItem resolves an item, the source a stream of it reads (all of it
 // but the loudness voice boost derives its gain from), and the file
 // holding that source.
-func (l *Library) streamItem(ctx context.Context, apiItemPID, filePID string) (*model.ItemView, flow.Source, *model.File, error) {
+func (l *Playback) streamItem(ctx context.Context, apiItemPID, filePID string) (*model.ItemView, flow.Source, *model.File, error) {
 	it, err := l.getItem(ctx, apiItemPID)
 	if err != nil {
 		return nil, flow.Source{}, nil, err
@@ -135,7 +135,7 @@ func (l *Library) streamItem(ctx context.Context, apiItemPID, filePID string) (*
 // request runs through this, and a caller that wants music loudness
 // (timeline leveling) is rare enough to ask for it by hash rather than
 // to make the whole library pay a second query per play.
-func (l *Library) attachFile(ctx context.Context, src *flow.Source, f *model.File) {
+func (l *Playback) attachFile(ctx context.Context, src *flow.Source, f *model.File) {
 	fileFacts(src, f)
 	if src.SpokenWord && f.EssenceHash != "" {
 		l.fillLoudness(ctx, src)
@@ -166,14 +166,14 @@ func fileFormat(f *model.File, codec, container string) (string, string) {
 // for callers that need them on content StreamSource does not read them
 // for. Absent measurements leave the fields nil, which every reader
 // already treats as "not analyzed".
-func (l *Library) FillLoudness(ctx context.Context, src *flow.Source) {
+func (l *Playback) FillLoudness(ctx context.Context, src *flow.Source) {
 	if src == nil || src.EssenceHash == "" {
 		return
 	}
 	l.fillLoudness(ctx, src)
 }
 
-func (l *Library) fillLoudness(ctx context.Context, src *flow.Source) {
+func (l *Playback) fillLoudness(ctx context.Context, src *flow.Source) {
 	m, err := l.db.SilenceMapFor(ctx, src.EssenceHash)
 	if err != nil {
 		if !errors.Is(err, wdb.ErrNotFound) {
@@ -186,12 +186,30 @@ func (l *Library) fillLoudness(ctx context.Context, src *flow.Source) {
 }
 
 // fileByPID reads one file row, classified.
-func (l *Library) fileByPID(ctx context.Context, pid model.PID) (*model.File, error) {
+func (l *Playback) fileByPID(ctx context.Context, pid model.PID) (*model.File, error) {
 	f, err := l.catalogFile(ctx, pid)
 	if err != nil {
 		return nil, classify(err)
 	}
 	return f, nil
+}
+
+// itemFile reads an item and its file as the catalog holds them now,
+// through the seams a test fails reads by: not-found when either is gone,
+// as an item in the trash keeps no file.
+func (l *Playback) itemFile(ctx context.Context, pid model.PID) (*model.ItemView, *model.File, error) {
+	it, err := l.catalogItem(ctx, pid)
+	if err != nil {
+		return nil, nil, classify(err)
+	}
+	if it.FilePID == "" {
+		return nil, nil, errNotFound("the item has no file")
+	}
+	f, err := l.fileByPID(ctx, it.FilePID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return it, f, nil
 }
 
 // bookPartByFile finds a book's part by backing file PID.
@@ -407,7 +425,7 @@ func catalogMarks(bd *model.BookDetail, marks []model.Chapter) []model.Chapter {
 // single-file book all are. A catalog that could not answer is a real
 // error and travels as one - swallowing it would render a fifteen-hour
 // book as one item that is really its first forty minutes.
-func (l *Library) BookParts(ctx context.Context, apiItemPID string) ([]PlayPart, error) {
+func (l *Playback) BookParts(ctx context.Context, apiItemPID string) ([]PlayPart, error) {
 	prefix, pid, ok := parseAPIPID(apiItemPID)
 	if !ok || !bookOrTrackPrefix(prefix) {
 		return nil, nil
@@ -450,12 +468,12 @@ type PlayPiece struct {
 //
 // Nil for anything that is not a multi-file book: a track, an episode,
 // and a single-file book are served whole and resolve as themselves.
-func (l *Library) BookPieces(ctx context.Context, uc *UserCtx, apiItemPID string) ([]PlayPiece, error) {
+func (l *Playback) BookPieces(ctx context.Context, uc *UserCtx, apiItemPID string) ([]PlayPiece, error) {
 	parts, err := l.BookParts(ctx, apiItemPID)
 	if err != nil || len(parts) == 0 {
 		return nil, err
 	}
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return nil, err
 	}
@@ -481,7 +499,7 @@ func (l *Library) BookPieces(ctx context.Context, uc *UserCtx, apiItemPID string
 }
 
 // The bridge plays a book in parts as one stream through this.
-var _ flow.PartsResolver = (*Library)(nil)
+var _ flow.PartsResolver = (*Playback)(nil)
 
 // StreamParts lays out a multi-file book for the engine's joined stream:
 // every part in reading order, its source, and the rate and channel count
@@ -489,7 +507,7 @@ var _ flow.PartsResolver = (*Library)(nil)
 // file once, as BookPieces reads them, and no loudness is read: a joined
 // stream is not voice-boosted. Nil for anything that is not a book in
 // parts.
-func (l *Library) StreamParts(ctx context.Context, apiItemPID string) ([]flow.Part, error) {
+func (l *Playback) StreamParts(ctx context.Context, apiItemPID string) ([]flow.Part, error) {
 	parts, err := l.BookParts(ctx, apiItemPID)
 	if err != nil || len(parts) == 0 {
 		return nil, err
@@ -555,7 +573,7 @@ func JoinableMP3(parts []flow.Part) bool {
 // ResolvePlayPart maps a book-timeline position to the backing part.
 // Single-file items (and every non-book) resolve to a zero PlayPart
 // with MultiPart false.
-func (l *Library) ResolvePlayPart(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64) (PlayPart, error) {
+func (l *Playback) ResolvePlayPart(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64) (PlayPart, error) {
 	parts, err := l.BookParts(ctx, apiItemPID)
 	if err != nil {
 		return PlayPart{}, err
@@ -594,8 +612,8 @@ type DirectPlayResolution struct {
 // running without the streaming engine: the original file, or the
 // selected part of a multi-file book, served whole. filePID comes
 // from ResolvePlayPart; empty means the item's own backing file.
-func (l *Library) DirectPlayInfo(ctx context.Context, uc *UserCtx, apiItemPID, filePID string) (DirectPlayResolution, error) {
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+func (l *Playback) DirectPlayInfo(ctx context.Context, uc *UserCtx, apiItemPID, filePID string) (DirectPlayResolution, error) {
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return DirectPlayResolution{}, err
 	}
@@ -644,7 +662,7 @@ func (l *Library) DirectPlayInfo(ctx context.Context, uc *UserCtx, apiItemPID, f
 // EffectiveVoiceBoost resolves the caller's stored voice-boost setting
 // for an item: the subscription setting for a podcast episode, the
 // book settings for an audiobook, false elsewhere.
-func (l *Library) EffectiveVoiceBoost(ctx context.Context, uc *UserCtx, apiItemPID string) bool {
+func (l *Playback) EffectiveVoiceBoost(ctx context.Context, uc *UserCtx, apiItemPID string) bool {
 	prefix, pid, ok := parseAPIPID(apiItemPID)
 	if !ok {
 		return false

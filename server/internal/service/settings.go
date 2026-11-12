@@ -4,10 +4,29 @@ import (
 	"context"
 	"encoding/json"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/colespringer/waxbin/model"
 )
+
+// Settings is the admin settings and the runtime toggles they drive.
+type Settings struct {
+	*core
+	// toggles is the hot-path settings cache (the server's read-only flag,
+	// transcode limits), swapped whole on every write.
+	toggles atomic.Value
+	// adminSettingsMu keeps one write to the runtime settings at a time,
+	// so no two reloads of the toggles cache race.
+	adminSettingsMu sync.Mutex
+	// sonicAnalysisDefault mirrors Config.SonicAnalysisDefault.
+	sonicAnalysisDefault bool
+}
+
+func newSettings(c *core, cfg Config) *Settings {
+	return &Settings{core: c, sonicAnalysisDefault: cfg.SonicAnalysisDefault}
+}
 
 // AdminSettings are the runtime-editable server settings.
 type AdminSettings struct {
@@ -98,14 +117,14 @@ type runtimeToggles struct {
 
 // enrichWritesTags is whether an enrichment pass writes into files; the
 // catalog leaves a read-only library's files out itself.
-func (l *Library) enrichWritesTags(context.Context) bool {
+func (l *Settings) enrichWritesTags(context.Context) bool {
 	t := l.currentToggles()
 	return t.enrichWriteTags && !t.readOnly
 }
 
 // loadRuntimeToggles primes the settings cache; called at Open and
 // after every settings mutation.
-func (l *Library) loadRuntimeToggles(ctx context.Context) {
+func (l *Settings) loadRuntimeToggles(ctx context.Context) {
 	t := &runtimeToggles{}
 	if v, err := l.db.SettingGet(ctx, settingReadOnly); err == nil {
 		t.readOnly = v == "true"
@@ -129,12 +148,12 @@ func (l *Library) loadRuntimeToggles(ctx context.Context) {
 		}
 	}
 	l.toggles.Store(t)
-	l.loadEnrichSources(ctx)
+	l.Enrichment.loadEnrichSources(ctx)
 }
 
 // currentToggles never returns nil; before the first load everything is
 // permissive-off, matching a fresh database.
-func (l *Library) currentToggles() *runtimeToggles {
+func (l *Settings) currentToggles() *runtimeToggles {
 	if t, ok := l.toggles.Load().(*runtimeToggles); ok && t != nil {
 		return t
 	}
@@ -142,9 +161,9 @@ func (l *Library) currentToggles() *runtimeToggles {
 }
 
 // AdminSettingsGet reads the runtime settings.
-func (l *Library) AdminSettingsGet(ctx context.Context) (AdminSettings, error) {
+func (l *Settings) AdminSettingsGet(ctx context.Context) (AdminSettings, error) {
 	out := AdminSettings{
-		SignupEnabled:       l.SignupEnabled(ctx),
+		SignupEnabled:       l.Identity.SignupEnabled(ctx),
 		ReadOnly:            l.currentToggles().readOnly,
 		SonicAnalysis:       l.SonicAnalysisEnabled(),
 		EnrichmentWriteTags: l.currentToggles().enrichWriteTags,
@@ -163,7 +182,7 @@ func (l *Library) AdminSettingsGet(ctx context.Context) (AdminSettings, error) {
 
 // TrashRetentionDays reads the configured trash retention window in days;
 // 0 (the default and the value on a parse error) disables retention.
-func (l *Library) TrashRetentionDays(ctx context.Context) int {
+func (l *Settings) TrashRetentionDays(ctx context.Context) int {
 	v, err := l.db.SettingGet(ctx, settingTrashRetention)
 	if err != nil {
 		return 0
@@ -183,7 +202,7 @@ func (l *Library) TrashRetentionDays(ctx context.Context) int {
 
 // TaskRetentionDays reads the tool-task retention window. Unset answers
 // the default; a stored 0 is "keep them", so the two are told apart.
-func (l *Library) TaskRetentionDays(ctx context.Context) int {
+func (l *Settings) TaskRetentionDays(ctx context.Context) int {
 	v, err := l.db.SettingGet(ctx, settingTaskRetention)
 	if err != nil {
 		return defaultTaskRetentionDays
@@ -200,7 +219,7 @@ func (l *Library) TaskRetentionDays(ctx context.Context) int {
 
 // AdminSettingsPut stores the settings c names and keeps the rest as
 // stored; they apply immediately. A refused field stores none of them.
-func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, c AdminSettingsChange) (AdminSettings, error) {
+func (l *Settings) AdminSettingsPut(ctx context.Context, actor *UserCtx, c AdminSettingsChange) (AdminSettings, error) {
 	if c.BackupKeepCount != nil && *c.BackupKeepCount < 0 || c.BackupKeepBytes != nil && *c.BackupKeepBytes < 0 {
 		return AdminSettings{}, errInvalid("backup retention must not be negative")
 	}
@@ -267,25 +286,25 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, c AdminS
 	if isReadOnly := l.ServerReadOnly(); wasReadOnly != isReadOnly {
 		// The session carries the flag, and the account marker is what
 		// makes an open client read it again.
-		l.emitEveryoneEvent(ctx, eventAccount)
+		l.Jobs.emitEveryoneEvent(ctx, eventAccount)
 		if wasReadOnly {
 			// No managed root was probed while the server was read-only.
-			l.probeRoots()
+			l.Roots.probeRoots()
 		}
 	}
 	if !wasSonic && l.SonicAnalysisEnabled() {
 		// A library scanned while analysis was off joins the queue now,
 		// not at the sweep's backstop.
-		l.similarityWakeup()
+		l.Similarity.wakeup()
 	}
 	if wasRadioArt && !l.RadioExternalArtEnabled() {
 		// Switching the rung off drops what it fetched. The read path
 		// refuses while it is off regardless, so this is about not
 		// holding a third party's bytes after the decision to stop
 		// asking for them rather than about correctness.
-		l.forgetRadioArt()
+		l.Radio.forgetRadioArt()
 	}
-	l.Audit(ctx, actor, "settings.update", AuditTarget{Kind: "settings"}, detail)
+	l.Audit.Record(ctx, actor, "settings.update", AuditTarget{Kind: "settings"}, detail)
 	return l.AdminSettingsGet(ctx)
 }
 
@@ -293,14 +312,14 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, c AdminS
 // title up against MusicBrainz and the Cover Art Archive. Cached, like
 // every other runtime toggle, so the play-info poll reads it without a
 // round trip.
-func (l *Library) RadioExternalArtEnabled() bool {
+func (l *Settings) RadioExternalArtEnabled() bool {
 	return l.currentToggles().radioExternalArt
 }
 
 // SonicAnalysisEnabled reports whether the embedded analyzer should
 // run: the saved runtime setting when an administrator has touched it,
 // the boot default otherwise.
-func (l *Library) SonicAnalysisEnabled() bool {
+func (l *Settings) SonicAnalysisEnabled() bool {
 	if v := l.currentToggles().sonicAnalysis; v != nil {
 		return *v
 	}
@@ -308,12 +327,12 @@ func (l *Library) SonicAnalysisEnabled() bool {
 }
 
 // TranscodingLimitsGet reads the transcode limits.
-func (l *Library) TranscodingLimitsGet(ctx context.Context) TranscodingLimits {
+func (l *Settings) TranscodingLimitsGet(ctx context.Context) TranscodingLimits {
 	return l.currentToggles().limits
 }
 
 // TranscodingLimitsPut replaces the transcode limits.
-func (l *Library) TranscodingLimitsPut(ctx context.Context, actor *UserCtx, lim TranscodingLimits) (TranscodingLimits, error) {
+func (l *Settings) TranscodingLimitsPut(ctx context.Context, actor *UserCtx, lim TranscodingLimits) (TranscodingLimits, error) {
 	if lim.MaxConcurrent < 0 || lim.MaxConcurrentPerUser < 0 || lim.DefaultMaxBitrateKbps < 0 {
 		return TranscodingLimits{}, errInvalid("limits must not be negative")
 	}
@@ -328,7 +347,7 @@ func (l *Library) TranscodingLimitsPut(ctx context.Context, actor *UserCtx, lim 
 		return TranscodingLimits{}, &Error{Kind: KindInternal, Err: err}
 	}
 	l.loadRuntimeToggles(ctx)
-	l.Audit(ctx, actor, "transcoding.update", AuditTarget{Kind: "settings"},
+	l.Audit.Record(ctx, actor, "transcoding.update", AuditTarget{Kind: "settings"},
 		map[string]any{"maxConcurrent": lim.MaxConcurrent,
 			"maxConcurrentPerUser":  lim.MaxConcurrentPerUser,
 			"defaultMaxBitrateKbps": lim.DefaultMaxBitrateKbps})
@@ -338,28 +357,13 @@ func (l *Library) TranscodingLimitsPut(ctx context.Context, actor *UserCtx, lim 
 // libraryAuditTarget names a library action's target by pid and by the
 // name the library goes by, which the entry keeps once the library is
 // gone.
-func (l *Library) libraryAuditTarget(ctx context.Context, apiLibraryPID string, pid model.PID) AuditTarget {
-	return AuditTarget{Kind: "library", PID: apiLibraryPID, Name: l.libraryName(ctx, pid)}
-}
-
-// libraryName is the name a library goes by: its root's, or, for a
-// podcast library, which is not a root, the name the podcast directory is
-// mounted under. Empty for a library the catalog does not list.
-func (l *Library) libraryName(ctx context.Context, pid model.PID) string {
-	for _, r := range l.libraryRoots() {
-		if r.PID == string(pid) {
-			return r.Name
-		}
-	}
-	if lib, err := l.libraryByPID(ctx, pid); err == nil && lib.Mode == model.ModePodcast {
-		return l.podcastRootName
-	}
-	return ""
+func (l *Settings) libraryAuditTarget(ctx context.Context, apiLibraryPID string, pid model.PID) AuditTarget {
+	return AuditTarget{Kind: "library", PID: apiLibraryPID, Name: l.Roots.libraryName(ctx, pid)}
 }
 
 // LibraryReadOnlySet flips one library's read-only flag, which the
 // catalog keeps and enforces file by file.
-func (l *Library) LibraryReadOnlySet(ctx context.Context, actor *UserCtx, apiLibraryPID string, readOnly bool) error {
+func (l *Settings) LibraryReadOnlySet(ctx context.Context, actor *UserCtx, apiLibraryPID string, readOnly bool) error {
 	prefix, pid, ok := parseAPIPID(apiLibraryPID)
 	if !ok || prefix != PrefixLibrary {
 		return errInvalid("bad library pid " + apiLibraryPID)
@@ -370,21 +374,21 @@ func (l *Library) LibraryReadOnlySet(ctx context.Context, actor *UserCtx, apiLib
 		}
 		return classify(err)
 	}
-	l.refreshLibraryState(ctx)
-	l.Audit(ctx, actor, "library.read-only", l.libraryAuditTarget(ctx, apiLibraryPID, pid),
+	l.Roots.refreshLibraryState(ctx)
+	l.Audit.Record(ctx, actor, "library.read-only", l.libraryAuditTarget(ctx, apiLibraryPID, pid),
 		map[string]any{"readOnly": readOnly})
 	return nil
 }
 
 // LibraryFolderFallbackSet lets a scan name a library's untagged files
 // from their folders, or stops it. Only an in-place library takes it.
-func (l *Library) LibraryFolderFallbackSet(ctx context.Context, actor *UserCtx, apiLibraryPID string, on bool) error {
+func (l *Settings) LibraryFolderFallbackSet(ctx context.Context, actor *UserCtx, apiLibraryPID string, on bool) error {
 	prefix, pid, ok := parseAPIPID(apiLibraryPID)
 	if !ok || prefix != PrefixLibrary {
 		return errInvalid("bad library pid " + apiLibraryPID)
 	}
 	if on {
-		lib, err := l.libraryByPID(ctx, pid)
+		lib, err := l.Roots.libraryByPID(ctx, pid)
 		if err != nil {
 			if KindOf(err) == KindNotFound {
 				return errNotFound("no library with pid " + apiLibraryPID)
@@ -408,8 +412,8 @@ func (l *Library) LibraryFolderFallbackSet(ctx context.Context, actor *UserCtx, 
 		}
 		return classify(err)
 	}
-	l.refreshLibraryState(ctx)
-	l.Audit(ctx, actor, "library.folder-fallback", l.libraryAuditTarget(ctx, apiLibraryPID, pid),
+	l.Roots.refreshLibraryState(ctx)
+	l.Audit.Record(ctx, actor, "library.folder-fallback", l.libraryAuditTarget(ctx, apiLibraryPID, pid),
 		map[string]any{"folderFallback": on})
 	return nil
 }
@@ -426,16 +430,16 @@ func errServerReadOnly() error {
 
 // ServerReadOnly reports the server-wide read-only switch, the flag the
 // session carries to every signed-in client.
-func (l *Library) ServerReadOnly() bool { return l.currentToggles().readOnly }
+func (l *Settings) ServerReadOnly() bool { return l.currentToggles().readOnly }
 
 // CheckWritable refuses when the whole server, or the named library, is
 // read-only. An empty library pid checks only the global flag (staging
 // surfaces that have no target library yet).
-func (l *Library) CheckWritable(ctx context.Context, bareLibraryPID string) error {
+func (l *Settings) CheckWritable(ctx context.Context, bareLibraryPID string) error {
 	if l.ServerReadOnly() {
 		return errServerReadOnly()
 	}
-	if bareLibraryPID != "" && l.libraryReadOnly(bareLibraryPID) {
+	if bareLibraryPID != "" && l.Roots.libraryReadOnly(bareLibraryPID) {
 		return errReadOnly("this library")
 	}
 	return nil
@@ -443,11 +447,11 @@ func (l *Library) CheckWritable(ctx context.Context, bareLibraryPID string) erro
 
 // checkPathWritable is CheckWritable keyed by a file path, for
 // surfaces that know the file before the library.
-func (l *Library) checkPathWritable(ctx context.Context, path string) error {
+func (l *Settings) checkPathWritable(ctx context.Context, path string) error {
 	if err := l.CheckWritable(ctx, ""); err != nil {
 		return err
 	}
-	pid, err := l.libraryForPath(ctx, path)
+	pid, err := l.Grants.libraryForPath(ctx, path)
 	if err != nil {
 		return err
 	}

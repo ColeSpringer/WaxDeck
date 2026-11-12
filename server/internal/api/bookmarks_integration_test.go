@@ -293,13 +293,13 @@ func TestABookmarkOnAHiddenBookCanStillBeRemoved(t *testing.T) {
 	mark := decode[Bookmark](t, resp)
 
 	ctx := context.Background()
-	uc, err := h.svc.UserCtxByID(ctx, adminUserID(t, h))
+	uc, err := h.svc.Grants.UserCtxByID(ctx, adminUserID(t, h))
 	if err != nil {
 		t.Fatal(err)
 	}
 	hidden := *uc
 	hidden.AllLibraries, hidden.Libraries = false, map[string]bool{}
-	if err := h.svc.DeleteBookmark(ctx, &hidden, book, mark.Id); err != nil {
+	if err := h.svc.Reads.DeleteBookmark(ctx, &hidden, book, mark.Id); err != nil {
 		t.Fatalf("deleting a mark on a book out of sight = %v, want it gone", err)
 	}
 	if list := decode[BookmarkList](t, get(t, h.ts, base, h.token)); len(list.Bookmarks) != 0 {

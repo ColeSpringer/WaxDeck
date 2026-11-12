@@ -139,6 +139,7 @@ export {
   clickInView,
   clickThrough,
   clickUntil,
+  clickOnceForAnswer,
   clickUntilRequested,
   chooseFromMenu,
   typeInto,

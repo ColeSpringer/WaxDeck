@@ -26,9 +26,9 @@ func folderState(t *testing.T, dir string) (int, time.Time) {
 // probedOnce rereads the libraries and runs a probe pass over them.
 func probedOnce(t *testing.T, ctx context.Context, svc *Library) {
 	t.Helper()
-	svc.refreshLibraryState(ctx)
-	svc.probeRoots()
-	waitFor(t, func() bool { return svc.rootProbe.idle() }, "the probe pass to end")
+	svc.Roots.refreshLibraryState(ctx)
+	svc.Roots.probeRoots()
+	waitFor(t, func() bool { return svc.Roots.rootProbe.idle() }, "the probe pass to end")
 }
 
 // A library the server treats as read-only, by its own flag or the whole
@@ -48,10 +48,10 @@ func TestAReadOnlyLibraryIsNeverProbed(t *testing.T) {
 			Root{Name: "held", Path: held, Managed: true},
 			Root{Name: "open", Path: open, Managed: true})
 	})
-	if err := svc.LibraryReadOnlySet(ctx, uc, libraryAt(t, ctx, svc, held).PID, true); err != nil {
+	if err := svc.Settings.LibraryReadOnlySet(ctx, uc, libraryAt(t, ctx, svc, held).PID, true); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return svc.rootProbe.idle() }, "the probe pass to end")
+	waitFor(t, func() bool { return svc.Roots.rootProbe.idle() }, "the probe pass to end")
 	n, mtime := folderState(t, held)
 	probedOnce(t, ctx, svc)
 	if n2, mtime2 := folderState(t, held); n2 != n || !mtime2.Equal(mtime) {
@@ -64,15 +64,15 @@ func TestAReadOnlyLibraryIsNeverProbed(t *testing.T) {
 		t.Errorf("the writable managed library lists writable %v, want true", w)
 	}
 
-	st, err := svc.AdminSettingsGet(ctx)
+	st, err := svc.Settings.AdminSettingsGet(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	st.ReadOnly = true
-	if _, err := svc.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return svc.rootProbe.idle() }, "the probe pass to end")
+	waitFor(t, func() bool { return svc.Roots.rootProbe.idle() }, "the probe pass to end")
 	n, mtime = folderState(t, open)
 	probedOnce(t, ctx, svc)
 	if n2, mtime2 := folderState(t, open); n2 != n || !mtime2.Equal(mtime) {
@@ -125,13 +125,13 @@ func TestACreateAtALibrarysFolderWritesNothingThere(t *testing.T) {
 	ctx, svc, uc, _ := openServiceAt(t, dataDir, func(c *Config) {
 		c.Roots = append(c.Roots, Root{Name: "held", Path: held, Managed: true})
 	})
-	if err := svc.LibraryReadOnlySet(ctx, uc, libraryAt(t, ctx, svc, held).PID, true); err != nil {
+	if err := svc.Settings.LibraryReadOnlySet(ctx, uc, libraryAt(t, ctx, svc, held).PID, true); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return svc.rootProbe.idle() }, "the probe pass to end")
+	waitFor(t, func() bool { return svc.Roots.rootProbe.idle() }, "the probe pass to end")
 	for _, dir := range []string{held, inside} {
 		n, mtime := folderState(t, dir)
-		_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "again", Path: dir, Managed: true})
+		_, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "again", Path: dir, Managed: true})
 		if err == nil {
 			t.Fatalf("a managed create at %s was accepted", dir)
 		}
@@ -154,20 +154,20 @@ func TestACreateOnAReadOnlyServerWritesNoProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, svc, uc, _ := openServiceAt(t, dataDir, nil)
-	st, err := svc.AdminSettingsGet(ctx)
+	st, err := svc.Settings.AdminSettingsGet(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	st.ReadOnly = true
-	if _, err := svc.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
 	n, mtime := folderState(t, fresh)
-	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "fresh", Path: fresh, Managed: true})
+	lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "fresh", Path: fresh, Managed: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return svc.rootProbe.idle() }, "the probe pass to end")
+	waitFor(t, func() bool { return svc.Roots.rootProbe.idle() }, "the probe pass to end")
 	if n2, mtime2 := folderState(t, fresh); n2 != n || !mtime2.Equal(mtime) {
 		t.Errorf("the folder went from %d entries at %v to %d at %v, want it untouched", n, mtime, n2, mtime2)
 	}

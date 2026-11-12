@@ -14,7 +14,7 @@ import (
 // subsonicBookmarkPIDs lists the item pids of who's bookmarks.
 func subsonicBookmarkPIDs(t *testing.T, ctx context.Context, svc *Library, who *UserCtx) []string {
 	t.Helper()
-	marks, err := svc.SubsonicBookmarks(ctx, who)
+	marks, err := svc.Playback.SubsonicBookmarks(ctx, who)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,11 +33,11 @@ func TestSubsonicBookmarksSkipATrashedBook(t *testing.T) {
 	older := f.itemPID(t, ctx, model.KindBook, "The Fixture Book")
 	newer := f.itemPID(t, ctx, model.KindBook, "The Chaptered Fixture")
 	for _, book := range []string{older, newer} {
-		if _, err := f.svc.Checkpoint(ctx, f.uc, book, 5000, nil); err != nil {
+		if _, err := f.svc.Playback.Checkpoint(ctx, f.uc, book, 5000, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := f.svc.DeleteItems(ctx, f.uc, []string{newer}, "trash", false); err != nil {
+	if _, err := f.svc.Tools.DeleteItems(ctx, f.uc, []string{newer}, "trash", false); err != nil {
 		t.Fatal(err)
 	}
 	if got := subsonicBookmarkPIDs(t, ctx, f.svc, f.uc); len(got) != 1 || got[0] != older {
@@ -51,10 +51,10 @@ func TestSubsonicBookmarksHonourContentRulesForBooks(t *testing.T) {
 	t.Parallel()
 	ctx, f := newMigrateFixture(t)
 	book := f.itemPID(t, ctx, model.KindBook, "The Fixture Book")
-	if _, err := f.svc.Checkpoint(ctx, f.uc, book, 5000, nil); err != nil {
+	if _, err := f.svc.Playback.Checkpoint(ctx, f.uc, book, 5000, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.svc.SetItemTag(ctx, f.uc, book, "MOOD", []string{"calm"}, MetadataEditParams{}); err != nil {
+	if _, err := f.svc.Editor.SetItemTag(ctx, f.uc, book, "MOOD", []string{"calm"}, MetadataEditParams{}); err != nil {
 		t.Fatal(err)
 	}
 	kid := &UserCtx{ID: f.uc.ID, CatalogPID: f.uc.CatalogPID, AllLibraries: true, Explicit: true,

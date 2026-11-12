@@ -272,7 +272,7 @@ func TestSetItemLyricsReportsSkippedLines(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newAdvisoryFixture(t)
 	apiPID, _ := fixtureTrackPID(t, ctx, svc, uc, "Flagged")
-	out, err := svc.SetItemLyrics(ctx, uc, apiPID, "[Chorus]\n[9:99.99]bad\n[00:01.00]la la la\n", "", MetadataEditParams{})
+	out, err := svc.Editor.SetItemLyrics(ctx, uc, apiPID, "[Chorus]\n[9:99.99]bad\n[00:01.00]la la la\n", "", MetadataEditParams{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -50,8 +50,8 @@ const (
 // them apart is the whole of this function. Getting it wrong ships a
 // spinner that never resolves, because a client polling `pending` has
 // been told to wait for something that will never arrive.
-func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID string, partIndex int) (WaveformResult, error) {
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+func (l *Playback) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID string, partIndex int) (WaveformResult, error) {
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return WaveformResult{}, err
 	}
@@ -68,12 +68,12 @@ func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID strin
 	// Each part has its own peaks row. Reading through the item answers
 	// the primary's, and the primary is not part one - it is whichever
 	// part was attached first.
-	filePID, partOut, err := l.resolvePart(ctx, it, partIndex)
+	filePID, partOut, err := l.Tools.resolvePart(ctx, it, partIndex)
 	if err != nil {
 		return WaveformResult{}, err
 	}
 
-	f, err := l.streamFile(ctx, it, filePID)
+	f, err := l.Tools.streamFile(ctx, it, filePID)
 	if err != nil {
 		return WaveformResult{}, err
 	}
@@ -153,8 +153,8 @@ func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID strin
 // same weighting written again in Dart. `PeaksForItem` reads every
 // part's envelope in one call, which is what makes this cheap here and
 // expensive anywhere else.
-func (l *Library) WaveformForItem(ctx context.Context, uc *UserCtx, apiItemPID string) (WaveformResult, error) {
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+func (l *Playback) WaveformForItem(ctx context.Context, uc *UserCtx, apiItemPID string) (WaveformResult, error) {
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return WaveformResult{}, err
 	}
@@ -268,7 +268,7 @@ func wholeItemValidator(parts []model.BookPart, essence []string, versions []int
 // itemParts lists a book's backing files in reading order. Anything
 // else has no parts, which is what makes the whole-item span the same
 // answer as the default one for it.
-func (l *Library) itemParts(ctx context.Context, it *model.ItemView) ([]model.BookPart, error) {
+func (l *Playback) itemParts(ctx context.Context, it *model.ItemView) ([]model.BookPart, error) {
 	if it.Kind != model.KindBook {
 		return nil, nil
 	}

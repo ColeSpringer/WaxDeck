@@ -13,7 +13,7 @@ import (
 
 func (s *Server) GetLibraryHealth(ctx context.Context, _ GetLibraryHealthRequestObject) (GetLibraryHealthResponseObject, error) {
 	uc := userCtx(ctx)
-	sum, err := s.svc.HealthSummaryFor(ctx, uc)
+	sum, err := s.svc.Health.SummaryFor(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func (s *Server) ListHealthIssues(ctx context.Context, req ListHealthIssuesReque
 	if err != nil {
 		return nil, err
 	}
-	items, next, err := s.svc.ListHealthIssuesFor(ctx, uc, deref(req.Params.Rule), deref(req.Params.Cursor), limit)
+	items, next, err := s.svc.Health.ListHealthIssuesFor(ctx, uc, deref(req.Params.Rule), deref(req.Params.Cursor), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (s *Server) ListHealthIssues(ctx context.Context, req ListHealthIssuesReque
 
 func (s *Server) SweepLibraryHealth(ctx context.Context, _ SweepLibraryHealthRequestObject) (SweepLibraryHealthResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.QueueHealthSweep(ctx, uc); err != nil {
+	if err := s.svc.Health.QueueHealthSweep(ctx, uc); err != nil {
 		return nil, err
 	}
 	return SweepLibraryHealth202Response{}, nil
@@ -97,7 +97,7 @@ func (s *Server) FixHealthIssues(ctx context.Context, req FixHealthIssuesRequest
 	if req.Body.ItemPids != nil {
 		pids = *req.Body.ItemPids
 	}
-	start, err := s.svc.StartHealthFix(ctx, uc, req.Body.Rule, pids)
+	start, err := s.svc.Health.StartHealthFix(ctx, uc, req.Body.Rule, pids)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func (s *Server) FixHealthIssues(ctx context.Context, req FixHealthIssuesRequest
 
 func (s *Server) ListDuplicates(ctx context.Context, _ ListDuplicatesRequestObject) (ListDuplicatesResponseObject, error) {
 	uc := userCtx(ctx)
-	groups, err := s.svc.ListDuplicateGroups(ctx, uc)
+	groups, err := s.svc.Health.ListDuplicateGroups(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (s *Server) MergeDuplicates(ctx context.Context, req MergeDuplicatesRequest
 	if !req.Body.EntityType.Valid() {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", "unknown entity type")
 	}
-	res, err := s.svc.MergeDuplicates(ctx, uc, string(req.Body.EntityType), req.Body.SurvivorPid, req.Body.LoserPids)
+	res, err := s.svc.Health.MergeDuplicates(ctx, uc, string(req.Body.EntityType), req.Body.SurvivorPid, req.Body.LoserPids)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (s *Server) MergeDuplicates(ctx context.Context, req MergeDuplicatesRequest
 
 func (s *Server) ListUpgrades(ctx context.Context, _ ListUpgradesRequestObject) (ListUpgradesResponseObject, error) {
 	uc := userCtx(ctx)
-	groups, err := s.svc.ListUpgradeGroups(ctx, uc)
+	groups, err := s.svc.Health.ListUpgradeGroups(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func (s *Server) ResolveUpgrade(ctx context.Context, req ResolveUpgradeRequestOb
 		}
 		body.RemoveFilePIDs = remove
 	}
-	trashed, err := s.svc.ResolveUpgrade(ctx, uc, body)
+	trashed, err := s.svc.Health.ResolveUpgrade(ctx, uc, body)
 	if err != nil {
 		if service.KindOf(err) == service.KindInvalid && errors.Is(err, service.ErrCueRipPart) {
 			return nil, refuseParams(http.StatusBadRequest, "invalid-request", serviceMessage(err), map[string]string{"reason": "cue-rip"})

@@ -54,7 +54,7 @@ func mergeEntityForPrefix(prefix string) (model.MergeEntity, bool) {
 // library grants and content rules. A pid naming no entity is a plain
 // not-found, so probing cannot distinguish "no such entity" from "not
 // yours".
-func (l *Library) resolveEntity(ctx context.Context, uc *UserCtx, apiEntityPID string) (model.MergeEntity, model.PID, error) {
+func (l *Identity) resolveEntity(ctx context.Context, uc *UserCtx, apiEntityPID string) (model.MergeEntity, model.PID, error) {
 	prefix, pid, ok := parseAPIPID(apiEntityPID)
 	if !ok {
 		return "", "", errNotFound("no such entity " + apiEntityPID)
@@ -67,7 +67,7 @@ func (l *Library) resolveEntity(ctx context.Context, uc *UserCtx, apiEntityPID s
 	// here would answer a not-found while the catalog is suspended for
 	// maintenance, where the caller needs the retry-shortly the
 	// maintenance kind renders.
-	visible, err := l.entityVisible(ctx, uc, prefix, pid)
+	visible, err := l.Reads.entityVisible(ctx, uc, prefix, pid)
 	if err != nil {
 		return "", "", err
 	}
@@ -109,7 +109,7 @@ func entityPlayStateDTO(apiEntityPID string, st *model.EntityPlayState) EntityPl
 
 // EntityPlayStateFor returns the caller's star and rating for one
 // artist or album. An entity never starred or rated reads back zero.
-func (l *Library) EntityPlayStateFor(ctx context.Context, uc *UserCtx, apiEntityPID string) (EntityPlayState, error) {
+func (l *Identity) EntityPlayStateFor(ctx context.Context, uc *UserCtx, apiEntityPID string) (EntityPlayState, error) {
 	kind, pid, err := l.resolveEntity(ctx, uc, apiEntityPID)
 	if err != nil {
 		return EntityPlayState{}, err
@@ -118,7 +118,7 @@ func (l *Library) EntityPlayStateFor(ctx context.Context, uc *UserCtx, apiEntity
 }
 
 // entityStateFor reads the state for an already-authorized entity.
-func (l *Library) entityStateFor(ctx context.Context, uc *UserCtx, apiEntityPID string, kind model.MergeEntity, pid model.PID) (EntityPlayState, error) {
+func (l *Identity) entityStateFor(ctx context.Context, uc *UserCtx, apiEntityPID string, kind model.MergeEntity, pid model.PID) (EntityPlayState, error) {
 	st, err := l.lib.EntityPlayState(ctx, model.PID(uc.CatalogPID), kind, pid)
 	if err != nil {
 		if KindOf(err) == KindNotFound {
@@ -133,7 +133,7 @@ func (l *Library) entityStateFor(ctx context.Context, uc *UserCtx, apiEntityPID 
 // and returns the resulting state. A replayed offline toggle carries its
 // recorded time to the catalog, which drops it when the star changed
 // more recently; see SetStar.
-func (l *Library) SetEntityStar(ctx context.Context, uc *UserCtx, apiEntityPID string, starred bool, recordedAt *time.Time) (EntityPlayState, error) {
+func (l *Identity) SetEntityStar(ctx context.Context, uc *UserCtx, apiEntityPID string, starred bool, recordedAt *time.Time) (EntityPlayState, error) {
 	kind, pid, err := l.resolveEntity(ctx, uc, apiEntityPID)
 	if err != nil {
 		return EntityPlayState{}, err
@@ -153,7 +153,7 @@ func (l *Library) SetEntityStar(ctx context.Context, uc *UserCtx, apiEntityPID s
 
 // SetEntityRating sets (0..100) or clears (nil) the acting user's
 // rating for an artist or album and returns the resulting state.
-func (l *Library) SetEntityRating(ctx context.Context, uc *UserCtx, apiEntityPID string, rating *int, recordedAt *time.Time) (EntityPlayState, error) {
+func (l *Identity) SetEntityRating(ctx context.Context, uc *UserCtx, apiEntityPID string, rating *int, recordedAt *time.Time) (EntityPlayState, error) {
 	if rating != nil && (*rating < 0 || *rating > 100) {
 		return EntityPlayState{}, errInvalid("rating must be between 0 and 100")
 	}
@@ -169,7 +169,7 @@ func (l *Library) SetEntityRating(ctx context.Context, uc *UserCtx, apiEntityPID
 		return EntityPlayState{}, classify(err)
 	}
 	if changed {
-		l.trackFacts.ratings.forget(uc.ID, pid)
+		l.Reads.trackFacts.ratings.forget(uc.ID, pid)
 		l.emitUserEvent(ctx, uc.ID, eventEntityState, apiEntityPID)
 	}
 	return l.entityStateFor(ctx, uc, apiEntityPID, kind, pid)
@@ -180,7 +180,7 @@ func (l *Library) SetEntityRating(ctx context.Context, uc *UserCtx, apiEntityPID
 // batch per kind, which doubles as the visibility filter for restricted
 // callers: an entity whose members all sit outside the caller's grant
 // is dropped rather than handed out as a pid they cannot follow.
-func (l *Library) StarredEntities(ctx context.Context, uc *UserCtx) (StarredEntities, error) {
+func (l *Identity) StarredEntities(ctx context.Context, uc *UserCtx) (StarredEntities, error) {
 	out := StarredEntities{Artists: []SearchHit{}, Albums: []SearchHit{}}
 	kinds := []struct {
 		merge  model.MergeEntity
@@ -209,7 +209,7 @@ func (l *Library) StarredEntities(ctx context.Context, uc *UserCtx) (StarredEnti
 		}
 		var visible map[model.PID]bool
 		if !fullReach(uc) {
-			if visible, err = l.visibleEntities(ctx, uc, k.prefix, pids); err != nil {
+			if visible, err = l.Reads.visibleEntities(ctx, uc, k.prefix, pids); err != nil {
 				return StarredEntities{}, err
 			}
 		}

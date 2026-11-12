@@ -37,7 +37,7 @@ func TestTheDialGuardRefusesWhatTheCatalogRefuses(t *testing.T) {
 		"2606:4700:4700::1111", "2001:4860:4860::8888",
 		"::ffff:8.8.8.8", "64:ff9b::808:808", "64:ff9b::6440:0:0",
 	}
-	l := &Library{}
+	l := bareLibrary(&core{})
 	for _, s := range refused {
 		if !privateIP(net.ParseIP(s)) {
 			t.Errorf("%s is not refused", s)
@@ -45,7 +45,7 @@ func TestTheDialGuardRefusesWhatTheCatalogRefuses(t *testing.T) {
 		if err := refusePrivateAddr(net.JoinHostPort(s, "443")); !errors.Is(err, errPrivateAddress) {
 			t.Errorf("dialing %s: %v, want the private-address refusal", s, err)
 		}
-		if err := l.guardAcquireHost(context.Background(), s); KindOf(err) != KindInvalid {
+		if err := l.Ingest.guardAcquireHost(context.Background(), s); KindOf(err) != KindInvalid {
 			t.Errorf("acquiring from %s: %v, want a refusal", s, err)
 		}
 	}
@@ -64,12 +64,12 @@ func TestEveryGuardedClientRefusesAPrivateHost(t *testing.T) {
 	var asked atomic.Int32
 	ts := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { asked.Add(1) }))
 	t.Cleanup(ts.Close)
-	l := &Library{}
+	l := bareLibrary(&core{})
 	clients := map[string]*http.Client{
-		"transcripts and chapters": l.transcriptClient(),
-		"the enclosure relay":      l.enclosureClient(),
-		"radio":                    l.radioClient(),
-		"notification delivery":    l.guardedNotifyClient(),
+		"transcripts and chapters": l.Podcasts.transcriptClient(),
+		"the enclosure relay":      l.Podcasts.enclosureClient(),
+		"radio":                    l.Radio.client(),
+		"notification delivery":    l.Integrations.guardedNotifyClient(),
 		"scrobbling":               scrobbleHTTPClient(false),
 	}
 	for name, client := range clients {
@@ -98,7 +98,7 @@ func TestASubscribeRefusesANAT64PrivateLiteral(t *testing.T) {
 		cfg.PodcastRootName = "podcasts"
 	})
 	for _, host := range []string{"[64:ff9b::a9fe:a9fe]", "[64:ff9b::a00:1]", "[64:ff9b::7f00:1]:8080"} {
-		_, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: "http://" + host + "/latest/meta-data/"})
+		_, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: "http://" + host + "/latest/meta-data/"})
 		if KindOf(err) != KindInvalid || FeedFailureReason(err) != reasonBlockedAddress {
 			t.Errorf("subscribing to %s: %v (%s), want blocked-address", host, err, FeedFailureReason(err))
 		}
@@ -131,9 +131,9 @@ func TestTheWriteTimeCheckRefusesWhatResolvesPrivate(t *testing.T) {
 	}
 	for _, host := range []string{"lan.example", ":8000"} {
 		writes := map[string]error{}
-		_, writes["a station"] = svc.CreateRadioStation(ctx, uc, RadioStationEdit{Name: "Station", StreamURL: "http://" + host + "/stream"})
-		_, writes["a ListenBrainz server"] = svc.ConnectListenBrainz(ctx, uc, "token", "http://"+host+"/")
-		_, writes["a webhook"] = svc.CreateMyNotificationTarget(ctx, uc, NotificationTargetInput{
+		_, writes["a station"] = svc.Radio.CreateRadioStation(ctx, uc, RadioStationEdit{Name: "Station", StreamURL: "http://" + host + "/stream"})
+		_, writes["a ListenBrainz server"] = svc.Integrations.ConnectListenBrainz(ctx, uc, "token", "http://"+host+"/")
+		_, writes["a webhook"] = svc.Integrations.CreateMyNotificationTarget(ctx, uc, NotificationTargetInput{
 			Kind: "webhook", Config: []byte(`{"url":"http://` + host + `/hook"}`), EnabledEvents: []string{},
 		})
 		for what, err := range writes {
@@ -142,7 +142,7 @@ func TestTheWriteTimeCheckRefusesWhatResolvesPrivate(t *testing.T) {
 			}
 		}
 	}
-	if _, err := svc.CreateRadioStation(ctx, uc, RadioStationEdit{Name: "Public", StreamURL: "http://radio.example/stream"}); err != nil {
+	if _, err := svc.Radio.CreateRadioStation(ctx, uc, RadioStationEdit{Name: "Public", StreamURL: "http://radio.example/stream"}); err != nil {
 		t.Fatalf("a station at a public name: %v", err)
 	}
 }
@@ -157,12 +157,12 @@ func TestARadioStreamSourceResolvesNothing(t *testing.T) {
 		lookups.Add(1)
 		return []net.IPAddr{{IP: net.ParseIP("192.0.2.1")}}, nil
 	}
-	station, err := svc.CreateRadioStation(ctx, uc, RadioStationEdit{Name: "Public", StreamURL: "http://radio.example/stream"})
+	station, err := svc.Radio.CreateRadioStation(ctx, uc, RadioStationEdit{Name: "Public", StreamURL: "http://radio.example/stream"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	saved := lookups.Load()
-	if _, err := svc.RadioStreamSource(ctx, station.PID); err != nil {
+	if _, err := svc.Radio.StreamSource(ctx, station.PID); err != nil {
 		t.Fatal(err)
 	}
 	if n := lookups.Load() - saved; n != 0 {

@@ -63,12 +63,12 @@ func newLandingShow(t *testing.T) landingShow {
 	}))
 	t.Cleanup(ts.Close)
 	s := landingShow{ctx: ctx, svc: svc, admin: admin, feed: ts.URL + "/feed.xml", episodes: map[string]string{}}
-	sub, _, err := svc.Subscribe(ctx, admin, SubscribeRequest{URL: s.feed})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, admin, SubscribeRequest{URL: s.feed})
 	if err != nil {
 		t.Fatal(err)
 	}
 	s.show = sub.Show.PID
-	eps, _, err := svc.Episodes(ctx, admin, s.show, "", 10)
+	eps, _, err := svc.Podcasts.Episodes(ctx, admin, s.show, "", 10)
 	if err != nil || len(eps) != 4 {
 		t.Fatalf("episodes = %+v (%v), want four", eps, err)
 	}
@@ -92,7 +92,7 @@ func newLandingShow(t *testing.T) landingShow {
 // downloaded names the show's episodes on the server, newest first.
 func (s landingShow) downloaded(t *testing.T) []string {
 	t.Helper()
-	eps, _, err := s.svc.Episodes(s.ctx, s.admin, s.show, "", 10)
+	eps, _, err := s.svc.Podcasts.Episodes(s.ctx, s.admin, s.show, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,20 +111,20 @@ func (s landingShow) downloaded(t *testing.T) []string {
 // kept window stays, and the landing waits for the sweep.
 func TestALandingCannotMoveARetentionSweepsCut(t *testing.T) {
 	s := newLandingShow(t)
-	if _, err := s.svc.SetStar(s.ctx, s.admin, s.episodes["Episode 2"], true, nil); err != nil {
+	if _, err := s.svc.Playback.SetStar(s.ctx, s.admin, s.episodes["Episode 2"], true, nil); err != nil {
 		t.Fatal(err)
 	}
 	keep := int64(2)
-	if _, err := s.svc.PutSubscriptionSettings(s.ctx, s.admin, s.show, SubscriptionSettings{RetentionKeep: &keep}); err != nil {
+	if _, err := s.svc.Podcasts.PutSubscriptionSettings(s.ctx, s.admin, s.show, SubscriptionSettings{RetentionKeep: &keep}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.svc.QueueEpisodeFetch(s.ctx, s.admin, s.episodes["Episode 4"]); err != nil {
+	if err := s.svc.Podcasts.QueueEpisodeFetch(s.ctx, s.admin, s.episodes["Episode 4"]); err != nil {
 		t.Fatal(err)
 	}
 	landed := make(chan bool, 1)
-	s.svc.retentionStatesHook = func(ctx context.Context, pids []model.PID) (map[model.PID][]model.PlayState, error) {
-		s.svc.retentionStatesHook = nil
-		go func() { landed <- s.svc.DrainFetchQueue(s.ctx) }()
+	s.svc.Podcasts.retentionStatesHook = func(ctx context.Context, pids []model.PID) (map[model.PID][]model.PlayState, error) {
+		s.svc.Podcasts.retentionStatesHook = nil
+		go func() { landed <- s.svc.Podcasts.DrainFetchQueue(s.ctx) }()
 		select {
 		case <-landed:
 			landed <- true
@@ -132,17 +132,17 @@ func TestALandingCannotMoveARetentionSweepsCut(t *testing.T) {
 		}
 		return s.svc.lib.PlayStatesForItems(ctx, pids)
 	}
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	<-landed
 	if got := s.downloaded(t); !slices.Contains(got, "Episode 2") {
 		t.Fatalf("downloads after a landing inside the sweep = %v, want the starred Episode 2 kept", got)
 	}
 	// The landing queues the show again, so the next sweep cuts it back to
 	// what it keeps.
-	if _, err := s.svc.SetStar(s.ctx, s.admin, s.episodes["Episode 2"], false, nil); err != nil {
+	if _, err := s.svc.Playback.SetStar(s.ctx, s.admin, s.episodes["Episode 2"], false, nil); err != nil {
 		t.Fatal(err)
 	}
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	if got := s.downloaded(t); !slices.Equal(got, []string{"Episode 4", "Episode 3"}) {
 		t.Errorf("downloads after the sweep the landing queued = %v, want the newest two", got)
 	}
@@ -152,10 +152,10 @@ func TestALandingCannotMoveARetentionSweepsCut(t *testing.T) {
 func (s landingShow) keepTwo(t *testing.T) {
 	t.Helper()
 	keep := int64(2)
-	if _, err := s.svc.PutSubscriptionSettings(s.ctx, s.admin, s.show, SubscriptionSettings{RetentionKeep: &keep}); err != nil {
+	if _, err := s.svc.Podcasts.PutSubscriptionSettings(s.ctx, s.admin, s.show, SubscriptionSettings{RetentionKeep: &keep}); err != nil {
 		t.Fatal(err)
 	}
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	if got := s.downloaded(t); !slices.Equal(got, []string{"Episode 3", "Episode 2"}) {
 		t.Fatalf("downloads after keeping two = %v, want the newest two", got)
 	}
@@ -168,7 +168,7 @@ func (s landingShow) sweep(t *testing.T) {
 	if err := s.svc.db.EnqueueRetention(s.ctx, string(bare), time.Now().UnixNano()); err != nil {
 		t.Fatal(err)
 	}
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 }
 
 // A download a subscriber asked for is theirs to hear before retention
@@ -177,21 +177,21 @@ func (s landingShow) sweep(t *testing.T) {
 func TestARequestedDownloadWaitsForItsRequester(t *testing.T) {
 	s := newLandingShow(t)
 	s.keepTwo(t)
-	if err := s.svc.QueueEpisodeFetch(s.ctx, s.admin, s.episodes["Episode 1"]); err != nil {
+	if err := s.svc.Podcasts.QueueEpisodeFetch(s.ctx, s.admin, s.episodes["Episode 1"]); err != nil {
 		t.Fatal(err)
 	}
-	if !s.svc.DrainFetchQueue(s.ctx) {
+	if !s.svc.Podcasts.DrainFetchQueue(s.ctx) {
 		t.Fatal("the fetch did not run")
 	}
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	s.sweep(t)
 	if got := s.downloaded(t); !slices.Equal(got, []string{"Episode 3", "Episode 2", "Episode 1"}) {
 		t.Fatalf("downloads after sweeps past the requested landing = %v, want Episode 1 kept for its requester", got)
 	}
-	if _, err := s.svc.SetPlayed(s.ctx, s.admin, s.episodes["Episode 1"], true, true, nil, nil, nil); err != nil {
+	if _, err := s.svc.Playback.SetPlayed(s.ctx, s.admin, s.episodes["Episode 1"], true, true, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	if got := s.downloaded(t); !slices.Equal(got, []string{"Episode 3", "Episode 2"}) {
 		t.Errorf("downloads after its requester finished it = %v, want the newest two", got)
 	}
@@ -201,36 +201,36 @@ func TestARequestedDownloadWaitsForItsRequester(t *testing.T) {
 // library any more, holds nothing back.
 func TestARequestedDownloadGoesWithItsRequestersFollow(t *testing.T) {
 	s := newLandingShow(t)
-	acct, err := s.svc.CreateAccount(s.ctx, AccountCreate{Username: "asker", Password: "correct-horse"})
+	acct, err := s.svc.Identity.CreateAccount(s.ctx, AccountCreate{Username: "asker", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	asker, err := s.svc.UserCtx(s.ctx, acct.User)
+	asker, err := s.svc.Grants.UserCtxFor(s.ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.svc.Subscribe(s.ctx, asker, SubscribeRequest{URL: s.feed}); err != nil {
+	if _, _, err := s.svc.Podcasts.Subscribe(s.ctx, asker, SubscribeRequest{URL: s.feed}); err != nil {
 		t.Fatal(err)
 	}
 	keep := int64(2)
-	if _, err := s.svc.PutSubscriptionSettings(s.ctx, asker, s.show, SubscriptionSettings{RetentionKeep: &keep}); err != nil {
+	if _, err := s.svc.Podcasts.PutSubscriptionSettings(s.ctx, asker, s.show, SubscriptionSettings{RetentionKeep: &keep}); err != nil {
 		t.Fatal(err)
 	}
 	s.keepTwo(t)
-	if err := s.svc.QueueEpisodeFetch(s.ctx, asker, s.episodes["Episode 1"]); err != nil {
+	if err := s.svc.Podcasts.QueueEpisodeFetch(s.ctx, asker, s.episodes["Episode 1"]); err != nil {
 		t.Fatal(err)
 	}
-	if !s.svc.DrainFetchQueue(s.ctx) {
+	if !s.svc.Podcasts.DrainFetchQueue(s.ctx) {
 		t.Fatal("the fetch did not run")
 	}
 	s.sweep(t)
 	if got := s.downloaded(t); len(got) != 3 {
 		t.Fatalf("downloads with the requester following = %v, want Episode 1 kept", got)
 	}
-	if err := s.svc.Unsubscribe(s.ctx, asker, s.show, false); err != nil {
+	if err := s.svc.Podcasts.Unsubscribe(s.ctx, asker, s.show, false); err != nil {
 		t.Fatal(err)
 	}
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	if got := s.downloaded(t); !slices.Equal(got, []string{"Episode 3", "Episode 2"}) {
 		t.Errorf("downloads after the requester stopped following = %v, want the newest two", got)
 	}
@@ -249,10 +249,10 @@ func TestAnAutomaticLandingQueuesItsShow(t *testing.T) {
 	if err := s.svc.db.EnqueueFetch(s.ctx, string(bare), "", time.Now().UnixNano(), fetchMaxAttempts); err != nil {
 		t.Fatal(err)
 	}
-	if !s.svc.DrainFetchQueue(s.ctx) {
+	if !s.svc.Podcasts.DrainFetchQueue(s.ctx) {
 		t.Fatal("the fetch did not run")
 	}
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	if got := s.downloaded(t); !slices.Equal(got, []string{"Episode 4", "Episode 3"}) {
 		t.Errorf("downloads after an automatic landing's sweep = %v, want the newest two", got)
 	}
@@ -264,20 +264,20 @@ func TestAnAutomaticLandingQueuesItsShow(t *testing.T) {
 func TestAHeardEpisodeAskedForAgainIsHeldUntilHeardAgain(t *testing.T) {
 	s := newLandingShow(t)
 	s.keepTwo(t)
-	if _, err := s.svc.SetPlayed(s.ctx, s.admin, s.episodes["Episode 1"], true, true, nil, nil, nil); err != nil {
+	if _, err := s.svc.Playback.SetPlayed(s.ctx, s.admin, s.episodes["Episode 1"], true, true, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.svc.QueueEpisodeFetch(s.ctx, s.admin, s.episodes["Episode 1"]); err != nil {
+	if err := s.svc.Podcasts.QueueEpisodeFetch(s.ctx, s.admin, s.episodes["Episode 1"]); err != nil {
 		t.Fatal(err)
 	}
-	if !s.svc.DrainFetchQueue(s.ctx) {
+	if !s.svc.Podcasts.DrainFetchQueue(s.ctx) {
 		t.Fatal("the fetch did not run")
 	}
 	s.sweep(t)
 	if got := s.downloaded(t); !slices.Contains(got, "Episode 1") {
 		t.Fatalf("downloads after a sweep past the requested landing = %v, want the episode asked for again kept", got)
 	}
-	eps, _, err := s.svc.Episodes(s.ctx, s.admin, s.show, "", 10)
+	eps, _, err := s.svc.Podcasts.Episodes(s.ctx, s.admin, s.show, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +290,7 @@ func TestAHeardEpisodeAskedForAgainIsHeldUntilHeardAgain(t *testing.T) {
 	if end <= 0 {
 		t.Fatal("Episode 1 has no duration to reach the end of")
 	}
-	if _, err := s.svc.Checkpoint(s.ctx, s.admin, s.episodes["Episode 1"], end, nil); err != nil {
+	if _, err := s.svc.Playback.Checkpoint(s.ctx, s.admin, s.episodes["Episode 1"], end, nil); err != nil {
 		t.Fatal(err)
 	}
 	s.sweep(t)
@@ -307,22 +307,22 @@ func TestADeletedRequesterLeavesTheOthersHeld(t *testing.T) {
 	s.keepTwo(t)
 	var askers []*UserCtx
 	for _, name := range []string{"first", "second"} {
-		acct, err := s.svc.CreateAccount(s.ctx, AccountCreate{Username: name, Password: "correct-horse"})
+		acct, err := s.svc.Identity.CreateAccount(s.ctx, AccountCreate{Username: name, Password: "correct-horse"})
 		if err != nil {
 			t.Fatal(err)
 		}
-		uc, err := s.svc.UserCtx(s.ctx, acct.User)
+		uc, err := s.svc.Grants.UserCtxFor(s.ctx, acct.User)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := s.svc.Subscribe(s.ctx, uc, SubscribeRequest{URL: s.feed}); err != nil {
+		if _, _, err := s.svc.Podcasts.Subscribe(s.ctx, uc, SubscribeRequest{URL: s.feed}); err != nil {
 			t.Fatal(err)
 		}
 		keep := int64(2)
-		if _, err := s.svc.PutSubscriptionSettings(s.ctx, uc, s.show, SubscriptionSettings{RetentionKeep: &keep}); err != nil {
+		if _, err := s.svc.Podcasts.PutSubscriptionSettings(s.ctx, uc, s.show, SubscriptionSettings{RetentionKeep: &keep}); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.svc.QueueEpisodeFetch(s.ctx, uc, s.episodes["Episode 1"]); err != nil {
+		if err := s.svc.Podcasts.QueueEpisodeFetch(s.ctx, uc, s.episodes["Episode 1"]); err != nil {
 			t.Fatal(err)
 		}
 		askers = append(askers, uc)
@@ -333,10 +333,10 @@ func TestADeletedRequesterLeavesTheOthersHeld(t *testing.T) {
 	if kept.ID < gone.ID {
 		gone, kept = kept, gone
 	}
-	if _, err := s.svc.DeleteAccount(s.ctx, nil, gone.ID, AccountDeletion{}); err != nil {
+	if _, err := s.svc.Identity.DeleteAccount(s.ctx, nil, gone.ID, AccountDeletion{}); err != nil {
 		t.Fatal(err)
 	}
-	if !s.svc.DrainFetchQueue(s.ctx) {
+	if !s.svc.Podcasts.DrainFetchQueue(s.ctx) {
 		t.Fatal("the fetch did not run")
 	}
 	s.sweep(t)
@@ -355,17 +355,17 @@ func TestADeletedRequesterLeavesTheOthersHeld(t *testing.T) {
 func TestAskingForAnEpisodeAlreadyHereHoldsIt(t *testing.T) {
 	s := newLandingShow(t)
 	s.keepTwo(t)
-	if err := s.svc.QueueEpisodeFetch(s.ctx, s.admin, s.episodes["Episode 2"]); err != nil {
+	if err := s.svc.Podcasts.QueueEpisodeFetch(s.ctx, s.admin, s.episodes["Episode 2"]); err != nil {
 		t.Fatal(err)
 	}
 	_, bare, _ := parseAPIPID(s.episodes["Episode 4"])
 	if err := s.svc.db.EnqueueFetch(s.ctx, string(bare), "", time.Now().UnixNano(), fetchMaxAttempts); err != nil {
 		t.Fatal(err)
 	}
-	if !s.svc.DrainFetchQueue(s.ctx) {
+	if !s.svc.Podcasts.DrainFetchQueue(s.ctx) {
 		t.Fatal("the fetch did not run")
 	}
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	if got := s.downloaded(t); !slices.Equal(got, []string{"Episode 4", "Episode 3", "Episode 2"}) {
 		t.Errorf("downloads after an automatic landing's sweep = %v, want Episode 2 kept for its asker", got)
 	}
@@ -376,40 +376,40 @@ func TestAskingForAnEpisodeAlreadyHereHoldsIt(t *testing.T) {
 // longer on the server.
 func TestADormantRequestersHoldKeepsNothing(t *testing.T) {
 	s := newLandingShow(t)
-	podcastLib, _ := s.svc.podcastLibrary(s.ctx)
+	podcastLib, _ := s.svc.Grants.podcastLibrary(s.ctx)
 	var music string
-	for _, r := range s.svc.libraryRoots() {
+	for _, r := range s.svc.Roots.libraryRoots() {
 		if r.Name == "configured" {
 			music = apiPID(PrefixLibrary, model.PID(r.PID))
 		}
 	}
-	acct, err := s.svc.CreateAccount(s.ctx, AccountCreate{
+	acct, err := s.svc.Identity.CreateAccount(s.ctx, AccountCreate{
 		Username: "asker", Password: "correct-horse", AccessMode: "granted",
 		LibraryPIDs: []string{music, apiPID(PrefixLibrary, model.PID(podcastLib))},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	asker, err := s.svc.UserCtx(s.ctx, acct.User)
+	asker, err := s.svc.Grants.UserCtxFor(s.ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.svc.Subscribe(s.ctx, asker, SubscribeRequest{URL: s.feed}); err != nil {
+	if _, _, err := s.svc.Podcasts.Subscribe(s.ctx, asker, SubscribeRequest{URL: s.feed}); err != nil {
 		t.Fatal(err)
 	}
 	keep := int64(2)
-	if _, err := s.svc.PutSubscriptionSettings(s.ctx, asker, s.show, SubscriptionSettings{RetentionKeep: &keep}); err != nil {
+	if _, err := s.svc.Podcasts.PutSubscriptionSettings(s.ctx, asker, s.show, SubscriptionSettings{RetentionKeep: &keep}); err != nil {
 		t.Fatal(err)
 	}
 	s.keepTwo(t)
-	if err := s.svc.QueueEpisodeFetch(s.ctx, asker, s.episodes["Episode 1"]); err != nil {
+	if err := s.svc.Podcasts.QueueEpisodeFetch(s.ctx, asker, s.episodes["Episode 1"]); err != nil {
 		t.Fatal(err)
 	}
-	if !s.svc.DrainFetchQueue(s.ctx) {
+	if !s.svc.Podcasts.DrainFetchQueue(s.ctx) {
 		t.Fatal("the fetch did not run")
 	}
 	mode := "granted"
-	if _, err := s.svc.UpdateAccount(s.ctx, acct.User.ID, AccountUpdate{AccessMode: &mode, LibraryPIDs: []string{music}}); err != nil {
+	if _, err := s.svc.Identity.UpdateAccount(s.ctx, acct.User.ID, AccountUpdate{AccessMode: &mode, LibraryPIDs: []string{music}}); err != nil {
 		t.Fatal(err)
 	}
 	s.sweep(t)

@@ -218,11 +218,11 @@ func TestARevertLeavesAFieldTheApprovalDidNotTouch(t *testing.T) {
 	t.Parallel()
 	h, pid, _ := nightfallLibrary(t, nil)
 	ctx := context.Background()
-	uc, err := h.svc.UserCtxByID(ctx, adminUserID(t, h))
+	uc, err := h.svc.Grants.UserCtxByID(ctx, adminUserID(t, h))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.svc.EditItemMetadata(ctx, uc, pid, map[string]string{"track_total": "12"},
+	if _, err := h.svc.Editor.EditItemMetadata(ctx, uc, pid, map[string]string{"track_total": "12"},
 		service.MetadataEditParams{Lock: true}); err != nil {
 		t.Fatal(err)
 	}

@@ -337,7 +337,7 @@ func (l *Library) placeWalked(ctx context.Context, items []*model.ItemView, seq 
 			for _, row := range rows[it.PID] {
 				lib := string(row.LibraryPID)
 				if lib == "" {
-					if found, err := l.libraryForPath(ctx, row.OrigDisplay); err == nil {
+					if found, err := l.Grants.libraryForPath(ctx, row.OrigDisplay); err == nil {
 						lib = found
 					}
 				}

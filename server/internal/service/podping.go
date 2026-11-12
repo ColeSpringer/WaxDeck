@@ -62,7 +62,7 @@ type podpingIndex struct {
 // A feed nobody here subscribes to is the overwhelmingly common case:
 // the chain carries every host's pings, and this catalog holds a
 // handful of feeds. That path is a map lookup and nothing else.
-func (l *Library) NotePodping(ctx context.Context, iri string) {
+func (l *Podcasts) NotePodping(ctx context.Context, iri string) {
 	key := normalizeFeedURL(iri)
 	if key == "" {
 		return
@@ -120,7 +120,7 @@ func (l *Library) NotePodping(ctx context.Context, iri string) {
 // rebuilds it. Called wherever a subscription is added or removed: a
 // show subscribed a moment ago must be reachable by its first ping, not
 // by the next rebuild.
-func (l *Library) InvalidatePodpingFeeds() {
+func (l *Podcasts) InvalidatePodpingFeeds() {
 	l.podping.mu.Lock()
 	defer l.podping.mu.Unlock()
 	l.podping.byFeed = nil
@@ -129,7 +129,7 @@ func (l *Library) InvalidatePodpingFeeds() {
 }
 
 // podpingFeeds answers the feed-URL index, rebuilding it when stale.
-func (l *Library) podpingFeeds(ctx context.Context) (map[string]model.PID, error) {
+func (l *Podcasts) podpingFeeds(ctx context.Context) (map[string]model.PID, error) {
 	l.podping.mu.Lock()
 	if l.podping.byFeed != nil && time.Since(l.podping.built) < podpingIndexTTL {
 		index := l.podping.byFeed
@@ -181,7 +181,7 @@ func (l *Library) podpingFeeds(ctx context.Context) (map[string]model.PID, error
 // invalidation arrived while it was being built. It always returns an
 // index to use now: the snapshot is good enough to answer the ping in
 // hand, it is only unfit to be cached as fresh.
-func (l *Library) commitPodpingIndex(index map[string]model.PID, gen uint64) map[string]model.PID {
+func (l *Podcasts) commitPodpingIndex(index map[string]model.PID, gen uint64) map[string]model.PID {
 	l.podping.mu.Lock()
 	defer l.podping.mu.Unlock()
 	if l.podping.gen != gen {
@@ -199,7 +199,7 @@ func recent(ns int64, d time.Duration) bool {
 
 // claimPodpingSync reports whether this show may be synced now, and
 // records the attempt when it may.
-func (l *Library) claimPodpingSync(show model.PID) bool {
+func (l *Podcasts) claimPodpingSync(show model.PID) bool {
 	l.podping.mu.Lock()
 	defer l.podping.mu.Unlock()
 	if l.podping.synced == nil {

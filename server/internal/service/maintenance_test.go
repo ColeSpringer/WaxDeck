@@ -65,9 +65,9 @@ func openServiceAt(t *testing.T, dataDir string, mutate func(*Config)) (context.
 		store.Close()
 	}
 	t.Cleanup(stop)
-	u, err := svc.UserByName(ctx, "admin")
+	u, err := svc.Grants.UserByName(ctx, "admin")
 	if errors.Is(err, wdb.ErrNotFound) {
-		acct, cerr := svc.CreateAccount(ctx, AccountCreate{Username: "admin", Password: "correct-horse", Roles: []string{"admin"}})
+		acct, cerr := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "admin", Password: "correct-horse", Roles: []string{"admin"}})
 		if cerr != nil {
 			t.Fatal(cerr)
 		}
@@ -76,7 +76,7 @@ func openServiceAt(t *testing.T, dataDir string, mutate func(*Config)) (context.
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, u)
+	uc, err := svc.Grants.UserCtxFor(ctx, u)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +202,7 @@ func TestARestoredCatalogResetsWhatWasDerivedFromTheOld(t *testing.T) {
 	ctx, svc, uc, _ := openServiceAt(t, dataDir, nil)
 	resyncs := countResyncs(svc)
 	flow := &fakeFlowRoots{names: []string{"configured"}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	bRoot := t.TempDir()
 	var userB model.PID
 	backup := backupOf(t, func(ctx context.Context, lib *waxbin.Library) {
@@ -223,11 +223,11 @@ func TestARestoredCatalogResetsWhatWasDerivedFromTheOld(t *testing.T) {
 
 	restoreUnder(t, ctx, svc, dataDir, backup)
 
-	u, err := svc.UserByName(ctx, "admin")
+	u, err := svc.Grants.UserByName(ctx, "admin")
 	if err != nil {
 		t.Fatal(err)
 	}
-	after, err := svc.UserCtx(ctx, u)
+	after, err := svc.Grants.UserCtxFor(ctx, u)
 	if err != nil || after.CatalogPID != string(userB) {
 		t.Errorf("the admin acts as %q (%v), want the restored catalog's user %s", after.CatalogPID, err, userB)
 	}
@@ -242,7 +242,7 @@ func TestARestoredCatalogResetsWhatWasDerivedFromTheOld(t *testing.T) {
 	}
 	waitFor(t, func() bool {
 		names := map[string]string{}
-		for _, r := range svc.libraryRoots() {
+		for _, r := range svc.Roots.libraryRoots() {
 			names[r.Path] = r.Name
 		}
 		return names[bRoot] == filepath.Base(bRoot) && names[filepath.Join(dataDir, "configured")] == "configured"
@@ -520,7 +520,7 @@ func TestACursorPastTheHeadIsAReplacedCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	past := head + 100
-	epoch, err := svc.grantEpoch(ctx, uc.ID)
+	epoch, err := svc.Grants.grantEpoch(ctx, uc.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -532,10 +532,10 @@ func TestACursorPastTheHeadIsAReplacedCatalog(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := svc.SweepGenres(ctx); err != nil {
+	if _, err := svc.Reads.SweepGenres(ctx); err != nil {
 		t.Errorf("genre sweep past the head: %v", err)
 	}
-	if _, err := svc.SweepDiscoveries(ctx); err != nil {
+	if _, err := svc.Similarity.SweepDiscoveries(ctx); err != nil {
 		t.Errorf("discovery sweep past the head: %v", err)
 	}
 	now, err := svc.lib.LatestChangeSeq(ctx)
@@ -605,7 +605,7 @@ func TestAStopBeforeTheFeedDrainsKeepsTheGeneration(t *testing.T) {
 func TestTheQueuesWaitOutAHandOff(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
-	svc.SetFlowJobs(stubFlowJobs{jobs: true})
+	svc.Tools.SetFlowJobs(stubFlowJobs{jobs: true})
 	task := newToolTask(uc, taskTypeHealthFix, "", toolTaskParams{Rule: ruleMissingLyrics}, "{}")
 	if err := svc.db.InsertToolTask(ctx, task); err != nil {
 		t.Fatal(err)
@@ -622,15 +622,15 @@ func TestTheQueuesWaitOutAHandOff(t *testing.T) {
 	if err := svc.lib.BeginMaintenance(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if svc.DrainLongToolTasks(ctx) || svc.DrainToolTasks(ctx) || svc.DrainMatchQueue(ctx) || svc.DrainFetchQueue(ctx) ||
-		svc.DrainAnalysisQueue(ctx) {
+	if svc.Tools.DrainLongToolTasks(ctx) || svc.Tools.DrainToolTasks(ctx) || svc.Ingest.DrainMatchQueue(ctx) || svc.Podcasts.DrainFetchQueue(ctx) ||
+		svc.Tools.DrainAnalysisQueue(ctx) {
 		t.Error("a queue drained during the hand-off")
 	}
-	svc.SweepRetention(ctx)
-	if svc.HealthSweepDue(ctx) {
+	svc.Podcasts.SweepRetention(ctx)
+	if svc.Health.SweepDue(ctx) {
 		t.Error("the health sweep came due during the hand-off")
 	}
-	svc.sweepEnded(ctx, uc.ID+"@1", &Error{Kind: KindMaintenance})
+	svc.Health.sweepEnded(ctx, uc.ID+"@1", &Error{Kind: KindMaintenance})
 	if err := svc.lib.EndMaintenance(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -643,7 +643,7 @@ func TestTheQueuesWaitOutAHandOff(t *testing.T) {
 	if row, err := svc.db.LeaseAnalysis(ctx, time.Now().UnixNano(), 1, analysisMaxAttempts); err != nil || row.Attempts != 0 {
 		t.Errorf("analysis = %+v (%v), want it queued and unattempted", row, err)
 	}
-	if !svc.SweepRequested(ctx) || svc.sweepFailed.Load() {
+	if !svc.Health.SweepRequested(ctx) || svc.Health.sweepFailed.Load() {
 		t.Error("a sweep cut short by the hand-off answered its request or read as failed")
 	}
 }
@@ -656,13 +656,13 @@ func TestAFailedUserMappingIsRetried(t *testing.T) {
 	if err := svc.lib.BeginMaintenance(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.reconcileCatalogUsers(ctx); err == nil {
+	if err := svc.Identity.reconcileCatalogUsers(ctx); err == nil {
 		t.Fatal("the mapping read a suspended catalog")
 	}
 	if err := svc.lib.EndMaintenance(ctx); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return !svc.usersUnmapped.Load() }, "the settle mapping the accounts again")
+	waitFor(t, func() bool { return !svc.Identity.usersUnmapped.Load() }, "the settle mapping the accounts again")
 }
 
 // A hook that panics still ends the hand-off: the catalog's own goroutine
@@ -750,19 +750,19 @@ func TestTheSweepsSkipATickDuringAHandOff(t *testing.T) {
 			t.Fatal(err)
 		}
 	}()
-	if _, err := svc.SweepGenres(ctx); err != nil {
+	if _, err := svc.Reads.SweepGenres(ctx); err != nil {
 		t.Errorf("genre sweep: %v", err)
 	}
-	if _, err := svc.SweepDiscoveries(ctx); err != nil {
+	if _, err := svc.Similarity.SweepDiscoveries(ctx); err != nil {
 		t.Errorf("discovery sweep: %v", err)
 	}
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Errorf("similarity sweep: %v", err)
 	}
 	if err := svc.db.SettingSet(ctx, settingTrashRetention, "1", 1); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SweepTrashRetention(ctx); err != nil {
+	if _, err := svc.Tools.SweepTrashRetention(ctx); err != nil {
 		t.Errorf("trash retention sweep: %v", err)
 	}
 }

@@ -137,7 +137,7 @@ type genreNormalizeSamples struct {
 // stored tree that no longer builds (hand-edited into a contradiction
 // through the database rather than the API) degrades to the default
 // rather than taking normalization down with it.
-func (l *Library) genreNormalizer(ctx context.Context) (*genre.Normalizer, error) {
+func (l *Reads) genreNormalizer(ctx context.Context) (*genre.Normalizer, error) {
 	norm, _, err := l.genreVocabularyInForce(ctx)
 	return norm, err
 }
@@ -147,7 +147,7 @@ func (l *Library) genreNormalizer(ctx context.Context) (*genre.Normalizer, error
 // disagree with the table: a stored tree that no longer builds resolves
 // nothing, so the default is what is really in force and that is what
 // the surface must report.
-func (l *Library) genreVocabularyInForce(ctx context.Context) (*genre.Normalizer, string, error) {
+func (l *Reads) genreVocabularyInForce(ctx context.Context) (*genre.Normalizer, string, error) {
 	l.genres.mu.Lock()
 	defer l.genres.mu.Unlock()
 	if l.genres.valid {
@@ -188,7 +188,7 @@ const (
 
 // invalidateGenreVocabulary drops the cached normalizer after a tree
 // write and bumps the version every vocabulary-derived cache keys on.
-func (l *Library) invalidateGenreVocabulary() {
+func (l *Reads) invalidateGenreVocabulary() {
 	l.genres.mu.Lock()
 	l.genres.norm, l.genres.source, l.genres.valid = nil, "", false
 	l.genres.mu.Unlock()
@@ -200,7 +200,7 @@ func (l *Library) invalidateGenreVocabulary() {
 // GenreTreeFor reads the instance's vocabulary. Administrators only: it
 // is server configuration, and the browse surface serves its effect
 // rather than its contents.
-func (l *Library) GenreTreeFor(ctx context.Context, uc *UserCtx) (GenreTreeDTO, error) {
+func (l *Reads) GenreTreeFor(ctx context.Context, uc *UserCtx) (GenreTreeDTO, error) {
 	if !uc.Admin {
 		return GenreTreeDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -225,7 +225,7 @@ func (l *Library) GenreTreeFor(ctx context.Context, uc *UserCtx) (GenreTreeDTO, 
 // built before it is stored, so a vocabulary that could not resolve
 // deterministically (a duplicate name, an alias claimed twice, a parent
 // that is not a top-level genre) is refused rather than persisted.
-func (l *Library) PutGenreTree(ctx context.Context, uc *UserCtx, nodes []GenreNodeDTO) (GenreTreeDTO, error) {
+func (l *Reads) PutGenreTree(ctx context.Context, uc *UserCtx, nodes []GenreNodeDTO) (GenreTreeDTO, error) {
 	if !uc.Admin {
 		return GenreTreeDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -258,7 +258,7 @@ func (l *Library) PutGenreTree(ctx context.Context, uc *UserCtx, nodes []GenreNo
 	if _, err := l.rewindGenreSweep(ctx); err != nil {
 		l.log.Warn("genre: rewinding the normalization sweeper", "err", err)
 	}
-	l.Audit(ctx, uc, "genre.tree", AuditTarget{Kind: "genre-tree", Name: "genre tree"},
+	l.Audit.Record(ctx, uc, "genre.tree", AuditTarget{Kind: "genre-tree", Name: "genre tree"},
 		map[string]any{"genres": len(rows), "source": treeSource(len(rows))})
 	return l.GenreTreeFor(ctx, uc)
 }
@@ -273,7 +273,7 @@ func treeSource(n int) string {
 // rewindGenreSweep points the continuous sweeper back at the oldest
 // change the catalog log still retains, and returns the position it
 // stored so a caller that is about to sweep does not read it back.
-func (l *Library) rewindGenreSweep(ctx context.Context) (int64, error) {
+func (l *Reads) rewindGenreSweep(ctx context.Context) (int64, error) {
 	first, err := l.lib.Changes(ctx, 0)
 	if err != nil {
 		return 0, classify(err)
@@ -293,8 +293,8 @@ func (l *Library) rewindGenreSweep(ctx context.Context) (int64, error) {
 // at scan time, so newly scanned items normalize shortly after they land
 // rather than waiting for a manual full pass. The supervised
 // genre-normalize worker calls it on its ticker, never a bare goroutine.
-func (l *Library) SweepGenres(ctx context.Context) (GenreSweepReport, error) {
-	if l.Maintenance() {
+func (l *Reads) SweepGenres(ctx context.Context) (GenreSweepReport, error) {
+	if l.library.Maintenance() {
 		return GenreSweepReport{}, nil
 	}
 	norm, err := l.genreNormalizer(ctx)
@@ -393,7 +393,7 @@ type genreNormalizeResult struct {
 // every item landing on the same scalar, and the batch runs with
 // SkipLocked so an item whose genre a user locked is reported and left
 // alone instead of failing the pass. dryRun computes without writing.
-func (l *Library) normalizeGenres(ctx context.Context, norm *genre.Normalizer, views []*model.ItemView, dryRun bool, sum *genreNormalizeSummary) (genreNormalizeResult, error) {
+func (l *Reads) normalizeGenres(ctx context.Context, norm *genre.Normalizer, views []*model.ItemView, dryRun bool, sum *genreNormalizeSummary) (genreNormalizeResult, error) {
 	var res genreNormalizeResult
 	byValue := map[string][]model.PID{}
 	var order []string
@@ -470,7 +470,7 @@ func (l *Library) normalizeGenres(ctx context.Context, norm *genre.Normalizer, v
 // A read failure answers false: over-reporting what a dry run would
 // rewrite is a smaller lie than claiming an item is user-curated when
 // nothing says so.
-func (l *Library) genreFieldLocked(ctx context.Context, pid model.PID) bool {
+func (l *Reads) genreFieldLocked(ctx context.Context, pid model.PID) bool {
 	prov, err := l.lib.Provenance(ctx, pid)
 	if err != nil {
 		l.log.Warn("genre: reading provenance for a dry run", "item", pid, "err", err)
@@ -487,7 +487,7 @@ func (l *Library) genreFieldLocked(ctx context.Context, pid model.PID) bool {
 // StartGenreNormalize queues a full-catalog normalization pass.
 // Administrators only, and dry-run first is the intended shape: the
 // report says exactly what would be rewritten before anything is.
-func (l *Library) StartGenreNormalize(ctx context.Context, uc *UserCtx, dryRun bool) (ToolTaskDTO, error) {
+func (l *Reads) StartGenreNormalize(ctx context.Context, uc *UserCtx, dryRun bool) (ToolTaskDTO, error) {
 	if !uc.Admin {
 		return ToolTaskDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -506,7 +506,7 @@ func (l *Library) StartGenreNormalize(ctx context.Context, uc *UserCtx, dryRun b
 	if err := l.db.InsertToolTask(ctx, t); err != nil {
 		return ToolTaskDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
-	l.notifyToolTask(ctx, t.ID)
+	l.Tools.notifyToolTask(ctx, t.ID)
 	return toolTaskDTO(t), nil
 }
 
@@ -519,7 +519,7 @@ type genreNormalizeParams struct {
 // The continuous sweeper covers everything the change log still retains;
 // this is the pass for a catalog older than that log, or for a
 // vocabulary edit an administrator wants applied now.
-func (l *Library) runGenreNormalize(ctx context.Context, t *wdb.ToolTask) error {
+func (l *Reads) runGenreNormalize(ctx context.Context, t *wdb.ToolTask) error {
 	var p genreNormalizeParams
 	if err := json.Unmarshal([]byte(t.Params), &p); err != nil {
 		return fmt.Errorf("%w: bad task params: %v", errToolPermanent, err)
@@ -551,13 +551,11 @@ func (l *Library) runGenreNormalize(ctx context.Context, t *wdb.ToolTask) error 
 	}
 	sum.Samples.Unmapped = dedupeStrings(sum.Samples.Unmapped, genreSampleCap)
 	t.Summary = marshalJSON(sum)
-	if uc := l.taskUserCtx(ctx, t.UserID); uc != nil {
-		l.Audit(ctx, uc, "genre.normalize", AuditTarget{Kind: "genre-tree", Name: "genre normalization"},
-			map[string]any{
-				"dryRun": p.DryRun, "scanned": sum.Scanned,
-				"normalized": sum.Normalized, "locked": sum.Locked, "unmapped": sum.Unmapped,
-			})
-	}
+	l.Tools.auditToolTask(ctx, t, "genre.normalize", AuditTarget{Kind: "genre-tree", Name: "genre normalization"},
+		map[string]any{
+			"dryRun": p.DryRun, "scanned": sum.Scanned,
+			"normalized": sum.Normalized, "locked": sum.Locked, "unmapped": sum.Unmapped,
+		})
 	return nil
 }
 
@@ -600,7 +598,7 @@ func parseSweepCursor(s string) (int64, bool) {
 // normalizing first collapses two raw tags that name one genre, so the
 // cap spends its slots on distinct genres rather than duplicates, and
 // the value written is one the sweeper will not immediately rewrite.
-func (l *Library) normalizeProviderGenres(ctx context.Context, genres []string) []string {
+func (l *Reads) normalizeProviderGenres(ctx context.Context, genres []string) []string {
 	norm, err := l.genreNormalizer(ctx)
 	if err != nil {
 		l.log.Warn("genre: vocabulary unavailable; enriching with raw provider genres", "err", err)

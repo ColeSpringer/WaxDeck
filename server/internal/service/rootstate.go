@@ -82,7 +82,7 @@ func (r *rootReach) note(runs []scan.Result, atNS int64) reachNews {
 
 // noteScanReach keeps what a finished scan job found of each library it
 // walked.
-func (l *Library) noteScanReach(ctx context.Context, j *model.Job) {
+func (l *Roots) noteScanReach(ctx context.Context, j *model.Job) {
 	if j.Kind != "scan" || j.State == model.JobRunning || j.Result == "" {
 		return
 	}
@@ -97,7 +97,7 @@ func (l *Library) noteScanReach(ctx context.Context, j *model.Job) {
 // library's folder, logs a library whose folder they found gone once for
 // the outage, offers the sidecar again a root whose folder is back, and
 // tells every account when a library's flag moved.
-func (l *Library) noteReach(ctx context.Context, runs []scan.Result, atNS int64) {
+func (l *Roots) noteReach(ctx context.Context, runs []scan.Result, atNS int64) {
 	news := l.rootReach.note(runs, atNS)
 	rootOf := func(run scan.Result) (Root, bool) {
 		for _, root := range l.libraryRoots() {
@@ -124,12 +124,12 @@ func (l *Library) noteReach(ctx context.Context, runs []scan.Result, atNS int64)
 		}
 	}
 	if news.moved {
-		l.emitEveryoneEvent(ctx, eventLibraries)
+		l.Jobs.emitEveryoneEvent(ctx, eventLibraries)
 	}
 }
 
 // flowRefusedAt reports whether the sidecar refused the root name at path.
-func (l *Library) flowRefusedAt(name, path string) bool {
+func (l *Roots) flowRefusedAt(name, path string) bool {
 	l.flowSyncMu.Lock()
 	defer l.flowSyncMu.Unlock()
 	return l.flowRefused[name].path == path
@@ -139,7 +139,7 @@ func (l *Library) flowRefusedAt(name, path string) bool {
 // back, which it refused while the folder was missing, and offers it the
 // root again, off the caller. An engine that is away is offered nothing,
 // so no refusal is remembered or warned of: its return offers every root.
-func (l *Library) offerFlowRootAgain(name, path string) {
+func (l *Roots) offerFlowRootAgain(name, path string) {
 	l.workers.GoOnce(l.procCtx, "flow-roots", func(ctx context.Context) error {
 		flow := l.flowRootSync()
 		away := flowEngineAway(flow)
@@ -164,7 +164,7 @@ func flowEngineAway(flow FlowRootSync) bool {
 
 // seedRootReach reads each library's last scan from the jobs the catalog
 // kept, so a start knows a folder that was missing before it.
-func (l *Library) seedRootReach(ctx context.Context) {
+func (l *Roots) seedRootReach(ctx context.Context) {
 	jobs, err := l.lib.Jobs(ctx, reachSeedWindow)
 	if err != nil {
 		l.log.Warn("reading the last scans of the libraries", "err", err)
@@ -317,7 +317,7 @@ func (p *rootProbe) warn(key string, unwritable bool) bool {
 // probeRoots tests the managed roots at paths for writes, every one when
 // there are none, off the caller, which can be the catalog feed: a hung
 // mount never answers.
-func (l *Library) probeRoots(paths ...string) {
+func (l *Roots) probeRoots(paths ...string) {
 	p := &l.rootProbe
 	if !p.begin(paths) {
 		return
@@ -349,7 +349,7 @@ func (l *Library) probeRoots(paths ...string) {
 }
 
 // probeRootsEvery probes the managed roots again on the slow timer.
-func (l *Library) probeRootsEvery(ctx context.Context) error {
+func (l *Roots) probeRootsEvery(ctx context.Context) error {
 	tick := time.NewTicker(cmp.Or(l.rootProbeEvery, rootProbeEvery))
 	defer tick.Stop()
 	for {
@@ -365,7 +365,7 @@ func (l *Library) probeRootsEvery(ctx context.Context) error {
 // storageRefused is storageRefusal for a write the server just tried: a
 // folder that refused it has the managed roots probed again, so the
 // libraries say so without waiting for the timer.
-func (l *Library) storageRefused(msg string) string {
+func (l *Roots) storageRefused(msg string) string {
 	cause := storageRefusal(msg)
 	if cause != "" {
 		l.probeRoots()
@@ -375,7 +375,7 @@ func (l *Library) storageRefused(msg string) string {
 
 // noteRefusedMoves is storageRefused for an organize run or undo that
 // ended with moves a folder refused.
-func (l *Library) noteRefusedMoves(j *model.Job) {
+func (l *Roots) noteRefusedMoves(j *model.Job) {
 	if j.Kind != "organize" && j.Kind != "organize-undo" {
 		return
 	}
@@ -394,7 +394,7 @@ func (l *Library) noteRefusedMoves(j *model.Job) {
 // paths in some: each one's flag set in the table, a root that stops
 // taking writes warned of, and every account told when a flag moved. A
 // folder that is not there is the scan's to report.
-func (l *Library) probeRootsOnce(ctx context.Context, all bool, some map[string]bool) {
+func (l *Roots) probeRootsOnce(ctx context.Context, all bool, some map[string]bool) {
 	refused := map[string]error{}
 	for _, r := range l.libraryRoots() {
 		if !l.probesRoot(r.Managed, r.ReadOnly) || !all && !some[r.Path] {
@@ -426,13 +426,13 @@ func (l *Library) probeRootsOnce(ctx context.Context, all bool, some map[string]
 		}
 	}
 	if moved {
-		l.emitEveryoneEvent(ctx, eventLibraries)
+		l.Jobs.emitEveryoneEvent(ctx, eventLibraries)
 	}
 }
 
 // configuredRoot reports whether the server's configuration names the
 // root at path.
-func (l *Library) configuredRoot(path string) bool {
+func (l *Roots) configuredRoot(path string) bool {
 	for _, r := range l.configRoots {
 		if samePath(rootKey(r.Path), rootKey(path)) {
 			return true
@@ -444,6 +444,6 @@ func (l *Library) configuredRoot(path string) bool {
 // probesRoot reports whether the probe writes into a root: a managed one
 // the server does not treat as read-only, by its own flag or the whole
 // server's. Nothing of WaxDeck's writes into the others.
-func (l *Library) probesRoot(managed, readOnly bool) bool {
-	return managed && !readOnly && !l.currentToggles().readOnly
+func (l *Roots) probesRoot(managed, readOnly bool) bool {
+	return managed && !readOnly && !l.Settings.currentToggles().readOnly
 }

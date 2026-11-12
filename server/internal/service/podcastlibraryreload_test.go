@@ -50,22 +50,22 @@ func TestTheFirstDownloadsPodcastLibraryIsFoundAtOnce(t *testing.T) {
 		cfg.PodcastRootName = "podcasts"
 		cfg.AllowPrivateFeedHosts = true
 	})
-	sub, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: ts.URL + "/feed.xml"})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: ts.URL + "/feed.xml"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	eps, _, err := svc.Episodes(ctx, uc, sub.Show.PID, "", 10)
+	eps, _, err := svc.Podcasts.Episodes(ctx, uc, sub.Show.PID, "", 10)
 	if err != nil || len(eps) != 1 {
 		t.Fatalf("episodes = %+v (%v), want one", eps, err)
 	}
-	if pid, _ := svc.podcastLibrary(ctx); pid != "" {
+	if pid, _ := svc.Grants.podcastLibrary(ctx); pid != "" {
 		t.Fatalf("a podcast library %q before any download", pid)
 	}
-	if err := svc.QueueEpisodeFetch(ctx, uc, eps[0].PID); err != nil {
+	if err := svc.Podcasts.QueueEpisodeFetch(ctx, uc, eps[0].PID); err != nil {
 		t.Fatal(err)
 	}
-	svc.DrainFetchQueue(ctx)
-	if pid, _ := svc.podcastLibrary(ctx); pid == "" {
+	svc.Podcasts.DrainFetchQueue(ctx)
+	if pid, _ := svc.Grants.podcastLibrary(ctx); pid == "" {
 		t.Error("the podcast library the first download just created reads as none")
 	}
 }
@@ -90,14 +90,14 @@ func TestAPodcastLibraryTheFeedReadsIsFoundAtOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, bare, _ := parseAPIPID(showEpisodePIDs(t, f, sub.Show.PID)[0])
-	if pid, _ := svc.podcastLibrary(ctx); pid != "" {
+	if pid, _ := svc.Grants.podcastLibrary(ctx); pid != "" {
 		t.Fatalf("a podcast library %q before any episode landed", pid)
 	}
 	if _, err := svc.lib.Podcasts().ImportEpisodeFile(ctx, bare, paths[0], false); err != nil {
 		t.Fatal(err)
 	}
 	feedCaughtUp(t, ctx, svc)
-	if pid, _ := svc.podcastLibrary(ctx); pid == "" {
+	if pid, _ := svc.Grants.podcastLibrary(ctx); pid == "" {
 		t.Error("the podcast library the feed just read the creation of reads as none")
 	}
 }

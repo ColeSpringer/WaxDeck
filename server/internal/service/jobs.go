@@ -6,13 +6,15 @@ package service
 // read back by pid.
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/colespringer/waxbin/analyze"
@@ -25,6 +27,24 @@ import (
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
+
+// Jobs is the catalog's jobs: reading and listing them, following them
+// and announcing how they ended.
+type Jobs struct {
+	*core
+	// jobs follows the catalog's jobs off the feed; jobWake is the feed's
+	// lossy nudge to the follower when a job row changes.
+	jobs    jobWatch
+	jobWake chan struct{}
+	// jobFinishedHook runs as a job's end is taken in (false) and once it
+	// has been (true), in a test; nothing in the server sets it.
+	jobFinishedHook atomic.Pointer[func(j *model.Job, done bool)]
+	// openedAtNS is when this process opened the library: a job's end
+	// taken in hand before it was cut short by a stop.
+	openedAtNS int64
+}
+
+func newJobs(c *core, _ Config) *Jobs { return &Jobs{core: c, jobWake: make(chan struct{}, 1)} }
 
 // jobFollowInterval is how often the follower reads the running jobs,
 // whose heartbeats never reach the feed.
@@ -77,7 +97,7 @@ func (w *jobWatch) forget() {
 }
 
 // followJob hands a job to the follower, which reads it at once.
-func (l *Library) followJob(pid model.PID) {
+func (l *Jobs) followJob(pid model.PID) {
 	l.jobs.saw(pid)
 	select {
 	case l.jobWake <- struct{}{}:
@@ -116,7 +136,7 @@ func (w *jobWatch) takeRead() []model.Job {
 // refreshFollowed reads again the jobs the feed saw change and the ones
 // last read running, so a finish the feed dropped still lands, and keeps
 // each read for the follower.
-func (l *Library) refreshFollowed(ctx context.Context) error {
+func (l *Jobs) refreshFollowed(ctx context.Context) error {
 	w := &l.jobs
 	w.refresh.Lock()
 	defer w.refresh.Unlock()
@@ -163,7 +183,7 @@ func (l *Library) refreshFollowed(ctx context.Context) error {
 // applyReads records what a refresh found; a job gone from the catalog,
 // as a restore replaces its jobs, lets go of its origin, or a fix it held
 // would read as running until the next start.
-func (l *Library) applyReads(reads map[model.PID]*model.Job) {
+func (l *Jobs) applyReads(reads map[model.PID]*model.Job) {
 	w := &l.jobs
 	var gone []model.PID
 	w.mu.Lock()
@@ -187,7 +207,7 @@ func (l *Library) applyReads(reads map[model.PID]*model.Job) {
 }
 
 // followedJob names a running job of kind ("" for any) the feed saw.
-func (l *Library) followedJob(ctx context.Context, kind string) (model.PID, bool, error) {
+func (l *Jobs) followedJob(ctx context.Context, kind string) (model.PID, bool, error) {
 	if err := l.refreshFollowed(ctx); err != nil {
 		return "", false, err
 	}
@@ -203,7 +223,7 @@ func (l *Library) followedJob(ctx context.Context, kind string) (model.PID, bool
 }
 
 // followedRunning lists the running jobs the feed saw.
-func (l *Library) followedRunning(ctx context.Context) ([]model.PID, error) {
+func (l *Jobs) followedRunning(ctx context.Context) ([]model.PID, error) {
 	if err := l.refreshFollowed(ctx); err != nil {
 		return nil, err
 	}
@@ -220,7 +240,7 @@ func (l *Library) followedRunning(ctx context.Context) ([]model.PID, error) {
 // runningJob names a running job of kind ("" for any): one the feed
 // followed, or among the newest window jobs one too new for the feed to
 // have passed on yet.
-func (l *Library) runningJob(ctx context.Context, kind string, window int) (model.PID, bool, error) {
+func (l *Jobs) runningJob(ctx context.Context, kind string, window int) (model.PID, bool, error) {
 	if pid, ok, err := l.followedJob(ctx, kind); err != nil || ok {
 		return pid, ok, err
 	}
@@ -234,6 +254,16 @@ func (l *Library) runningJob(ctx context.Context, kind string, window int) (mode
 		}
 	}
 	return "", false, nil
+}
+
+// catalogJobRunning reports whether a scan or another catalog job is in
+// flight. It reads the facade rather than the service's own listing,
+// which is role-gated; a job that starts just after this answers only
+// means the pass runs one tick early, and the next one covers what it
+// wrote.
+func (l *Jobs) catalogJobRunning(ctx context.Context) (bool, error) {
+	_, running, err := l.runningJob(ctx, "", 20)
+	return running, err
 }
 
 // jobSeen is what the follower last announced of a job, and when.
@@ -279,10 +309,10 @@ func jobNews(prev *jobSeen, j model.Job, now time.Time, openedAtNS int64) bool {
 // runJobFollower announces the catalog's jobs to administrators as they
 // move and settles each one that ends. A job row on the feed wakes it;
 // while a job runs it also reads on a ticker.
-func (l *Library) runJobFollower(ctx context.Context) error {
+func (l *Jobs) runJobFollower(ctx context.Context) error {
 	l.settleOrigins(ctx)
-	l.loadWaitingImports(ctx)
-	tick := time.NewTicker(cmp.Or(l.jobFollowEvery, jobFollowInterval))
+	l.Ingest.loadWaitingImports(ctx)
+	tick := time.NewTicker(jobFollowInterval)
 	defer tick.Stop()
 	seen := map[model.PID]jobSeen{}
 	for {
@@ -291,11 +321,11 @@ func (l *Library) runJobFollower(ctx context.Context) error {
 			return nil
 		case <-l.jobWake:
 		case <-tick.C:
-			if !l.jobs.pending() && !l.waitingImports() {
+			if !l.jobs.pending() && !l.Ingest.waitingImports() {
 				continue
 			}
 		}
-		if l.Maintenance() {
+		if l.library.Maintenance() {
 			continue
 		}
 		if err := l.refreshFollowed(ctx); err != nil {
@@ -308,7 +338,7 @@ func (l *Library) runJobFollower(ctx context.Context) error {
 		// job ends, or when none runs: the one that held it may have
 		// ended before the import began to wait.
 		if l.jobs.idle() || slices.ContainsFunc(reads, func(j model.Job) bool { return j.State != model.JobRunning }) {
-			l.retryWaitingImports()
+			l.Ingest.retryWaitingImports()
 		}
 		if len(seen) > jobSeenCap {
 			for pid, s := range seen {
@@ -322,7 +352,7 @@ func (l *Library) runJobFollower(ctx context.Context) error {
 
 // announceJobs tells administrators which jobs moved, reading who they
 // are once, and settles each that ended.
-func (l *Library) announceJobs(ctx context.Context, seen map[model.PID]jobSeen, jobs []model.Job) {
+func (l *Jobs) announceJobs(ctx context.Context, seen map[model.PID]jobSeen, jobs []model.Job) {
 	now := time.Now()
 	var news []model.Job
 	for _, j := range jobs {
@@ -344,33 +374,33 @@ func (l *Library) announceJobs(ctx context.Context, seen map[model.PID]jobSeen, 
 		l.log.Warn("listing administrators for job news", "err", err)
 	}
 	for _, j := range news {
-		for _, id := range l.jobAudience(ctx, j, admins) {
+		for _, id := range l.audience(ctx, j, admins) {
 			l.emitUserEvent(ctx, id, eventJob, apiPID(PrefixJob, j.PID))
 		}
 		if j.State == model.JobRunning {
 			continue
 		}
-		l.noteScanReach(ctx, &j)
-		l.noteRefusedMoves(&j)
+		l.Roots.noteScanReach(ctx, &j)
+		l.Roots.noteRefusedMoves(&j)
 		// Most jobs have no one to tell: an upload's imports, deletes,
 		// the scheduler's own runs. Only a pass's pictures matter then,
 		// a kind change's pids, which WaxDeck's own rows follow, and a
 		// removed library, whose name and grants WaxDeck keeps.
-		if j.Kind == "enrich" || j.Kind == "set-kind" || j.Kind == "remove-root" || l.jobHasOrigin(ctx, j.PID) {
+		if j.Kind == "enrich" || j.Kind == "set-kind" || j.Kind == "remove-root" || l.hasOrigin(ctx, j.PID) {
 			l.settleLater(func(ctx context.Context) { l.onJobFinished(ctx, &j) })
 		}
 	}
 }
 
-// jobAudience is who hears of a job: every administrator of a whole
+// audience is who hears of a job: every administrator of a whole
 // pass; of a targeted one, its starter while it runs, and every
 // administrator too at its end, which retires it from a list showing it.
-func (l *Library) jobAudience(ctx context.Context, j model.Job, admins []string) []string {
+func (l *Jobs) audience(ctx context.Context, j model.Job, admins []string) []string {
 	if j.TargetType == "" {
 		return admins
 	}
 	var out []string
-	if starter, err := l.jobStarter(ctx, j.PID); err != nil {
+	if starter, err := l.starter(ctx, j.PID); err != nil {
 		l.log.Warn("reading a targeted job's origin", "job", string(j.PID), "err", err)
 	} else if starter != "" {
 		out = append(out, starter)
@@ -385,12 +415,12 @@ func (l *Library) jobAudience(ctx context.Context, j model.Job, admins []string)
 	return out
 }
 
-// jobStarter is the account a targeted job answers to besides the
+// starter is the account a targeted job answers to besides the
 // administrators: its starter, while the origin row holds them. A whole
 // pass has none, since administrators alone hear of passes, which its
 // callers apply. Both the audience a job's news reaches and who may read
 // it are this rule.
-func (l *Library) jobStarter(ctx context.Context, pid model.PID) (string, error) {
+func (l *Jobs) starter(ctx context.Context, pid model.PID) (string, error) {
 	o, err := l.db.JobOriginGet(ctx, string(pid))
 	if errors.Is(err, wdb.ErrNotFound) {
 		return "", nil
@@ -401,8 +431,8 @@ func (l *Library) jobStarter(ctx context.Context, pid model.PID) (string, error)
 	return o.UserID, nil
 }
 
-// jobHasOrigin reports whether someone waits to hear a job ended.
-func (l *Library) jobHasOrigin(ctx context.Context, pid model.PID) bool {
+// hasOrigin reports whether someone waits to hear a job ended.
+func (l *Jobs) hasOrigin(ctx context.Context, pid model.PID) bool {
 	has, err := l.db.HasJobOrigin(ctx, string(pid))
 	if err != nil {
 		l.log.Warn("reading a job's origin", "job", string(pid), "err", err)
@@ -414,7 +444,7 @@ func (l *Library) jobHasOrigin(ctx context.Context, pid model.PID) bool {
 // settleLater runs a job's end off the caller: a fix's re-check reads
 // every item failing its rule, and neither the follower, which would hold
 // every other job's news behind it, nor a request should wait on that.
-func (l *Library) settleLater(settle func(context.Context)) {
+func (l *Jobs) settleLater(settle func(context.Context)) {
 	l.workers.GoOnce(l.procCtx, "job-settle", func(ctx context.Context) error {
 		settle(ctx)
 		return nil
@@ -422,7 +452,7 @@ func (l *Library) settleLater(settle func(context.Context)) {
 }
 
 // emitEveryoneEvent puts a pid-less marker on every account's stream.
-func (l *Library) emitEveryoneEvent(ctx context.Context, kind string) {
+func (l *Jobs) emitEveryoneEvent(ctx context.Context, kind string) {
 	ids, err := l.db.EnabledUserIDs(ctx)
 	if err != nil {
 		l.log.Warn("listing accounts for an event", "kind", kind, "err", err)
@@ -436,7 +466,7 @@ func (l *Library) emitEveryoneEvent(ctx context.Context, kind string) {
 // onJobFinished is a job's end: a pass that gathered pictures moves the
 // artwork epoch, so generated playlist covers re-composite, and whoever
 // started the job hears of it.
-func (l *Library) onJobFinished(ctx context.Context, j *model.Job) {
+func (l *Jobs) onJobFinished(ctx context.Context, j *model.Job) {
 	if hook := l.jobFinishedHook.Load(); hook != nil {
 		(*hook)(j, false)
 		defer (*hook)(j, true)
@@ -445,8 +475,8 @@ func (l *Library) onJobFinished(ctx context.Context, j *model.Job) {
 	// settles, which a restart repeats; one started elsewhere has no
 	// origin, so a follow-up that fails leaves one of no one's for the
 	// next start to repeat, and nothing else of the job is to settle.
-	if j.Kind == "set-kind" && !l.jobHasOrigin(ctx, j.PID) {
-		if l.followKindChange(ctx, j) != nil {
+	if j.Kind == "set-kind" && !l.hasOrigin(ctx, j.PID) {
+		if l.Reads.followKindChange(ctx, j) != nil {
 			if err := l.db.InsertJobOrigin(context.WithoutCancel(ctx), wdb.JobOrigin{
 				PID: string(j.PID), CreatedAtNS: time.Now().UnixNano(),
 			}); err != nil {
@@ -456,14 +486,14 @@ func (l *Library) onJobFinished(ctx context.Context, j *model.Job) {
 		return
 	}
 	// A removal no origin records, the CLI's, has no one to tell either.
-	if j.Kind == "remove-root" && !l.jobHasOrigin(ctx, j.PID) {
-		l.settleUnrecordedRemoval(ctx, j)
+	if j.Kind == "remove-root" && !l.hasOrigin(ctx, j.PID) {
+		l.Roots.settleUnrecordedRemoval(ctx, j)
 		return
 	}
 	if j.Kind == "enrich" && j.Result != "" {
 		var res enrich.Result
 		if json.Unmarshal([]byte(j.Result), &res) == nil && (res.ArtFetched > 0 || res.AuxArtFetched > 0) {
-			l.noteArtworkChanged(ctx)
+			l.Playlists.noteArtworkChanged(ctx)
 		}
 	}
 	l.settleJobOrigin(ctx, j)
@@ -473,13 +503,13 @@ func (l *Library) onJobFinished(ctx context.Context, j *model.Job) {
 // follows it from here, since the feed may have dropped its rows; one
 // whose record failed is followed all the same. A job that ended before
 // the record landed is settled here: the follower found no one to tell.
-func (l *Library) adoptJob(ctx context.Context, pid model.PID, userID, rule string) {
+func (l *Jobs) adoptJob(ctx context.Context, pid model.PID, userID, rule string) {
 	_ = l.adoptJobWith(ctx, wdb.JobOrigin{PID: string(pid), UserID: userID, Rule: rule})
 }
 
 // adoptJobWith is adoptJob for an origin carrying more, answering whether
 // it was recorded.
-func (l *Library) adoptJobWith(ctx context.Context, o wdb.JobOrigin) error {
+func (l *Jobs) adoptJobWith(ctx context.Context, o wdb.JobOrigin) error {
 	ctx = context.WithoutCancel(ctx)
 	o.CreatedAtNS = time.Now().UnixNano()
 	err := l.db.InsertJobOrigin(ctx, o)
@@ -500,7 +530,7 @@ func (l *Library) adoptJobWith(ctx context.Context, o wdb.JobOrigin) error {
 // The origin goes once the end is told, so a stop in between leaves it
 // for the next start, and an organize run's audit row goes in with that
 // drop, so a settle repeated then records the run once.
-func (l *Library) settleJobOrigin(ctx context.Context, j *model.Job) {
+func (l *Jobs) settleJobOrigin(ctx context.Context, j *model.Job) {
 	o, err := l.db.ClaimJobOrigin(context.WithoutCancel(ctx), string(j.PID), time.Now().UnixNano(), l.openedAtNS)
 	if err != nil {
 		if !errors.Is(err, wdb.ErrNotFound) {
@@ -511,20 +541,20 @@ func (l *Library) settleJobOrigin(ctx context.Context, j *model.Job) {
 	// Its rows follow before anyone is told: the reader opens what the
 	// change made. A follow-up that failed keeps the origin, so the next
 	// start's settle repeats it.
-	if j.Kind == "set-kind" && l.followKindChange(ctx, j) != nil {
+	if j.Kind == "set-kind" && l.Reads.followKindChange(ctx, j) != nil {
 		return
 	}
-	removed, err := l.followRootRemoval(ctx, j, o)
+	removed, err := l.Roots.followRootRemoval(ctx, j, o)
 	if err != nil {
 		l.log.Warn("following up a library's removal; the next start repeats it", "job", string(j.PID), "err", err)
 		return
 	}
 	if o.Rule != "" {
-		l.finishHealthFixJob(ctx, o, jobDTO(j))
+		l.Health.finishHealthFixJob(ctx, o, jobDTO(j))
 		return
 	}
 	ctx = context.WithoutCancel(ctx)
-	audit := l.finishOrganizeJob(ctx, o, j)
+	audit := l.Health.finishOrganizeJob(ctx, o, j)
 	// An origin of no one's only kept a follow-up; there is nobody to tell.
 	if o.UserID != "" {
 		ended := []Job{jobDTO(j)}
@@ -541,7 +571,7 @@ func (l *Library) settleJobOrigin(ctx context.Context, j *model.Job) {
 }
 
 // dropJobOrigin forgets an origin whose job's end has been told.
-func (l *Library) dropJobOrigin(ctx context.Context, pid string) {
+func (l *Jobs) dropJobOrigin(ctx context.Context, pid string) {
 	if _, err := l.db.DeleteJobOrigin(ctx, pid); err != nil && !errors.Is(err, wdb.ErrNotFound) {
 		l.log.Warn("dropping a told job's origin", "job", pid, "err", err)
 	}
@@ -549,7 +579,7 @@ func (l *Library) dropJobOrigin(ctx context.Context, pid string) {
 
 // releaseLostOrigin forgets the origin of a job the catalog no longer
 // has, telling every account when it held a fix.
-func (l *Library) releaseLostOrigin(ctx context.Context, pid model.PID) {
+func (l *Jobs) releaseLostOrigin(ctx context.Context, pid model.PID) {
 	rule, err := l.db.DeleteJobOrigin(ctx, string(pid))
 	switch {
 	case errors.Is(err, wdb.ErrNotFound):
@@ -562,7 +592,7 @@ func (l *Library) releaseLostOrigin(ctx context.Context, pid model.PID) {
 
 // settleOrigins settles the origins whose job ended while no follower ran,
 // or whose settle a stop cut short, and follows the ones still running.
-func (l *Library) settleOrigins(ctx context.Context) {
+func (l *Jobs) settleOrigins(ctx context.Context) {
 	origins, err := l.db.JobOrigins(ctx)
 	if err != nil {
 		l.log.Warn("listing job origins", "err", err)
@@ -621,7 +651,7 @@ var jobTargetPrefixes = map[string]string{
 // item its kind's prefix, best effort. The items every job names are read
 // at once: a list refreshes on every job's news and keeps every kind
 // change.
-func (l *Library) nameJobTargets(ctx context.Context, jobs []Job) {
+func (l *Jobs) nameJobTargets(ctx context.Context, jobs []Job) {
 	var pids []model.PID
 	for i := range jobs {
 		if k := jobs[i].SetKind; k != nil {
@@ -633,7 +663,7 @@ func (l *Library) nameJobTargets(ctx context.Context, jobs []Job) {
 			}
 		}
 	}
-	items, err := l.readItems(ctx, pids)
+	items, err := l.Reads.readItems(ctx, pids)
 	if err != nil {
 		l.log.Warn("reading the items jobs name", "err", err)
 	}
@@ -663,23 +693,23 @@ func (l *Library) nameJobTargets(ctx context.Context, jobs []Job) {
 				t.Name = info.Name
 			}
 		case "library":
-			for _, r := range l.libraryRoots() {
+			for _, r := range l.Roots.libraryRoots() {
 				if r.PID == string(bare) {
 					t.Name = r.Name
 				}
 			}
 			if t.Name == "" {
-				t.Name = l.removals.name(bare)
+				t.Name = l.Roots.removals.name(bare)
 			}
 			if t.Name == "" {
-				t.Name = l.removedLibraryName(ctx, t.PID)
+				t.Name = l.Roots.removedLibraryName(ctx, t.PID)
 			}
 		case "trash":
 			if trashed == nil {
 				trashed = map[model.PID]string{}
 				if entries, err := l.lib.Trash(ctx, true, 0); err == nil {
 					for _, e := range entries {
-						trashed[e.PID] = l.trashEntryName(e)
+						trashed[e.PID] = l.Tools.trashEntryName(e)
 					}
 				}
 			}
@@ -691,8 +721,8 @@ func (l *Library) nameJobTargets(ctx context.Context, jobs []Job) {
 // nameScanRuns names each library a scan walked from the root table, and
 // the ones whose folder it could not reach: WaxBin names a run by its
 // root's path, which is not every reader's to see.
-func (l *Library) nameScanRuns(s *ScanTallyDTO) {
-	roots := l.libraryRoots()
+func (l *Jobs) nameScanRuns(s *ScanTallyDTO) {
+	roots := l.Roots.libraryRoots()
 	s.RootsUnreachable = nil
 	for i := range s.Runs {
 		run := &s.Runs[i]
@@ -789,4 +819,263 @@ func (j *Job) readResult(raw string) {
 			}
 		}
 	}
+}
+
+// followStarted hands a job this server started to the follower, which
+// the feed alone may never tell of it, recording who asked when a person
+// did (userID, empty for the server's own).
+func (l *Jobs) followStarted(ctx context.Context, pid model.PID, userID string) {
+	if userID != "" {
+		l.adoptJob(ctx, pid, userID, "")
+		return
+	}
+	l.followJob(pid)
+}
+
+// Status reports one catalog job.
+func (l *Jobs) Status(ctx context.Context, apiJobPID string) (Job, error) {
+	prefix, pid, ok := parseAPIPID(apiJobPID)
+	if !ok || prefix != PrefixJob {
+		return Job{}, errNotFound("no job with pid " + apiJobPID)
+	}
+	job, err := l.lib.Job(ctx, pid)
+	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return Job{}, errNotFound("no job with pid " + apiJobPID)
+		}
+		return Job{}, classify(err)
+	}
+	out := []Job{jobDTO(job)}
+	l.nameJobTargets(ctx, out)
+	return out[0], nil
+}
+
+// StatusFor reads one job for a caller in its audience (the one
+// Jobs.audience tells of it): an administrator, or the account that
+// started a targeted job while its origin row still holds them. Anyone
+// else is refused.
+func (l *Jobs) StatusFor(ctx context.Context, uc *UserCtx, apiJobPID string) (Job, error) {
+	if uc.Admin {
+		return l.Status(ctx, apiJobPID)
+	}
+	// Who started it is read before the job: one that ends in between
+	// is told and its origin dropped, which read the other way round
+	// finds neither the starter nor an ended job.
+	_, pid, _ := parseAPIPID(apiJobPID)
+	origin, err := l.starter(ctx, pid)
+	if err != nil {
+		return Job{}, &Error{Kind: KindInternal, Err: err}
+	}
+	job, err := l.Status(ctx, apiJobPID)
+	if err != nil {
+		return job, err
+	}
+	starter := ""
+	if job.Target != nil {
+		starter = origin
+	}
+	// The starter, or, once a job on an item has ended and its origin is
+	// told, anyone who may edit that item: a kind change's starter reads
+	// the result their screen follows after the origin has gone.
+	if (starter != "" && starter == uc.ID) || l.mayReadEndedItemJob(ctx, uc, job) {
+		l.narrowJob(ctx, uc, &job)
+		return job, nil
+	}
+	return Job{}, &Error{Kind: KindForbidden, Msg: "only administrators and the job's starter may read it"}
+}
+
+// narrowJob leaves a job with what a reader who is not an administrator
+// may read of it: a scan's per-library runs and the server's paths are
+// the administrators', and a kind change's report keeps what is in the
+// reader's sight.
+func (l *Jobs) narrowJob(ctx context.Context, uc *UserCtx, job *Job) {
+	if job.Scan != nil {
+		job.Scan.Runs, job.Scan.RootsUnreachable = nil, nil
+	}
+	job.Error = l.failureWordsFor(uc, job.Error)
+	if k := job.SetKind; k != nil {
+		l.narrowKindTally(ctx, uc, k)
+	}
+}
+
+// failureWordsFor is failureWords for a reader who may not be granted
+// every library: a failure naming a file in one they are not says only
+// that.
+func (l *Jobs) failureWordsFor(uc *UserCtx, s string) string {
+	if !uc.AllLibraries {
+		for _, r := range l.Roots.libraryRoots() {
+			p := cleanRootPath(r.Path)
+			if p != "" && p != "." && !libraryGranted(uc, model.PID(r.PID)) && strings.Contains(s, p+string(filepath.Separator)) {
+				return "it failed on a file in a library you are not granted"
+			}
+		}
+	}
+	return l.Ingest.failureWords(s)
+}
+
+// narrowKindTally leaves a kind change's report with what a reader who is
+// not an administrator may see: an administrator's change can run over
+// libraries they are not granted, so items out of their sight go, and so
+// do write-back failures of files there. An item of the reader's own
+// that folded into one out of their sight, as a book's key reaches
+// across libraries, stays with the other withheld.
+func (l *Jobs) narrowKindTally(ctx context.Context, uc *UserCtx, k *KindTallyDTO) {
+	seen := map[string]bool{}
+	visible := func(pid string) bool {
+		if v, ok := seen[pid]; ok {
+			return v
+		}
+		_, err := l.Grants.getVisibleItem(ctx, uc, pid)
+		seen[pid] = err == nil
+		return seen[pid]
+	}
+	k.Converted = slices.DeleteFunc(k.Converted, func(pid string) bool { return !visible(pid) })
+	k.Created = slices.DeleteFunc(k.Created, func(pid string) bool { return !visible(pid) })
+	for from, to := range k.Absorbed {
+		switch {
+		case visible(to):
+		case l.Ingest.CanCurateItem(ctx, uc, from):
+			k.Absorbed[from] = ""
+		default:
+			delete(k.Absorbed, from)
+		}
+	}
+	k.WriteBackFailures = l.Editor.WriteBackFailuresFor(ctx, uc, k.WriteBackFailures)
+}
+
+// mayReadEndedItemJob reports whether a job that ran on an item has ended
+// and the caller may edit that item now.
+func (l *Jobs) mayReadEndedItemJob(ctx context.Context, uc *UserCtx, job Job) bool {
+	if job.Target == nil || job.Target.Type != "item" || job.State == string(model.JobRunning) {
+		return false
+	}
+	may, err := l.Ingest.MayCurateItem(ctx, uc, job.Target.PID)
+	return err == nil && may
+}
+
+// listedOnceEnded are the targeted jobs the list keeps once they end:
+// someone's deliberate act whose result is worth a row, not a burst.
+var listedOnceEnded = map[string]bool{"set-kind": true, "organize-undo": true, "remove-root": true}
+
+// requestJobKinds are the jobs each answered to the request that started
+// it: an upload's import, a delete (one for a whole request, up to 500
+// items), a trash restore or purge. Ended, a burst of them would bury the
+// passes, so the list keeps them only while they run.
+var requestJobKinds = map[string]bool{"import": true, "delete": true, "restore": true, "purge-trash": true}
+
+// listableJobs reads the newest fetch catalog jobs and keeps those the list
+// shows the caller (listedJob). It answers too how many the catalog read
+// held, which falls short of fetch once there are no older jobs.
+func (l *Jobs) listableJobs(ctx context.Context, uc *UserCtx, fetch int) ([]*model.Job, int, error) {
+	jobs, err := l.lib.Jobs(ctx, fetch)
+	if err != nil {
+		return nil, 0, classify(err)
+	}
+	clearedAt, err := l.db.JobsClearedAt(ctx, uc.ID)
+	if err != nil {
+		return nil, 0, err
+	}
+	read := len(jobs)
+	return slices.DeleteFunc(jobs, func(j *model.Job) bool {
+		return !listedJob(j, clearedAt)
+	}), read, nil
+}
+
+// listedJob reports whether the list shows j to a caller who cleared what
+// ended by clearedAt: every running job, and an ended one unless it is
+// targeted (listedOnceEnded aside), of a request kind, or cleared.
+func listedJob(j *model.Job, clearedAt int64) bool {
+	if j.State == model.JobRunning {
+		return true
+	}
+	if requestJobKinds[j.Kind] || (j.TargetType != "" && !listedOnceEnded[j.Kind]) {
+		return false
+	}
+	return jobEndedAt(j) > clearedAt
+}
+
+// jobEndedAt is when a job ended, from the first time it recorded.
+func jobEndedAt(j *model.Job) int64 {
+	switch {
+	case j.FinishedAt != 0:
+		return j.FinishedAt
+	case j.HeartbeatAt != 0:
+		return j.HeartbeatAt
+	}
+	return j.StartedAt
+}
+
+// ClearFinishedJobs hides the caller's listed ended jobs from their list
+// and answers how many there were. The cut is the newest end among them,
+// not the clock, so a job that ends during the call is neither counted nor
+// hidden. Administrators only.
+func (l *Jobs) ClearFinishedJobs(ctx context.Context, uc *UserCtx) (int, error) {
+	if !uc.Admin {
+		return 0, &Error{Kind: KindForbidden, Msg: "administrators only"}
+	}
+	jobs, _, err := l.listableJobs(ctx, uc, jobsFetchCap)
+	if err != nil {
+		return 0, err
+	}
+	var n int
+	var newest int64
+	for _, j := range jobs {
+		if j.State != model.JobRunning {
+			n++
+			newest = max(newest, jobEndedAt(j))
+		}
+	}
+	if n == 0 {
+		return 0, nil
+	}
+	return n, l.db.SetJobsClearedAt(ctx, uc.ID, newest)
+}
+
+// List lists recent catalog jobs, newest first, after any still running
+// that newer ones pushed out. A finished targeted job is left out (read by
+// pid): a burst of them would push the passes out. A kind change, an
+// organize undo and a library removal are the exceptions
+// (listedOnceEnded). A finished job of a per-item kind is left out too, and
+// so are jobs the caller cleared, before the limit applies: the read widens
+// past them until the page is full, the catalog has no older jobs, or it
+// reaches jobsFetchCap. Administrators only.
+func (l *Jobs) List(ctx context.Context, uc *UserCtx, limit int) ([]Job, error) {
+	if !uc.Admin {
+		return nil, &Error{Kind: KindForbidden, Msg: "administrators only"}
+	}
+	var jobs []*model.Job
+	for fetch := min(limit*jobsOverfetch, jobsFetchCap); ; fetch = min(fetch*jobsOverfetch, jobsFetchCap) {
+		listable, read, err := l.listableJobs(ctx, uc, fetch)
+		if err != nil {
+			return nil, err
+		}
+		jobs = listable
+		if len(jobs) >= limit || read < fetch || fetch == jobsFetchCap {
+			break
+		}
+	}
+	jobs = jobs[:min(len(jobs), limit)]
+	listed := make(map[model.PID]bool, len(jobs))
+	for _, job := range jobs {
+		listed[job.PID] = true
+	}
+	var out []Job
+	running, err := l.followedRunning(ctx)
+	if err != nil {
+		l.log.Warn("jobs: reading the followed jobs", "err", err)
+	}
+	for _, pid := range running {
+		if listed[pid] {
+			continue
+		}
+		if job, err := l.lib.Job(ctx, pid); err == nil && job.State == model.JobRunning {
+			out = append(out, jobDTO(job))
+		}
+	}
+	sortJobsNewestFirst(out)
+	for _, job := range jobs {
+		out = append(out, jobDTO(job))
+	}
+	l.nameJobTargets(ctx, out)
+	return out, nil
 }

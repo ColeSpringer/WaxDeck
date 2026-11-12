@@ -14,16 +14,16 @@ func TestRemovingFromAStaleListingConflicts(t *testing.T) {
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:3]
 	pl := playlistWith(t, ctx, svc, uc, "Two Devices", pids)
 
-	if err := svc.RemovePlaylistItemAt(ctx, uc, pl, 0, pids[0]); err != nil {
+	if err := svc.Playlists.RemovePlaylistItemAt(ctx, uc, pl, 0, pids[0]); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.RemovePlaylistItemAt(ctx, uc, pl, 0, pids[0]); KindOf(err) != KindConflict {
+	if err := svc.Playlists.RemovePlaylistItemAt(ctx, uc, pl, 0, pids[0]); KindOf(err) != KindConflict {
 		t.Fatalf("the second device's removal = %v (kind %q), want a conflict", err, KindOf(err))
 	}
-	if err := svc.RemovePlaylistItemAt(ctx, uc, pl, 2, pids[2]); KindOf(err) != KindConflict {
+	if err := svc.Playlists.RemovePlaylistItemAt(ctx, uc, pl, 2, pids[2]); KindOf(err) != KindConflict {
 		t.Fatalf("a guarded removal past the shortened end = %v, want a conflict", err)
 	}
-	err := svc.RemovePlaylistItemsAt(ctx, uc, pl, []int{0, 1}, []string{pids[1], pids[0]})
+	err := svc.Playlists.RemovePlaylistItemsAt(ctx, uc, pl, []int{0, 1}, []string{pids[1], pids[0]})
 	if KindOf(err) != KindConflict {
 		t.Fatalf("a batch with one stale position = %v (kind %q), want a conflict", err, KindOf(err))
 	}
@@ -31,13 +31,13 @@ func TestRemovingFromAStaleListingConflicts(t *testing.T) {
 		t.Fatalf("members after the refused batch = %v, want %v untouched", left, pids[1:])
 	}
 
-	if err := svc.RemovePlaylistItemAt(ctx, uc, pl, 5, ""); KindOf(err) != KindNotFound {
+	if err := svc.Playlists.RemovePlaylistItemAt(ctx, uc, pl, 5, ""); KindOf(err) != KindNotFound {
 		t.Fatalf("an unguarded removal past the end = %v, want not found", err)
 	}
-	if err := svc.RemovePlaylistItemsAt(ctx, uc, pl, []int{0, 5}, []string{"", ""}); KindOf(err) != KindNotFound {
+	if err := svc.Playlists.RemovePlaylistItemsAt(ctx, uc, pl, []int{0, 5}, []string{"", ""}); KindOf(err) != KindNotFound {
 		t.Fatalf("an unguarded batch past the end = %v, want not found", err)
 	}
-	if err := svc.RemovePlaylistItemAt(ctx, uc, pl, 0, "pl-"+pids[0][3:]); KindOf(err) != KindInvalid {
+	if err := svc.Playlists.RemovePlaylistItemAt(ctx, uc, pl, 0, "pl-"+pids[0][3:]); KindOf(err) != KindInvalid {
 		t.Fatalf("a playlist pid as the expected item = %v, want invalid", err)
 	}
 }

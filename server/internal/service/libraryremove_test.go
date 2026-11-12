@@ -21,7 +21,7 @@ import (
 // there is none.
 func removalAudit(t *testing.T, ctx context.Context, svc *Library, apiLibraryPID string) *AuditEventDTO {
 	t.Helper()
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "library.remove"}, "", 50)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: "library.remove"}, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,13 +36,13 @@ func removalAudit(t *testing.T, ctx context.Context, svc *Library, apiLibraryPID
 // memberCtx makes an account granted only the libraries named.
 func memberCtx(t *testing.T, ctx context.Context, svc *Library, name string, libraryPIDs ...string) *UserCtx {
 	t.Helper()
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: name, Password: "long-enough-pw", AccessMode: "granted", LibraryPIDs: libraryPIDs,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestRemoveLibraryDetachesAndUnmountsTheBridge(t *testing.T) {
 	dataDir := t.TempDir()
 	ctx, svc, uc, _ := openServiceAt(t, dataDir, nil)
 	flow := &fakeFlowRoots{names: []string{"configured"}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	books := t.TempDir()
 	tracks, err := fixtures.Generate(books, fixtures.Spec{
 		Name: "kept", Codec: fixtures.CodecFLAC, Duration: 2 * time.Second,
@@ -67,25 +67,25 @@ func TestRemoveLibraryDetachesAndUnmountsTheBridge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: books})
+	lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: books})
 	if err != nil {
 		t.Fatal(err)
 	}
 	configured := libraryAt(t, ctx, svc, filepath.Join(dataDir, "configured")).PID
 	member := memberCtx(t, ctx, svc, "member", configured, lib.PID)
-	invite, err := svc.CreateInvite(ctx, uc, InviteCreate{AccessMode: "granted", LibraryPIDs: []string{lib.PID}})
+	invite, err := svc.Identity.CreateInvite(ctx, uc, InviteCreate{AccessMode: "granted", LibraryPIDs: []string{lib.PID}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.flowSyncMu.Lock()
-	svc.flowRefused = map[string]flowRefusal{"books": {path: books}}
-	svc.flowSyncMu.Unlock()
+	svc.Roots.flowSyncMu.Lock()
+	svc.Roots.flowRefused = map[string]flowRefusal{"books": {path: books}}
+	svc.Roots.flowSyncMu.Unlock()
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
 
-	job, err := svc.RemoveLibrary(ctx, uc, lib.PID)
+	job, err := svc.Roots.RemoveLibrary(ctx, uc, lib.PID)
 	if err != nil {
 		t.Fatalf("RemoveLibrary: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestRemoveLibraryDetachesAndUnmountsTheBridge(t *testing.T) {
 		audit.Detail["filesDetached"] != float64(1) || audit.Detail["itemsArchived"] != float64(1) || audit.Detail["trashRowsDropped"] != float64(0) {
 		t.Errorf("audit = %+v, want books removed by %s with one file detached and one item archived", audit, uc.ID)
 	}
-	libs, err := svc.Libraries(ctx)
+	libs, err := svc.Roots.Libraries(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,16 +115,16 @@ func TestRemoveLibraryDetachesAndUnmountsTheBridge(t *testing.T) {
 	if !slices.Equal(removed, []string{"books"}) || slices.Contains(names, "books") {
 		t.Errorf("the bridge removed %v and maps %v, want books unmounted", removed, names)
 	}
-	svc.flowSyncMu.Lock()
-	_, refused := svc.flowRefused["books"]
-	svc.flowSyncMu.Unlock()
+	svc.Roots.flowSyncMu.Lock()
+	_, refused := svc.Roots.flowRefused["books"]
+	svc.Roots.flowSyncMu.Unlock()
 	if refused {
 		t.Error("the bridge's refusal of books is still remembered")
 	}
-	if acct, err := svc.Account(ctx, member.ID); err != nil || !slices.Equal(acct.LibraryPIDs, []string{configured}) {
+	if acct, err := svc.Identity.Account(ctx, member.ID); err != nil || !slices.Equal(acct.LibraryPIDs, []string{configured}) {
 		t.Errorf("the member's grants = %v (%v), want only %s", acct.LibraryPIDs, err, configured)
 	}
-	invites, err := svc.Invites(ctx)
+	invites, err := svc.Identity.Invites(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestRemoveLibraryDetachesAndUnmountsTheBridge(t *testing.T) {
 		t.Errorf("the library's file is gone from disk: %v", err)
 	}
 
-	ended, err := svc.JobStatus(ctx, job.PID)
+	ended, err := svc.Jobs.Status(ctx, job.PID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestRemoveLibraryDetachesAndUnmountsTheBridge(t *testing.T) {
 		t.Errorf("the ended job = %+v (target %+v, tally %+v), want books' removal done with its counts", ended, ended.Target, ended.RemoveRoot)
 	}
 	waitFor(t, func() bool {
-		page, err := svc.Notifications(ctx, uc, "", 20)
+		page, err := svc.Integrations.Notifications(ctx, uc, "", 20)
 		if err != nil {
 			return false
 		}
@@ -162,14 +162,14 @@ func TestARemovalStartedElsewhereIsFollowedUp(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
 	flow := &fakeFlowRoots{names: []string{"configured"}}
-	svc.SetFlowRoots(flow)
-	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "stray", Path: t.TempDir()})
+	svc.Roots.SetFlowRoots(flow)
+	lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "stray", Path: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, bare, _ := parseAPIPID(lib.PID)
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
 	if _, err := svc.lib.StartRemoveRoot(ctx, bare, waxbin.RemoveRootOptions{}); err != nil {
@@ -193,7 +193,7 @@ func TestRemovingAConfiguredLibraryIsRefused(t *testing.T) {
 	dataDir := t.TempDir()
 	ctx, svc, uc, _ := openServiceAt(t, dataDir, nil)
 	configured := libraryAt(t, ctx, svc, filepath.Join(dataDir, "configured")).PID
-	_, err := svc.RemoveLibrary(ctx, uc, configured)
+	_, err := svc.Roots.RemoveLibrary(ctx, uc, configured)
 	if KindOf(err) != KindConflict || err.Error() !=
 		"this library is configured in WAXDECK_LIBRARY_ROOTS; take it out of the configuration and restart, then remove it here" {
 		t.Fatalf("removing the configured root = %v, want it refused for the configuration", err)
@@ -233,7 +233,7 @@ func TestRemovingThePodcastLibraryIsRefused(t *testing.T) {
 	if pid == "" {
 		t.Fatal("no podcast library")
 	}
-	_, err = svc.RemoveLibrary(ctx, uc, apiPID(PrefixLibrary, pid))
+	_, err = svc.Roots.RemoveLibrary(ctx, uc, apiPID(PrefixLibrary, pid))
 	if KindOf(err) != KindInvalid || !strings.Contains(err.Error(), "podcast") {
 		t.Fatalf("removing the podcast library = %v, want it refused", err)
 	}
@@ -244,28 +244,28 @@ func TestRemovingThePodcastLibraryIsRefused(t *testing.T) {
 func TestRemovingALibraryNeedsAnAdministratorAndAWritableServer(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
-	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "spare", Path: t.TempDir()})
+	lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "spare", Path: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	member := memberCtx(t, ctx, svc, "member", lib.PID)
-	if _, err := svc.RemoveLibrary(ctx, member, lib.PID); KindOf(err) != KindForbidden {
+	if _, err := svc.Roots.RemoveLibrary(ctx, member, lib.PID); KindOf(err) != KindForbidden {
 		t.Errorf("a member removing = %v, want forbidden", err)
 	}
 	for _, pid := range []string{"lb-" + string(model.NewPID()), "tr-" + string(model.NewPID()), "nonsense"} {
-		if _, err := svc.RemoveLibrary(ctx, uc, pid); KindOf(err) != KindNotFound {
+		if _, err := svc.Roots.RemoveLibrary(ctx, uc, pid); KindOf(err) != KindNotFound {
 			t.Errorf("removing %s = %v, want not found", pid, err)
 		}
 	}
-	st, err := svc.AdminSettingsGet(ctx)
+	st, err := svc.Settings.AdminSettingsGet(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	st.ReadOnly = true
-	if _, err := svc.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, uc, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.RemoveLibrary(ctx, uc, lib.PID); KindOf(err) != KindReadOnly {
+	if _, err := svc.Roots.RemoveLibrary(ctx, uc, lib.PID); KindOf(err) != KindReadOnly {
 		t.Errorf("removing on a read-only server = %v, want read-only", err)
 	}
 }
@@ -278,15 +278,15 @@ func TestAnEndedRemovalIsNamedAfterARestart(t *testing.T) {
 	dataDir := t.TempDir()
 	ctx, svc, uc, stop := openServiceAt(t, dataDir, nil)
 	dir := t.TempDir()
-	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "spare", Path: dir})
+	lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "spare", Path: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
-	job, err := svc.RemoveLibrary(ctx, uc, lib.PID)
+	job, err := svc.Roots.RemoveLibrary(ctx, uc, lib.PID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +294,7 @@ func TestAnEndedRemovalIsNamedAfterARestart(t *testing.T) {
 	stop()
 
 	ctx, svc, uc, _ = openServiceAt(t, dataDir, nil)
-	jobs, err := svc.Jobs(ctx, uc, 20)
+	jobs, err := svc.Jobs.List(ctx, uc, 20)
 	if err != nil {
 		t.Fatal(err)
 	}

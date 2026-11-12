@@ -41,7 +41,7 @@ func noteDegraded(ctx context.Context) {
 
 // fallbackFault is the failure the test hook injects into a read that
 // falls back, named by what it reads; nil outside tests.
-func (l *Library) fallbackFault(read string) error {
+func (l *Reads) fallbackFault(read string) error {
 	if hook := l.trackFacts.fallbackHook; hook != nil {
 		return hook(read)
 	}

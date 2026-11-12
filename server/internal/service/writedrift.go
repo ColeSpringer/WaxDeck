@@ -22,13 +22,13 @@ func (d writeDrift) any() bool { return d.unsynced || len(d.owed) > 0 }
 // itemWriteDrift reads an item's write drift from the diagnostics of the
 // files the sweep grades it by, leaving out what a clean-up pass rewrote
 // in the catalog alone.
-func (l *Library) itemWriteDrift(ctx context.Context, it *model.ItemView) (writeDrift, error) {
+func (l *Ingest) itemWriteDrift(ctx context.Context, it *model.ItemView) (writeDrift, error) {
 	rows, err := l.lib.FileDiagnostics(ctx, model.DiagnosticFilter{ItemPID: it.PID})
 	if err != nil {
 		return writeDrift{}, classify(err)
 	}
 	graded := map[model.PID]bool{}
-	for _, f := range l.gradedFiles(ctx, it) {
+	for _, f := range l.Health.gradedFiles(ctx, it) {
 		graded[f.FilePID] = true
 	}
 	var d writeDrift
@@ -46,7 +46,7 @@ func (l *Library) itemWriteDrift(ctx context.Context, it *model.ItemView) (write
 			}
 		}
 	}
-	d.owed, err = l.owedBesideNormalized(ctx, it.PID, owed)
+	d.owed, err = l.Health.owedBesideNormalized(ctx, it.PID, owed)
 	return d, err
 }
 
@@ -56,7 +56,7 @@ func (l *Library) itemWriteDrift(ctx context.Context, it *model.ItemView) (write
 // which their own editors write) as still out of sync. A refusal from a
 // file the item is not graded by, a copy in a read-only library, does
 // not hold back a fill.
-func (l *Library) fixWriteDrift(ctx context.Context, it *model.ItemView, sum *healthFixSummary) {
+func (l *Ingest) fixWriteDrift(ctx context.Context, it *model.ItemView, sum *healthFixSummary) {
 	drift, err := l.itemWriteDrift(ctx, it)
 	if err != nil {
 		sum.Failed++
@@ -123,7 +123,7 @@ func creditTwin(k model.Kind, role string) string {
 // credits, custom tags and the item's own front cover. A file that
 // refused or lost a write, and that nothing else here writes, is
 // rewritten by re-asserting its title.
-func (l *Library) payWriteDrift(ctx context.Context, it *model.ItemView, drift writeDrift) error {
+func (l *Ingest) payWriteDrift(ctx context.Context, it *model.ItemView, drift writeDrift) error {
 	prov, err := l.lib.Provenance(ctx, it.PID)
 	if err != nil {
 		return err
@@ -232,7 +232,7 @@ func (l *Library) payWriteDrift(ctx context.Context, it *model.ItemView, drift w
 // cover cleared in the catalog has nothing to embed, and stays owed: the
 // catalog's chain would answer with the album's, an artist's or a
 // genre's picture, which is not the item's to carry.
-func (l *Library) payOwedArt(ctx context.Context, it *model.ItemView, a model.Attribution) error {
+func (l *Ingest) payOwedArt(ctx context.Context, it *model.ItemView, a model.Attribution) error {
 	ref := model.EntityRef{Type: model.ArtTrack, PID: it.PID}
 	if it.Kind == model.KindEpisode {
 		ref.Type = model.ArtEpisode

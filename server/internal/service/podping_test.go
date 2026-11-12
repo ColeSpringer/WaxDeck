@@ -66,16 +66,16 @@ func TestNormalizeFeedURL(t *testing.T) {
 // episode.
 func TestPodpingSyncFloor(t *testing.T) {
 	t.Parallel()
-	l := &Library{}
+	l := bareLibrary(&core{})
 	const show = "pc-01JZX5N8QW3F4V9T2B7KD3M9R6"
-	if !l.claimPodpingSync(show) {
+	if !l.Podcasts.claimPodpingSync(show) {
 		t.Fatal("the first ping for a show was refused")
 	}
-	if l.claimPodpingSync(show) {
+	if l.Podcasts.claimPodpingSync(show) {
 		t.Error("a second ping inside the floor claimed a sync")
 	}
 	// The floor is per show: one busy feed must not mute another.
-	if !l.claimPodpingSync("pc-01JZX5N8QW3F4V9T2B7KD3M9R7") {
+	if !l.Podcasts.claimPodpingSync("pc-01JZX5N8QW3F4V9T2B7KD3M9R7") {
 		t.Error("a different show was held behind the first one's floor")
 	}
 }
@@ -93,37 +93,37 @@ func TestPodpingSyncFloor(t *testing.T) {
 // exactly what invalidating on subscribe was added to prevent.
 func TestPodpingIndexInvalidationSurvivesARebuild(t *testing.T) {
 	t.Parallel()
-	l := &Library{}
+	l := bareLibrary(&core{})
 	const feed = "https://example.com/feed.xml"
 
 	// A build begins and reads the generation it started from.
-	l.podping.mu.Lock()
-	gen := l.podping.gen
-	l.podping.mu.Unlock()
+	l.Podcasts.podping.mu.Lock()
+	gen := l.Podcasts.podping.gen
+	l.Podcasts.podping.mu.Unlock()
 
 	// A subscription lands while that build is still reading.
-	l.InvalidatePodpingFeeds()
+	l.Podcasts.InvalidatePodpingFeeds()
 
 	// The build finishes and offers its pre-subscription snapshot.
 	stale := map[string]model.PID{feed: "pc-01JZX5N8QW3F4V9T2B7KD3M9R6"}
-	if got := l.commitPodpingIndex(stale, gen); len(got) != 1 {
+	if got := l.Podcasts.commitPodpingIndex(stale, gen); len(got) != 1 {
 		t.Fatalf("the caller was not given an index to answer with: %v", got)
 	}
-	l.podping.mu.Lock()
-	cached, built := l.podping.byFeed, l.podping.built
-	l.podping.mu.Unlock()
+	l.Podcasts.podping.mu.Lock()
+	cached, built := l.Podcasts.podping.byFeed, l.Podcasts.podping.built
+	l.Podcasts.podping.mu.Unlock()
 	if cached != nil || !built.IsZero() {
 		t.Fatal("a snapshot taken before an invalidation was cached as fresh")
 	}
 
 	// A build that started after the invalidation commits normally.
-	l.podping.mu.Lock()
-	gen = l.podping.gen
-	l.podping.mu.Unlock()
-	l.commitPodpingIndex(stale, gen)
-	l.podping.mu.Lock()
-	cached, built = l.podping.byFeed, l.podping.built
-	l.podping.mu.Unlock()
+	l.Podcasts.podping.mu.Lock()
+	gen = l.Podcasts.podping.gen
+	l.Podcasts.podping.mu.Unlock()
+	l.Podcasts.commitPodpingIndex(stale, gen)
+	l.Podcasts.podping.mu.Lock()
+	cached, built = l.Podcasts.podping.byFeed, l.Podcasts.podping.built
+	l.Podcasts.podping.mu.Unlock()
 	if cached == nil || built.IsZero() {
 		t.Fatal("an uncontested rebuild did not cache")
 	}

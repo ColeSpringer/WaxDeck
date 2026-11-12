@@ -56,7 +56,7 @@ func notifyHarness(t *testing.T) *harness {
 func drainNotify(t *testing.T, h *harness) {
 	t.Helper()
 	ctx := context.Background()
-	for i := 0; h.svc.DrainNotifyOutbox(ctx); i++ {
+	for i := 0; h.svc.Integrations.DrainNotifyOutbox(ctx); i++ {
 		if i > 100 {
 			t.Fatal("notify outbox did not drain")
 		}
@@ -344,7 +344,7 @@ func TestNotificationDeliveryRouting(t *testing.T) {
 	// A user event reaches only the named user's targets, and only
 	// those enabled for it: kit's target selects feed-disabled, so the
 	// same emit to both users delivers once.
-	h.svc.EmitNotification(ctx, "episode-downloaded", "New episode: Show", "Ep 1",
+	h.svc.Integrations.EmitNotification(ctx, "episode-downloaded", "New episode: Show", "Ep 1",
 		[]string{samUser.Id, kitUser.Id})
 	drainNotify(t, h)
 	if got := samSink.deliveries(); len(got) != 1 || got[0]["event"] != "episode-downloaded" || got[0]["title"] != "New episode: Show" {
@@ -356,7 +356,7 @@ func TestNotificationDeliveryRouting(t *testing.T) {
 
 	// A server event reaches server targets and the admin's opted-in
 	// personal target, never a non-admin's.
-	h.svc.EmitServerNotification(ctx, "signup-requested", "New account request", "pat is waiting.")
+	h.svc.Integrations.EmitServerNotification(ctx, "signup-requested", "New account request", "pat is waiting.")
 	drainNotify(t, h)
 	if got := serverSink.deliveries(); len(got) != 1 || got[0]["event"] != "signup-requested" {
 		t.Fatalf("server deliveries = %v", got)
@@ -428,8 +428,8 @@ func TestNotificationUnifiedPushGatingRegression(t *testing.T) {
 	// The deselected event enqueues nothing: the outbox stays empty
 	// (nothing dials the unreachable endpoint) and the target's health
 	// fields stay untouched.
-	h.svc.EmitNotification(ctx, "episode-downloaded", "New episode", "Body", []string{samUser.Id})
-	if h.svc.DrainNotifyOutbox(ctx) {
+	h.svc.Integrations.EmitNotification(ctx, "episode-downloaded", "New episode", "Body", []string{samUser.Id})
+	if h.svc.Integrations.DrainNotifyOutbox(ctx) {
 		t.Fatal("a deselected event reached the outbox")
 	}
 	list = decode[NotificationTargetList](t, get(t, h.ts, "/api/v1/users/me/notification-targets", sam.Token))

@@ -18,6 +18,7 @@ import (
 	"github.com/colespringer/waxbin/config"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/organize"
+	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/waxerr"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -26,7 +27,7 @@ import (
 // libraryRoots returns a snapshot of the service's root table. Callers
 // range over it without retaining; the table is replaced whole under
 // rootsMu, so a snapshot taken here stays consistent.
-func (l *Library) libraryRoots() []Root {
+func (l *Roots) libraryRoots() []Root {
 	l.rootsMu.RLock()
 	defer l.rootsMu.RUnlock()
 	return l.roots
@@ -51,7 +52,7 @@ func samePath(a, b string) bool {
 // refreshLibraryState rebuilds the root table from the catalog's libraries,
 // naming each root uniquely and keeping the name: it is the streaming
 // engine's address for the root.
-func (l *Library) refreshLibraryState(ctx context.Context) {
+func (l *Roots) refreshLibraryState(ctx context.Context) {
 	l.refreshMu.Lock()
 	defer l.refreshMu.Unlock()
 	libs, err := l.lib.Libraries(ctx)
@@ -62,7 +63,7 @@ func (l *Library) refreshLibraryState(ctx context.Context) {
 	libs = slices.DeleteFunc(libs, func(lib *model.Library) bool {
 		return lib.Mode == model.ModePodcast || lib.DisplayRoot == ""
 	})
-	names := l.rootNames(ctx, libs)
+	names := l.names(ctx, libs)
 	roots := make([]Root, 0, len(libs))
 	for _, lib := range libs {
 		roots = append(roots, Root{
@@ -110,7 +111,7 @@ func (l *Library) refreshLibraryState(ctx context.Context) {
 		l.probeRoots(paths...)
 	}
 	if first || changed {
-		l.invalidateAttribution()
+		l.Grants.invalidateAttribution()
 	}
 	if moved {
 		l.nudgeWatcher()
@@ -121,13 +122,13 @@ func (l *Library) refreshLibraryState(ctx context.Context) {
 		})
 	}
 	if changed {
-		l.emitEveryoneEvent(ctx, eventLibraries)
+		l.Jobs.emitEveryoneEvent(ctx, eventLibraries)
 	}
 }
 
-// rootNames names each library: configured names first, then stored ones,
-// then the directory's, numbered past any name taken and stored.
-func (l *Library) rootNames(ctx context.Context, libs []*model.Library) map[model.PID]string {
+// names picks each library's name: configured names first, then stored
+// ones, then the directory's, numbered past any name taken and stored.
+func (l *Roots) names(ctx context.Context, libs []*model.Library) map[model.PID]string {
 	stored := map[string]string{}
 	if rows, err := l.db.LibraryRootsList(ctx); err != nil {
 		l.log.Warn("reading library root names", "err", err)
@@ -184,7 +185,7 @@ func (l *Library) rootNames(ctx context.Context, libs []*model.Library) map[mode
 }
 
 // libraryReadOnly reports whether the catalog flags a library read-only.
-func (l *Library) libraryReadOnly(bareLibraryPID string) bool {
+func (l *Roots) libraryReadOnly(bareLibraryPID string) bool {
 	for _, r := range l.libraryRoots() {
 		if r.PID == bareLibraryPID {
 			return r.ReadOnly
@@ -193,22 +194,177 @@ func (l *Library) libraryReadOnly(bareLibraryPID string) bool {
 	return false
 }
 
+// libraryByPID resolves a catalog library by bare pid.
+func (l *Roots) libraryByPID(ctx context.Context, pid model.PID) (*model.Library, error) {
+	libs, err := l.lib.Libraries(ctx)
+	if err != nil {
+		return nil, classify(err)
+	}
+	for _, lib := range libs {
+		if lib.PID == pid {
+			return lib, nil
+		}
+	}
+	return nil, errNotFound("no such library")
+}
+
+// LibraryInfo is one catalog library for the admin surface.
+type LibraryInfo struct {
+	PID   string
+	Name  string
+	Media string
+	// MediaDeclared is the configuration naming what the root holds, which
+	// SetLibraryMedia then refuses to change.
+	MediaDeclared bool
+	// Path is the root directory, for the screen that manages it. Empty
+	// where the catalog holds a path it cannot render as text.
+	Path string
+	// ItemCount is what the catalog holds under the root, counted at read
+	// time. Only Libraries fills it; a create has nothing there yet.
+	ItemCount int64
+	// StreamingWarning is set by AddLibrary when the root exists but the
+	// streaming sidecar did not take it.
+	StreamingWarning string
+	// ScanStarted is AddLibrary's scan starting; false when another job
+	// held the catalog, so the root waits for the next scan.
+	ScanStarted bool
+	// ReadOnly, FolderFallback, Managed and Profile are the catalog's
+	// policy for the root.
+	ReadOnly       bool
+	FolderFallback bool
+	Managed        bool
+	Profile        string
+	// Configured is the server's configuration naming the root, which
+	// only a configuration change takes away. Unreachable is its folder
+	// missing at its last scan. Writable is a managed root taking the
+	// server's writes when last probed; nil where the server does not
+	// probe: an in-place root, or one it treats as read-only.
+	Configured  bool
+	Unreachable bool
+	Writable    *bool
+}
+
+// Libraries lists the catalog's libraries with their configured root
+// names (falling back to the root directory's base name) and their
+// paths. Cheap: no counting.
+//
+// The Subsonic surface calls this on every getMusicFolders, which
+// clients issue on connect, so nothing here may touch the catalog's
+// item tables. LibrariesWithCounts is the variant that does, and only
+// the administrative listing asks for it.
+func (l *Roots) Libraries(ctx context.Context) ([]LibraryInfo, error) {
+	return l.libraries(ctx, false)
+}
+
+// LibrariesWithCounts is Libraries plus how much each root holds: one
+// indexed count per library. It is the administrators' listing, which
+// says what the last write probe found and writes nothing itself.
+func (l *Roots) LibrariesWithCounts(ctx context.Context) ([]LibraryInfo, error) {
+	return l.libraries(ctx, true)
+}
+
+func (l *Roots) libraries(ctx context.Context, counts bool) ([]LibraryInfo, error) {
+	libs, err := l.lib.Libraries(ctx)
+	if err != nil {
+		return nil, classify(err)
+	}
+	out := make([]LibraryInfo, 0, len(libs))
+	for _, lib := range libs {
+		info := l.libraryInfo(lib)
+		if counts {
+			info.ItemCount = l.libraryItemCount(ctx, lib.PID)
+		}
+		out = append(out, info)
+	}
+	return out, nil
+}
+
+// libraryInfo maps a catalog library, named as the root table names it.
+// The catalog stores no media for the podcast library.
+func (l *Roots) libraryInfo(lib *model.Library) LibraryInfo {
+	name, writable := filepath.Base(lib.DisplayRoot), true
+	for _, r := range l.libraryRoots() {
+		if rootKey(r.Path) == rootKey(lib.DisplayRoot) {
+			name, writable = r.Name, !r.Unwritable
+		}
+	}
+	var probed *bool
+	if l.probesRoot(lib.Mode == model.ModeManaged, lib.ReadOnly) {
+		probed = &writable
+	}
+	media := string(lib.MediaType())
+	if lib.Mode == model.ModePodcast {
+		media = "podcast"
+	}
+	return LibraryInfo{
+		PID:            apiPID(PrefixLibrary, lib.PID),
+		Name:           name,
+		Media:          media,
+		MediaDeclared:  l.declaredMedia(lib) != "",
+		Path:           lib.DisplayRoot,
+		ReadOnly:       lib.ReadOnly,
+		FolderFallback: lib.FolderFallback,
+		Managed:        lib.Mode == model.ModeManaged,
+		Profile:        lib.Profile,
+		Configured:     l.configuredRoot(lib.DisplayRoot),
+		Unreachable:    l.rootReach.unreachable(lib.PID),
+		Writable:       probed,
+	}
+}
+
+// libraryName is the name a library goes by: its root's, or, for a
+// podcast library, which is not a root, the name the podcast directory is
+// mounted under. Empty for a library the catalog does not list.
+func (l *Roots) libraryName(ctx context.Context, pid model.PID) string {
+	for _, r := range l.libraryRoots() {
+		if r.PID == string(pid) {
+			return r.Name
+		}
+	}
+	if lib, err := l.libraryByPID(ctx, pid); err == nil && lib.Mode == model.ModePodcast {
+		return l.podcastRootName
+	}
+	return ""
+}
+
+// libraryItemCount counts the playable items a root holds, keyed on the
+// catalog's own library dimension: an indexed integer comparison, not
+// the path-prefix scan this used to be. The old form compiled
+// `startsWith` to `LIKE ? ESCAPE '\'`, and SQLite turns its LIKE
+// optimization off whenever an ESCAPE clause is present.
+//
+// A count that cannot be taken reports zero rather than failing the
+// listing - the number is a caption on an administrative table, and
+// losing the table over it would be the worse answer.
+func (l *Roots) libraryItemCount(ctx context.Context, libraryPID model.PID) int64 {
+	if libraryPID == "" {
+		return 0
+	}
+	q := query.New(query.EntityItems).Where("library", query.OpIs, string(libraryPID)).Build()
+	n, err := l.lib.Count(ctx, q, "")
+	if err != nil {
+		l.log.Warn("counting a library's items", "library", libraryPID, "err", err)
+		return 0
+	}
+	return int64(n)
+}
+
 // nudgeWatcher re-arms the library watcher over the current root table;
 // a no-op when the watcher is off.
-func (l *Library) nudgeWatcher() {
+func (l *Roots) nudgeWatcher() {
 	select {
 	case l.watchNudge <- struct{}{}:
 	default:
 	}
 }
 
-// RootTable is the service's root table: every library root the catalog
+// Table is the service's root table: every library root the catalog
 // holds, named.
-func (l *Library) RootTable() []Root { return slices.Clone(l.libraryRoots()) }
+func (l *Roots) Table() []Root { return slices.Clone(l.libraryRoots()) }
 
 // flowRootSync is the wired bridge, nil before SetFlowRoots and on a
 // server with no streaming engine.
-func (l *Library) flowRootSync() FlowRootSync {
+func (l *Roots) flowRootSync() FlowRootSync {
 	if p := l.flowRoots.Load(); p != nil {
 		return *p
 	}
@@ -219,7 +375,7 @@ func (l *Library) flowRootSync() FlowRootSync {
 // wired: the mounts of libraries removed while it could not be told are
 // taken off, and the roots it does not map, as a restore or the CLI
 // brings, are taught, passing over one it refused at the same path.
-func (l *Library) syncFlowRoots(ctx context.Context) {
+func (l *Roots) syncFlowRoots(ctx context.Context) {
 	p := l.flowRoots.Load()
 	if p == nil {
 		return
@@ -242,7 +398,7 @@ func (l *Library) syncFlowRoots(ctx context.Context) {
 // settleRoots brings the catalog's roots to what the server runs with:
 // defined profiles, the configured roots, the table rebuilt, and what the
 // last scans found of their folders.
-func (l *Library) settleRoots(ctx context.Context) error {
+func (l *Roots) settleRoots(ctx context.Context) error {
 	l.defaultUndefinedProfiles(ctx)
 	if err := l.registerConfiguredRoots(ctx); err != nil {
 		return err
@@ -256,7 +412,7 @@ func (l *Library) settleRoots(ctx context.Context) error {
 // holds in another mode, or holding other media than the configuration
 // declares, leaving the rest alone so no settle races an edit.
 // One the catalog refuses (an overlap) is left out: the app removes nothing.
-func (l *Library) registerConfiguredRoots(ctx context.Context) error {
+func (l *Roots) registerConfiguredRoots(ctx context.Context) error {
 	if len(l.configRoots) == 0 {
 		return nil
 	}
@@ -322,7 +478,7 @@ func overlappingRoots(roots []Root) (string, string, bool) {
 // defaultUndefinedProfiles moves a library naming a profile the catalog
 // does not define (a restored or runtime one) to the default, which
 // organizing and imports would otherwise refuse.
-func (l *Library) defaultUndefinedProfiles(ctx context.Context) {
+func (l *Roots) defaultUndefinedProfiles(ctx context.Context) {
 	libs, err := l.lib.Libraries(ctx)
 	if err != nil {
 		l.log.Warn("reading the libraries' organize profiles", "err", err)
@@ -339,7 +495,7 @@ func (l *Library) defaultUndefinedProfiles(ctx context.Context) {
 			continue
 		}
 		if names == nil {
-			names = l.rootNames(ctx, slices.DeleteFunc(slices.Clone(libs), func(lib *model.Library) bool {
+			names = l.names(ctx, slices.DeleteFunc(slices.Clone(libs), func(lib *model.Library) bool {
 				return lib.Mode == model.ModePodcast || lib.DisplayRoot == ""
 			}))
 		}
@@ -350,14 +506,14 @@ func (l *Library) defaultUndefinedProfiles(ctx context.Context) {
 			l.log.Warn("moving a library to the default profile", "root", lib.DisplayRoot, "err", err)
 			continue
 		}
-		l.Audit(ctx, nil, "library.profile", AuditTarget{Kind: "library", PID: apiPID(PrefixLibrary, lib.PID), Name: names[lib.PID]},
+		l.Audit.Record(ctx, nil, "library.profile", AuditTarget{Kind: "library", PID: apiPID(PrefixLibrary, lib.PID), Name: names[lib.PID]},
 			map[string]any{"profile": organize.DefaultProfileName, "undefined": lib.Profile})
 	}
 }
 
 // declaredMedia is what the configuration says a root holds, or empty
 // where it says nothing.
-func (l *Library) declaredMedia(lib *model.Library) model.MediaType {
+func (l *Roots) declaredMedia(lib *model.Library) model.MediaType {
 	for _, r := range l.configRoots {
 		if r.Media != "" && samePath(rootKey(r.Path), rootKey(lib.DisplayRoot)) {
 			return model.MediaType(r.Media)
@@ -373,7 +529,7 @@ func (l *Library) declaredMedia(lib *model.Library) model.MediaType {
 // which only a read checks, so unchanged files are read again only when
 // forced). The podcast library, and a root the configuration declares,
 // refuse.
-func (l *Library) SetLibraryMedia(ctx context.Context, uc *UserCtx, apiLibraryPID, media string) (LibraryInfo, error) {
+func (l *Roots) SetLibraryMedia(ctx context.Context, uc *UserCtx, apiLibraryPID, media string) (LibraryInfo, error) {
 	if !uc.Admin {
 		return LibraryInfo{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -415,12 +571,12 @@ func (l *Library) SetLibraryMedia(ctx context.Context, uc *UserCtx, apiLibraryPI
 	force := to != model.MediaAudiobook
 	jobPID, scanErr := l.lib.StartScan(l.procCtx, waxbin.ScanRequest{LibraryPID: pid, Force: force})
 	if scanErr == nil {
-		l.followStarted(ctx, jobPID, uc.ID)
+		l.Jobs.followStarted(ctx, jobPID, uc.ID)
 	} else {
 		l.log.Warn("a library's media changed while a catalog job is running; rescan it once the job ends",
 			"library", apiLibraryPID, "force", force, "err", scanErr)
 	}
-	l.Audit(ctx, uc, "library.media", AuditTarget{Kind: "library", PID: apiLibraryPID, Name: l.libraryInfo(lib).Name},
+	l.Audit.Record(ctx, uc, "library.media", AuditTarget{Kind: "library", PID: apiLibraryPID, Name: l.libraryInfo(lib).Name},
 		map[string]any{"media": string(to), "from": string(from), "scanStarted": scanErr == nil})
 	info := l.libraryInfo(updated)
 	info.ScanStarted = scanErr == nil
@@ -462,7 +618,7 @@ type FlowRootSync interface {
 // SetFlowRoots wires the bridge's runtime-root surface, and brings it to
 // the root table (syncFlowRoots). Nil says no streaming engine is
 // configured: there is no sidecar to tell anything.
-func (l *Library) SetFlowRoots(s FlowRootSync) {
+func (l *Roots) SetFlowRoots(s FlowRootSync) {
 	l.flowRoots.Store(&s)
 	l.workers.GoOnce(l.procCtx, "flow-roots", func(ctx context.Context) error {
 		l.syncFlowRoots(ctx)
@@ -473,7 +629,7 @@ func (l *Library) SetFlowRoots(s FlowRootSync) {
 // AddLibrary catalogs a new root, names it, teaches the streaming sidecar and
 // kicks a scan. A sidecar that cannot take the root leaves streaming for its
 // restart, which StreamingWarning reports. Administrators only.
-func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInput) (LibraryInfo, error) {
+func (l *Roots) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInput) (LibraryInfo, error) {
 	if !uc.Admin {
 		return LibraryInfo{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -519,7 +675,7 @@ func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInpu
 	// already in flight was snapshotted before this root existed and will not
 	// cover it, so on a conflict the root waits for the next scan; log that so
 	// the gap is visible rather than silently swallowed.
-	_, scanErr := l.Rescan(ctx, false)
+	_, scanErr := l.library.Rescan(ctx, false)
 	if scanErr != nil {
 		if KindOf(scanErr) == KindConflict {
 			l.log.Warn("library created while a catalog job is running; its root will index on the next scan, or rescan manually",
@@ -537,7 +693,7 @@ func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInpu
 		// not only in the server log.
 		detail["streamingWarning"] = streamWarning
 	}
-	l.Audit(ctx, uc, "library.create", AuditTarget{Kind: "library", PID: apiLibPID, Name: name}, detail)
+	l.Audit.Record(ctx, uc, "library.create", AuditTarget{Kind: "library", PID: apiLibPID, Name: name}, detail)
 	info := l.libraryInfo(lib)
 	// The response carries the warning too: the administrator who made the
 	// change reads it, not the log.
@@ -550,7 +706,7 @@ func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInpu
 // browsing, downloading, and direct playback never depended on the
 // sidecar. The returned string is empty when streaming works now, and
 // otherwise says what an administrator still has to do.
-func (l *Library) syncFlowRoot(ctx context.Context, name, path string) string {
+func (l *Roots) syncFlowRoot(ctx context.Context, name, path string) string {
 	flow := l.flowRootSync()
 	if flow == nil {
 		return ""
@@ -580,7 +736,7 @@ type flowRefusal struct {
 
 // teachFlowRoot offers the bridge one root, remembering a refusal. The
 // caller holds flowSyncMu.
-func (l *Library) teachFlowRoot(ctx context.Context, flow FlowRootSync, name, path string) string {
+func (l *Roots) teachFlowRoot(ctx context.Context, flow FlowRootSync, name, path string) string {
 	outages := l.flowOutages.Load()
 	err := flow.SyncRoot(ctx, name, path)
 	if err == nil {
@@ -604,7 +760,7 @@ func (l *Library) teachFlowRoot(ctx context.Context, flow FlowRootSync, name, pa
 // absolute and clean; allowAbsent takes a folder that does not answer yet.
 // It answers the path stored: path with its symlinks followed, when they
 // can be.
-func (l *Library) registerRoot(ctx context.Context, name, path string, mode model.Mode, media model.MediaType, allowAbsent bool) (*model.Library, string, error) {
+func (l *Roots) registerRoot(ctx context.Context, name, path string, mode model.Mode, media model.MediaType, allowAbsent bool) (*model.Library, string, error) {
 	claim, release, err := l.claimRoot(ctx, name, path, mode == model.ModeManaged)
 	if err != nil {
 		return nil, "", err
@@ -620,7 +776,7 @@ func (l *Library) registerRoot(ctx context.Context, name, path string, mode mode
 	if resolved != "" {
 		path = rootKey(resolved)
 	}
-	if err := l.rootStillFree(ctx, claim, path, folder); err != nil {
+	if err := l.stillFree(ctx, claim, path, folder); err != nil {
 		return nil, "", err
 	}
 	if l.creates.free != nil {
@@ -663,7 +819,7 @@ func (l *Library) registerRoot(ctx context.Context, name, path string, mode mode
 // keeps of it (followRootRemoval). A root the configuration names comes
 // back at every start, so it is refused, as is the podcast library.
 // Administrators only.
-func (l *Library) RemoveLibrary(ctx context.Context, uc *UserCtx, apiLibraryPID string) (Job, error) {
+func (l *Roots) RemoveLibrary(ctx context.Context, uc *UserCtx, apiLibraryPID string) (Job, error) {
 	if !uc.Admin {
 		return Job{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -671,7 +827,7 @@ func (l *Library) RemoveLibrary(ctx context.Context, uc *UserCtx, apiLibraryPID 
 	if !ok || prefix != PrefixLibrary {
 		return Job{}, errNotFound("no library with pid " + apiLibraryPID)
 	}
-	if err := l.CheckWritable(ctx, ""); err != nil {
+	if err := l.Settings.CheckWritable(ctx, ""); err != nil {
 		return Job{}, err
 	}
 	lib, err := l.libraryByPID(ctx, pid)
@@ -699,19 +855,19 @@ func (l *Library) RemoveLibrary(ctx context.Context, uc *UserCtx, apiLibraryPID 
 		l.removals.abandon(pid, seq)
 		return Job{}, classifyMutation(err)
 	}
-	if err := l.adoptJobWith(ctx, wdb.JobOrigin{PID: string(jobPID), UserID: uc.ID, Detail: string(detail)}); err != nil {
+	if err := l.Jobs.adoptJobWith(ctx, wdb.JobOrigin{PID: string(jobPID), UserID: uc.ID, Detail: string(detail)}); err != nil {
 		// No origin holds it, so its end is the follower's, now or when seen.
 		l.removals.unrecord(pid)
 		if j, err := l.lib.Job(ctx, jobPID); err == nil && j.State != model.JobRunning {
-			l.settleLater(func(ctx context.Context) { l.settleUnrecordedRemoval(ctx, j) })
+			l.Jobs.settleLater(func(ctx context.Context) { l.settleUnrecordedRemoval(ctx, j) })
 		}
 	}
-	return l.JobStatus(ctx, apiPID(PrefixJob, jobPID))
+	return l.Jobs.Status(ctx, apiPID(PrefixJob, jobPID))
 }
 
-// rootTaken refuses a create at a folder a library holds, or under a name
+// taken refuses a create at a folder a library holds, or under a name
 // a root goes by.
-func (l *Library) rootTaken(ctx context.Context, name, path string, libs []*model.Library) error {
+func (l *Roots) taken(ctx context.Context, name, path string, libs []*model.Library) error {
 	held := map[string]bool{}
 	for _, lib := range libs {
 		key := rootKey(lib.DisplayRoot)

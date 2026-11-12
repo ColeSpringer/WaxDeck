@@ -24,20 +24,20 @@ func TestOrganizeLeavesAReadOnlyLibraryInPlace(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, path, _ := managedTrackFixture(t)
 	profile := organize.DefaultProfileName
-	if plan, err := svc.PreviewOrganize(ctx, uc, profile, nil); err != nil || plan.TotalActions != 1 || plan.Held != 0 {
+	if plan, err := svc.Health.PreviewOrganize(ctx, uc, profile, nil); err != nil || plan.TotalActions != 1 || plan.Held != 0 {
 		t.Fatalf("writable preview = %+v (%v), want the track's move", plan, err)
 	}
 	setServerReadOnly(t, ctx, svc, true)
-	if plan, err := svc.PreviewOrganize(ctx, uc, profile, nil); err != nil || plan.TotalActions != 0 || plan.Held != 1 {
+	if plan, err := svc.Health.PreviewOrganize(ctx, uc, profile, nil); err != nil || plan.TotalActions != 0 || plan.Held != 1 {
 		t.Fatalf("read-only server preview = %+v (%v), want the move held", plan, err)
 	}
 	setServerReadOnly(t, ctx, svc, false)
 	setLibrariesReadOnly(t, ctx, svc, uc, true)
-	plan, err := svc.PreviewOrganize(ctx, uc, profile, nil)
+	plan, err := svc.Health.PreviewOrganize(ctx, uc, profile, nil)
 	if err != nil || plan.TotalActions != 0 || plan.ReadOnlyLibraries != 1 {
 		t.Fatalf("read-only library preview = %+v (%v), want the library left out", plan, err)
 	}
-	rep, err := svc.ApplyOrganize(ctx, uc, profile, nil)
+	rep, err := svc.Health.ApplyOrganize(ctx, uc, profile, nil)
 	if err != nil || rep.Moved != 0 || rep.ReadOnlyLibraries != 1 {
 		t.Fatalf("apply = %+v (%v), want the library left out", rep, err)
 	}
@@ -53,10 +53,10 @@ func TestAPassWithNothingToMoveCountsWhatItLeft(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := untaggedBesideStrayFixture(t)
 	profile := organize.DefaultProfileName
-	if rep, err := svc.ApplyOrganize(ctx, uc, profile, nil); err != nil || rep.Moved != 1 || rep.Held != 1 {
+	if rep, err := svc.Health.ApplyOrganize(ctx, uc, profile, nil); err != nil || rep.Moved != 1 || rep.Held != 1 {
 		t.Fatalf("first pass = %+v (%v), want the stray moved and the untagged track held", rep, err)
 	}
-	rep, err := svc.ApplyOrganize(ctx, uc, profile, nil)
+	rep, err := svc.Health.ApplyOrganize(ctx, uc, profile, nil)
 	if err != nil || rep.Moved != 0 || rep.Skipped != 1 || rep.Held != 1 {
 		t.Fatalf("second pass = %+v (%v), want one in place and one held", rep, err)
 	}
@@ -70,11 +70,11 @@ func TestAPassWithNothingToMoveCountsWhatItLeft(t *testing.T) {
 func TestOrganizeProfilesCountTheManagedLibraries(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := openEnrichFixture(t, func(*Config) {})
-	if got, err := svc.OrganizeProfilesFor(ctx, uc); err != nil || got.ManagedLibraries != 0 || len(got.Profiles) == 0 {
+	if got, err := svc.Health.OrganizeProfilesFor(ctx, uc); err != nil || got.ManagedLibraries != 0 || len(got.Profiles) == 0 {
 		t.Fatalf("in-place profiles = %+v (%v), want the built-in and no managed library", got, err)
 	}
 	ctx, svc, uc, _, _ = managedTrackFixture(t)
-	if got, err := svc.OrganizeProfilesFor(ctx, uc); err != nil || got.ManagedLibraries != 1 {
+	if got, err := svc.Health.OrganizeProfilesFor(ctx, uc); err != nil || got.ManagedLibraries != 1 {
 		t.Fatalf("managed profiles = %+v (%v), want one managed library", got, err)
 	}
 }
@@ -103,7 +103,7 @@ func managedAt(t *testing.T, dataDir string) (context.Context, *Library, *UserCt
 
 func profileNamed(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, name string) (OrganizeProfileDTO, bool) {
 	t.Helper()
-	got, err := svc.OrganizeProfilesFor(ctx, uc)
+	got, err := svc.Health.OrganizeProfilesFor(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestASavedProfileListsWithSamplesAndSurvivesARestart(t *testing.T) {
 	t.Parallel()
 	dataDir := t.TempDir()
 	ctx, svc, uc, stop := managedAt(t, dataDir)
-	saved, err := svc.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{artist}/{title}.{ext}", TagWrite: true})
+	saved, err := svc.Health.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{artist}/{title}.{ext}", TagWrite: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestASavedProfileListsWithSamplesAndSurvivesARestart(t *testing.T) {
 	if got, ok := profileNamed(t, ctx, svc, uc, "flat"); !ok || got.Music != saved.Music {
 		t.Fatalf("after a restart flat = %+v (listed %v), want it back", got, ok)
 	}
-	plan, err := svc.PreviewOrganize(ctx, uc, "flat", nil)
+	plan, err := svc.Health.PreviewOrganize(ctx, uc, "flat", nil)
 	if err != nil || plan.TotalActions != 1 || plan.Actions[0].To != filepath.Join("Nomad", "Stray.flac") {
 		t.Fatalf("plan = %+v (%v), want the track laid out flat", plan, err)
 	}
@@ -149,29 +149,29 @@ func TestASavedProfileListsWithSamplesAndSurvivesARestart(t *testing.T) {
 func TestAProfileALibraryNamesCannotBeDeleted(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := managedAt(t, t.TempDir())
-	if _, err := svc.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
+	if _, err := svc.Health.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
 		t.Fatal(err)
 	}
-	lib := apiPID(PrefixLibrary, model.PID(svc.libraryRoots()[0].PID))
-	if info, err := svc.SetLibraryProfile(ctx, uc, lib, "flat"); err != nil || info.Profile != "flat" {
+	lib := apiPID(PrefixLibrary, model.PID(svc.Roots.libraryRoots()[0].PID))
+	if info, err := svc.Health.SetLibraryProfile(ctx, uc, lib, "flat"); err != nil || info.Profile != "flat" {
 		t.Fatalf("set = %+v (%v), want flat", info, err)
 	}
-	if err := svc.DeleteOrganizeProfile(ctx, uc, "flat"); KindOf(err) != KindConflict {
+	if err := svc.Health.DeleteOrganizeProfile(ctx, uc, "flat"); KindOf(err) != KindConflict {
 		t.Fatalf("deleting a profile in use = %v, want a conflict", err)
 	}
-	if _, err := svc.SetLibraryProfile(ctx, uc, lib, organize.DefaultProfileName); err != nil {
+	if _, err := svc.Health.SetLibraryProfile(ctx, uc, lib, organize.DefaultProfileName); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.DeleteOrganizeProfile(ctx, uc, "flat"); err != nil {
+	if err := svc.Health.DeleteOrganizeProfile(ctx, uc, "flat"); err != nil {
 		t.Fatalf("deleting a profile nothing names: %v", err)
 	}
-	if err := svc.DeleteOrganizeProfile(ctx, uc, organize.DefaultProfileName); KindOf(err) != KindInvalid {
+	if err := svc.Health.DeleteOrganizeProfile(ctx, uc, organize.DefaultProfileName); KindOf(err) != KindInvalid {
 		t.Errorf("deleting the built-in = %v, want invalid", err)
 	}
-	if err := svc.DeleteOrganizeProfile(ctx, uc, "gone"); KindOf(err) != KindNotFound {
+	if err := svc.Health.DeleteOrganizeProfile(ctx, uc, "gone"); KindOf(err) != KindNotFound {
 		t.Errorf("deleting an unknown profile = %v, want not found", err)
 	}
-	if _, err := svc.SetLibraryProfile(ctx, uc, lib, "gone"); KindOf(err) != KindInvalid {
+	if _, err := svc.Health.SetLibraryProfile(ctx, uc, lib, "gone"); KindOf(err) != KindInvalid {
 		t.Errorf("a library on an unknown profile = %v, want invalid", err)
 	}
 }
@@ -180,16 +180,16 @@ func TestAProfileALibraryNamesCannotBeDeleted(t *testing.T) {
 func TestABadTemplateIsInvalid(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := managedAt(t, t.TempDir())
-	if _, err := svc.PutOrganizeProfile(ctx, uc, "bad", OrganizeProfileInput{Music: "{nope}/{title}.{ext}"}); KindOf(err) != KindInvalid {
+	if _, err := svc.Health.PutOrganizeProfile(ctx, uc, "bad", OrganizeProfileInput{Music: "{nope}/{title}.{ext}"}); KindOf(err) != KindInvalid {
 		t.Errorf("saving an unknown field = %v, want invalid", err)
 	}
-	if _, err := svc.PreviewOrganizeProfile(ctx, uc, "bad", OrganizeProfileInput{Music: "{artist"}); KindOf(err) != KindInvalid {
+	if _, err := svc.Health.PreviewOrganizeProfile(ctx, uc, "bad", OrganizeProfileInput{Music: "{artist"}); KindOf(err) != KindInvalid {
 		t.Errorf("previewing an open brace = %v, want invalid", err)
 	}
 	if _, ok := profileNamed(t, ctx, svc, uc, "bad"); ok {
 		t.Error("a refused profile was listed")
 	}
-	sample, err := svc.PreviewOrganizeProfile(ctx, uc, "", OrganizeProfileInput{Podcast: "{podcast}/{episode}.{ext}"})
+	sample, err := svc.Health.PreviewOrganizeProfile(ctx, uc, "", OrganizeProfileInput{Podcast: "{podcast}/{episode}.{ext}"})
 	if err != nil || sample.Podcast != filepath.Join("Night Shift Radio", "The Lighthouse Keeper.mp3") || sample.Music == "" {
 		t.Errorf("preview = %+v (%v), want the podcast template and the native rest", sample, err)
 	}
@@ -201,19 +201,19 @@ func TestALibrarysProfileSurvivesARestart(t *testing.T) {
 	t.Parallel()
 	dataDir := t.TempDir()
 	ctx, svc, uc, stop := managedAt(t, dataDir)
-	if _, err := svc.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
+	if _, err := svc.Health.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
 		t.Fatal(err)
 	}
-	lib := apiPID(PrefixLibrary, model.PID(svc.libraryRoots()[0].PID))
-	if _, err := svc.SetLibraryProfile(ctx, uc, lib, "flat"); err != nil {
+	lib := apiPID(PrefixLibrary, model.PID(svc.Roots.libraryRoots()[0].PID))
+	if _, err := svc.Health.SetLibraryProfile(ctx, uc, lib, "flat"); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.LibraryReadOnlySet(ctx, uc, lib, true); err != nil {
+	if err := svc.Settings.LibraryReadOnlySet(ctx, uc, lib, true); err != nil {
 		t.Fatal(err)
 	}
 	stop()
 	ctx, svc, _, _ = managedAt(t, dataDir)
-	infos, err := svc.Libraries(ctx)
+	infos, err := svc.Roots.Libraries(ctx)
 	if err != nil || len(infos) != 1 || infos[0].Profile != "flat" || !infos[0].ReadOnly {
 		t.Fatalf("libraries = %+v (%v), want flat and read-only", infos, err)
 	}
@@ -225,10 +225,10 @@ func TestALibraryOnADeletedProfileStartsUnderTheDefault(t *testing.T) {
 	t.Parallel()
 	dataDir := t.TempDir()
 	ctx, svc, uc, stop := managedAt(t, dataDir)
-	if _, err := svc.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
+	if _, err := svc.Health.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SetLibraryProfile(ctx, uc, apiPID(PrefixLibrary, model.PID(svc.libraryRoots()[0].PID)), "flat"); err != nil {
+	if _, err := svc.Health.SetLibraryProfile(ctx, uc, apiPID(PrefixLibrary, model.PID(svc.Roots.libraryRoots()[0].PID)), "flat"); err != nil {
 		t.Fatal(err)
 	}
 	stop()
@@ -241,7 +241,7 @@ func TestALibraryOnADeletedProfileStartsUnderTheDefault(t *testing.T) {
 	}
 	store.Close()
 	ctx, svc, _, _ = managedAt(t, dataDir)
-	if infos, err := svc.Libraries(ctx); err != nil || infos[0].Profile != organize.DefaultProfileName {
+	if infos, err := svc.Roots.Libraries(ctx); err != nil || infos[0].Profile != organize.DefaultProfileName {
 		t.Fatalf("libraries = %+v (%v), want the default profile", infos, err)
 	}
 }
@@ -253,15 +253,15 @@ func TestARuntimeLibraryOnADeletedProfileStartsUnderTheDefault(t *testing.T) {
 	t.Parallel()
 	dataDir := t.TempDir()
 	ctx, svc, uc, stop := managedAt(t, dataDir)
-	if _, err := svc.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
+	if _, err := svc.Health.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
 		t.Fatal(err)
 	}
 	extraDir := t.TempDir()
-	extra, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "extra", Path: extraDir, Managed: true})
+	extra, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "extra", Path: extraDir, Managed: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SetLibraryProfile(ctx, uc, extra.PID, "flat"); err != nil {
+	if _, err := svc.Health.SetLibraryProfile(ctx, uc, extra.PID, "flat"); err != nil {
 		t.Fatal(err)
 	}
 	stop()
@@ -278,7 +278,7 @@ func TestARuntimeLibraryOnADeletedProfileStartsUnderTheDefault(t *testing.T) {
 	}
 	store.Close()
 	ctx, svc, uc, _ = managedAt(t, dataDir)
-	infos, err := svc.Libraries(ctx)
+	infos, err := svc.Roots.Libraries(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,10 +287,10 @@ func TestARuntimeLibraryOnADeletedProfileStartsUnderTheDefault(t *testing.T) {
 			t.Errorf("library %s on %q, want the default profile", info.Name, info.Profile)
 		}
 	}
-	if _, err := svc.PreviewOrganize(ctx, uc, "", nil); err != nil {
+	if _, err := svc.Health.PreviewOrganize(ctx, uc, "", nil); err != nil {
 		t.Errorf("planning each library under its own = %v", err)
 	}
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "library.profile"}, "", 10)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: "library.profile"}, "", 10)
 	if err != nil || len(page.Events) == 0 || page.Events[0].Detail["undefined"] != "flat" {
 		t.Errorf("audit = %+v (%v), want the move to the default recorded", page.Events, err)
 	}
@@ -302,10 +302,10 @@ func TestAnOversizedTemplateIsRefused(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := managedAt(t, t.TempDir())
 	huge := OrganizeProfileInput{Music: strings.Repeat("<", maxTemplateLen+1)}
-	if _, err := svc.PutOrganizeProfile(ctx, uc, "deep", huge); KindOf(err) != KindInvalid {
+	if _, err := svc.Health.PutOrganizeProfile(ctx, uc, "deep", huge); KindOf(err) != KindInvalid {
 		t.Errorf("saving = %v, want invalid", err)
 	}
-	if _, err := svc.PreviewOrganizeProfile(ctx, uc, "deep", huge); KindOf(err) != KindInvalid {
+	if _, err := svc.Health.PreviewOrganizeProfile(ctx, uc, "deep", huge); KindOf(err) != KindInvalid {
 		t.Errorf("previewing = %v, want invalid", err)
 	}
 }
@@ -316,25 +316,25 @@ func TestProfileNamesAreCheckedAlike(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := managedAt(t, t.TempDir())
 	music := OrganizeProfileInput{Music: "{title}.{ext}"}
-	if _, err := svc.PutOrganizeProfile(ctx, uc, strings.Repeat("整", 22), music); err != nil {
+	if _, err := svc.Health.PutOrganizeProfile(ctx, uc, strings.Repeat("整", 22), music); err != nil {
 		t.Errorf("a 22-character name = %v, want it saved", err)
 	}
 	for _, name := range []string{"rock/pop", "what?", "C# layout", `a\b`, strings.Repeat("x", 65)} {
-		if _, err := svc.PutOrganizeProfile(ctx, uc, name, music); KindOf(err) != KindInvalid {
+		if _, err := svc.Health.PutOrganizeProfile(ctx, uc, name, music); KindOf(err) != KindInvalid {
 			t.Errorf("saving %q = %v, want invalid", name, err)
 		}
 	}
-	if _, err := svc.PutOrganizeProfile(ctx, uc, " flat", music); err != nil {
+	if _, err := svc.Health.PutOrganizeProfile(ctx, uc, " flat", music); err != nil {
 		t.Fatal(err)
 	}
-	pid := apiPID(PrefixLibrary, model.PID(svc.libraryRoots()[0].PID))
-	if _, err := svc.SetLibraryProfile(ctx, uc, pid, "flat "); err != nil {
+	pid := apiPID(PrefixLibrary, model.PID(svc.Roots.libraryRoots()[0].PID))
+	if _, err := svc.Health.SetLibraryProfile(ctx, uc, pid, "flat "); err != nil {
 		t.Errorf("naming the library's profile with a space = %v", err)
 	}
-	if _, err := svc.SetLibraryProfile(ctx, uc, pid, organize.DefaultProfileName); err != nil {
+	if _, err := svc.Health.SetLibraryProfile(ctx, uc, pid, organize.DefaultProfileName); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.DeleteOrganizeProfile(ctx, uc, " flat"); err != nil {
+	if err := svc.Health.DeleteOrganizeProfile(ctx, uc, " flat"); err != nil {
 		t.Errorf("deleting by the name as typed = %v", err)
 	}
 }
@@ -347,10 +347,10 @@ func TestAnInvalidStoredProfileBlocksNothing(t *testing.T) {
 	if err := svc.db.OrganizeProfilesUpsert(ctx, wdb.OrganizeProfile{Name: "broken", Music: "{unterminated"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
+	if _, err := svc.Health.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
 		t.Fatalf("saving beside a broken row = %v", err)
 	}
-	if err := svc.DeleteOrganizeProfile(ctx, uc, "flat"); err != nil {
+	if err := svc.Health.DeleteOrganizeProfile(ctx, uc, "flat"); err != nil {
 		t.Errorf("deleting beside a broken row = %v", err)
 	}
 }
@@ -360,7 +360,7 @@ func TestAnInvalidStoredProfileBlocksNothing(t *testing.T) {
 func TestSamplesShowEveryDefaultToken(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := managedAt(t, t.TempDir())
-	sample, err := svc.PreviewOrganizeProfile(ctx, uc, "", OrganizeProfileInput{Music: "{genre}/{title}.{ext}"})
+	sample, err := svc.Health.PreviewOrganizeProfile(ctx, uc, "", OrganizeProfileInput{Music: "{genre}/{title}.{ext}"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +377,7 @@ func TestSamplesShowEveryDefaultToken(t *testing.T) {
 func TestAProfileSaysWhatItSetsItself(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := managedAt(t, t.TempDir())
-	if _, err := svc.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
+	if _, err := svc.Health.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
 		t.Fatal(err)
 	}
 	flat, _ := profileNamed(t, ctx, svc, uc, "flat")
@@ -393,17 +393,17 @@ func TestAProfileSaysWhatItSetsItself(t *testing.T) {
 func TestAnEmptyProfilePlansEachLibraryUnderItsOwn(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := managedAt(t, t.TempDir())
-	if _, err := svc.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
+	if _, err := svc.Health.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SetLibraryProfile(ctx, uc, apiPID(PrefixLibrary, model.PID(svc.libraryRoots()[0].PID)), "flat"); err != nil {
+	if _, err := svc.Health.SetLibraryProfile(ctx, uc, apiPID(PrefixLibrary, model.PID(svc.Roots.libraryRoots()[0].PID)), "flat"); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := svc.PreviewOrganize(ctx, uc, "", nil)
+	plan, err := svc.Health.PreviewOrganize(ctx, uc, "", nil)
 	if err != nil || plan.TotalActions != 1 || plan.Actions[0].To != "Stray.flac" {
 		t.Fatalf("plan = %+v (%v), want the library's own flat layout", plan, err)
 	}
-	if _, err := svc.PreviewOrganize(ctx, uc, "gone", nil); KindOf(err) != KindInvalid {
+	if _, err := svc.Health.PreviewOrganize(ctx, uc, "gone", nil); KindOf(err) != KindInvalid {
 		t.Errorf("an unknown profile = %v, want invalid", err)
 	}
 }
@@ -435,7 +435,7 @@ func TestAPreviewCarriesHoldsWithTheirCodes(t *testing.T) {
 		t.Fatal(err)
 	}
 	profile := organize.DefaultProfileName
-	plan, err := svc.PreviewOrganize(ctx, uc, profile, nil)
+	plan, err := svc.Health.PreviewOrganize(ctx, uc, profile, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -457,7 +457,7 @@ func TestAPreviewCarriesHoldsWithTheirCodes(t *testing.T) {
 	}
 
 	setServerReadOnly(t, ctx, svc, true)
-	plan, err = svc.PreviewOrganize(ctx, uc, profile, nil)
+	plan, err = svc.Health.PreviewOrganize(ctx, uc, profile, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -487,7 +487,7 @@ func TestAPreviewHoldsAMoveWhoseDestinationIsOccupied(t *testing.T) {
 		t.Fatal(err)
 	}
 	profile := organize.DefaultProfileName
-	plan, err := svc.PreviewOrganize(ctx, uc, profile, nil)
+	plan, err := svc.Health.PreviewOrganize(ctx, uc, profile, nil)
 	if err != nil || plan.TotalActions != 2 || plan.Held != 0 {
 		t.Fatalf("preview = %+v (%v), want both tracks' moves", plan, err)
 	}
@@ -510,7 +510,7 @@ func TestAPreviewHoldsAMoveWhoseDestinationIsOccupied(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]int{string(organize.HoldOccupied): 1}
-	plan, err = svc.PreviewOrganize(ctx, uc, profile, nil)
+	plan, err = svc.Health.PreviewOrganize(ctx, uc, profile, nil)
 	if err != nil || plan.TotalActions != 1 || plan.Held != 1 || !maps.Equal(plan.HeldByCode, want) {
 		t.Fatalf("preview = total %d, held %d by %v (%v); want the stray held as %v",
 			plan.TotalActions, plan.Held, plan.HeldByCode, err, want)
@@ -519,7 +519,7 @@ func TestAPreviewHoldsAMoveWhoseDestinationIsOccupied(t *testing.T) {
 		t.Errorf("hold = %+v, want the stray's move to %s, with the catalog's words", h, strayTo)
 	}
 
-	rep, err := svc.ApplyOrganize(ctx, uc, profile, nil)
+	rep, err := svc.Health.ApplyOrganize(ctx, uc, profile, nil)
 	if err != nil || rep.Moved != 1 || rep.Held != 1 || rep.Failed != 0 {
 		t.Fatalf("apply = %+v (%v), want one moved and the stray held", rep, err)
 	}
@@ -555,7 +555,7 @@ func TestTwoSpellingsOfOneArtistFileUnderOneFolder(t *testing.T) {
 	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := svc.PreviewOrganize(ctx, uc, organize.DefaultProfileName, nil)
+	plan, err := svc.Health.PreviewOrganize(ctx, uc, organize.DefaultProfileName, nil)
 	if err != nil || plan.TotalActions != 4 || plan.Held != 0 || plan.HeldByCode[string(organize.HoldOccupiedCase)] != 0 {
 		t.Fatalf("preview = total %d, held %d by %v (%v); want all four moves and no hold for case",
 			plan.TotalActions, plan.Held, plan.HeldByCode, err)

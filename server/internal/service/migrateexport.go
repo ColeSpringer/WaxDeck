@@ -58,11 +58,11 @@ type MigrationExportDTO struct {
 
 // migrationExportsDir is where staged archives live: under staging,
 // beside uploads, on the volume checkStagingRoom probes.
-func (l *Library) migrationExportsDir() string {
-	return filepath.Join(l.stagingDir, "migrations")
+func (l *Migrate) migrationExportsDir() string {
+	return filepath.Join(l.Ingest.stagingDir, "migrations")
 }
 
-func (l *Library) migrationExportPath(fileName string) string {
+func (l *Migrate) migrationExportPath(fileName string) string {
 	return filepath.Join(l.migrationExportsDir(), fileName)
 }
 
@@ -70,7 +70,7 @@ func (l *Library) migrationExportPath(fileName string) string {
 // recognised in it. `declared` is the request's content length when it
 // gave one, so a body too large for the volume is refused before it is
 // read rather than after.
-func (l *Library) StageMigrationExport(ctx context.Context, uc *UserCtx, r io.Reader, declared int64) (MigrationExportDTO, error) {
+func (l *Migrate) StageMigrationExport(ctx context.Context, uc *UserCtx, r io.Reader, declared int64) (MigrationExportDTO, error) {
 	if !uc.Admin {
 		return MigrationExportDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -79,7 +79,7 @@ func (l *Library) StageMigrationExport(ctx context.Context, uc *UserCtx, r io.Re
 			Msg: fmt.Sprintf("the export exceeds the %d byte upload limit", migrateExportMaxBytes)}
 	}
 	if declared > 0 {
-		if err := l.checkStagingRoom(ctx, declared); err != nil {
+		if err := l.Ingest.checkStagingRoom(ctx, declared); err != nil {
 			return MigrationExportDTO{}, err
 		}
 	}
@@ -157,14 +157,14 @@ func (l *Library) StageMigrationExport(ctx context.Context, uc *UserCtx, r io.Re
 		return MigrationExportDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
 	placed = true
-	l.Audit(ctx, uc, "migration.export.stage", AuditTarget{Kind: "migration-export", PID: id, Name: source}, map[string]any{
+	l.Audit.Record(ctx, uc, "migration.export.stage", AuditTarget{Kind: "migration-export", PID: id, Name: source}, map[string]any{
 		"source": source, "files": len(files), "sizeBytes": n,
 	})
 	return MigrationExportDTO{PID: id, Source: source, Files: files, SizeBytes: n, ExpiresAt: expires}, nil
 }
 
 // DiscardMigrationExport deletes one staged export and its file.
-func (l *Library) DiscardMigrationExport(ctx context.Context, uc *UserCtx, id string) error {
+func (l *Migrate) DiscardMigrationExport(ctx context.Context, uc *UserCtx, id string) error {
 	if !uc.Admin {
 		return &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -188,7 +188,7 @@ func (l *Library) DiscardMigrationExport(ctx context.Context, uc *UserCtx, id st
 // deletes the file when it finishes, so it would take the upload with
 // it. An expired row is refused for the reason it is swept - the upload
 // was abandoned - rather than waiting for the hourly pass to say so.
-func (l *Library) ownedMigrationExport(ctx context.Context, uc *UserCtx, id string) (wdb.MigrationExport, error) {
+func (l *Migrate) ownedMigrationExport(ctx context.Context, uc *UserCtx, id string) (wdb.MigrationExport, error) {
 	row, err := l.db.MigrationExportByID(ctx, id)
 	if err != nil && !errors.Is(err, wdb.ErrNotFound) {
 		// A read that failed is not an export that is absent. Answering
@@ -208,7 +208,7 @@ func (l *Library) ownedMigrationExport(ctx context.Context, uc *UserCtx, id stri
 // exportIsBeingRead reports whether a live tool task holds this upload.
 // A claim left behind by a task that is over says nothing: that is the
 // stale claim the next import replaces.
-func (l *Library) exportIsBeingRead(ctx context.Context, row wdb.MigrationExport) bool {
+func (l *Migrate) exportIsBeingRead(ctx context.Context, row wdb.MigrationExport) bool {
 	if row.ClaimedBy == "" {
 		return false
 	}
@@ -222,7 +222,7 @@ func (l *Library) exportIsBeingRead(ctx context.Context, row wdb.MigrationExport
 // dropMigrationExport removes an export's file and then its row. File
 // first: a row without a file is a 404 the caller can act on, while a
 // file without a row is bytes nothing will ever delete.
-func (l *Library) dropMigrationExport(ctx context.Context, row wdb.MigrationExport) error {
+func (l *Migrate) dropMigrationExport(ctx context.Context, row wdb.MigrationExport) error {
 	if err := os.Remove(l.migrationExportPath(row.FileName)); err != nil && !os.IsNotExist(err) {
 		l.log.Warn("deleting a staged export", "export", row.ID, "err", err)
 		return &Error{Kind: KindInternal, Err: err}
@@ -237,7 +237,7 @@ func (l *Library) dropMigrationExport(ctx context.Context, row wdb.MigrationExpo
 // SweepMigrationExports deletes the staged exports that expired, and
 // the archives no row names any more. Runs on the janitor's ticker
 // beside the other prunes.
-func (l *Library) SweepMigrationExports(ctx context.Context) {
+func (l *Migrate) SweepMigrationExports(ctx context.Context) {
 	rows, err := l.db.ExpiredMigrationExports(ctx, time.Now().UnixNano())
 	if err != nil {
 		l.log.Warn("sweeping staged exports", "err", err)
@@ -265,7 +265,7 @@ func (l *Library) SweepMigrationExports(ctx context.Context) {
 // leaves up to half a gigabyte on the volume that staging shares with
 // the databases, addressable by nothing. Named by their own id, so the
 // check is one point read each.
-func (l *Library) sweepOrphanExports(ctx context.Context) {
+func (l *Migrate) sweepOrphanExports(ctx context.Context) {
 	dir := l.migrationExportsDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -311,7 +311,7 @@ func (l *Library) sweepOrphanExports(ctx context.Context) {
 
 // migrationExportFile resolves a staged export for the import that
 // reads it: the row, and the path its archive lives at.
-func (l *Library) migrationExportFile(ctx context.Context, id string) (wdb.MigrationExport, string, error) {
+func (l *Migrate) migrationExportFile(ctx context.Context, id string) (wdb.MigrationExport, string, error) {
 	row, err := l.db.MigrationExportByID(ctx, id)
 	if errors.Is(err, wdb.ErrNotFound) {
 		return wdb.MigrationExport{}, "", fmt.Errorf("%w: the uploaded export is gone", errToolPermanent)

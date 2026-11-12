@@ -43,7 +43,7 @@ func TestASecondDecisionOfAnEntryWaitsForTheFirst(t *testing.T) {
 	_, id := pendingUploadEntry(t, ctx, svc, uc)
 	planning, release := make(chan struct{}), make(chan struct{})
 	var plans atomic.Int32
-	svc.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
+	svc.Ingest.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
 		if plans.Add(1) == 1 {
 			close(planning)
 			<-release
@@ -52,11 +52,11 @@ func TestASecondDecisionOfAnEntryWaitsForTheFirst(t *testing.T) {
 	}
 	first := make(chan error, 1)
 	go func() {
-		_, _, err := svc.DecideReviewEntry(ctx, uc, id, "as-is", "")
+		_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "")
 		first <- err
 	}()
 	<-planning
-	_, _, err := svc.DecideReviewEntry(ctx, uc, id, "as-is", "")
+	_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "")
 	close(release)
 	if KindOf(err) != KindConflict {
 		t.Errorf("a second decision while the first runs = %v, want a conflict", err)
@@ -76,20 +76,20 @@ func TestASecondDecisionOfAnEntryWaitsForTheFirst(t *testing.T) {
 func TestAnEntryBeingDecidedTakesNoOtherChange(t *testing.T) {
 	ctx, svc, uc := managedUploadFixture(t)
 	up, id := pendingUploadEntry(t, ctx, svc, uc)
-	svc.deciding.Store(id, struct{}{})
+	svc.Ingest.deciding.Store(id, struct{}{})
 	busy := func(what string, err error) {
 		t.Helper()
 		if KindOf(err) != KindConflict || !strings.Contains(err.Error(), "being decided") {
 			t.Errorf("%s while the entry is being decided = %v, want a conflict saying so", what, err)
 		}
 	}
-	_, _, err := svc.DecideReviewEntry(ctx, uc, id, "skip", "")
+	_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "skip", "")
 	busy("a decision", err)
-	_, err = svc.RevertReviewEntry(ctx, uc, id)
+	_, err = svc.Ingest.RevertReviewEntry(ctx, uc, id)
 	busy("a revert", err)
-	_, err = svc.ReidentifyEntry(ctx, uc, id, ReviewOverrideDTO{Title: "Other"})
+	_, err = svc.Ingest.ReidentifyEntry(ctx, uc, id, ReviewOverrideDTO{Title: "Other"})
 	busy("a new search", err)
-	busy("discarding the upload", svc.DeleteUpload(ctx, uc, up.ID))
+	busy("discarding the upload", svc.Ingest.DeleteUpload(ctx, uc, up.ID))
 
 	if status, _ := decidedEntry(t, ctx, svc, id); status != reviewPending {
 		t.Fatalf("entry status = %s, want it still pending", status)
@@ -98,7 +98,7 @@ func TestAnEntryBeingDecidedTakesNoOtherChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the upload is gone: %v", err)
 	}
-	if _, err := os.Stat(svc.uploadFinalPath(row)); err != nil {
+	if _, err := os.Stat(svc.Ingest.uploadFinalPath(row)); err != nil {
 		t.Fatalf("the staged file is gone: %v", err)
 	}
 }
@@ -111,11 +111,11 @@ func TestADecisionOutlivesTheClientThatAskedForIt(t *testing.T) {
 	up, id := pendingUploadEntry(t, ctx, svc, uc)
 	request, hangUp := context.WithCancel(ctx)
 	defer hangUp()
-	svc.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
+	svc.Ingest.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
 		hangUp()
 		return svc.lib.ImportAcquired(ctx, f, kind, meta)
 	}
-	if _, _, err := svc.DecideReviewEntry(request, uc, id, "as-is", ""); err != nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(request, uc, id, "as-is", ""); err != nil {
 		t.Fatalf("decision whose client went away: %v", err)
 	}
 	status, p := decidedEntry(t, ctx, svc, id)
@@ -155,17 +155,17 @@ func uploadPathAs(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	up, err := svc.CreateUpload(ctx, uc, UploadCreateParams{
+	up, err := svc.Ingest.CreateUpload(ctx, uc, UploadCreateParams{
 		FileName: filepath.Base(path), SizeBytes: int64(len(data)), MediaType: media,
 		Identify: &identify, BatchID: batchID,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.AppendUploadData(ctx, uc, up.ID, 0, bytes.NewReader(data)); err != nil {
+	if _, err := svc.Ingest.AppendUploadData(ctx, uc, up.ID, 0, bytes.NewReader(data)); err != nil {
 		t.Fatal(err)
 	}
-	done, err := svc.CompleteUpload(ctx, uc, up.ID)
+	done, err := svc.Ingest.CompleteUpload(ctx, uc, up.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,14 +183,14 @@ func pendingUnit(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, p
 func pendingUnitOf(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, media string, paths ...string) string {
 	t.Helper()
 	yes := true
-	b, err := svc.CreateUploadBatch(ctx, uc, UploadBatchCreateParams{Grouping: groupingAlbum, MediaType: media, Identify: &yes})
+	b, err := svc.Ingest.CreateUploadBatch(ctx, uc, UploadBatchCreateParams{Grouping: groupingAlbum, MediaType: media, Identify: &yes})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range paths {
 		uploadPathAs(t, ctx, svc, uc, p, media, true, b.ID)
 	}
-	done, err := svc.CompleteUploadBatch(ctx, uc, b.ID)
+	done, err := svc.Ingest.CompleteUploadBatch(ctx, uc, b.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func pendingUnitOf(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx,
 // failingPlan makes the nth plan of an import fail.
 func failingPlan(svc *Library, n int32) {
 	var plans atomic.Int32
-	svc.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
+	svc.Ingest.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
 		if plans.Add(1) == n {
 			return nil, errors.New("the library went away")
 		}
@@ -223,7 +223,7 @@ func TestABulkOutcomeThatFailedCarriesNoWarnings(t *testing.T) {
 	// Both files planned up front, the held one landing on its plan, then
 	// the second's own plan fails.
 	failingPlan(svc, 3)
-	out := svc.DecideReviewBulk(ctx, uc, []string{id}, "as-is")
+	out := svc.Ingest.DecideReviewBulk(ctx, uc, []string{id}, "as-is")
 	if len(out) != 1 || out[0].OK {
 		t.Fatalf("bulk outcome = %+v, want the entry failed", out)
 	}
@@ -256,7 +256,7 @@ func stagedStill(t *testing.T, ctx context.Context, svc *Library, uploadID strin
 	if row.State != uploadStaged {
 		t.Fatalf("upload state = %q, want it still staged", row.State)
 	}
-	if _, err := os.Stat(svc.uploadFinalPath(row)); err != nil {
+	if _, err := os.Stat(svc.Ingest.uploadFinalPath(row)); err != nil {
 		t.Fatalf("the staged file is gone: %v", err)
 	}
 }
@@ -279,7 +279,7 @@ func TestAFileWhosePlaceAnotherItemTakesIsNotHeld(t *testing.T) {
 	if row.DuplicatePID == "" {
 		t.Fatal("the relabelled recording arrived as no duplicate")
 	}
-	if _, _, err := svc.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", ""); KindOf(err) != KindConflict {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", ""); KindOf(err) != KindConflict {
 		t.Fatalf("decision = %v, want a conflict over the taken place", err)
 	}
 	stagedStill(t, ctx, svc, up.ID)
@@ -319,7 +319,7 @@ func TestAHolderInAnotherLibraryDoesNotHoldAFile(t *testing.T) {
 	if row.DuplicatePID == "" {
 		t.Fatal("the recording arrived as no duplicate of the other library's")
 	}
-	if _, _, err := svc.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", ""); KindOf(err) != KindConflict {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", ""); KindOf(err) != KindConflict {
 		t.Fatalf("decision = %v, want a conflict over the taken place", err)
 	}
 	stagedStill(t, ctx, svc, up.ID)
@@ -358,17 +358,17 @@ func TestAnUploadDuplicatesNothingTheLibraryNoLongerHolds(t *testing.T) {
 	send := func() UploadDTO {
 		t.Helper()
 		no := false
-		up, err := svc.CreateUpload(ctx, uc, UploadCreateParams{
+		up, err := svc.Ingest.CreateUpload(ctx, uc, UploadCreateParams{
 			FileName: "eleven.flac", SizeBytes: int64(len(data)), MediaType: "music",
 			SHA256: hex.EncodeToString(sum[:]), Identify: &no,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := svc.AppendUploadData(ctx, uc, up.ID, 0, bytes.NewReader(data)); err != nil {
+		if _, err := svc.Ingest.AppendUploadData(ctx, uc, up.ID, 0, bytes.NewReader(data)); err != nil {
 			t.Fatal(err)
 		}
-		done, err := svc.CompleteUpload(ctx, uc, up.ID)
+		done, err := svc.Ingest.CompleteUpload(ctx, uc, up.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -389,18 +389,18 @@ func TestAnUploadDuplicatesNothingTheLibraryNoLongerHolds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := svc.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", ""); err != nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", ""); err != nil {
 		t.Fatal(err)
 	}
 	it, err := svc.lib.Get(ctx, model.PID(holder))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.DeleteItems(ctx, uc, []string{itemAPIPID(it)}, "permanent", false); err != nil {
+	if _, err := svc.Tools.DeleteItems(ctx, uc, []string{itemAPIPID(it)}, "permanent", false); err != nil {
 		t.Fatal(err)
 	}
 
-	third, err := svc.CreateUpload(ctx, uc, UploadCreateParams{
+	third, err := svc.Ingest.CreateUpload(ctx, uc, UploadCreateParams{
 		FileName: "eleven.flac", SizeBytes: int64(len(data)), MediaType: "music", SHA256: hex.EncodeToString(sum[:]),
 	})
 	if err != nil {
@@ -423,7 +423,7 @@ func wantPlainRefusal(t *testing.T, svc *Library, err error) {
 		t.Fatal("the decision stood, want it refused")
 	}
 	msg := err.Error()
-	if strings.Contains(msg, svc.stagingDir) || strings.Contains(msg, "meta.") || strings.Contains(msg, "inbox.") {
+	if strings.Contains(msg, svc.Ingest.stagingDir) || strings.Contains(msg, "meta.") || strings.Contains(msg, "inbox.") {
 		t.Fatalf("refusal %q names the server's paths or operations", msg)
 	}
 }
@@ -437,10 +437,10 @@ func TestARefusalForAMissingStagedFileReadsPlainly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(svc.uploadFinalPath(row)); err != nil {
+	if err := os.Remove(svc.Ingest.uploadFinalPath(row)); err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = svc.DecideReviewEntry(ctx, uc, id, "as-is", "")
+	_, _, err = svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "")
 	if KindOf(err) != KindConflict {
 		t.Fatalf("decision = %v, want a conflict", err)
 	}
@@ -452,40 +452,40 @@ func TestARefusalForAMissingStagedFileReadsPlainly(t *testing.T) {
 // staging path the planner named it by.
 func TestARefusalForAFileTheCatalogCannotImportNamesNoStagingPath(t *testing.T) {
 	ctx, svc, uc := managedUploadFixture(t)
-	svc.setUploadFormats([]string{"flac", "webm"})
+	svc.Ingest.setUploadFormats([]string{"flac", "webm"})
 	data, err := os.ReadFile(flacTagged(t, "odd", map[string]string{"TITLE": "Odd", "ARTIST": "Odd Band"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	yes := true
-	up, err := svc.CreateUpload(ctx, uc, UploadCreateParams{
+	up, err := svc.Ingest.CreateUpload(ctx, uc, UploadCreateParams{
 		FileName: "odd.webm", SizeBytes: int64(len(data)), MediaType: "music", Identify: &yes,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.AppendUploadData(ctx, uc, up.ID, 0, bytes.NewReader(data)); err != nil {
+	if _, err := svc.Ingest.AppendUploadData(ctx, uc, up.ID, 0, bytes.NewReader(data)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.CompleteUpload(ctx, uc, up.ID); err != nil {
+	if _, err := svc.Ingest.CompleteUpload(ctx, uc, up.ID); err != nil {
 		t.Fatal(err)
 	}
 	row, err := svc.db.UploadByID(ctx, up.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = svc.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", "")
+	_, _, err = svc.Ingest.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", "")
 	wantPlainRefusal(t, svc, err)
 }
 
 // A write-back failure that names no file is worded without a name,
 // rather than as the base name of nothing.
 func TestAWriteBackWarningWithoutAFileNamesNone(t *testing.T) {
-	l := &Library{}
-	if got := l.writeBackWarning(waxbin.WriteBackFailure{Reason: "no backing files present to write"}); got != "tags not written: no backing files present to write" {
+	l := bareLibrary(&core{})
+	if got := l.Ingest.writeBackWarning(waxbin.WriteBackFailure{Reason: "no backing files present to write"}); got != "tags not written: no backing files present to write" {
 		t.Fatalf("warning = %q", got)
 	}
-	if got := l.writeBackWarning(waxbin.WriteBackFailure{Path: "/srv/music/a.flac", Reason: "meta.Writer.Apply: permission denied"}); got != "a.flac: tags not written: permission denied" {
+	if got := l.Ingest.writeBackWarning(waxbin.WriteBackFailure{Path: "/srv/music/a.flac", Reason: "meta.Writer.Apply: permission denied"}); got != "a.flac: tags not written: permission denied" {
 		t.Fatalf("warning = %q", got)
 	}
 }
@@ -504,17 +504,17 @@ func TestAnImportNoticeSaysAHeldFileAddedNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	no := false
-	b, err := svc.CreateUploadBatch(ctx, uc, UploadBatchCreateParams{Grouping: groupingAlbum, MediaType: "music", Identify: &no})
+	b, err := svc.Ingest.CreateUploadBatch(ctx, uc, UploadBatchCreateParams{Grouping: groupingAlbum, MediaType: "music", Identify: &no})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range []string{path, again} {
 		uploadPathAsking(t, ctx, svc, uc, p, false, b.ID)
 	}
-	if _, err := svc.CompleteUploadBatch(ctx, uc, b.ID); err != nil {
+	if _, err := svc.Ingest.CompleteUploadBatch(ctx, uc, b.ID); err != nil {
 		t.Fatal(err)
 	}
-	page, err := svc.Notifications(ctx, uc, "", 10)
+	page, err := svc.Integrations.Notifications(ctx, uc, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -538,17 +538,17 @@ func TestAReviewNoticeCountsTheFilesThatLanded(t *testing.T) {
 	dir := t.TempDir()
 	twins := []string{unitTrack(t, dir, "twin-a", "Twin", "1"), unitTrack(t, dir, "twin-b", "Twin", "1")}
 	no := false
-	b, err := svc.CreateUploadBatch(ctx, uc, UploadBatchCreateParams{Grouping: groupingAlbum, MediaType: "music", Identify: &no})
+	b, err := svc.Ingest.CreateUploadBatch(ctx, uc, UploadBatchCreateParams{Grouping: groupingAlbum, MediaType: "music", Identify: &no})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range twins {
 		uploadPathAsking(t, ctx, svc, uc, p, false, b.ID)
 	}
-	if _, err := svc.CompleteUploadBatch(ctx, uc, b.ID); err != nil {
+	if _, err := svc.Ingest.CompleteUploadBatch(ctx, uc, b.ID); err != nil {
 		t.Fatal(err)
 	}
-	page, err := svc.Notifications(ctx, uc, "", 10)
+	page, err := svc.Integrations.Notifications(ctx, uc, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -574,11 +574,11 @@ func TestAnUnofficialMarkNamesTheFilesItLeftAlone(t *testing.T) {
 	uploadPathAsking(t, ctx, svc, uc, held, false, "")
 	id := pendingUnit(t, ctx, svc, uc, held, unitTrack(t, dir, "other", "Other Two", "2"))
 	failingPlan(svc, 3)
-	if _, _, err := svc.DecideReviewEntry(ctx, uc, id, "unofficial", ""); err == nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "unofficial", ""); err == nil {
 		t.Fatal("the first attempt stood, want it stopped by the failing plan")
 	}
-	svc.planHook = nil
-	_, warnings, err := svc.DecideReviewEntry(ctx, uc, id, "unofficial", "")
+	svc.Ingest.planHook = nil
+	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "unofficial", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -592,10 +592,10 @@ func TestAnUnofficialMarkNamesTheFilesItLeftAlone(t *testing.T) {
 func TestALandedUploadsTrackIsNamedNotByItsStagingPath(t *testing.T) {
 	ctx, svc, uc := managedUploadFixture(t)
 	_, id := pendingUploadEntry(t, ctx, svc, uc)
-	if _, _, err := svc.DecideReviewEntry(ctx, uc, id, "as-is", ""); err != nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", ""); err != nil {
 		t.Fatal(err)
 	}
-	detail, err := svc.GetReviewEntry(ctx, uc, id)
+	detail, err := svc.Ingest.GetReviewEntry(ctx, uc, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -611,19 +611,19 @@ func TestALibraryTurnedReadOnlyMidDecisionIsSaidSo(t *testing.T) {
 	ctx, svc, uc := managedUploadFixture(t)
 	up, id := pendingUploadEntry(t, ctx, svc, uc)
 	var lib Root
-	for _, r := range svc.libraryRoots() {
+	for _, r := range svc.Roots.libraryRoots() {
 		if r.Name == "lib" {
 			lib = r
 		}
 	}
-	svc.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
+	svc.Ingest.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
 		res, err := svc.lib.ImportAcquired(ctx, f, kind, meta)
-		if ferr := svc.LibraryReadOnlySet(ctx, uc, apiPID(PrefixLibrary, model.PID(lib.PID)), true); ferr != nil {
+		if ferr := svc.Settings.LibraryReadOnlySet(ctx, uc, apiPID(PrefixLibrary, model.PID(lib.PID)), true); ferr != nil {
 			t.Error(ferr)
 		}
 		return res, err
 	}
-	if _, _, err := svc.DecideReviewEntry(ctx, uc, id, "as-is", ""); KindOf(err) != KindReadOnly {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", ""); KindOf(err) != KindReadOnly {
 		t.Fatalf("decision = %v (%s), want read-only", err, KindOf(err))
 	}
 	stagedStill(t, ctx, svc, up.ID)
@@ -680,7 +680,7 @@ func TestABooksLaterPartsAreItsOwnNotJoined(t *testing.T) {
 	id := pendingUnitOf(t, ctx, svc, uc, "audiobook",
 		bookPart(t, dir, "part-1", "Chapter One", "1"), bookPart(t, dir, "part-2", "Chapter Two", "2"),
 		bookPart(t, dir, "part-3", "Chapter Three", "3"))
-	_, warnings, err := svc.DecideReviewEntry(ctx, uc, id, "as-is", "")
+	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -697,7 +697,7 @@ func TestARetriedBookDecisionFinishesTheBookItStarted(t *testing.T) {
 	// Both parts planned up front, the first landing on its plan, then
 	// the second's own plan fails.
 	failingPlan(svc, 3)
-	if _, _, err := svc.DecideReviewEntry(ctx, uc, id, "as-is", ""); err == nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", ""); err == nil {
 		t.Fatal("the first attempt stood, want it stopped by the failing plan")
 	}
 	_, p := decidedEntry(t, ctx, svc, id)
@@ -705,11 +705,11 @@ func TestARetriedBookDecisionFinishesTheBookItStarted(t *testing.T) {
 		t.Fatalf("after the first attempt: pids %q / %q, want the first part landed alone", p.Tracks[0].PID, p.Tracks[1].PID)
 	}
 	var plans atomic.Int32
-	svc.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
+	svc.Ingest.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
 		plans.Add(1)
 		return svc.lib.ImportAcquired(ctx, f, kind, meta)
 	}
-	_, warnings, err := svc.DecideReviewEntry(ctx, uc, id, "as-is", "")
+	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -731,7 +731,7 @@ func TestACompletionThatCouldNotCheckKeepsTheOpeningWarning(t *testing.T) {
 	}
 	sum := sha256.Sum256(data)
 	no := false
-	up, err := svc.CreateUpload(ctx, uc, UploadCreateParams{
+	up, err := svc.Ingest.CreateUpload(ctx, uc, UploadCreateParams{
 		FileName: "twelve.flac", SizeBytes: int64(len(data)), MediaType: "music",
 		SHA256: hex.EncodeToString(sum[:]), Identify: &no,
 	})
@@ -741,16 +741,16 @@ func TestACompletionThatCouldNotCheckKeepsTheOpeningWarning(t *testing.T) {
 	if up.Duplicate == nil {
 		t.Fatal("the same bytes opened with no warning")
 	}
-	if _, err := svc.AppendUploadData(ctx, uc, up.ID, 0, bytes.NewReader(data)); err != nil {
+	if _, err := svc.Ingest.AppendUploadData(ctx, uc, up.ID, 0, bytes.NewReader(data)); err != nil {
 		t.Fatal(err)
 	}
-	svc.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
+	svc.Ingest.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
 		if meta.Copy {
 			return nil, errors.New("the catalog could not be read")
 		}
 		return svc.lib.ImportAcquired(ctx, f, kind, meta)
 	}
-	done, err := svc.CompleteUpload(ctx, uc, up.ID)
+	done, err := svc.Ingest.CompleteUpload(ctx, uc, up.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

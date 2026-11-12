@@ -23,7 +23,7 @@ func (s *Server) ListPlaylists(ctx context.Context, req ListPlaylistsRequestObje
 	if req.Params.ContainsItem != nil {
 		contains = *req.Params.ContainsItem
 	}
-	page, err := s.svc.Playlists(ctx, uc, contains, cursor, limit)
+	page, err := s.svc.Playlists.List(ctx, uc, contains, cursor, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func (s *Server) CreatePlaylist(ctx context.Context, req CreatePlaylistRequestOb
 	if req.Body.ItemPids != nil {
 		create.ItemPIDs = *req.Body.ItemPids
 	}
-	pl, err := s.svc.CreatePlaylist(ctx, uc, create)
+	pl, err := s.svc.Playlists.CreatePlaylist(ctx, uc, create)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func (s *Server) CreatePlaylist(ctx context.Context, req CreatePlaylistRequestOb
 
 func (s *Server) GetPlaylist(ctx context.Context, req GetPlaylistRequestObject) (GetPlaylistResponseObject, error) {
 	uc := userCtx(ctx)
-	pl, err := s.svc.PlaylistByPID(ctx, uc, req.Pid)
+	pl, err := s.svc.Playlists.ByPID(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (s *Server) UpdatePlaylist(ctx context.Context, req UpdatePlaylistRequestOb
 		r := ruleFromWire(*req.Body.Rule)
 		upd.Rule = &r
 	}
-	pl, err := s.svc.UpdatePlaylist(ctx, uc, req.Pid, upd)
+	pl, err := s.svc.Playlists.UpdatePlaylist(ctx, uc, req.Pid, upd)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (s *Server) UpdatePlaylist(ctx context.Context, req UpdatePlaylistRequestOb
 
 func (s *Server) DeletePlaylist(ctx context.Context, req DeletePlaylistRequestObject) (DeletePlaylistResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.DeletePlaylist(ctx, uc, req.Pid); err != nil {
+	if err := s.svc.Playlists.DeletePlaylist(ctx, uc, req.Pid); err != nil {
 		return nil, err
 	}
 	return DeletePlaylist204Response{}, nil
@@ -110,7 +110,7 @@ func (s *Server) ListPlaylistItems(ctx context.Context, req ListPlaylistItemsReq
 	if req.Params.Cursor != nil {
 		cursor = *req.Params.Cursor
 	}
-	page, err := s.svc.PlaylistItems(ctx, uc, req.Pid, cursor, limit)
+	page, err := s.svc.Playlists.Items(ctx, uc, req.Pid, cursor, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +129,7 @@ func (s *Server) ReplacePlaylistItems(ctx context.Context, req ReplacePlaylistIt
 		return nil, errNoBody()
 	}
 	uc := userCtx(ctx)
-	if err := s.svc.ReplacePlaylistItems(ctx, uc, req.Pid, req.Body.ItemPids, req.Body.BaseUpdatedAt); err != nil {
+	if err := s.svc.Playlists.ReplacePlaylistItems(ctx, uc, req.Pid, req.Body.ItemPids, req.Body.BaseUpdatedAt); err != nil {
 		return nil, err
 	}
 	return ReplacePlaylistItems204Response{}, nil
@@ -140,7 +140,7 @@ func (s *Server) AddPlaylistItems(ctx context.Context, req AddPlaylistItemsReque
 		return nil, errNoBody()
 	}
 	uc := userCtx(ctx)
-	if err := s.svc.AddPlaylistItems(ctx, uc, req.Pid, req.Body.ItemPids); err != nil {
+	if err := s.svc.Playlists.AddPlaylistItems(ctx, uc, req.Pid, req.Body.ItemPids); err != nil {
 		return nil, err
 	}
 	return AddPlaylistItems204Response{}, nil
@@ -148,7 +148,7 @@ func (s *Server) AddPlaylistItems(ctx context.Context, req AddPlaylistItemsReque
 
 func (s *Server) RemovePlaylistItemAt(ctx context.Context, req RemovePlaylistItemAtRequestObject) (RemovePlaylistItemAtResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.RemovePlaylistItemAt(ctx, uc, req.Pid, req.Position, deref(req.Params.ItemPid)); err != nil {
+	if err := s.svc.Playlists.RemovePlaylistItemAt(ctx, uc, req.Pid, req.Position, deref(req.Params.ItemPid)); err != nil {
 		return nil, err
 	}
 	return RemovePlaylistItemAt204Response{}, nil
@@ -163,7 +163,7 @@ func (s *Server) PreviewSmartRule(ctx context.Context, req PreviewSmartRuleReque
 	if err != nil {
 		return nil, err
 	}
-	prev, err := s.svc.PreviewRule(ctx, uc, ruleFromWire(*req.Body), limit)
+	prev, err := s.svc.Playlists.PreviewRule(ctx, uc, ruleFromWire(*req.Body), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func (s *Server) PreviewSmartRule(ctx context.Context, req PreviewSmartRuleReque
 
 func (s *Server) GetRuleFields(ctx context.Context, _ GetRuleFieldsRequestObject) (GetRuleFieldsResponseObject, error) {
 	uc := userCtx(ctx)
-	vocab, err := s.svc.RuleVocabulary(ctx, uc)
+	vocab, err := s.svc.Playlists.RuleVocabulary(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +205,7 @@ func (s *Server) GetRuleFields(ctx context.Context, _ GetRuleFieldsRequestObject
 
 func (s *Server) ExportPlaylistM3u(ctx context.Context, req ExportPlaylistM3uRequestObject) (ExportPlaylistM3uResponseObject, error) {
 	uc := userCtx(ctx)
-	doc, err := s.svc.ExportPlaylistM3U(ctx, uc, req.Pid)
+	doc, err := s.svc.Playlists.ExportPlaylistM3U(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ func (s *Server) ImportPlaylistM3u(ctx context.Context, req ImportPlaylistM3uReq
 	if req.Body.Visibility != nil {
 		vis = *req.Body.Visibility
 	}
-	res, err := s.svc.ImportPlaylistM3U(ctx, uc, req.Body.Name, vis, req.Body.Content)
+	res, err := s.svc.Playlists.ImportPlaylistM3U(ctx, uc, req.Body.Name, vis, req.Body.Content)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +244,7 @@ func (s *Server) PreviewPlaylistM3u(ctx context.Context, req PreviewPlaylistM3uR
 		return nil, errNoBody()
 	}
 	uc := userCtx(ctx)
-	prev, err := s.svc.PreviewPlaylistM3U(ctx, uc, req.Body.Content)
+	prev, err := s.svc.Playlists.PreviewPlaylistM3U(ctx, uc, req.Body.Content)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +278,7 @@ func (s *Server) ImportPlaylistNsp(ctx context.Context, req ImportPlaylistNspReq
 	if req.Params.Name != nil {
 		name = *req.Params.Name
 	}
-	pl, err := s.svc.ImportPlaylistNSP(ctx, uc, doc, name, derefBool(req.Params.Partial))
+	pl, err := s.svc.Playlists.ImportPlaylistNSP(ctx, uc, doc, name, derefBool(req.Params.Partial))
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +293,7 @@ func (s *Server) ReportPlaylistNspImport(ctx context.Context, req ReportPlaylist
 	if err != nil {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", "the NSP document could not be read")
 	}
-	rep, err := s.svc.ReportPlaylistNSPImport(doc)
+	rep, err := s.svc.Playlists.ReportPlaylistNSPImport(doc)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +302,7 @@ func (s *Server) ReportPlaylistNspImport(ctx context.Context, req ReportPlaylist
 
 func (s *Server) ExportPlaylistNsp(ctx context.Context, req ExportPlaylistNspRequestObject) (ExportPlaylistNspResponseObject, error) {
 	uc := userCtx(ctx)
-	doc, err := s.svc.ExportPlaylistNSP(ctx, uc, req.Pid, derefBool(req.Params.Partial), deref(req.Params.RuleHash))
+	doc, err := s.svc.Playlists.ExportPlaylistNSP(ctx, uc, req.Pid, derefBool(req.Params.Partial), deref(req.Params.RuleHash))
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +311,7 @@ func (s *Server) ExportPlaylistNsp(ctx context.Context, req ExportPlaylistNspReq
 
 func (s *Server) ReportPlaylistNspExport(ctx context.Context, req ReportPlaylistNspExportRequestObject) (ReportPlaylistNspExportResponseObject, error) {
 	uc := userCtx(ctx)
-	rep, err := s.svc.ReportPlaylistNSPExport(ctx, uc, req.Pid)
+	rep, err := s.svc.Playlists.ReportPlaylistNSPExport(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}

@@ -17,25 +17,25 @@ import (
 func TestHistoryPagesShareOneListingOfAnUnchangedJournal(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, _ := managedTrackFixture(t)
-	apply, err := svc.ApplyOrganize(ctx, uc, "", nil)
+	apply, err := svc.Health.ApplyOrganize(ctx, uc, "", nil)
 	if err != nil || apply.Moved != 1 {
 		t.Fatalf("apply = %+v (%v)", apply, err)
 	}
-	back, err := svc.UndoOrganize(ctx, uc, apply.JobPID)
+	back, err := svc.Health.UndoOrganize(ctx, uc, apply.JobPID)
 	if err != nil || back.Moved != 1 {
 		t.Fatalf("undo = %+v (%v)", back, err)
 	}
-	again, err := svc.UndoOrganize(ctx, uc, back.JobPID)
+	again, err := svc.Health.UndoOrganize(ctx, uc, back.JobPID)
 	if err != nil || again.Moved != 1 {
 		t.Fatalf("undo of the undo = %+v (%v)", again, err)
 	}
 	var reads atomic.Int32
-	svc.historyReadHook = func() { reads.Add(1) }
+	svc.Health.historyReadHook = func() { reads.Add(1) }
 
 	cursor := ""
 	var listed []string
 	for range 3 {
-		page, next, err := svc.OrganizeHistory(ctx, uc, cursor, 1)
+		page, next, err := svc.Health.OrganizeHistory(ctx, uc, cursor, 1)
 		if err != nil || len(page) != 1 {
 			t.Fatalf("page after %q = %+v (%v), want one run", cursor, page, err)
 		}
@@ -47,29 +47,29 @@ func TestHistoryPagesShareOneListingOfAnUnchangedJournal(t *testing.T) {
 		t.Fatalf("pages = %v ending at %q, want %v newest first and no next page", listed, cursor, want)
 	}
 	_, bare, _ := parseAPIPID(apply.JobPID)
-	if n := svc.journalCommitted(ctx, bare); n != 1 {
+	if n := svc.Health.journalCommitted(ctx, bare); n != 1 {
 		t.Fatalf("the apply's committed moves = %d, want 1", n)
 	}
 	if n := reads.Load(); n != 1 {
 		t.Fatalf("the journal was listed %d times for three pages and a settle, want once", n)
 	}
 
-	fourth, err := svc.UndoOrganize(ctx, uc, again.JobPID)
+	fourth, err := svc.Health.UndoOrganize(ctx, uc, again.JobPID)
 	if err != nil || fourth.Moved != 1 {
 		t.Fatalf("a fourth run = %+v (%v)", fourth, err)
 	}
-	page, _, err := svc.OrganizeHistory(ctx, uc, "", 1)
+	page, _, err := svc.Health.OrganizeHistory(ctx, uc, "", 1)
 	if err != nil || len(page) != 1 || page[0].JobPID != fourth.JobPID {
 		t.Fatalf("first page after a new run = %+v (%v), want the new run", page, err)
 	}
 
-	svc.journalPruneHook = func(ctx context.Context, _ time.Duration) (int, error) {
+	svc.Integrations.journalPruneHook = func(ctx context.Context, _ time.Duration) (int, error) {
 		return svc.lib.PruneOrganizeJournal(ctx, 0)
 	}
-	if err := svc.RunPrune(ctx); err != nil {
+	if err := svc.Integrations.RunPrune(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if page, _, err := svc.OrganizeHistory(ctx, uc, "", 10); err != nil || len(page) != 0 {
+	if page, _, err := svc.Health.OrganizeHistory(ctx, uc, "", 10); err != nil || len(page) != 0 {
 		t.Fatalf("history after the prune = %+v (%v), want every run gone with its journal", page, err)
 	}
 }
@@ -80,21 +80,21 @@ func TestHistoryPagesShareOneListingOfAnUnchangedJournal(t *testing.T) {
 func TestRunProfilesAreNotLockedAcrossTheJobRead(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, _ := managedTrackFixture(t)
-	apply, err := svc.ApplyOrganize(ctx, uc, "", nil)
+	apply, err := svc.Health.ApplyOrganize(ctx, uc, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, bare, _ := parseAPIPID(apply.JobPID)
 	held := false
 	read := func(ctx context.Context, pid model.PID) (*model.Job, error) {
-		if !svc.runProfilesMu.TryLock() {
+		if !svc.Health.runProfilesMu.TryLock() {
 			held = true
 		} else {
-			svc.runProfilesMu.Unlock()
+			svc.Health.runProfilesMu.Unlock()
 		}
 		return svc.lib.Job(ctx, pid)
 	}
-	profiles := svc.runProfilesWith(ctx, []model.OrganizeBatch{{JobPID: bare, Kind: "organize"}}, read)
+	profiles := svc.Health.runProfilesWith(ctx, []model.OrganizeBatch{{JobPID: bare, Kind: "organize"}}, read)
 	if held {
 		t.Fatal("the profiles' lock was held across the catalog's job read")
 	}
@@ -108,10 +108,10 @@ func TestRunProfilesAreNotLockedAcrossTheJobRead(t *testing.T) {
 func TestHistoryIsListedAfreshOnceTheCatalogIsReopened(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, _ := managedTrackFixture(t)
-	if _, err := svc.ApplyOrganize(ctx, uc, "", nil); err != nil {
+	if _, err := svc.Health.ApplyOrganize(ctx, uc, "", nil); err != nil {
 		t.Fatal(err)
 	}
-	if page, _, err := svc.OrganizeHistory(ctx, uc, "", 10); err != nil || len(page) != 1 {
+	if page, _, err := svc.Health.OrganizeHistory(ctx, uc, "", 10); err != nil || len(page) != 1 {
 		t.Fatalf("history = %+v (%v), want the run", page, err)
 	}
 	if n, err := svc.lib.PruneOrganizeJournal(ctx, 0); err != nil || n == 0 {
@@ -122,7 +122,7 @@ func TestHistoryIsListedAfreshOnceTheCatalogIsReopened(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc.onReopen(ctx, waxbin.ReopenEvent{Seq: head})
-	if page, _, err := svc.OrganizeHistory(ctx, uc, "", 10); err != nil || len(page) != 0 {
+	if page, _, err := svc.Health.OrganizeHistory(ctx, uc, "", 10); err != nil || len(page) != 0 {
 		t.Fatalf("history after the reopen = %+v (%v), want the pruned run gone", page, err)
 	}
 }

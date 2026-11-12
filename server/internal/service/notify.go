@@ -66,7 +66,7 @@ var notifyEventCatalog = []NotifyEvent{
 }
 
 // NotifyEvents returns the event catalog.
-func (l *Library) NotifyEvents() []NotifyEvent { return notifyEventCatalog }
+func (l *Integrations) NotifyEvents() []NotifyEvent { return notifyEventCatalog }
 
 func notifyEventByName(name string) (NotifyEvent, bool) {
 	for _, e := range notifyEventCatalog {
@@ -173,7 +173,7 @@ var guardedNotifyKinds = map[string]bool{
 // guardedNotifyClient builds the dial-guarded delivery client once:
 // private addresses refused unless the server allows LAN notification
 // hosts.
-func (l *Library) guardedNotifyClient() *http.Client {
+func (l *Integrations) guardedNotifyClient() *http.Client {
 	l.notifyGuardedOnce.Do(func() {
 		l.notifyGuardedHTTP = &http.Client{Transport: guardedTransport(l.allowPrivateNotifyHosts), Timeout: 15 * time.Second}
 	})
@@ -183,7 +183,7 @@ func (l *Library) guardedNotifyClient() *http.Client {
 // notifyClientFor picks the delivery client for one target: user-scope
 // targets of guarded kinds dial through the private-address guard,
 // everything else through the plain client.
-func (l *Library) notifyClientFor(t wdb.NotificationTarget) *http.Client {
+func (l *Integrations) notifyClientFor(t wdb.NotificationTarget) *http.Client {
 	if t.Scope == NotifyScopeUser && guardedNotifyKinds[t.Kind] && !l.allowPrivateNotifyHosts {
 		return l.guardedNotifyClient()
 	}
@@ -193,7 +193,7 @@ func (l *Library) notifyClientFor(t wdb.NotificationTarget) *http.Client {
 // --- target CRUD ------------------------------------------------------------------
 
 // ListServerNotificationTargets lists the server-scope targets.
-func (l *Library) ListServerNotificationTargets(ctx context.Context) ([]NotificationTarget, error) {
+func (l *Integrations) ListServerNotificationTargets(ctx context.Context) ([]NotificationTarget, error) {
 	rows, err := l.db.ServerNotificationTargets(ctx)
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
@@ -202,7 +202,7 @@ func (l *Library) ListServerNotificationTargets(ctx context.Context) ([]Notifica
 }
 
 // ListMyNotificationTargets lists the caller's personal targets.
-func (l *Library) ListMyNotificationTargets(ctx context.Context, uc *UserCtx) ([]NotificationTarget, error) {
+func (l *Integrations) ListMyNotificationTargets(ctx context.Context, uc *UserCtx) ([]NotificationTarget, error) {
 	rows, err := l.db.UserNotificationTargets(ctx, uc.ID)
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
@@ -211,7 +211,7 @@ func (l *Library) ListMyNotificationTargets(ctx context.Context, uc *UserCtx) ([
 }
 
 // CreateServerNotificationTarget stores a server-scope target.
-func (l *Library) CreateServerNotificationTarget(ctx context.Context, in NotificationTargetInput) (NotificationTarget, error) {
+func (l *Integrations) CreateServerNotificationTarget(ctx context.Context, in NotificationTargetInput) (NotificationTarget, error) {
 	row, err := l.buildNotificationTarget(ctx, in, NotifyScopeServer, "", false)
 	if err != nil {
 		return NotificationTarget{}, err
@@ -220,7 +220,7 @@ func (l *Library) CreateServerNotificationTarget(ctx context.Context, in Notific
 }
 
 // CreateMyNotificationTarget stores a personal target for the caller.
-func (l *Library) CreateMyNotificationTarget(ctx context.Context, uc *UserCtx, in NotificationTargetInput) (NotificationTarget, error) {
+func (l *Integrations) CreateMyNotificationTarget(ctx context.Context, uc *UserCtx, in NotificationTargetInput) (NotificationTarget, error) {
 	row, err := l.buildNotificationTarget(ctx, in, NotifyScopeUser, uc.ID, uc.Admin)
 	if err != nil {
 		return NotificationTarget{}, err
@@ -228,7 +228,7 @@ func (l *Library) CreateMyNotificationTarget(ctx context.Context, uc *UserCtx, i
 	return l.insertNotificationTarget(ctx, row)
 }
 
-func (l *Library) insertNotificationTarget(ctx context.Context, row wdb.NotificationTarget) (NotificationTarget, error) {
+func (l *Integrations) insertNotificationTarget(ctx context.Context, row wdb.NotificationTarget) (NotificationTarget, error) {
 	if err := l.db.InsertNotificationTarget(ctx, row); err != nil {
 		switch {
 		case errors.Is(err, wdb.ErrConflict):
@@ -243,7 +243,7 @@ func (l *Library) insertNotificationTarget(ctx context.Context, row wdb.Notifica
 
 // UpdateServerNotificationTarget replaces a server-scope target's
 // label, config, and enabled events.
-func (l *Library) UpdateServerNotificationTarget(ctx context.Context, apiPID string, in NotificationTargetInput) (NotificationTarget, error) {
+func (l *Integrations) UpdateServerNotificationTarget(ctx context.Context, apiPID string, in NotificationTargetInput) (NotificationTarget, error) {
 	row, err := l.notificationTargetRow(ctx, apiPID)
 	if err != nil {
 		return NotificationTarget{}, err
@@ -255,7 +255,7 @@ func (l *Library) UpdateServerNotificationTarget(ctx context.Context, apiPID str
 }
 
 // UpdateMyNotificationTarget replaces one of the caller's targets.
-func (l *Library) UpdateMyNotificationTarget(ctx context.Context, uc *UserCtx, apiPID string, in NotificationTargetInput) (NotificationTarget, error) {
+func (l *Integrations) UpdateMyNotificationTarget(ctx context.Context, uc *UserCtx, apiPID string, in NotificationTargetInput) (NotificationTarget, error) {
 	row, err := l.notificationTargetRow(ctx, apiPID)
 	if err != nil {
 		return NotificationTarget{}, err
@@ -266,7 +266,7 @@ func (l *Library) UpdateMyNotificationTarget(ctx context.Context, uc *UserCtx, a
 	return l.updateNotificationTarget(ctx, row, in, uc.Admin)
 }
 
-func (l *Library) updateNotificationTarget(ctx context.Context, row wdb.NotificationTarget, in NotificationTargetInput, ownerIsAdmin bool) (NotificationTarget, error) {
+func (l *Integrations) updateNotificationTarget(ctx context.Context, row wdb.NotificationTarget, in NotificationTargetInput, ownerIsAdmin bool) (NotificationTarget, error) {
 	// The kind is fixed at creation; the input's kind rides along only
 	// on create, so rebuild against the stored one.
 	in.Kind = row.Kind
@@ -300,7 +300,7 @@ func (l *Library) updateNotificationTarget(ctx context.Context, row wdb.Notifica
 }
 
 // DeleteServerNotificationTarget removes a server-scope target.
-func (l *Library) DeleteServerNotificationTarget(ctx context.Context, apiPID string) error {
+func (l *Integrations) DeleteServerNotificationTarget(ctx context.Context, apiPID string) error {
 	row, err := l.notificationTargetRow(ctx, apiPID)
 	if err != nil {
 		return err
@@ -318,7 +318,7 @@ func (l *Library) DeleteServerNotificationTarget(ctx context.Context, apiPID str
 }
 
 // DeleteMyNotificationTarget removes one of the caller's targets.
-func (l *Library) DeleteMyNotificationTarget(ctx context.Context, uc *UserCtx, apiPID string) error {
+func (l *Integrations) DeleteMyNotificationTarget(ctx context.Context, uc *UserCtx, apiPID string) error {
 	prefix, pid, ok := parseAPIPID(apiPID)
 	if !ok || prefix != PrefixNotifyTarget {
 		return errNotFound("no notification target " + apiPID)
@@ -334,7 +334,7 @@ func (l *Library) DeleteMyNotificationTarget(ctx context.Context, uc *UserCtx, a
 
 // TestServerNotificationTarget queues one test delivery to a
 // server-scope target, bypassing event selection.
-func (l *Library) TestServerNotificationTarget(ctx context.Context, apiPID string) error {
+func (l *Integrations) TestServerNotificationTarget(ctx context.Context, apiPID string) error {
 	row, err := l.notificationTargetRow(ctx, apiPID)
 	if err != nil {
 		return err
@@ -347,7 +347,7 @@ func (l *Library) TestServerNotificationTarget(ctx context.Context, apiPID strin
 
 // TestMyNotificationTarget queues one test delivery to one of the
 // caller's targets.
-func (l *Library) TestMyNotificationTarget(ctx context.Context, uc *UserCtx, apiPID string) error {
+func (l *Integrations) TestMyNotificationTarget(ctx context.Context, uc *UserCtx, apiPID string) error {
 	row, err := l.notificationTargetRow(ctx, apiPID)
 	if err != nil {
 		return err
@@ -358,7 +358,7 @@ func (l *Library) TestMyNotificationTarget(ctx context.Context, uc *UserCtx, api
 	return l.enqueueNotifyTest(ctx, row.ID)
 }
 
-func (l *Library) enqueueNotifyTest(ctx context.Context, targetID string) error {
+func (l *Integrations) enqueueNotifyTest(ctx context.Context, targetID string) error {
 	err := l.db.EnqueueNotify(ctx, wdb.NotifyRow{
 		TargetID: targetID,
 		Event:    notifyTestEvent,
@@ -372,7 +372,7 @@ func (l *Library) enqueueNotifyTest(ctx context.Context, targetID string) error 
 }
 
 // notificationTargetRow resolves an API pid to its stored row.
-func (l *Library) notificationTargetRow(ctx context.Context, apiPID string) (wdb.NotificationTarget, error) {
+func (l *Integrations) notificationTargetRow(ctx context.Context, apiPID string) (wdb.NotificationTarget, error) {
 	prefix, pid, ok := parseAPIPID(apiPID)
 	if !ok || prefix != PrefixNotifyTarget {
 		return wdb.NotificationTarget{}, errNotFound("no notification target " + apiPID)
@@ -391,7 +391,7 @@ func (l *Library) notificationTargetRow(ctx context.Context, apiPID string) (wdb
 // scope rules: server targets take server-scope events; user targets
 // take user-scope events, plus server-scope events when the owner is
 // an administrator.
-func (l *Library) buildNotificationTarget(ctx context.Context, in NotificationTargetInput, scope, ownerID string, ownerIsAdmin bool) (wdb.NotificationTarget, error) {
+func (l *Integrations) buildNotificationTarget(ctx context.Context, in NotificationTargetInput, scope, ownerID string, ownerIsAdmin bool) (wdb.NotificationTarget, error) {
 	provider, ok := notify.ByKind(in.Kind)
 	if !ok {
 		return wdb.NotificationTarget{}, errInvalid("unknown notification kind " + in.Kind)
@@ -481,7 +481,7 @@ func validateEnabledEvents(names []string, scope string, ownerIsAdmin bool) ([]s
 	return out, nil
 }
 
-func (l *Library) notificationTargetDTOs(rows []wdb.NotificationTarget) []NotificationTarget {
+func (l *Integrations) notificationTargetDTOs(rows []wdb.NotificationTarget) []NotificationTarget {
 	out := make([]NotificationTarget, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, l.notificationTargetDTO(r))
@@ -493,7 +493,7 @@ func (l *Library) notificationTargetDTOs(rows []wdb.NotificationTarget) []Notifi
 // shape. A config this server's key cannot open (a cross-host restore)
 // renders as an empty document: the secret is genuinely lost, and
 // saving the target again re-enters it.
-func (l *Library) notificationTargetDTO(r wdb.NotificationTarget) NotificationTarget {
+func (l *Integrations) notificationTargetDTO(r wdb.NotificationTarget) NotificationTarget {
 	config := json.RawMessage("{}")
 	if l.sealer != nil {
 		if pt, err := l.sealer.Open(r.SealedConfig); err == nil {
@@ -531,7 +531,7 @@ func (l *Library) notificationTargetDTO(r wdb.NotificationTarget) NotificationTa
 
 // EmitNotification is EmitNotificationFor for an event that names
 // nothing to open.
-func (l *Library) EmitNotification(ctx context.Context, event, title, body string, userIDs []string) {
+func (l *Integrations) EmitNotification(ctx context.Context, event, title, body string, userIDs []string) {
 	l.EmitNotificationFor(ctx, event, title, body, "", userIDs)
 }
 
@@ -543,7 +543,7 @@ func (l *Library) EmitNotification(ctx context.Context, event, title, body strin
 //
 // The inbox row is written whether or not the account has a target: a
 // target is how news leaves the server, not where it is kept.
-func (l *Library) EmitNotificationFor(ctx context.Context, event, title, body, targetPID string, userIDs []string) {
+func (l *Integrations) EmitNotificationFor(ctx context.Context, event, title, body, targetPID string, userIDs []string) {
 	ev, ok := notifyEventByName(event)
 	if !ok || ev.Scope != NotifyScopeUser {
 		l.log.Warn("emit of unknown or non-user notification event", "event", event)
@@ -570,7 +570,7 @@ func (l *Library) EmitNotificationFor(ctx context.Context, event, title, body, t
 // targets plus admin-owned personal targets that opted in. The admin
 // set is re-read at emit time, so a demoted administrator's targets
 // deliver nothing.
-func (l *Library) EmitServerNotification(ctx context.Context, event, title, body string) {
+func (l *Integrations) EmitServerNotification(ctx context.Context, event, title, body string) {
 	ev, ok := notifyEventByName(event)
 	if !ok || ev.Scope != NotifyScopeServer {
 		l.log.Warn("emit of unknown or non-server notification event", "event", event)
@@ -601,7 +601,7 @@ func (l *Library) EmitServerNotification(ctx context.Context, event, title, body
 	}
 }
 
-func (l *Library) enqueueToEnabled(ctx context.Context, targets []wdb.NotificationTarget, event, title, body, targetPID string, now int64) {
+func (l *Integrations) enqueueToEnabled(ctx context.Context, targets []wdb.NotificationTarget, event, title, body, targetPID string, now int64) {
 	for _, t := range targets {
 		if !targetWantsEvent(t, event) {
 			continue
@@ -648,7 +648,7 @@ func targetWantsEvent(t wdb.NotificationTarget, event string) bool {
 // (`app/app/lib/src/shell/routes.dart`) written out a second time,
 // because a Go server cannot read a Dart constant. A Dart test pins
 // each one against WaxRoute, so a rename over there fails over here.
-func (l *Library) notificationLink(event, targetPID string) string {
+func (l *Integrations) notificationLink(event, targetPID string) string {
 	if l.publicBase == "" {
 		return ""
 	}
@@ -710,7 +710,7 @@ func (l *Library) notificationLink(event, targetPID string) string {
 // --- delivery ---------------------------------------------------------------------
 
 // DrainNotifyOutbox delivers one queued notification; false when idle.
-func (l *Library) DrainNotifyOutbox(ctx context.Context) bool {
+func (l *Integrations) DrainNotifyOutbox(ctx context.Context) bool {
 	now := time.Now().UnixNano()
 	row, err := l.db.LeaseNotify(ctx, now, int64(notifyLeaseSeconds)*int64(time.Second), notifyMaxAttempts)
 	if err != nil {
@@ -822,7 +822,7 @@ func pacingWait(t wdb.NotificationTarget, event string, now time.Time) time.Dura
 // deliverNotify opens the target's config and hands the message to its
 // provider. The config is read at delivery time, so edits between
 // enqueue and drain win.
-func (l *Library) deliverNotify(ctx context.Context, target wdb.NotificationTarget, row wdb.NotifyRow) error {
+func (l *Integrations) deliverNotify(ctx context.Context, target wdb.NotificationTarget, row wdb.NotifyRow) error {
 	provider, ok := notify.ByKind(target.Kind)
 	if !ok {
 		return &notify.Permanent{Err: errors.New("unknown notification kind " + target.Kind)}
@@ -847,7 +847,7 @@ func (l *Library) deliverNotify(ctx context.Context, target wdb.NotificationTarg
 
 // markNotifyHealth records a delivery outcome on the target so the
 // settings surface can show why notifications are not arriving.
-func (l *Library) markNotifyHealth(ctx context.Context, targetID string, deliveryErr error) {
+func (l *Integrations) markNotifyHealth(ctx context.Context, targetID string, deliveryErr error) {
 	msg := ""
 	if deliveryErr != nil {
 		msg = clipHealthMessage(deliveryErr.Error())
@@ -877,7 +877,7 @@ func clipHealthMessage(msg string) string {
 }
 
 // PruneNotifyOutbox drops stale or exhausted rows.
-func (l *Library) PruneNotifyOutbox(ctx context.Context) {
+func (l *Integrations) PruneNotifyOutbox(ctx context.Context) {
 	cutoff := time.Now().Add(-notifyHorizon).UnixNano()
 	if n, err := l.db.PruneNotifyOutbox(ctx, cutoff, notifyMaxAttempts); err != nil {
 		l.log.Warn("pruning notify outbox", "err", err)
@@ -890,7 +890,7 @@ func (l *Library) PruneNotifyOutbox(ctx context.Context) {
 
 // PushRegistrations lists the caller's UnifiedPush registrations: the
 // unifiedpush rows of the caller's targets, in the legacy shape.
-func (l *Library) PushRegistrations(ctx context.Context, uc *UserCtx) ([]PushRegistration, error) {
+func (l *Integrations) PushRegistrations(ctx context.Context, uc *UserCtx) ([]PushRegistration, error) {
 	rows, err := l.db.UserNotificationTargets(ctx, uc.ID)
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
@@ -916,7 +916,7 @@ func (l *Library) PushRegistrations(ctx context.Context, uc *UserCtx) ([]PushReg
 // before targets existed); a routine re-register refreshes endpoint
 // and label only, preserving the event selection made in the targets
 // surface.
-func (l *Library) RegisterPushEndpoint(ctx context.Context, uc *UserCtx, endpoint, label string) (PushRegistration, bool, error) {
+func (l *Integrations) RegisterPushEndpoint(ctx context.Context, uc *UserCtx, endpoint, label string) (PushRegistration, bool, error) {
 	raw, err := json.Marshal(map[string]string{"endpoint": endpoint})
 	if err != nil {
 		return PushRegistration{}, false, &Error{Kind: KindInternal, Err: err}
@@ -954,7 +954,7 @@ func (l *Library) RegisterPushEndpoint(ctx context.Context, uc *UserCtx, endpoin
 
 // DeletePushRegistration removes one of the caller's registrations.
 // The legacy surface reaches unifiedpush targets only.
-func (l *Library) DeletePushRegistration(ctx context.Context, uc *UserCtx, apiRegPID string) error {
+func (l *Integrations) DeletePushRegistration(ctx context.Context, uc *UserCtx, apiRegPID string) error {
 	row, err := l.notificationTargetRow(ctx, apiRegPID)
 	if err != nil {
 		// Keep the legacy surface's vocabulary.
@@ -979,7 +979,7 @@ func (l *Library) DeletePushRegistration(ctx context.Context, uc *UserCtx, apiRe
 // DeleteAllPushRegistrations removes every UnifiedPush registration
 // the caller holds (and only those; other target kinds are not part
 // of the legacy surface).
-func (l *Library) DeleteAllPushRegistrations(ctx context.Context, uc *UserCtx) error {
+func (l *Integrations) DeleteAllPushRegistrations(ctx context.Context, uc *UserCtx) error {
 	if err := l.db.DeleteUserNotificationTargetsByKind(ctx, uc.ID, notify.KindUnifiedPush); err != nil {
 		return &Error{Kind: KindInternal, Err: err}
 	}
@@ -988,7 +988,7 @@ func (l *Library) DeleteAllPushRegistrations(ctx context.Context, uc *UserCtx) e
 
 // dropLegacyNotifySetting removes the retired settings-blob relay
 // configuration; best-effort at open, harmless when absent.
-func (l *Library) dropLegacyNotifySetting(ctx context.Context) {
+func (l *Integrations) dropLegacyNotifySetting(ctx context.Context) {
 	if err := l.db.SettingDelete(ctx, legacyNotifySetting); err != nil {
 		l.log.Warn("dropping legacy notification setting", "err", err)
 	}

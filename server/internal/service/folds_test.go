@@ -16,7 +16,6 @@ import (
 	"github.com/colespringer/waxbin/query"
 
 	"github.com/colespringer/waxdeck/fixtures"
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // foldFixture is a library holding an artist under two spellings and one
@@ -49,7 +48,7 @@ func foldFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 // answering the group and the outcome.
 func mergeFinding(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, entityType string) (DuplicateGroupDTO, MergeResultDTO) {
 	t.Helper()
-	groups, err := svc.ListDuplicateGroups(ctx, uc)
+	groups, err := svc.Health.ListDuplicateGroups(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +60,7 @@ func mergeFinding(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, 
 		for _, l := range g.Losers {
 			losers = append(losers, l.PID)
 		}
-		res, err := svc.MergeDuplicates(ctx, uc, entityType, g.Survivor.PID, losers)
+		res, err := svc.Health.MergeDuplicates(ctx, uc, entityType, g.Survivor.PID, losers)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -73,7 +72,7 @@ func mergeFinding(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, 
 
 func allFolds(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) []EntityFoldDTO {
 	t.Helper()
-	folds, next, err := svc.ListEntityFolds(ctx, uc, "", 0)
+	folds, next, err := svc.Reads.ListEntityFolds(ctx, uc, "", 0)
 	if err != nil || next != "" {
 		t.Fatalf("folds = %+v, next %q (%v)", folds, next, err)
 	}
@@ -95,7 +94,7 @@ func TestAMergeFoldsTheLosersNameIntoTheSurvivor(t *testing.T) {
 	if len(albumMerge.Folds) != 1 || !strings.HasPrefix(albumMerge.Folds[0], "al:") {
 		t.Fatalf("album merge folds = %q, want the loser album's key", albumMerge.Folds)
 	}
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "entity.merge"}, "", 10)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: "entity.merge"}, "", 10)
 	if err != nil || len(page.Events) != 2 {
 		t.Fatalf("audit = %+v (%v), want both merges", page.Events, err)
 	}
@@ -131,14 +130,14 @@ func TestUnfoldingForgetsTheFold(t *testing.T) {
 	ctx, svc, uc := foldFixture(t)
 	_, artistMerge := mergeFinding(t, ctx, svc, uc, "artist")
 	_, albumMerge := mergeFinding(t, ctx, svc, uc, "album")
-	if err := svc.UnfoldEntities(ctx, uc, "artist", artistMerge.Folds); err != nil {
+	if err := svc.Reads.UnfoldEntities(ctx, uc, "artist", artistMerge.Folds); err != nil {
 		t.Fatal(err)
 	}
 	folds := allFolds(t, ctx, svc, uc)
 	if len(folds) != 1 || folds[0].Key != albumMerge.Folds[0] {
 		t.Fatalf("folds after unfolding the artist = %+v, want the album's alone", folds)
 	}
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "entity.unfold"}, "", 10)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: "entity.unfold"}, "", 10)
 	if err != nil || len(page.Events) != 1 || page.Events[0].TargetKind != "artist" {
 		t.Fatalf("audit = %+v (%v), want the unfold", page.Events, err)
 	}
@@ -153,14 +152,14 @@ func TestUnfoldingAMissingKeyForgetsNothing(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := foldFixture(t)
 	_, artistMerge := mergeFinding(t, ctx, svc, uc, "artist")
-	err := svc.UnfoldEntities(ctx, uc, "artist", []string{artistMerge.Folds[0], "nobody folded"})
+	err := svc.Reads.UnfoldEntities(ctx, uc, "artist", []string{artistMerge.Folds[0], "nobody folded"})
 	if KindOf(err) != KindNotFound || !strings.Contains(err.Error(), "nobody folded") {
 		t.Fatalf("unfolding a missing key = %v, want not found naming it", err)
 	}
 	if folds := allFolds(t, ctx, svc, uc); len(folds) != 1 || folds[0].Key != artistMerge.Folds[0] {
 		t.Errorf("folds = %+v, want the held key kept", folds)
 	}
-	if page, _ := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "entity.unfold"}, "", 10); len(page.Events) != 0 {
+	if page, _ := svc.Audit.Events(ctx, AuditFilter{Action: "entity.unfold"}, "", 10); len(page.Events) != 0 {
 		t.Errorf("a refused unfold was audited: %+v", page.Events)
 	}
 }
@@ -172,10 +171,10 @@ func TestFoldsAreForAdministrators(t *testing.T) {
 	ctx, svc, uc := foldFixture(t)
 	_, artistMerge := mergeFinding(t, ctx, svc, uc, "artist")
 	member := &UserCtx{ID: uc.ID, CatalogPID: uc.CatalogPID, AllLibraries: true}
-	if _, _, err := svc.ListEntityFolds(ctx, member, "", 0); KindOf(err) != KindForbidden {
+	if _, _, err := svc.Reads.ListEntityFolds(ctx, member, "", 0); KindOf(err) != KindForbidden {
 		t.Errorf("a member listing folds = %v, want forbidden", err)
 	}
-	if err := svc.UnfoldEntities(ctx, member, "artist", artistMerge.Folds); KindOf(err) != KindForbidden {
+	if err := svc.Reads.UnfoldEntities(ctx, member, "artist", artistMerge.Folds); KindOf(err) != KindForbidden {
 		t.Errorf("a member unfolding = %v, want forbidden", err)
 	}
 	many := make([]string, maxUnfoldKeys+1)
@@ -190,7 +189,7 @@ func TestFoldsAreForAdministrators(t *testing.T) {
 		{"artist", nil},
 		{"artist", many},
 	} {
-		if err := svc.UnfoldEntities(ctx, uc, bad.entityType, bad.keys); KindOf(err) != KindInvalid {
+		if err := svc.Reads.UnfoldEntities(ctx, uc, bad.entityType, bad.keys); KindOf(err) != KindInvalid {
 			t.Errorf("unfolding %s with %d keys = %v, want invalid", bad.entityType, len(bad.keys), err)
 		}
 	}
@@ -206,19 +205,19 @@ func TestFoldsPageByTypeThenKey(t *testing.T) {
 	ctx, svc, uc := foldFixture(t)
 	mergeFinding(t, ctx, svc, uc, "artist")
 	mergeFinding(t, ctx, svc, uc, "album")
-	first, next, err := svc.ListEntityFolds(ctx, uc, "", 1)
+	first, next, err := svc.Reads.ListEntityFolds(ctx, uc, "", 1)
 	if err != nil || len(first) != 1 || first[0].EntityType != "album" || next == "" {
 		t.Fatalf("first page = %+v, next %q (%v), want the album fold and a cursor", first, next, err)
 	}
-	second, next, err := svc.ListEntityFolds(ctx, uc, next, 1)
+	second, next, err := svc.Reads.ListEntityFolds(ctx, uc, next, 1)
 	if err != nil || len(second) != 1 || second[0].EntityType != "artist" || next == "" {
 		t.Fatalf("second page = %+v, next %q (%v), want the artist fold and a cursor past it", second, next, err)
 	}
-	last, next, err := svc.ListEntityFolds(ctx, uc, next, 1)
+	last, next, err := svc.Reads.ListEntityFolds(ctx, uc, next, 1)
 	if err != nil || len(last) != 0 || next != "" {
 		t.Fatalf("last page = %+v, next %q (%v), want nothing more", last, next, err)
 	}
-	if _, _, err := svc.ListEntityFolds(ctx, uc, "not-a-cursor", 1); KindOf(err) != KindInvalid {
+	if _, _, err := svc.Reads.ListEntityFolds(ctx, uc, "not-a-cursor", 1); KindOf(err) != KindInvalid {
 		t.Errorf("a foreign cursor = %v, want invalid", err)
 	}
 }
@@ -449,7 +448,7 @@ func TestAnUnfoldedNameSplitsOutOnlyWhenItsFileChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	group, merged := mergeFinding(t, ctx, svc, uc, "artist")
-	if err := svc.UnfoldEntities(ctx, uc, "artist", merged.Folds); err != nil {
+	if err := svc.Reads.UnfoldEntities(ctx, uc, "artist", merged.Folds); err != nil {
 		t.Fatal(err)
 	}
 	loser := group.Losers[0].Name

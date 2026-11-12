@@ -50,7 +50,7 @@ func TestAMissingFileWithACopyIsReportedForWhatHappened(t *testing.T) {
 		},
 	})
 	pid := itemPIDByTitle(t, ctx, svc, uc, "Solo")
-	it, err := svc.getVisibleItem(ctx, uc, pid)
+	it, err := svc.Grants.getVisibleItem(ctx, uc, pid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestAMissingFileWithACopyIsReportedForWhatHappened(t *testing.T) {
 	if err := os.Remove(copies[0]); err != nil {
 		t.Fatal(err)
 	}
-	svc.markAudioMissing(ctx, string(it.PID)+"|")
+	svc.Tools.markAudioMissing(ctx, string(it.PID)+"|")
 	if !strings.Contains(logs.String(), "dropped the rows") {
 		t.Errorf("a gone copy's drain logged no drop:\n%s", logs.String())
 	}
@@ -77,7 +77,7 @@ func TestAMissingFileWithACopyIsReportedForWhatHappened(t *testing.T) {
 	if err := os.Remove(primary); err != nil {
 		t.Fatal(err)
 	}
-	svc.markAudioMissing(ctx, string(it.PID)+"|")
+	svc.Tools.markAudioMissing(ctx, string(it.PID)+"|")
 	if !strings.Contains(logs.String(), "took the place") {
 		t.Errorf("a gone primary's drain logged no promotion:\n%s", logs.String())
 	}

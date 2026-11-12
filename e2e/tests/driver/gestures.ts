@@ -7,7 +7,7 @@
 // so each forced click here sits behind a destination or rect-at-rest
 // check instead.
 
-import { expect, Locator, Page, Request } from '@playwright/test';
+import { expect, Locator, Page, Request, Response } from '@playwright/test';
 import { T } from './budgets';
 
 // No click, keystroke or scroll under a nested deadline: a `toPass` attempt
@@ -18,16 +18,38 @@ import { T } from './budgets';
 // retried unit, so never inside another `toPass`. Keys typed before flutter
 // binds its editing session never reach the controller.
 export async function typeInto(page: Page, field: Locator, text: string) {
+  await enterInto(field, () => typeOnce(page, field, text));
+}
+
+// Paste a document into a flutter text field, as one retried unit like
+// `typeInto`: the whole text arrives as one input, the way a paste does.
+// Typed, each key is a round trip to a renderer that rebuilds the field,
+// and on a busy machine a few hundred of them outlast T.action.
+export async function pasteInto(page: Page, field: Locator, text: string) {
+  await enterInto(field, () =>
+    enterOnce(page, field, text, () => page.keyboard.insertText(text)),
+  );
+}
+
+// The retried unit `typeInto` and `pasteInto` share.
+async function enterInto(field: Locator, attempt: () => Promise<void>) {
   // Bounded, so an absent field fails here with a page snapshot.
   await field.waitFor({ timeout: T.nav });
   // T.action, not more: two of these have to fit a spec's 120s.
-  await expect(async () => {
-    await typeOnce(page, field, text);
-  }).toPass({ timeout: T.action });
+  await expect(attempt).toPass({ timeout: T.action });
 }
 
 // One attempt of `typeInto`, for a caller whose own loop retries it.
 export async function typeOnce(page: Page, field: Locator, text: string) {
+  await enterOnce(page, field, text, () => page.keyboard.type(text));
+}
+
+async function enterOnce(
+  page: Page,
+  field: Locator,
+  text: string,
+  enter: () => Promise<void>,
+) {
   // Re-located and re-clicked each attempt: the click re-establishes a
   // lost editing session, and flutter may have rebuilt the node.
   const inner = field.locator('input, textarea');
@@ -36,7 +58,7 @@ export async function typeOnce(page: Page, field: Locator, text: string) {
   await input.click({ timeout: T.step });
   await expect(input).toBeFocused({ timeout: T.step });
   await page.keyboard.press('ControlOrMeta+a');
-  await page.keyboard.type(text);
+  await enter();
   await expect(input).toHaveValue(text, { timeout: 1_000 });
   // A value flutter never received is gone by the second read.
   await new Promise((resolve) => setTimeout(resolve, 400));
@@ -181,6 +203,30 @@ export async function clickUntilRequested(
   press: Press = {},
 ) {
   await clickUntil(trigger, requestSeen(page, matches), press);
+}
+
+// Click a control once and answer the response its request came back
+// with; null when the press sent nothing within the step tier of landing.
+// One attempt, for a caller whose own loop retries it. The wait is armed
+// before the click, so an answer cannot slip past it, and counted from
+// the click's landing, so a slow click does not spend it and a swallowed
+// one costs the step tier and no more.
+export async function clickOnceForAnswer(
+  page: Pick<Page, 'waitForResponse'>,
+  trigger: Locator,
+  answers: (res: Response) => boolean,
+): Promise<Response | null> {
+  const answered = page.waitForResponse(answers, { timeout: 0 }).catch(() => null);
+  await trigger.click({ timeout: T.step });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const silent = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), T.step);
+  });
+  try {
+    return await Promise.race([answered, silent]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Click a canvas control and wait for what it opens, as one retried unit:

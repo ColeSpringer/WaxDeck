@@ -60,7 +60,7 @@ func (c *cannedSource) SearchRecordings(context.Context, string, string) ([]*mat
 func drainMatches(t *testing.T, h *harness) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
-	for h.svc.DrainMatchQueue(context.Background()) {
+	for h.svc.Ingest.DrainMatchQueue(context.Background()) {
 		if time.Now().After(deadline) {
 			t.Fatal("identify worker did not drain")
 		}
@@ -607,7 +607,7 @@ func TestDiscardAfterAPartialLandingKeepsWhatLanded(t *testing.T) {
 	if err := h.store.UpdateUpload(context.Background(), row); err != nil {
 		t.Fatal(err)
 	}
-	h.svc.DrainExpiredUploads(context.Background())
+	h.svc.Ingest.DrainExpiredUploads(context.Background())
 	row, err = h.store.UploadByID(context.Background(), second.Id)
 	if err != nil {
 		t.Fatal(err)
@@ -1006,7 +1006,7 @@ func (f *fakeAcquireSource) Fetch(_ context.Context, req source.FetchRequest, w 
 func drainTools(t *testing.T, h *harness) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
-	for h.svc.DrainToolTasks(context.Background()) {
+	for h.svc.Tools.DrainToolTasks(context.Background()) {
 		if time.Now().After(deadline) {
 			t.Fatal("tool worker did not drain")
 		}

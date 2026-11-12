@@ -43,11 +43,11 @@ func serviceHandler(t *testing.T) (*Handler, *service.UserCtx) {
 		svc.Close()
 		store.Close()
 	})
-	acct, err := svc.CreateAccount(ctx, service.AccountCreate{Username: "alice", Password: "login-password-1"})
+	acct, err := svc.Identity.CreateAccount(ctx, service.AccountCreate{Username: "alice", Password: "login-password-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,6 +81,7 @@ func indexesLastModified(t *testing.T, h *Handler, uc *service.UserCtx) int64 {
 // position than the one served or, when it cannot tell, the feed's.
 func TestGetIndexesReportsThePositionOfTheIndexItServes(t *testing.T) {
 	h, uc := serviceHandler(t)
+	settle(t, h)
 	first := indexesLastModified(t, h, uc)
 	h.idxMu.Lock()
 	served := h.idxShared

@@ -66,7 +66,7 @@ type BookResumePoint struct {
 }
 
 // BookDetailFor returns one audiobook with the caller's settings.
-func (l *Library) BookDetailFor(ctx context.Context, uc *UserCtx, apiBookPID string) (BookDetail, error) {
+func (l *Reads) BookDetailFor(ctx context.Context, uc *UserCtx, apiBookPID string) (BookDetail, error) {
 	bd, err := l.getBookDetail(ctx, uc, apiBookPID)
 	if err != nil {
 		return BookDetail{}, err
@@ -132,7 +132,7 @@ func bookParts(bd *model.BookDetail) []BookPart {
 
 // BookResumeFor returns where the caller left off, with the containing
 // chapter.
-func (l *Library) BookResumeFor(ctx context.Context, uc *UserCtx, apiBookPID string) (BookResumePoint, error) {
+func (l *Reads) BookResumeFor(ctx context.Context, uc *UserCtx, apiBookPID string) (BookResumePoint, error) {
 	bd, err := l.getBookDetail(ctx, uc, apiBookPID)
 	if err != nil {
 		return BookResumePoint{}, err
@@ -157,7 +157,7 @@ func (l *Library) BookResumeFor(ctx context.Context, uc *UserCtx, apiBookPID str
 }
 
 // PutBookSettings fully replaces the caller's settings for one book.
-func (l *Library) PutBookSettings(ctx context.Context, uc *UserCtx, apiBookPID string, s BookSettings) (BookSettings, error) {
+func (l *Reads) PutBookSettings(ctx context.Context, uc *UserCtx, apiBookPID string, s BookSettings) (BookSettings, error) {
 	bd, err := l.getBookDetail(ctx, uc, apiBookPID)
 	if err != nil {
 		return BookSettings{}, err
@@ -191,7 +191,7 @@ type Bookmark struct {
 const bookmarkNoteMax = 500
 
 // BookmarksFor lists the caller's marks in one book, in timeline order.
-func (l *Library) BookmarksFor(ctx context.Context, uc *UserCtx, apiBookPID string) ([]Bookmark, error) {
+func (l *Reads) BookmarksFor(ctx context.Context, uc *UserCtx, apiBookPID string) ([]Bookmark, error) {
 	bd, err := l.getBookDetail(ctx, uc, apiBookPID)
 	if err != nil {
 		return nil, err
@@ -209,7 +209,7 @@ var ErrBookmarkRemoved = errors.New("that bookmark was removed")
 // CreateBookmark records a mark at a book-timeline position, under the
 // client's own bookmark pid when it minted one (an offline mark, dated by
 // that pid): a replay answers the stored mark, unchecked.
-func (l *Library) CreateBookmark(ctx context.Context, uc *UserCtx, apiBookPID, apiID string, positionMS int64, note string) (Bookmark, error) {
+func (l *Reads) CreateBookmark(ctx context.Context, uc *UserCtx, apiBookPID, apiID string, positionMS int64, note string) (Bookmark, error) {
 	bd, err := l.getBookDetail(ctx, uc, apiBookPID)
 	if err != nil {
 		return Bookmark{}, err
@@ -285,7 +285,7 @@ func bookmarkDTO(r wdb.Bookmark) Bookmark {
 // DeleteBookmark removes one of the caller's marks. Removing one that is
 // already gone succeeds, so a retry after a lost answer is not an error,
 // and so does one on a book out of their sight: the mark is still theirs.
-func (l *Library) DeleteBookmark(ctx context.Context, uc *UserCtx, apiBookPID, apiBookmarkID string) error {
+func (l *Reads) DeleteBookmark(ctx context.Context, uc *UserCtx, apiBookPID, apiBookmarkID string) error {
 	prefix, book, ok := parseAPIPID(apiBookPID)
 	if !ok || !bookOrTrackPrefix(prefix) {
 		return errNotFound("no book with pid " + apiBookPID)
@@ -305,7 +305,7 @@ func (l *Library) DeleteBookmark(ctx context.Context, uc *UserCtx, apiBookPID, a
 }
 
 // getBookDetail resolves an API book PID with the visibility check.
-func (l *Library) getBookDetail(ctx context.Context, uc *UserCtx, apiBookPID string) (*model.BookDetail, error) {
+func (l *Reads) getBookDetail(ctx context.Context, uc *UserCtx, apiBookPID string) (*model.BookDetail, error) {
 	prefix, pid, ok := parseAPIPID(apiBookPID)
 	if !ok || !bookOrTrackPrefix(prefix) {
 		return nil, errNotFound("no book with pid " + apiBookPID)
@@ -323,7 +323,7 @@ func (l *Library) getBookDetail(ctx context.Context, uc *UserCtx, apiBookPID str
 	}
 	// The item routes' rule, content rules included: a book a tag rule
 	// or the advisory flag hides is as absent here as it is there.
-	if _, err := l.getVisibleItem(ctx, uc, apiBookPID); err != nil {
+	if _, err := l.Grants.getVisibleItem(ctx, uc, apiBookPID); err != nil {
 		if KindOf(err) == KindNotFound {
 			return nil, errNotFound("no book with pid " + apiBookPID)
 		}
@@ -372,7 +372,7 @@ const bookSeriesPageSize = 100
 // HasMore rather than whether anything survived the filter, which is
 // what keeps a caller draining instead of stopping on a filtered-out
 // window.
-func (l *Library) ListBookSeries(ctx context.Context, uc *UserCtx, cursor string, limit int) (BookSeriesPageDTO, error) {
+func (l *Reads) ListBookSeries(ctx context.Context, uc *UserCtx, cursor string, limit int) (BookSeriesPageDTO, error) {
 	if limit <= 0 || limit > 500 {
 		limit = bookSeriesPageSize
 	}
@@ -423,7 +423,7 @@ func (l *Library) ListBookSeries(ctx context.Context, uc *UserCtx, cursor string
 // it is offered to this account", by library grant or content rule,
 // exactly as the listing leaves such a series out: a restricted caller
 // must not learn a series exists from an empty answer.
-func (l *Library) BookSeriesDetailFor(ctx context.Context, uc *UserCtx, apiPID string) (BookSeriesDetailDTO, error) {
+func (l *Reads) BookSeriesDetailFor(ctx context.Context, uc *UserCtx, apiPID string) (BookSeriesDetailDTO, error) {
 	prefix, pid, ok := parseAPIPID(apiPID)
 	if !ok || prefix != PrefixSeries {
 		return BookSeriesDetailDTO{}, errNotFound("no series with pid " + apiPID)
@@ -449,7 +449,7 @@ func (l *Library) BookSeriesDetailFor(ctx context.Context, uc *UserCtx, apiPID s
 	}
 	// BooksInSeries takes no query node, so nothing upstream has applied
 	// this caller's grants or tag rules.
-	allowed, err := l.tagVerdicts(ctx, uc, books)
+	allowed, err := l.Grants.tagVerdicts(ctx, uc, books)
 	if err != nil {
 		return BookSeriesDetailDTO{}, err
 	}
@@ -462,7 +462,7 @@ func (l *Library) BookSeriesDetailFor(ctx context.Context, uc *UserCtx, apiPID s
 		}
 		held++
 		heldMS += it.DurationMS
-		if !l.offersWith(ctx, uc, allowed, it) {
+		if !l.Grants.offersWith(ctx, uc, allowed, it) {
 			continue
 		}
 		out.Books = append(out.Books, BookSeriesEntryDTO{
@@ -486,7 +486,7 @@ func (l *Library) BookSeriesDetailFor(ctx context.Context, uc *UserCtx, apiPID s
 
 // seriesReached is the series detail's gate for a caller not of full
 // reach: a book of the series inside its grants that its listings offer.
-func (l *Library) seriesReached(ctx context.Context, uc *UserCtx, pid model.PID) (bool, error) {
+func (l *Reads) seriesReached(ctx context.Context, uc *UserCtx, pid model.PID) (bool, error) {
 	ent, err := l.lib.EntityByPID(ctx, read.EntitySeries, pid)
 	if err != nil {
 		if err := classify(err); KindOf(err) != KindNotFound {
@@ -517,7 +517,7 @@ func tagRestricted(uc *UserCtx) bool {
 // it, an alternate copy's included, which can be a book the caller
 // cannot open. Series have no query field to facet on, so the books are
 // read per series, but their tag verdicts come in one pass for the page.
-func (l *Library) seriesOffering(ctx context.Context, uc *UserCtx, page []*read.EntityInfo) (map[model.PID]bool, error) {
+func (l *Reads) seriesOffering(ctx context.Context, uc *UserCtx, page []*read.EntityInfo) (map[model.PID]bool, error) {
 	if fullReach(uc) {
 		return nil, nil
 	}
@@ -534,14 +534,14 @@ func (l *Library) seriesOffering(ctx context.Context, uc *UserCtx, page []*read.
 		books[ent.PID] = held
 		all = append(all, held...)
 	}
-	allowed, err := l.tagVerdicts(ctx, uc, all)
+	allowed, err := l.Grants.tagVerdicts(ctx, uc, all)
 	if err != nil {
 		return nil, err
 	}
 	out := make(map[model.PID]bool, len(books))
 	for pid, held := range books {
 		for _, it := range held {
-			if it != nil && l.offersWith(ctx, uc, allowed, it) {
+			if it != nil && l.Grants.offersWith(ctx, uc, allowed, it) {
 				out[pid] = true
 				break
 			}

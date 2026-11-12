@@ -54,7 +54,7 @@ func TestAFolderIsNormalizedWhereverItIsWritten(t *testing.T) {
 		{" x / y ", "x/y"},
 		{strings.Repeat("\u00e9", 512), strings.Repeat("\u00e9", 512)},
 	} {
-		sub, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: fmt.Sprintf("%s/n%d.xml", host.URL, i), Folder: c.in})
+		sub, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: fmt.Sprintf("%s/n%d.xml", host.URL, i), Folder: c.in})
 		if err != nil {
 			t.Fatalf("subscribing with %q: %v", c.in, err)
 		}
@@ -64,10 +64,10 @@ func TestAFolderIsNormalizedWhereverItIsWritten(t *testing.T) {
 	}
 
 	huge := strings.Repeat("x/", 32000)
-	if _, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: host.URL + "/huge.xml", Folder: huge}); KindOf(err) != KindInvalid {
+	if _, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: host.URL + "/huge.xml", Folder: huge}); KindOf(err) != KindInvalid {
 		t.Errorf("subscribing with a 64 KB folder: %v, want refused", err)
 	}
-	sub, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: host.URL + "/kept.xml", Folder: "Kept"})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: host.URL + "/kept.xml", Folder: "Kept"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestAFolderIsNormalizedWhereverItIsWritten(t *testing.T) {
 	settings := sub.Settings
 	for _, folder := range []string{huge, strings.Repeat("\u00e9", 513)} {
 		settings.Folder = folder
-		if _, err := svc.PutSubscriptionSettings(ctx, uc, sub.Show.PID, settings); KindOf(err) != KindInvalid {
+		if _, err := svc.Podcasts.PutSubscriptionSettings(ctx, uc, sub.Show.PID, settings); KindOf(err) != KindInvalid {
 			t.Errorf("settings with a %d-byte folder: %v, want refused", len(folder), err)
 		}
 	}
@@ -84,7 +84,7 @@ func TestAFolderIsNormalizedWhereverItIsWritten(t *testing.T) {
 	}
 	for in, want := range map[string]string{"/Arts/": "Arts", " a // b ": "a/b"} {
 		settings.Folder = in
-		if put, err := svc.PutSubscriptionSettings(ctx, uc, sub.Show.PID, settings); err != nil || put.Settings.Folder != want {
+		if put, err := svc.Podcasts.PutSubscriptionSettings(ctx, uc, sub.Show.PID, settings); err != nil || put.Settings.Folder != want {
 			t.Errorf("settings with %q: folder %q (%v), want %q", in, put.Settings.Folder, err, want)
 		}
 	}
@@ -96,7 +96,7 @@ func TestAFolderIsNormalizedWhereverItIsWritten(t *testing.T) {
 func storedFolders(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, host string, folders []string) {
 	t.Helper()
 	for i, folder := range folders {
-		sub, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: fmt.Sprintf("%s/f%d.xml", host, i)})
+		sub, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: fmt.Sprintf("%s/f%d.xml", host, i)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -127,7 +127,7 @@ func TestTheExportTakesAnyStoredFolder(t *testing.T) {
 			ctx, svc, uc := openOpmlFixture(t)
 			host := showsHost(t, nil)
 			storedFolders(t, ctx, svc, uc, host.URL, []string{c.stored, "Other"})
-			doc, err := svc.ExportOPML(ctx, uc)
+			doc, err := svc.Podcasts.ExportOPML(ctx, uc)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -157,7 +157,7 @@ func TestTheNestedExportIsUnchanged(t *testing.T) {
 	ctx, svc, uc := openOpmlFixture(t)
 	host := showsHost(t, nil)
 	storedFolders(t, ctx, svc, uc, host.URL, []string{"News", "News/Tech", "", "Arts"})
-	doc, err := svc.ExportOPML(ctx, uc)
+	doc, err := svc.Podcasts.ExportOPML(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestAnImportFitsItsFoldersAndAsksPermissionFirst(t *testing.T) {
 <outline title=" / News / "><outline text="Plain" xmlUrl="%[1]s/plain.xml"/></outline>
 <outline text="%[2]s"><outline text="Long" xmlUrl="%[1]s/long.xml"/></outline>
 %[3]s</body></opml>`, host.URL, strings.Repeat("y", 600), deep)
-	entries, err := svc.ImportOPML(ctx, uc, []byte(doc))
+	entries, err := svc.Podcasts.ImportOPML(ctx, uc, []byte(doc))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestAnImportFitsItsFoldersAndAsksPermissionFirst(t *testing.T) {
 	barred := *uc
 	barred.ManagePodcasts = false
 	for _, body := range []string{doc, "<opml><body><outline"} {
-		if _, err := svc.ImportOPML(ctx, &barred, []byte(body)); KindOf(err) != KindForbidden {
+		if _, err := svc.Podcasts.ImportOPML(ctx, &barred, []byte(body)); KindOf(err) != KindForbidden {
 			t.Errorf("an import without the permission: %v, want forbidden", err)
 		}
 	}
@@ -315,7 +315,7 @@ func TestAnImportOutlivesItsCaller(t *testing.T) {
 	})
 	doc := fmt.Sprintf(`<opml version="2.0"><body><outline text="1" xmlUrl="%[1]s/first.xml"/>
 <outline text="2" xmlUrl="%[1]s/second.xml"/><outline text="3" xmlUrl="%[1]s/third.xml"/></body></opml>`, host.URL)
-	entries, err := svc.ImportOPML(callCtx, uc, []byte(doc))
+	entries, err := svc.Podcasts.ImportOPML(callCtx, uc, []byte(doc))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,21 +336,21 @@ func TestAFolderIsAtMostSixteenDeep(t *testing.T) {
 	ctx, svc, uc := openOpmlFixture(t)
 	host := showsHost(t, nil)
 	deep := func(n int) string { return strings.TrimSuffix(strings.Repeat("d/", n), "/") }
-	if _, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: host.URL + "/deep.xml", Folder: deep(17)}); KindOf(err) != KindInvalid {
+	if _, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: host.URL + "/deep.xml", Folder: deep(17)}); KindOf(err) != KindInvalid {
 		t.Errorf("subscribing 17 deep: %v, want refused", err)
 	}
-	sub, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: host.URL + "/deep.xml", Folder: deep(16)})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: host.URL + "/deep.xml", Folder: deep(16)})
 	if err != nil || sub.Settings.Folder != deep(16) {
 		t.Fatalf("subscribing 16 deep = %q (%v), want kept", sub.Settings.Folder, err)
 	}
 	settings := sub.Settings
 	settings.Folder = deep(17)
-	if _, err := svc.PutSubscriptionSettings(ctx, uc, sub.Show.PID, settings); KindOf(err) != KindInvalid {
+	if _, err := svc.Podcasts.PutSubscriptionSettings(ctx, uc, sub.Show.PID, settings); KindOf(err) != KindInvalid {
 		t.Errorf("settings 17 deep: %v, want refused", err)
 	}
 	doc := fmt.Sprintf(`<opml version="2.0"><body>%s<outline text="Deeper" xmlUrl="%s/deeper.xml"/>%s</body></opml>`,
 		strings.Repeat(`<outline text="d">`, 20), host.URL, strings.Repeat(`</outline>`, 20))
-	entries, err := svc.ImportOPML(ctx, uc, []byte(doc))
+	entries, err := svc.Podcasts.ImportOPML(ctx, uc, []byte(doc))
 	if err != nil || len(entries) != 1 || entries[0].Err != "" {
 		t.Fatalf("import = %+v (%v)", entries, err)
 	}

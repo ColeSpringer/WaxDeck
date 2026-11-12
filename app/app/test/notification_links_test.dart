@@ -13,7 +13,7 @@ import 'package:waxdeck/src/shell/routes.dart';
 String _serverLinkTable() {
   final path = _repoFile('server/internal/service/notify.go');
   final source = File(path).readAsStringSync();
-  const opening = 'func (l *Library) notificationLink(';
+  const opening = ') notificationLink(';
   final start = source.indexOf(opening);
   if (start < 0) throw StateError('notificationLink is no longer in notify.go');
   final end = source.indexOf('\n}', start);

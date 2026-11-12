@@ -69,17 +69,17 @@ func TestStartupRefreshRepairsStaleSortKeys(t *testing.T) {
 		if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
 			t.Fatalf("scanning fixture library: %v", err)
 		}
-		acct, err := svc.CreateAccount(ctx, AccountCreate{
+		acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 			Username: username, Password: "correct-horse", Roles: []string{"admin"},
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		uc, err := svc.UserCtx(ctx, acct.User)
+		uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 		if err != nil {
 			t.Fatal(err)
 		}
-		page, err := svc.Facets(ctx, uc, FacetQuery{Dimension: "album", Order: FacetSortLabel, Limit: 50})
+		page, err := svc.Reads.Facets(ctx, uc, FacetQuery{Dimension: "album", Order: FacetSortLabel, Limit: 50})
 		if err != nil {
 			t.Fatalf("enumerating albums: %v", err)
 		}
@@ -91,7 +91,7 @@ func TestStartupRefreshRepairsStaleSortKeys(t *testing.T) {
 		if albumPID == "" {
 			t.Fatalf("the scanned library has no Folded album; buckets %+v", page.Buckets)
 		}
-		album, err := svc.Album(ctx, uc, albumPID)
+		album, err := svc.Reads.Album(ctx, uc, albumPID)
 		if err != nil {
 			t.Fatalf("reading the album: %v", err)
 		}
@@ -143,11 +143,11 @@ func TestStartupRefreshRepairsStaleSortKeys(t *testing.T) {
 		svc.Close()
 		store.Close()
 	})
-	user, err := svc.UserByName(ctx, username)
+	user, err := svc.Grants.UserByName(ctx, username)
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, user)
+	uc, err := svc.Grants.UserCtxFor(ctx, user)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestStartupRefreshRepairsStaleSortKeys(t *testing.T) {
 	got := "zzzz stale"
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
-		album, err := svc.Album(ctx, uc, albumPID)
+		album, err := svc.Reads.Album(ctx, uc, albumPID)
 		if err != nil {
 			t.Fatalf("reading the album after reopen: %v", err)
 		}

@@ -31,7 +31,7 @@ func (s *Server) Signup(ctx context.Context, req SignupRequestObject) (SignupRes
 	if !s.limiter.Allowed(ipKey) {
 		return nil, refuse(http.StatusTooManyRequests, "rate-limited", "too many signup attempts; retry later")
 	}
-	_, state, err := s.svc.Signup(ctx, req.Body.Username, req.Body.Password,
+	_, state, err := s.svc.Identity.Signup(ctx, req.Body.Username, req.Body.Password,
 		deref(req.Body.DisplayName), deref(req.Body.InviteToken))
 	if err != nil {
 		kind := service.KindOf(err)
@@ -62,7 +62,7 @@ func (s *Server) ListSignupRequests(ctx context.Context, req ListSignupRequestsR
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.svc.PendingAccounts(ctx, deref(req.Params.Cursor), limit)
+	page, err := s.svc.Identity.PendingAccounts(ctx, deref(req.Params.Cursor), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func (s *Server) ApproveSignupRequest(ctx context.Context, req ApproveSignupRequ
 			ap.Permissions = &perms
 		}
 	}
-	acct, err := s.svc.ApproveSignup(ctx, uc, req.UserId, ap)
+	acct, err := s.svc.Identity.ApproveSignup(ctx, uc, req.UserId, ap)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func (s *Server) RejectSignupRequest(ctx context.Context, req RejectSignupReques
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.svc.RejectSignup(ctx, uc, req.UserId); err != nil {
+	if err := s.svc.Identity.RejectSignup(ctx, uc, req.UserId); err != nil {
 		return nil, err
 	}
 	return RejectSignupRequest204Response{}, nil
@@ -119,7 +119,7 @@ func (s *Server) ListInvites(ctx context.Context, _ ListInvitesRequestObject) (L
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	invites, err := s.svc.Invites(ctx)
+	invites, err := s.svc.Identity.Invites(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +159,7 @@ func (s *Server) CreateInvite(ctx context.Context, req CreateInviteRequestObject
 			in.ExpiresAtNS = req.Body.ExpiresAt.UnixNano()
 		}
 	}
-	iv, err := s.svc.CreateInvite(ctx, uc, in)
+	iv, err := s.svc.Identity.CreateInvite(ctx, uc, in)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +185,7 @@ func (s *Server) RevokeInvite(ctx context.Context, req RevokeInviteRequestObject
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.svc.RevokeInvite(ctx, uc, req.InviteId); err != nil {
+	if err := s.svc.Identity.RevokeInvite(ctx, uc, req.InviteId); err != nil {
 		return nil, err
 	}
 	return RevokeInvite204Response{}, nil

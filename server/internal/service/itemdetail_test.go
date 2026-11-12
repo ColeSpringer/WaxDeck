@@ -25,11 +25,11 @@ func TestAnItemsDetailReadsItsFileAndCopiesOnly(t *testing.T) {
 	waitForJob(t, ctx, svc, scan)
 	book := itemPIDByTitle(t, ctx, svc, admin, "Shared Tome")
 	reads := 0
-	svc.fileReadHook = func(ctx context.Context, pid model.PID) (*model.File, error) {
+	svc.Reads.fileReadHook = func(ctx context.Context, pid model.PID) (*model.File, error) {
 		reads++
 		return svc.lib.File(ctx, pid)
 	}
-	d, err := svc.Item(ctx, admin, book)
+	d, err := svc.Reads.Item(ctx, admin, book)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestAnItemsDetailReadsItsFileAndCopiesOnly(t *testing.T) {
 func TestAnItemEnteredWithItsEarliestVisibleFile(t *testing.T) {
 	c := newCopyReach(t)
 	seen := map[model.PID]int64{c.primary.FilePID: 2e18, c.copy.FilePID: 1e18}
-	c.svc.fileReadHook = func(ctx context.Context, pid model.PID) (*model.File, error) {
+	c.svc.Reads.fileReadHook = func(ctx context.Context, pid model.PID) (*model.File, error) {
 		f, err := c.svc.lib.File(ctx, pid)
 		if err == nil {
 			f.FirstSeen = seen[pid]
@@ -54,7 +54,7 @@ func TestAnItemEnteredWithItsEarliestVisibleFile(t *testing.T) {
 		uc   *UserCtx
 		want int64
 	}{{c.admin, 1e18}, {c.bob, 2e18}} {
-		d, err := c.svc.Item(c.ctx, who.uc, itemAPIPID(c.item))
+		d, err := c.svc.Reads.Item(c.ctx, who.uc, itemAPIPID(c.item))
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -31,7 +31,7 @@ type createdFeed struct {
 }
 
 // followCreated starts following the feed from its present tail.
-func (l *Library) followCreated(ctx context.Context) *createdFeed {
+func (l *Ingest) followCreated(ctx context.Context) *createdFeed {
 	f := &createdFeed{read: l.lib.Changes, tail: l.lib.LatestChangeSeq, created: map[model.PID]bool{}}
 	f.restart(ctx)
 	if f.broken {
@@ -89,7 +89,7 @@ func (f *createdFeed) made(ctx context.Context, pid model.PID) bool {
 // joined an item the import did not create. owned holds the items this
 // entry's files created in an earlier attempt, which a retried decide
 // lands the rest of a book onto.
-func (l *Library) landedItem(ctx context.Context, res *waxbin.AcquiredResult, report *inbox.Report,
+func (l *Ingest) landedItem(ctx context.Context, res *waxbin.AcquiredResult, report *inbox.Report,
 	doc *reviewTrackDoc, feed *createdFeed, owned map[string]bool) (importedFile, error) {
 	var action *inbox.Action
 	for i := range res.Plan.Actions {
@@ -140,7 +140,7 @@ func (l *Library) landedItem(ctx context.Context, res *waxbin.AcquiredResult, re
 // The plan does not say whose file takes the place (a refused action
 // keeps no destination), so the holder's details stand in for it: a
 // file tagged as another item would land on that one's place.
-func (l *Library) heldWhereItGoes(ctx context.Context, res *waxbin.AcquiredResult, doc *reviewTrackDoc) bool {
+func (l *Ingest) heldWhereItGoes(ctx context.Context, res *waxbin.AcquiredResult, doc *reviewTrackDoc) bool {
 	if !res.AlreadyPresent || res.Plan == nil || len(res.Plan.Actions) == 0 {
 		return false
 	}

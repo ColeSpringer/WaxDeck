@@ -29,13 +29,13 @@ func waitForWarmLogo(t *testing.T, svc *Library, apiStationPID string) RadioLogo
 func TestCreateRadioStationWarmsTheLogo(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	svc.allowPrivateRadioHosts = true
+	svc.Radio.allowPrivateRadioHosts = true
 	var woke atomic.Int64
-	svc.SetRadioInvalidator(func(string) { woke.Add(1) })
+	svc.Radio.SetRadioInvalidator(func(string) { woke.Add(1) })
 	var hits atomic.Int64
 	host := artHost(t, &hits, "image/png", coverPNG(t, 80))
 
-	station, err := svc.CreateRadioStation(ctx, uc, RadioStationEdit{
+	station, err := svc.Radio.CreateRadioStation(ctx, uc, RadioStationEdit{
 		Name: "Warm FM", StreamURL: "http://198.51.100.7/stream",
 		LogoURL: host.URL + "/logo.png",
 	})
@@ -53,7 +53,7 @@ func TestCreateRadioStationWarmsTheLogo(t *testing.T) {
 	}
 
 	// The first paint answers from the cache without another fetch.
-	served, err := svc.RadioStationLogo(ctx, station.PID)
+	served, err := svc.Radio.StationLogo(ctx, station.PID)
 	if err != nil || len(served.Bytes) == 0 {
 		t.Fatalf("first paint = %v (%d bytes)", err, len(served.Bytes))
 	}
@@ -68,13 +68,13 @@ func TestCreateRadioStationWarmsTheLogo(t *testing.T) {
 func TestCreateRadioStationCachesAWarmMiss(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	svc.allowPrivateRadioHosts = true
+	svc.Radio.allowPrivateRadioHosts = true
 	var woke atomic.Int64
-	svc.SetRadioInvalidator(func(string) { woke.Add(1) })
+	svc.Radio.SetRadioInvalidator(func(string) { woke.Add(1) })
 	var hits atomic.Int64
 	host := artHost(t, &hits, "text/html", []byte("<html>not a logo</html>"))
 
-	station, err := svc.CreateRadioStation(ctx, uc, RadioStationEdit{
+	station, err := svc.Radio.CreateRadioStation(ctx, uc, RadioStationEdit{
 		Name: "Miss FM", StreamURL: "http://198.51.100.8/stream",
 		LogoURL: host.URL + "/logo.png",
 	})
@@ -84,7 +84,7 @@ func TestCreateRadioStationCachesAWarmMiss(t *testing.T) {
 	if logo := waitForWarmLogo(t, svc, station.PID); len(logo.Bytes) != 0 {
 		t.Fatal("markup was cached as a logo")
 	}
-	if _, err := svc.RadioStationLogo(ctx, station.PID); err == nil {
+	if _, err := svc.Radio.StationLogo(ctx, station.PID); err == nil {
 		t.Fatal("a cached miss should answer not-found")
 	}
 	if got := hits.Load(); got != 1 {
@@ -101,7 +101,7 @@ func TestCreateRadioStationCachesAWarmMiss(t *testing.T) {
 func TestWarmLogoTriesAHintNotedMidFlight(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	svc.allowPrivateRadioHosts = true
+	svc.Radio.allowPrivateRadioHosts = true
 	var hits atomic.Int64
 	mark := artHost(t, &hits, "image/png", coverPNG(t, 70))
 	gate := make(chan struct{})
@@ -114,7 +114,7 @@ func TestWarmLogoTriesAHintNotedMidFlight(t *testing.T) {
 	}))
 	t.Cleanup(slow.Close)
 
-	station, err := svc.CreateRadioStation(ctx, uc, RadioStationEdit{
+	station, err := svc.Radio.CreateRadioStation(ctx, uc, RadioStationEdit{
 		Name: "Late Mark FM", StreamURL: "http://198.51.100.12/stream",
 		LogoURL: slow.URL + "/logo.png",
 	})
@@ -122,7 +122,7 @@ func TestWarmLogoTriesAHintNotedMidFlight(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The stream names its mark while the warm fetch is still held open.
-	svc.NoteRadioLogoHint(station.PID, mark.URL+"/mark.png")
+	svc.Radio.NoteRadioLogoHint(station.PID, mark.URL+"/mark.png")
 	close(gate)
 
 	if logo := waitForWarmLogo(t, svc, station.PID); len(logo.Bytes) == 0 {
@@ -140,12 +140,12 @@ func TestWarmLogoTriesAHintNotedMidFlight(t *testing.T) {
 func TestUpdateRadioStationRewarmsTheLogo(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	svc.allowPrivateRadioHosts = true
+	svc.Radio.allowPrivateRadioHosts = true
 	var oldHits, newHits atomic.Int64
 	oldHost := artHost(t, &oldHits, "image/png", coverPNG(t, 60))
 	newHost := artHost(t, &newHits, "image/png", coverPNG(t, 90))
 
-	station, err := svc.CreateRadioStation(ctx, uc, RadioStationEdit{
+	station, err := svc.Radio.CreateRadioStation(ctx, uc, RadioStationEdit{
 		Name: "Edit FM", StreamURL: "http://198.51.100.14/stream",
 		LogoURL: oldHost.URL + "/logo.png",
 	})
@@ -154,7 +154,7 @@ func TestUpdateRadioStationRewarmsTheLogo(t *testing.T) {
 	}
 	first := waitForWarmLogo(t, svc, station.PID)
 
-	if _, err := svc.UpdateRadioStation(ctx, station.PID, RadioStationEdit{
+	if _, err := svc.Radio.UpdateRadioStation(ctx, station.PID, RadioStationEdit{
 		Name: "Edit FM", StreamURL: "http://198.51.100.14/stream",
 		LogoURL: newHost.URL + "/logo.png",
 	}); err != nil {
@@ -168,7 +168,7 @@ func TestUpdateRadioStationRewarmsTheLogo(t *testing.T) {
 		t.Fatalf("new logo host asked %d times, want 1", got)
 	}
 	// The paint answers the new mark from the cache alone.
-	served, err := svc.RadioStationLogo(ctx, station.PID)
+	served, err := svc.Radio.StationLogo(ctx, station.PID)
 	if err != nil || string(served.Bytes) != string(second.Bytes) {
 		t.Fatalf("paint after the edit = %v (%d bytes)", err, len(served.Bytes))
 	}

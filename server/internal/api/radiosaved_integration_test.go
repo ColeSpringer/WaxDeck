@@ -113,7 +113,7 @@ func TestRadioSavedSongFlipsThePlayInfoHeart(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	st := savedSongStation(t, h, "Deck FM")
-	h.svc.NoteRadioTitle(st.Pid, "Charlie Parker - Ornithology")
+	h.svc.Radio.NoteRadioTitle(st.Pid, "Charlie Parker - Ornithology")
 
 	info := decode[RadioPlayInfo](t, get(t, h.ts, "/api/v1/radio/stations/"+st.Pid+"/play-info", h.token))
 	if info.NowPlaying == nil || *info.NowPlaying != "Charlie Parker - Ornithology" {
@@ -134,14 +134,14 @@ func TestRadioSavedSongFlipsThePlayInfoHeart(t *testing.T) {
 
 	// A rollover empties the heart without touching the list: the flag
 	// describes what is announced, not what is kept.
-	h.svc.NoteRadioTitle(st.Pid, "Miles Davis - Solar")
+	h.svc.Radio.NoteRadioTitle(st.Pid, "Miles Davis - Solar")
 	info = decode[RadioPlayInfo](t, get(t, h.ts, "/api/v1/radio/stations/"+st.Pid+"/play-info", h.token))
 	if info.NowPlayingSaved != nil && *info.NowPlayingSaved {
 		t.Fatal("play-info reports the next song saved")
 	}
 
 	// Untapping empties it for the song that is kept.
-	h.svc.NoteRadioTitle(st.Pid, "Charlie Parker - Ornithology")
+	h.svc.Radio.NoteRadioTitle(st.Pid, "Charlie Parker - Ornithology")
 	if resp := h.deleteReq(t, "/api/v1/radio/saved/"+saved.Pid); resp.StatusCode != 204 {
 		t.Fatalf("delete status = %d", resp.StatusCode)
 	}
@@ -173,7 +173,7 @@ func TestRadioSavedSongSnapshotsTheAnnouncedCover(t *testing.T) {
 
 	// The picture the station named in its own stream, resolved by the
 	// play-info poll and then copied by the save.
-	h.svc.NoteRadioMeta(st.Pid, "Charlie Parker - Ornithology", host.URL+"/cover.png")
+	h.svc.Radio.NoteRadioMeta(st.Pid, "Charlie Parker - Ornithology", host.URL+"/cover.png")
 	waitForSavedSnapshotArt(t, h, st.Pid)
 
 	saved := decode[RadioSavedSong](t, mustSave(t, h, st.Pid, "Charlie Parker - Ornithology"))

@@ -27,7 +27,7 @@ func TestARepairsResetSurvivesACrashAtItsEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for svc.DrainLongToolTasks(ctx) {
+	for svc.Tools.DrainLongToolTasks(ctx) {
 	}
 	if row, err := svc.db.ToolTaskByID(ctx, task.ID); err != nil || row.State != taskStateDone {
 		t.Fatalf("the repair = %+v (%v), want its end on the record", row, err)
@@ -67,7 +67,7 @@ func TestARepairCutShortGivesItsResetAtItsEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !svc.DrainLongToolTasks(ctx) {
+	if !svc.Tools.DrainLongToolTasks(ctx) {
 		t.Fatal("the repair did not run")
 	}
 	stop()
@@ -76,7 +76,7 @@ func TestARepairCutShortGivesItsResetAtItsEnd(t *testing.T) {
 	if retired(t, ctx, svc, uc, before) {
 		t.Fatal("the next start gave the reset of a repair still to finish")
 	}
-	if !svc.drainToolTasksAt(ctx, wdb.TaskTypes{Only: longToolTasks}, time.Now().Add(time.Hour).UnixNano()) {
+	if !svc.Tools.drainToolTasksAt(ctx, wdb.TaskTypes{Only: longToolTasks}, time.Now().Add(time.Hour).UnixNano()) {
 		t.Fatal("the cut repair did not run again")
 	}
 	if row, err := svc.db.ToolTaskByID(ctx, task.ID); err != nil || row.State != taskStateDone {
@@ -103,7 +103,7 @@ func TestAFailedRollupsStepOwesNoReset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !svc.DrainLongToolTasks(ctx) {
+	if !svc.Tools.DrainLongToolTasks(ctx) {
 		t.Fatal("the repair did not run")
 	}
 	if row, err := svc.db.ToolTaskByID(ctx, task.ID); err != nil || row.WaitReason != "catalog-maintenance" {

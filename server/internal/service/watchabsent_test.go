@@ -121,7 +121,7 @@ func TestAnAbsentRootIsNotWatchedUntilItIsThere(t *testing.T) {
 	var logged lockedBuffer
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: present}, {Name: "later", Path: later}}, &logged)
 	select {
-	case <-svc.watchReady:
+	case <-svc.Roots.watchReady:
 	case <-time.After(10 * time.Second):
 		t.Fatal("the watcher never armed")
 	}
@@ -167,7 +167,7 @@ func TestAWatcherWithNoRootThereWaitsForOne(t *testing.T) {
 		t.Fatal(err)
 	}
 	select {
-	case <-svc.watchReady:
+	case <-svc.Roots.watchReady:
 	case <-time.After(10 * time.Second):
 		t.Fatal("the watcher never armed once the folder was there")
 	}
@@ -183,7 +183,7 @@ func TestARootTakenUpLaterIsCaughtUpByAScan(t *testing.T) {
 	var logged lockedBuffer
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: t.TempDir()}}, &logged)
 	select {
-	case <-svc.watchReady:
+	case <-svc.Roots.watchReady:
 	case <-time.After(10 * time.Second):
 		t.Fatal("the watcher never armed")
 	}

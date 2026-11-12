@@ -9,23 +9,17 @@ import (
 	"crypto/rand"
 	"fmt"
 	"log/slog"
-	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
-
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/config"
 	"github.com/colespringer/waxbin/enrich"
-	"github.com/colespringer/waxbin/inbox"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/pidpath"
 	"github.com/colespringer/waxbin/source"
@@ -35,9 +29,6 @@ import (
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/diskspace"
 	"github.com/colespringer/waxdeck/server/internal/match"
-	"github.com/colespringer/waxdeck/server/internal/providers"
-	"github.com/colespringer/waxdeck/server/internal/scrobble"
-	"github.com/colespringer/waxdeck/server/internal/similarity"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 )
 
@@ -94,7 +85,8 @@ type Config struct {
 	// baseline aside at startup instead of refusing to start. See
 	// staleBaseline for what it does and does not distinguish.
 	ResetStaleCatalog bool
-	// Sealer encrypts recoverable secrets (app passwords) at rest.
+	// Sealer encrypts recoverable secrets at rest: app passwords,
+	// notification targets, scrobbling credentials and migration secrets.
 	Sealer *auth.Sealer
 	// SecretCipher seals catalog-held secrets (private-feed passwords)
 	// at rest; the catalog binds each secret's key as AAD. Removing an
@@ -231,46 +223,14 @@ type Config struct {
 
 // Library is the catalog service over an embedded WaxBin library. It
 // owns the write lock for the process lifetime and hosts the IPC
-// socket the waxbin CLI proxies through.
+// socket the waxbin CLI proxies through. It is also the root the domain
+// types hang from (svc.Radio, svc.Playlists and the rest), and keeps the
+// catalog's lifecycle.
 type Library struct {
-	lib   *waxbin.Library
-	paths *pidpath.Cache
-	db    *wdb.DB
+	*core
 	// socketDir is the private directory the IPC socket lives in when the
 	// data dir's path is too long for one; Close removes it.
 	socketDir string
-	// catalogUsers maps an account whose stored catalog user a reset or
-	// restore dropped to the one the catalog holds for it; read through
-	// catalogPID.
-	catalogUsers   map[string]model.PID
-	catalogUsersMu sync.RWMutex
-	// usersUnmapped is an account the last mapping could not place,
-	// which the settle after a reopen retries.
-	usersUnmapped atomic.Bool
-	// roots is the root table, rebuilt from the catalog and swapped under
-	// rootsMu (read it through libraryRoots); refreshMu keeps an older read
-	// from landing after a newer one. configRoots are the configured ones.
-	roots       []Root
-	rootsBuilt  bool
-	rootsMu     sync.RWMutex
-	refreshMu   sync.Mutex
-	configRoots []Root
-	// refreshHook runs in a test between a refresh's read of the catalog
-	// and its store of the table, under refreshMu; nothing in the server
-	// sets it.
-	refreshHook func()
-	// rootsLeftOut are configured roots the catalog refused, warned of once.
-	rootsLeftOut sync.Map
-	// rootReach and rootProbe are what the console says of the roots
-	// beyond the catalog's policy (rootstate.go); removals the libraries
-	// the console removes (rootremove.go); creates the ones it is adding
-	// (rootcreate.go).
-	rootReach rootReach
-	rootProbe rootProbe
-	removals  rootRemovals
-	creates   rootCreates
-	// rootProbeEvery is Config.RootProbeEvery.
-	rootProbeEvery time.Duration
 	// maintenance is a catalog hand-off in progress, between the suspend
 	// and reopen hooks; suspendGen numbers the suspends. watchMu keeps a
 	// suspend out of a watchdog's reopen.
@@ -289,25 +249,6 @@ type Library struct {
 	// suspendHook runs inside the suspend hook for a test; nothing in the
 	// server sets it.
 	suspendHook func(context.Context)
-	// remapHook stands in for db.RemapItems in a test; nothing in the
-	// server sets it.
-	remapHook func(context.Context, wdb.KindMoves) error
-	// planHook stands in for the catalog's import planner in a test;
-	// nothing in the server sets it.
-	planHook func(context.Context, waxbin.AcquiredFile, model.Kind, waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error)
-	// kindReadHook stands in for the catalog's item read in a kind
-	// change's follow-up and tally in a test; nothing in the server sets
-	// it.
-	kindReadHook func(context.Context, model.PID) (*model.ItemView, error)
-	// deletePlanHook runs between a delete's read of its items' files
-	// and its plan, and deleteApplyHook between a plan and its apply, in
-	// a test; nothing in the server sets them.
-	deletePlanHook  func(context.Context)
-	deleteApplyHook func(context.Context)
-	// toolStepHook runs as a book tool passes each step of a run, and an
-	// error it answers ends the run there, as a crash or a shutdown would,
-	// in a test; nothing in the server sets it.
-	toolStepHook func(step string) error
 	// catalogRepairHook runs before each step of a catalog repair, and an
 	// error it answers is that step's, in a test; nothing in the server
 	// sets it.
@@ -316,495 +257,30 @@ type Library struct {
 	// before anything follows it, and answering true stops there, as the
 	// process stopping would, in a test; nothing in the server sets it.
 	catalogRepairEndHook func() bool
-	// refResolveHook runs as a walk of the catalog's resolve ladder over
-	// refs portable refs starts, and m3uResolveHook as the catalog's
-	// resolve of an M3U8 document does, in a test; nothing in the server
-	// sets them.
-	refResolveHook func(opts waxbin.ResolveOptions, refs int)
-	m3uResolveHook func()
-	// mutateHook stands in for the answer of a tool's catalog mutation
-	// (its trash, its scan, its import) in a test, a busy catalog say;
-	// nil lets the call through. Nothing in the server sets it.
-	mutateHook func(op string) error
 	// scanStartHook stands in for the catalog's answer to a whole scan's
 	// start in a test, a busy catalog say; nil lets the start through.
 	// Nothing in the server sets it.
 	scanStartHook func() error
-	// lookupHost stands in for the resolver behind the server's own
-	// address checks (hostAddrs) in a test; nil asks the system's.
-	// Nothing in the server sets it.
-	lookupHost func(ctx context.Context, host string) ([]net.IPAddr, error)
-	// toolLeaseEvery is how often a run renews its task's lease; zero is
-	// toolLeaseRenew. A test shortens it.
-	toolLeaseEvery time.Duration
-	// toolRuns counts the runs this process holds on each task, which the
-	// retire pass leaves whatever their leases say.
-	toolRunsMu sync.Mutex
-	toolRuns   map[string]int
-	// discardReadHook runs between a discard's first read of its session
-	// and its guards, in a test; nothing in the server sets it.
-	discardReadHook func()
-	// bodyReadHook runs once an append has read a chunk's body and before
-	// the session counts its bytes, in a test; nothing in the server sets
-	// it.
-	bodyReadHook func()
-	// applyImportHook stands in for the catalog's import apply in a test;
-	// nothing in the server sets it.
-	applyImportHook func(context.Context, *inbox.Plan) (*inbox.Report, error)
-	// fileReadHook stands in for the catalog's read of a file's row in a
-	// test; nothing in the server sets it.
-	fileReadHook func(context.Context, model.PID) (*model.File, error)
-	// journalPruneHook stands in for the catalog's organize journal prune
-	// in a test; nothing in the server sets it.
-	journalPruneHook func(context.Context, time.Duration) (int, error)
-	// pathPlanHook runs as the path rule plans the items it is given, nil
-	// for the whole library, and historyReadHook as the organize history
-	// reads the catalog's journal, in a test; nothing in the server sets
-	// them.
-	pathPlanHook    func(pids []string)
-	historyReadHook func()
-	// jobOriginInsertHook stands in for recording who started a job, and
-	// awaitJobHook for waiting a catalog job out, in a test; nothing in the
-	// server sets them.
-	jobOriginInsertHook func(context.Context, wdb.JobOrigin) error
-	awaitJobHook        func(ctx context.Context, pid model.PID, silence time.Duration, tick func(context.Context)) (*model.Job, error)
 	// resetMu serializes a replaced catalog's reset between the reopen
-	// hook and the feed, and a repair's new generation with both;
-	// profilesMu a saved profile's round trip.
-	resetMu    sync.Mutex
-	profilesMu sync.Mutex
-	// runProfiles is the profile each organize run the history last listed
-	// laid out by, which a finished run never changes; history the
-	// journal's listing those runs come from.
-	runProfilesMu sync.Mutex
-	runProfiles   map[model.PID]string
-	history       organizeHistory
+	// hook and the feed, and a repair's new generation with both.
+	resetMu sync.Mutex
 	// catalogResync tells every client to re-mirror the catalog. Set by
 	// SetCatalogResyncer; unset is a no-op.
 	catalogResync atomic.Pointer[func()]
-	log           *slog.Logger
-	// libDirs caches path-to-library attribution for visibility checks.
-	libDirs libraryDirs
-	// procCtx outlives any one request: async catalog jobs launch on it
-	// so a scan survives the 202 that reported it started.
-	procCtx context.Context
 	// feed is the catalog change stream's identity and position;
 	// serverGen names the event_log stream's generation.
 	feed      syncFeed
 	serverGen string
-	// jobs follows the catalog's jobs off the feed; jobWake is the feed's
-	// lossy nudge to the follower when a job row changes.
-	jobs    jobWatch
-	jobWake chan struct{}
 	// libJournal records which library each item sat in, followed off the
 	// change log; journalWake is the feed's lossy nudge when an item moves.
 	libJournal  libraryJournal
 	journalWake chan struct{}
-	// sweeping is a health sweep in progress.
-	sweeping atomic.Bool
-	// sweepFailed is the last sweep having failed, until one lands.
-	sweepFailed atomic.Bool
-	// catalogWake and userWake are the lossy wakeup hints the event hub
-	// fans out as invalidation frames.
+	// catalogWake is the lossy wakeup hint the event hub fans out as
+	// invalidation frames.
 	catalogWake chan struct{}
-	userWake    chan string
-	// sealer and appSecrets back the app-password credential store;
-	// cursorSealer seals listing cursors (Config.CursorSealer).
-	sealer       *auth.Sealer
-	appSecrets   appSecretCache
-	cursorSealer *auth.Sealer
-	// trackFacts caches the compatibility surface's track sweep.
-	trackFacts trackFactsCache
-	// genres holds the built genre vocabulary; facets caches the
-	// full-visibility browse-dimension enumerations.
-	genres genreVocabulary
-	facets facetCache
-	// tagValues holds the stored spellings of each custom-tag field, for
-	// compiling a caller's tag rules into a query. Same generation as
-	// facets, since both are functions of the catalog's contents.
-	tagValues tagValueCache
-	// m3us holds the catalog's latest resolutions of M3U8 documents.
-	m3us m3uResolutions
-	// podcastDir and podcastRootName locate the episode download
-	// library; defaultRetentionKeep is the unset-subscriber policy;
-	// retentionInUseWindow gates the sweep's in-use deferral.
-	podcastDir           string
-	podcastRootName      string
-	defaultRetentionKeep int64
-	retentionInUseWindow time.Duration
-	// flowJobs is the streaming sidecar's analysis surface, wired after
-	// construction (the bridge needs this service as its resolver);
-	// flowRoots is its runtime-root surface, wired the same way.
-	flowJobs  FlowJobs
-	flowRoots atomic.Pointer[FlowRootSync]
-	// flowSyncMu serializes teaching the bridge: WaxFlow refuses a root
-	// name it already maps, and two teachers could both see one as new.
-	// flowRefused holds the paths it refused by name, not offered again,
-	// each with flowOutages, the times the engine went away, as of its
-	// offer.
-	flowSyncMu  sync.Mutex
-	flowRefused map[string]flowRefusal
-	flowOutages atomic.Uint64
-	// streaming is the streaming engine's state as the bridge last said
-	// (SetEngineState), nil before anything was said.
-	streaming atomic.Pointer[EngineState]
-	// coverSyncing single-flights playlist cover generation per playlist,
-	// so concurrent readers of one shared list do not each composite it.
-	coverSyncing map[model.PID]bool
-	coverSyncMu  sync.Mutex
-	// readerCovers keeps the member cover a reader is shown in place of a
-	// shared playlist's stored one (readerMemberCover).
-	readerCovers readerCoverCache
-	// playedLocks serializes the played decide-act per (user, item);
-	// see lockPlayed.
-	playedLocks [playedStripes]sync.Mutex
-	// membershipLocks serializes changes to who follows which show, per
-	// account; see lockMembership.
-	membershipLocks [playedStripes]sync.Mutex
-	// showHolds keep a download from landing in a show while its
-	// retention sweep runs; see showHold.
-	showHolds [playedStripes]sync.Mutex
-	// gpodderDownloads is what gpodder episodes downloads answered lately,
-	// which an episodes upload answers no later than.
-	gpodderDownloads gpodderDownloads
-	// transcriptHTTP is the guarded client for transcript pointers,
-	// built on first use; allowPrivateFeedHosts relaxes its SSRF guard.
-	transcriptHTTP        *http.Client
-	transcriptHTTPOnce    sync.Once
-	allowPrivateFeedHosts bool
-	// transcriptCacheBytes overrides transcriptCacheMaxBytes when set
-	// (tests).
-	transcriptCacheBytes int64
-	// chapterDocs keeps what episodes' chapters documents read for display.
-	chapterDocs chaptersCache
-	// enclosureHTTP is the guarded client the podcast enclosure
-	// passthrough relays through, built on first use and sharing
-	// allowPrivateFeedHosts with transcript fetches. It carries no
-	// overall timeout: an episode relay lasts as long as the listening
-	// session, so the request context is its only bound.
-	enclosureHTTP     *http.Client
-	enclosureHTTPOnce sync.Once
-	// showSources remembers each show's source type; see showSourceType.
-	showSources sync.Map
-	// episodeReadHook stands in for the catalog's episode read by pids in
-	// a test; nothing in the server sets it.
-	episodeReadHook func(context.Context, []model.PID) ([]*model.Episode, error)
-	// showReadHook stands in for readShow's catalog read in a test;
-	// nothing in the server sets it.
-	showReadHook func(context.Context, model.PID) (*model.Podcast, error)
-	// listenerReadHook stands in for podcastListeners' read of a
-	// subscriber's account in a test; nothing in the server sets it.
-	listenerReadHook func(context.Context, string) (*UserCtx, error)
-	// retentionStatesHook stands in for the retention sweep's read of
-	// its candidates' play states in a test; nothing in the server sets
-	// it.
-	retentionStatesHook func(context.Context, []model.PID) (map[model.PID][]model.PlayState, error)
-	// pinHook stands in for the catalog write that pins or unpins an
-	// episode in a test; nothing in the server sets it.
-	pinHook func(context.Context, model.PID, *model.Episode, bool) error
-	// markMissingHook stands in for the catalog's mark-missing of an item
-	// whose audio the analysis worker found gone, in a test; nothing in
-	// the server sets it.
-	markMissingHook func(context.Context, model.PID) (model.MarkMissingOutcome, error)
-	// handoverHook fails a step of handing a deleted account's playlist
-	// over in a test; nothing in the server sets it.
-	handoverHook func(stage string, pl *model.Playlist) error
-	// memberReadHook runs as a playlist's members are read, in a test;
-	// nothing in the server sets it.
-	memberReadHook func(pl *model.Playlist)
-	// journalWalkHook runs before each page of the library journal's walk
-	// and coverRecordHook before a generated cover's provenance is
-	// recorded, in a test, either failing what follows; nothing in the
-	// server sets them.
+	// journalWalkHook runs before each page of the library journal's walk,
+	// in a test, failing what follows; nothing in the server sets it.
 	journalWalkHook func() error
-	coverRecordHook func() error
-	// accountDisabledHook runs in a test the moment DeleteAccount has
-	// disabled the account; nothing in the server sets it.
-	accountDisabledHook func(context.Context)
-	// deletingAccounts holds the ids of the accounts a DeleteAccount is
-	// running for, so a second request for one is refused rather than run
-	// beside the first.
-	deletingAccounts sync.Map
-	// secretReadHook stands in for the catalog's read of a show's stored
-	// feed password in a test; nothing in the server sets it.
-	secretReadHook func(context.Context, string) (string, error)
-	// searchCandidates shrinks Search's candidate pool in a test; zero is
-	// searchMaxCandidates.
-	searchCandidates int
-	// radioHTTP is the guarded client for radio streams and the
-	// station directory, built on first use; allowPrivateRadioHosts
-	// relaxes its SSRF guard. It carries no overall timeout (radio
-	// streams are unbounded); bounded calls pass a request context.
-	radioHTTP              *http.Client
-	radioHTTPOnce          sync.Once
-	allowPrivateRadioHosts bool
-	// radioTitleFresh is how long an observed title outlives the last
-	// metadata block; radioTitleFreshFor is its default.
-	radioTitleFresh time.Duration
-	// radioArtBudget bounds one external artwork lookup;
-	// radioArtLookupBudget is its default and its only production value.
-	// Tests set it short to reach the deadline without waiting a minute.
-	radioArtBudget time.Duration
-	// radioWake wakes the clients tuned to one station when its face has
-	// something new. Set by SetRadioInvalidator; unset is a no-op.
-	radioWake          atomic.Pointer[func(stationPID string)]
-	radioDirectoryBase string
-	// radioDirectoryMirrorList overrides mirror discovery, and
-	// radioMirrors caches what discovery found. radioMirrorCold holds
-	// the mirrors that just failed, which sort last for a few minutes
-	// rather than being dropped: on an afternoon where the whole
-	// directory is unwell, dropping them would leave nothing to ask.
-	radioDirectoryMirrorList []string
-	radioMirrors             []string
-	radioMirrorsAt           time.Time
-	radioMirrorCold          map[string]time.Time
-	radioMirrorsMu           sync.Mutex
-	// podcastDirectory answers show name searches, built on first use
-	// so an install that never searches never allocates its cache.
-	podcastDirectoryBase string
-	podcastDirectory     *providers.PodcastDirectory
-	podcastDirectoryOnce sync.Once
-	// nowPlayingMemos caches the last ICY-title-to-track resolution per
-	// listener and station, so a poll that changes nothing costs no FTS.
-	nowPlayingMemos  map[string]nowPlayingMemo
-	nowPlayingMemoMu sync.Mutex
-	// radioTitles holds each station's last proxy-observed in-stream
-	// title; process-local on purpose (a title only exists while this
-	// process is proxying the stream).
-	radioTitles   map[string]radioTitle
-	radioTitlesMu sync.Mutex
-	// radioLogos caches fetched station logos, and the stations found to
-	// have none, so a household browsing the dial does not re-fetch the
-	// same favicons once per device. Memory only and bounded by bytes:
-	// logos are decoration, and losing them at restart costs one fetch
-	// each. radioLogosOrder is insertion order, for eviction.
-	// radioLogoFlights are the fetches in progress, keyed by station pid,
-	// so two callers asking for one logo at the same moment cost one
-	// request to the station host rather than two. A dial and a grid draw
-	// the same station on one paint and two devices paint at once, and
-	// against a dead host each of those is a ten-second wait.
-	// radioLogoHints are logo URLs tried ahead of discovery: a station's
-	// Icy-Logo, or a picture it repeated song after song. radioIcyLogos
-	// and radioDirectoryLogos are only the logos stations declared.
-	// radioWarmSlots bounds concurrent warm lookups: a client restoring
-	// a whole station list creates in a burst, and an unbounded fan-out
-	// of discovery flights (each up to the 12s budget) is a lot of
-	// sockets for pictures. Queued warms hold only their claim; paints
-	// join the flight and wait the same either way.
-	radioLogos          map[string]radioLogo
-	radioLogosOrder     []string
-	radioLogosBytes     int
-	radioLogoFlights    map[string]chan struct{}
-	radioLogoHints      map[string]string
-	radioIcyLogos       map[string]string
-	radioDirectoryLogos map[string]string
-	radioLogosMu        sync.Mutex
-	radioWarmSlots      chan struct{}
-	// batchFinalizeMu serializes upload-batch finalization (the flip,
-	// entry opening, and member linking as one unit): two concurrent
-	// finalizes of one batch would otherwise both gather the same
-	// still-unlinked members and open duplicate review entries.
-	// Process-wide is fine - finalizes are rare and database-only.
-	batchFinalizeMu sync.Mutex
-	// lastfmPtr holds the swappable outbound Last.fm client (admin
-	// credential changes rebuild it at runtime); envLastfmKey/Secret
-	// keep the environment pair as the fallback when no runtime pair is
-	// stored. listenbrainz needs no server credentials.
-	lastfmPtr       atomic.Value
-	envLastfmKey    string
-	envLastfmSecret string
-
-	listenbrainz              *scrobble.ListenBrainz
-	allowPrivateScrobbleHosts bool
-	// publicBase is where this server's web app answers, trailing slash
-	// trimmed; empty leaves every notification link out.
-	publicBase string
-	// version mirrors Config.Version.
-	version string
-	// notifyGuardedHTTP is the dial-guarded client for user-pointed
-	// notification destinations, built on first use;
-	// allowPrivateNotifyHosts relaxes its SSRF guard.
-	notifyGuardedHTTP       *http.Client
-	notifyGuardedOnce       sync.Once
-	allowPrivateNotifyHosts bool
-	// engine is the release matching engine; nil when no candidate
-	// source is configured (review entries then hold no candidates).
-	engine *match.Engine
-	// stagingDir holds upload staging; uploadFormats is the accepted
-	// extension set (uploadFormatsList the sorted health-payload form,
-	// deny-list subtracted); uploadRetention bounds staged-byte
-	// lifetime.
-	stagingDir        string
-	uploadFormats     map[string]bool
-	uploadFormatsList []string
-	uploadRetention   time.Duration
-	// stagingFree answers how much room the staging volume has left,
-	// for the check a new session runs. A field rather than a direct
-	// call so a test can hand it a full disk; nothing configures it.
-	stagingFree func(string) (int64, bool)
-	// catalogFile reads a file row, for fileByPID and the similarity
-	// sweep; a field so a test can hand it a read that fails.
-	catalogFile func(context.Context, model.PID) (*model.File, error)
-	// catalogItem reads an item row for the analysis queues; a field so a
-	// test can hand one row a read that fails.
-	catalogItem func(context.Context, model.PID) (*model.ItemView, error)
-	// admitUpload serializes the allowance checks a new session runs
-	// against the insert that spends them.
-	admitUpload sync.Mutex
-	// completing holds the ids of the upload sessions a complete or a
-	// discard is working on, so a second waits its turn.
-	completing sync.Map
-	// appendLocks serialize the chunk appends of one upload session.
-	appendLocks sessionLocks
-	// deciding holds the ids of the review entries a decision, revert,
-	// search or discard is changing, one at a time.
-	deciding sync.Map
-	// waitingForCatalog holds the declined submissions whose import met
-	// another job holding the catalog, tried again when a job ends or the
-	// follower finds none running; heldOff those whose entry another
-	// change held, tried again when it lets go.
-	waitingForCatalog sync.Map
-	heldOff           sync.Map
-	// fpcalcTimeout bounds one fpcalc run when set, defaultFpcalcTimeout
-	// otherwise.
-	fpcalcTimeout time.Duration
-	// fpcalcPath is the fingerprint binary, empty when absent (matching
-	// then runs on tag and search evidence only).
-	fpcalcPath string
-	// sources are the server-registered enrichment providers in the
-	// operator's order, and what the catalog's pass runs on.
-	sources *enrichSources
-	// openedAtNS is when this process opened the library: a job's end
-	// taken in hand before it was cut short by a stop.
-	openedAtNS int64
-	// startupScan is whether this start scans every library, which takes
-	// back what a removal the last stop cut short let go of.
-	startupScan bool
-	// jobFollowEvery is how often the job follower reads the running jobs;
-	// zero is jobFollowInterval.
-	jobFollowEvery time.Duration
-	// matchWake nudges the identify worker; lossy, ticker-backstopped.
-	matchWake chan struct{}
-	// toggles is the hot-path settings cache (the server's read-only flag,
-	// transcode limits), swapped whole on every write.
-	toggles atomic.Value
-	// adminSettingsMu keeps one write to the runtime settings at a time,
-	// so no two reloads of the toggles cache race.
-	adminSettingsMu sync.Mutex
-	// gate is the single transcode session gate, built on first use.
-	gate     *transcodeGate
-	gateOnce sync.Once
-	// sourceProviders are the injected acquisition providers, kept for
-	// the acquire-from-URL surface (the catalog holds its own copy for
-	// show dispatch).
-	sourceProviders []source.Provider
-	// sim is the in-memory sonic-similarity engine, warmed lazily from
-	// waxdeck.db on first use (it only holds data when a worker has
-	// posted embeddings). simSweepVersion remembers the catalog data
-	// version the last analysis sweep covered, so an unchanged catalog
-	// never re-walks. simDrops counts the queue rows removed because their
-	// own track left or moved on, or because they rested out of attempts
-	// for a week, whose audio may be queued again, and simSweptDrops is the
-	// count the last sweep covered: a sweep owed one runs on an unchanged
-	// catalog. simWake nudges the sweep loop when tracks may have arrived;
-	// lossy, ticker-backstopped.
-	// simIndex is the latest walk's analysisIndex, which the status counts
-	// from; simIndexMu keeps two walks of one catalog from running at
-	// once, and simIndexChecked is when the index was last walked or
-	// checked against the catalog, in unix nanoseconds. simWalk is the
-	// walk running off any request, under simWalkMu. workerLocalPaths
-	// mirrors Config.WorkerLocalPaths.
-	sim              *similarity.Engine
-	simWarm          sync.Once
-	simWarmErr       error
-	simSweepVersion  atomic.Int64
-	simDrops         atomic.Uint64
-	simSweptDrops    atomic.Uint64
-	simWake          chan struct{}
-	simIndex         atomic.Pointer[analysisIndex]
-	simIndexMu       sync.Mutex
-	simIndexChecked  atomic.Int64
-	simWalkMu        sync.Mutex
-	simWalk          *analysisWalk
-	workerLocalPaths bool
-	// isrcResolver mirrors Config.ISRCResolver.
-	isrcResolver ISRCResolver
-	// musicbrainzConfigured mirrors whether Config.EnrichmentContact was
-	// set, which is what decides whether the enrichment pass's identity
-	// phases can run. The provider-gated phases run without it, so this
-	// is not "enrichment is configured" - see enrichmentPhases.
-	musicbrainzConfigured bool
-	// enrichmentMatchReleases mirrors Config.EnrichmentMatchReleases,
-	// which with the contact gates the release-match phase.
-	enrichmentMatchReleases bool
-	// sonicAnalysisDefault and workerAPIConfigured mirror their Config
-	// fields.
-	sonicAnalysisDefault bool
-	workerAPIConfigured  bool
-	// workers is the supervised group Open was handed, kept so work a
-	// request starts but does not wait on (radio's external artwork
-	// lookup) still runs under the recover boundary every WaxDeck
-	// goroutine goes through. Nothing here may spawn a bare one.
-	workers *supervise.Group
-	// radioListenFloor mirrors Config.RadioListenMinListen, resolved.
-	radioListenFloor time.Duration
-	// radioArtResolver mirrors Config.RadioArtResolver, and
-	// radioArtCache holds what it has answered.
-	radioArtResolver RadioArtResolver
-	radioArtCache    radioArt
-	// radioWrites hands radio bookkeeping from the goroutine relaying a
-	// listener's audio to the writer Open starts. Everything the relay
-	// loop does that touches SQLite goes through here, and nothing else
-	// in that loop does.
-	radioWrites chan radioWrite
-	// radioWriteDone, when set, is called after each queued piece of
-	// bookkeeping has been written, so a test can wait for the writer
-	// instead of sleeping; nothing in the server sets it. Atomic because
-	// the writer is already running by the time a test can install one.
-	radioWriteDone atomic.Pointer[func()]
-	// podping holds the feed-URL index a chain notification resolves
-	// against, and the per-show floor between two podping-driven syncs.
-	podping podpingIndex
-	// watchQueue holds the event-touched directories waiting out their
-	// settle window; watchScans carries settled batches to the scan
-	// worker, so scans never run on the event loop; watchNudge wakes
-	// the library watcher to re-arm over a fresh root table after a
-	// runtime library create; watchReady closes once the first arm
-	// pass finishes, so a test can order its drop after the watches
-	// exist.
-	watchQueue     *watchPending
-	watchScans     chan []string
-	watchNudge     chan struct{}
-	watchReady     chan struct{}
-	watchReadyOnce sync.Once
-	// watchRecheck is Config.WatchRecheck.
-	watchRecheck time.Duration
-	// watchScanHook runs as the watcher scans a settled directory, or lets
-	// go of one a catalog scan covered, in a test; nothing in the server
-	// sets it.
-	watchScanHook func(dir string, scanned bool)
-	// watchArmHook runs as a watcher pass starts arming its roots (false)
-	// and once they are armed (true), in a test; nothing in the server
-	// sets it. Atomic, since a test sets it while the watcher runs.
-	watchArmHook atomic.Pointer[func(armed bool)]
-	// watchLookHook runs at each stage of a look at a root, before its
-	// stat ("stat"), its walk ("walk"), each watch a rewalk prunes
-	// ("prune") and each create it arms ("arm"), and on the loop as a
-	// renamed directory's watch drops ("drop") and as a create is queued
-	// for a root's look ("queue");
-	// watchMountsHook stands in for the mount-table read; watchCheckHook
-	// runs once the watcher has acted on a look's answer;
-	// watchLookWait stands in for how long a pass waits for its looks;
-	// watcher is the running kernel watcher, for a test to drop a watch
-	// the way an unmount does. Tests only, like the hooks above.
-	watchLookHook   atomic.Pointer[func(stage, path string)]
-	watchMountsHook atomic.Pointer[func() (string, error)]
-	watchCheckHook  atomic.Pointer[func(root string)]
-	watchLookWait   atomic.Int64
-	watcher         atomic.Pointer[fsnotify.Watcher]
-	// jobFinishedHook runs as a job's end is taken in (false) and once it
-	// has been (true), in a test; nothing in the server sets it.
-	jobFinishedHook atomic.Pointer[func(j *model.Job, done bool)]
 }
 
 // SocketFileName names the IPC socket, beside the catalog DB unless that
@@ -947,123 +423,79 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		return nil, fmt.Errorf("service: pid path cache: %w", err)
 	}
 
-	l = &Library{
-		sources: sources,
-		lib:     lib, paths: paths, db: store, configRoots: cfg.Roots, log: log, procCtx: ctx,
-		catalogFile:              lib.File,
-		catalogItem:              lib.Get,
-		catalogPath:              opts.DBPath,
-		socketDir:                socketDir,
-		catalogWake:              make(chan struct{}, 1),
-		userWake:                 make(chan string, 64),
-		jobWake:                  make(chan struct{}, 1),
-		journalWake:              make(chan struct{}, 1),
-		openedAtNS:               time.Now().UnixNano(),
-		startupScan:              cfg.ScanOnStart,
-		matchWake:                make(chan struct{}, 1),
-		simWake:                  make(chan struct{}, 1),
-		radioWrites:              make(chan radioWrite, radioWriteQueue),
-		sealer:                   cfg.Sealer,
-		cursorSealer:             cursorSealer,
-		podcastDir:               cfg.PodcastDir,
-		podcastRootName:          cfg.PodcastRootName,
-		defaultRetentionKeep:     cfg.DefaultRetentionKeep,
-		retentionInUseWindow:     cfg.RetentionInUseWindow,
-		allowPrivateFeedHosts:    cfg.AllowPrivateFeedHosts,
-		allowPrivateRadioHosts:   cfg.AllowPrivateRadioHosts,
-		radioListenFloor:         cmp.Or(cfg.RadioListenMinListen, RadioListenMinListen),
-		radioTitleFresh:          cfg.RadioTitleFreshFor,
-		radioDirectoryBase:       cfg.RadioDirectoryBase,
-		radioDirectoryMirrorList: cfg.RadioDirectoryMirrors,
-		podcastDirectoryBase:     cfg.PodcastDirectoryBase,
-		radioTitles:              map[string]radioTitle{},
-		radioLogos:               map[string]radioLogo{},
-		radioWarmSlots:           make(chan struct{}, 4),
-		radioLogoFlights:         map[string]chan struct{}{},
-		listenbrainz:             scrobble.NewListenBrainz(),
-		sim:                      similarity.New(),
-		workerLocalPaths:         cfg.WorkerLocalPaths,
-		isrcResolver:             cfg.ISRCResolver,
-		sonicAnalysisDefault:     cfg.SonicAnalysisDefault,
-		workerAPIConfigured:      cfg.WorkerAPIConfigured,
-		workers:                  group,
-		radioArtResolver:         cfg.RadioArtResolver,
-		watchQueue:               newWatchPending(cfg.WatchSettle),
-		watchRecheck:             cfg.WatchRecheck,
-		watchScans:               make(chan []string, 1),
-		watchNudge:               make(chan struct{}, 1),
-		watchReady:               make(chan struct{}),
-		rootProbeEvery:           cfg.RootProbeEvery,
+	c := &core{
+		db:          store,
+		lib:         lib,
+		log:         log,
+		workers:     group,
+		paths:       paths,
+		procCtx:     ctx,
+		catalogFile: lib.File,
+		catalogItem: lib.Get,
+		userWake:    make(chan string, 64),
+		sealer:      cfg.Sealer,
 	}
+	l = &Library{
+		core:        c,
+		catalogPath: opts.DBPath,
+		socketDir:   socketDir,
+		catalogWake: make(chan struct{}, 1),
+		journalWake: make(chan struct{}, 1),
+	}
+	c.library = l
+	c.wire(cfg)
+	l.Enrichment.sources = sources
+	l.Health.cursorSealer = cursorSealer
+	l.Jobs.openedAtNS = time.Now().UnixNano()
 	if reset != nil {
 		l.recordCatalogReset(ctx, reset)
 	}
 	// Before anything reads as an account: a reset drops the catalog user
 	// each one is mapped to.
-	if err := l.reconcileCatalogUsers(ctx); err != nil {
+	if err := l.Identity.reconcileCatalogUsers(ctx); err != nil {
 		paths.Close()
 		lib.Close()
 		return nil, fmt.Errorf("service: catalog users: %w", err)
 	}
-	if err := l.settleRoots(ctx); err != nil {
+	if err := l.Roots.settleRoots(ctx); err != nil {
 		paths.Close()
 		lib.Close()
 		return nil, fmt.Errorf("service: library roots: %w", err)
 	}
-	l.reconcileRemovedLibraries(ctx)
-	// The ListenBrainz API base is caller-supplied, so its deliveries
-	// ride a dial-guarded client like every other user-pointed fetch;
-	// the flag opts LAN instances back in. The connection's write-time
-	// check gives the friendly error, this guard is the boundary.
-	l.allowPrivateScrobbleHosts = cfg.AllowPrivateScrobbleHosts
-	l.listenbrainz.HTTP = scrobbleHTTPClient(cfg.AllowPrivateScrobbleHosts)
-	l.allowPrivateNotifyHosts = cfg.AllowPrivateNotifyHosts
-	l.publicBase = strings.TrimRight(cfg.PublicBase, "/")
+	l.Roots.reconcileRemovedLibraries(ctx)
+	l.Integrations.allowPrivateNotifyHosts = cfg.AllowPrivateNotifyHosts
+	l.Integrations.publicBase = strings.TrimRight(cfg.PublicBase, "/")
 	l.version = cfg.Version
-	l.dropLegacyNotifySetting(ctx)
-	l.loadRuntimeToggles(ctx)
-	l.envLastfmKey, l.envLastfmSecret = cfg.LastfmAPIKey, cfg.LastfmSecret
-	l.loadLastfmClient(ctx)
-	if l.retentionInUseWindow == 0 {
-		l.retentionInUseWindow = 2 * time.Minute
-	}
-	if l.radioTitleFresh == 0 {
-		l.radioTitleFresh = radioTitleFreshFor
-	}
-	if l.radioArtBudget == 0 {
-		l.radioArtBudget = radioArtLookupBudget
-	}
+	l.Integrations.dropLegacyNotifySetting(ctx)
+	l.Settings.loadRuntimeToggles(ctx)
+	l.Integrations.envLastfmKey, l.Integrations.envLastfmSecret = cfg.LastfmAPIKey, cfg.LastfmSecret
+	l.Integrations.loadLastfmClient(ctx)
 	if cfg.MatchSource != nil {
-		l.engine = match.NewEngine(cfg.MatchSource, cfg.MatchConfig)
+		l.Ingest.engine = match.NewEngine(cfg.MatchSource, cfg.MatchConfig)
 	}
-	l.stagingDir = cfg.StagingDir
-	if l.stagingDir == "" {
-		l.stagingDir = filepath.Join(cfg.DataDir, "staging")
+	l.Ingest.stagingDir = cfg.StagingDir
+	if l.Ingest.stagingDir == "" {
+		l.Ingest.stagingDir = filepath.Join(cfg.DataDir, "staging")
 	}
 	// Made here rather than by the first writer, so the free-space
 	// probe a new session runs has a directory on the staging volume to
 	// ask about. A server nobody uploads to carries an empty directory,
 	// which the janitor already expects to find.
-	if err := os.MkdirAll(l.stagingDir, 0o755); err != nil {
+	if err := os.MkdirAll(l.Ingest.stagingDir, 0o755); err != nil {
 		paths.Close()
 		lib.Close()
 		return nil, fmt.Errorf("service: staging directory: %w", err)
 	}
-	l.stagingFree = diskspace.Free
-	l.setUploadFormats(cfg.UploadFormats)
-	l.uploadRetention = cfg.UploadRetention
-	if l.uploadRetention == 0 {
-		l.uploadRetention = 7 * 24 * time.Hour
-	}
-	l.fpcalcPath = cfg.FpcalcPath
-	if l.fpcalcPath == "" {
+	l.Ingest.stagingFree = diskspace.Free
+	l.Ingest.setUploadFormats(cfg.UploadFormats)
+	l.Ingest.fpcalcPath = cfg.FpcalcPath
+	if l.Ingest.fpcalcPath == "" {
 		if p, err := exec.LookPath("fpcalc"); err == nil {
-			l.fpcalcPath = p
+			l.Ingest.fpcalcPath = p
 		}
 	}
-	l.musicbrainzConfigured = cfg.EnrichmentContact != ""
-	l.enrichmentMatchReleases = cfg.EnrichmentMatchReleases
-	l.sourceProviders = cfg.SourceProviders
+	l.Enrichment.musicbrainzConfigured = cfg.EnrichmentContact != ""
+	l.Ingest.sourceProviders = cfg.SourceProviders
 	if err := l.initSync(ctx); err != nil {
 		paths.Close()
 		lib.Close()
@@ -1093,7 +525,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	group.Go(ctx, "catalog-feed", l.runCatalogFeed)
 
 	// The catalog's jobs, announced as they move and settled as they end.
-	group.Go(ctx, "job-follow", l.runJobFollower)
+	group.Go(ctx, "job-follow", l.Jobs.runJobFollower)
 
 	// Which library each item sat in, for the catalog delta's tombstones.
 	group.Go(ctx, "library-journal", l.runLibraryJournal)
@@ -1103,7 +535,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	// goroutine would add to the group's wait counter while shutdown may
 	// already be waiting on it, which is a panic rather than a late
 	// worker.
-	group.Go(ctx, "radio-writes", l.writeRadioBookkeeping)
+	group.Go(ctx, "radio-writes", l.Radio.writeRadioBookkeeping)
 
 	// A waxbin upgrade can change the sort-key fold, and no scan rewrites
 	// an existing key, so every boot sweeps the stale ones; rewritten rows
@@ -1129,7 +561,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	// starters existed, and a catalog reset or rebuild, which drops the
 	// playlist while the row naming it survives. Both only ever take
 	// effect at a start.
-	group.GoOnce(ctx, "starter-playlists", l.reconcileStarterPlaylists)
+	group.GoOnce(ctx, "starter-playlists", l.Playlists.reconcileStarterPlaylists)
 
 	if cfg.ScanOnStart {
 		group.GoOnce(ctx, "startup-scan", func(ctx context.Context) error {
@@ -1137,7 +569,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 			if err != nil {
 				return err
 			}
-			l.followJob(pid)
+			l.Jobs.followJob(pid)
 			log.Info("startup scan launched", "job", string(pid))
 			return nil
 		})
@@ -1148,29 +580,16 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	// Spawned even with no roots yet: a console-managed install adds
 	// its first library at runtime, and the watcher holds for the nudge.
 	if cfg.WatchLibraries {
-		group.Go(ctx, "library-watch", l.watchLibraries)
-		group.Go(ctx, "library-watch-scan", l.watchScanWorker)
+		group.Go(ctx, "library-watch", l.Roots.watchLibraries)
+		group.Go(ctx, "library-watch-scan", l.Roots.watchScanWorker)
 	}
 
 	// The managed roots' write probe, once the server's read-only switch
 	// is read: now, then on a slow timer (and after a refused write).
-	l.probeRoots()
-	group.Go(ctx, "root-probe-timer", l.probeRootsEvery)
+	l.Roots.probeRoots()
+	group.Go(ctx, "root-probe-timer", l.Roots.probeRootsEvery)
 	opened = true
 	return l, nil
-}
-
-// untilShutdown is ctx without the caller's cancellation or deadline,
-// ended instead by the server stopping: work a client may walk away from
-// midway, a decision moving files or writing tags, finishes rather than
-// stopping half done, and still stops with the server.
-func (l *Library) untilShutdown(ctx context.Context) (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	stop := context.AfterFunc(l.procCtx, cancel)
-	return ctx, func() {
-		stop()
-		cancel()
-	}
 }
 
 // Close releases the catalog (flushing playback state), the path cache,
@@ -1182,7 +601,7 @@ func (l *Library) Close() error {
 	// stopped the writer, and after the wait that would otherwise be the
 	// obvious place to flush. Close runs behind both, so by here nothing
 	// can be relaying and nothing more can arrive.
-	l.drainRadioWrites()
+	l.Radio.drainRadioWrites()
 	if err := l.paths.Close(); err != nil {
 		l.log.Warn("closing pid path cache", "err", err)
 	}
@@ -1222,8 +641,8 @@ func (l *Library) startScan(ctx context.Context, userID string, force bool) (Job
 	if err != nil {
 		return Job{}, classify(err)
 	}
-	l.followStarted(ctx, pid, userID)
-	return l.JobStatus(ctx, apiPID(PrefixJob, pid))
+	l.Jobs.followStarted(ctx, pid, userID)
+	return l.Jobs.Status(ctx, apiPID(PrefixJob, pid))
 }
 
 // Analyze starts the asynchronous analyze pass and returns the job.
@@ -1254,267 +673,8 @@ func (l *Library) startAnalyze(ctx context.Context, userID string) (Job, error) 
 	if err != nil {
 		return Job{}, classify(err)
 	}
-	l.followStarted(ctx, pid, userID)
-	return l.JobStatus(ctx, apiPID(PrefixJob, pid))
-}
-
-// followStarted hands a job this server started to the follower, which
-// the feed alone may never tell of it, recording who asked when a person
-// did (userID, empty for the server's own).
-func (l *Library) followStarted(ctx context.Context, pid model.PID, userID string) {
-	if userID != "" {
-		l.adoptJob(ctx, pid, userID, "")
-		return
-	}
-	l.followJob(pid)
-}
-
-// JobStatus reports one catalog job.
-func (l *Library) JobStatus(ctx context.Context, apiJobPID string) (Job, error) {
-	prefix, pid, ok := parseAPIPID(apiJobPID)
-	if !ok || prefix != PrefixJob {
-		return Job{}, errNotFound("no job with pid " + apiJobPID)
-	}
-	job, err := l.lib.Job(ctx, pid)
-	if err != nil {
-		if KindOf(err) == KindNotFound {
-			return Job{}, errNotFound("no job with pid " + apiJobPID)
-		}
-		return Job{}, classify(err)
-	}
-	out := []Job{jobDTO(job)}
-	l.nameJobTargets(ctx, out)
-	return out[0], nil
-}
-
-// JobStatusFor reads one job for a caller in its audience (the one
-// jobAudience tells of it): an administrator, or the account that
-// started a targeted job while its origin row still holds them. Anyone
-// else is refused.
-func (l *Library) JobStatusFor(ctx context.Context, uc *UserCtx, apiJobPID string) (Job, error) {
-	if uc.Admin {
-		return l.JobStatus(ctx, apiJobPID)
-	}
-	// Who started it is read before the job: one that ends in between
-	// is told and its origin dropped, which read the other way round
-	// finds neither the starter nor an ended job.
-	_, pid, _ := parseAPIPID(apiJobPID)
-	origin, err := l.jobStarter(ctx, pid)
-	if err != nil {
-		return Job{}, &Error{Kind: KindInternal, Err: err}
-	}
-	job, err := l.JobStatus(ctx, apiJobPID)
-	if err != nil {
-		return job, err
-	}
-	starter := ""
-	if job.Target != nil {
-		starter = origin
-	}
-	// The starter, or, once a job on an item has ended and its origin is
-	// told, anyone who may edit that item: a kind change's starter reads
-	// the result their screen follows after the origin has gone.
-	if (starter != "" && starter == uc.ID) || l.mayReadEndedItemJob(ctx, uc, job) {
-		l.narrowJob(ctx, uc, &job)
-		return job, nil
-	}
-	return Job{}, &Error{Kind: KindForbidden, Msg: "only administrators and the job's starter may read it"}
-}
-
-// narrowJob leaves a job with what a reader who is not an administrator
-// may read of it: a scan's per-library runs and the server's paths are
-// the administrators', and a kind change's report keeps what is in the
-// reader's sight.
-func (l *Library) narrowJob(ctx context.Context, uc *UserCtx, job *Job) {
-	if job.Scan != nil {
-		job.Scan.Runs, job.Scan.RootsUnreachable = nil, nil
-	}
-	job.Error = l.failureWordsFor(uc, job.Error)
-	if k := job.SetKind; k != nil {
-		l.narrowKindTally(ctx, uc, k)
-	}
-}
-
-// failureWordsFor is failureWords for a reader who may not be granted
-// every library: a failure naming a file in one they are not says only
-// that.
-func (l *Library) failureWordsFor(uc *UserCtx, s string) string {
-	if !uc.AllLibraries {
-		for _, r := range l.libraryRoots() {
-			p := cleanRootPath(r.Path)
-			if p != "" && p != "." && !libraryGranted(uc, model.PID(r.PID)) && strings.Contains(s, p+string(filepath.Separator)) {
-				return "it failed on a file in a library you are not granted"
-			}
-		}
-	}
-	return l.failureWords(s)
-}
-
-// narrowKindTally leaves a kind change's report with what a reader who is
-// not an administrator may see: an administrator's change can run over
-// libraries they are not granted, so items out of their sight go, and so
-// do write-back failures of files there. An item of the reader's own
-// that folded into one out of their sight, as a book's key reaches
-// across libraries, stays with the other withheld.
-func (l *Library) narrowKindTally(ctx context.Context, uc *UserCtx, k *KindTallyDTO) {
-	seen := map[string]bool{}
-	visible := func(pid string) bool {
-		if v, ok := seen[pid]; ok {
-			return v
-		}
-		_, err := l.getVisibleItem(ctx, uc, pid)
-		seen[pid] = err == nil
-		return seen[pid]
-	}
-	k.Converted = slices.DeleteFunc(k.Converted, func(pid string) bool { return !visible(pid) })
-	k.Created = slices.DeleteFunc(k.Created, func(pid string) bool { return !visible(pid) })
-	for from, to := range k.Absorbed {
-		switch {
-		case visible(to):
-		case l.CanCurateItem(ctx, uc, from):
-			k.Absorbed[from] = ""
-		default:
-			delete(k.Absorbed, from)
-		}
-	}
-	k.WriteBackFailures = l.WriteBackFailuresFor(ctx, uc, k.WriteBackFailures)
-}
-
-// mayReadEndedItemJob reports whether a job that ran on an item has ended
-// and the caller may edit that item now.
-func (l *Library) mayReadEndedItemJob(ctx context.Context, uc *UserCtx, job Job) bool {
-	if job.Target == nil || job.Target.Type != "item" || job.State == string(model.JobRunning) {
-		return false
-	}
-	may, err := l.MayCurateItem(ctx, uc, job.Target.PID)
-	return err == nil && may
-}
-
-// listedOnceEnded are the targeted jobs the list keeps once they end:
-// someone's deliberate act whose result is worth a row, not a burst.
-var listedOnceEnded = map[string]bool{"set-kind": true, "organize-undo": true, "remove-root": true}
-
-// requestJobKinds are the jobs each answered to the request that started
-// it: an upload's import, a delete (one for a whole request, up to 500
-// items), a trash restore or purge. Ended, a burst of them would bury the
-// passes, so the list keeps them only while they run.
-var requestJobKinds = map[string]bool{"import": true, "delete": true, "restore": true, "purge-trash": true}
-
-// listableJobs reads the newest fetch catalog jobs and keeps those the list
-// shows the caller (listedJob). It answers too how many the catalog read
-// held, which falls short of fetch once there are no older jobs.
-func (l *Library) listableJobs(ctx context.Context, uc *UserCtx, fetch int) ([]*model.Job, int, error) {
-	jobs, err := l.lib.Jobs(ctx, fetch)
-	if err != nil {
-		return nil, 0, classify(err)
-	}
-	clearedAt, err := l.db.JobsClearedAt(ctx, uc.ID)
-	if err != nil {
-		return nil, 0, err
-	}
-	read := len(jobs)
-	return slices.DeleteFunc(jobs, func(j *model.Job) bool {
-		return !listedJob(j, clearedAt)
-	}), read, nil
-}
-
-// listedJob reports whether the list shows j to a caller who cleared what
-// ended by clearedAt: every running job, and an ended one unless it is
-// targeted (listedOnceEnded aside), of a request kind, or cleared.
-func listedJob(j *model.Job, clearedAt int64) bool {
-	if j.State == model.JobRunning {
-		return true
-	}
-	if requestJobKinds[j.Kind] || (j.TargetType != "" && !listedOnceEnded[j.Kind]) {
-		return false
-	}
-	return jobEndedAt(j) > clearedAt
-}
-
-// jobEndedAt is when a job ended, from the first time it recorded.
-func jobEndedAt(j *model.Job) int64 {
-	switch {
-	case j.FinishedAt != 0:
-		return j.FinishedAt
-	case j.HeartbeatAt != 0:
-		return j.HeartbeatAt
-	}
-	return j.StartedAt
-}
-
-// ClearFinishedJobs hides the caller's listed ended jobs from their list
-// and answers how many there were. The cut is the newest end among them,
-// not the clock, so a job that ends during the call is neither counted nor
-// hidden. Administrators only.
-func (l *Library) ClearFinishedJobs(ctx context.Context, uc *UserCtx) (int, error) {
-	if !uc.Admin {
-		return 0, &Error{Kind: KindForbidden, Msg: "administrators only"}
-	}
-	jobs, _, err := l.listableJobs(ctx, uc, jobsFetchCap)
-	if err != nil {
-		return 0, err
-	}
-	var n int
-	var newest int64
-	for _, j := range jobs {
-		if j.State != model.JobRunning {
-			n++
-			newest = max(newest, jobEndedAt(j))
-		}
-	}
-	if n == 0 {
-		return 0, nil
-	}
-	return n, l.db.SetJobsClearedAt(ctx, uc.ID, newest)
-}
-
-// Jobs lists recent catalog jobs, newest first, after any still running
-// that newer ones pushed out. A finished targeted job is left out (read by
-// pid): a burst of them would push the passes out. A kind change, an
-// organize undo and a library removal are the exceptions
-// (listedOnceEnded). A finished job of a per-item kind is left out too, and
-// so are jobs the caller cleared, before the limit applies: the read widens
-// past them until the page is full, the catalog has no older jobs, or it
-// reaches jobsFetchCap. Administrators only.
-func (l *Library) Jobs(ctx context.Context, uc *UserCtx, limit int) ([]Job, error) {
-	if !uc.Admin {
-		return nil, &Error{Kind: KindForbidden, Msg: "administrators only"}
-	}
-	var jobs []*model.Job
-	for fetch := min(limit*jobsOverfetch, jobsFetchCap); ; fetch = min(fetch*jobsOverfetch, jobsFetchCap) {
-		listable, read, err := l.listableJobs(ctx, uc, fetch)
-		if err != nil {
-			return nil, err
-		}
-		jobs = listable
-		if len(jobs) >= limit || read < fetch || fetch == jobsFetchCap {
-			break
-		}
-	}
-	jobs = jobs[:min(len(jobs), limit)]
-	listed := make(map[model.PID]bool, len(jobs))
-	for _, job := range jobs {
-		listed[job.PID] = true
-	}
-	var out []Job
-	running, err := l.followedRunning(ctx)
-	if err != nil {
-		l.log.Warn("jobs: reading the followed jobs", "err", err)
-	}
-	for _, pid := range running {
-		if listed[pid] {
-			continue
-		}
-		if job, err := l.lib.Job(ctx, pid); err == nil && job.State == model.JobRunning {
-			out = append(out, jobDTO(job))
-		}
-	}
-	sortJobsNewestFirst(out)
-	for _, job := range jobs {
-		out = append(out, jobDTO(job))
-	}
-	l.nameJobTargets(ctx, out)
-	return out, nil
+	l.Jobs.followStarted(ctx, pid, userID)
+	return l.Jobs.Status(ctx, apiPID(PrefixJob, pid))
 }
 
 // summary converts an item view to the list-row DTO.
@@ -1571,28 +731,4 @@ func itemNames(it *model.ItemView) (title, artist, album string) {
 		return it.Title, it.Artist, it.Album
 	}
 	return clipFeedTitle(it.Title), clipFeedTitle(it.Artist), clipFeedTitle(it.Album)
-}
-
-// getItem fetches an item and enforces that the API prefix fits its
-// kind. Tracks and books answer to either prefix: an item's kind can
-// change under it (a kind change, a library made to hold audiobooks, a
-// retag), and a queue, a playlist or a shelf holding the old form must
-// still reach it, while every answer carries the current one. An
-// episode's prefix stays its own.
-func (l *Library) getItem(ctx context.Context, apiItemPID string) (*model.ItemView, error) {
-	prefix, pid, ok := parseAPIPID(apiItemPID)
-	if !ok || !itemPrefix(prefix) {
-		return nil, errNotFound("no item with pid " + apiItemPID)
-	}
-	it, err := l.lib.Get(ctx, pid)
-	if err != nil {
-		if KindOf(err) == KindNotFound {
-			return nil, errNotFound("no item with pid " + apiItemPID)
-		}
-		return nil, classify(err)
-	}
-	if !prefixFitsKind(prefix, it.Kind) {
-		return nil, errNotFound("no item with pid " + apiItemPID)
-	}
-	return it, nil
 }

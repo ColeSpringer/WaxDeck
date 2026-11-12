@@ -119,7 +119,7 @@ func scrobblerSlot(t *testing.T, h *harness, service string) Scrobbler {
 func drainScrobbles(t *testing.T, h *harness) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
-	for h.svc.DrainScrobbleOutbox(context.Background()) {
+	for h.svc.Integrations.DrainScrobbleOutbox(context.Background()) {
 		if time.Now().After(deadline) {
 			t.Fatal("scrobble outbox did not drain")
 		}

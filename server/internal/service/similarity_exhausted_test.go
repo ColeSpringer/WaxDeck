@@ -19,7 +19,7 @@ func TestAnExhaustedSonicRowIsQueuedAgainAfterTheWeek(t *testing.T) {
 	logs := &syncBuffer{}
 	ctx, svc, uc := newCatalogFixtureWith(t, catalogFixtureOptions{logs: logs})
 	enableSonicAnalysis(t, ctx, svc, uc)
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	states, err := svc.db.SimilarityQueueStates(ctx)
@@ -65,13 +65,13 @@ func TestAnExhaustedSonicRowIsQueuedAgainAfterTheWeek(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.RunPrune(ctx); err != nil {
+	if err := svc.Integrations.RunPrune(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if again, err := svc.lib.DataVersion(ctx); err != nil || again != version {
 		t.Fatalf("the prune moved the catalog's data version (%d to %d, %v); the sweep would walk for it", version, again, err)
 	}
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 

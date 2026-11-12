@@ -49,7 +49,7 @@ func (e *env) changesSince(device string, since int64) subDeltaJSON {
 // subscribeFirstParty follows a feed the way the WaxDeck apps do.
 func (e *env) subscribeFirstParty(feed string) string {
 	e.t.Helper()
-	sub, _, err := e.svc.Subscribe(e.ctx, e.uc, service.SubscribeRequest{URL: feed})
+	sub, _, err := e.svc.Podcasts.Subscribe(e.ctx, e.uc, service.SubscribeRequest{URL: feed})
 	if err != nil {
 		e.t.Fatalf("subscribing %s: %v", feed, err)
 	}
@@ -136,7 +136,7 @@ func TestFirstPartyUnsubscribeClearsTheHolds(t *testing.T) {
 	a := e.feedURLOf(1)
 	e.change("phone", []string{a}, nil)
 	show := e.subscribeFirstParty(a)
-	if err := e.svc.Unsubscribe(e.ctx, e.uc, show, false); err != nil {
+	if err := e.svc.Podcasts.Unsubscribe(e.ctx, e.uc, show, false); err != nil {
 		t.Fatal(err)
 	}
 	e.wantList("after the apps unsubscribed")
@@ -153,7 +153,7 @@ func TestPutMatchesByShowNotSpelling(t *testing.T) {
 	e := newEnv(t)
 	a := e.feedURLOf(1)
 	e.change("phone", []string{a}, nil)
-	added, _, err := e.svc.GpodderSubChangesSince(e.ctx, e.uc, "", 0)
+	added, _, err := e.svc.Podcasts.GpodderSubChangesSince(e.ctx, e.uc, "", 0)
 	if err != nil || len(added) != 1 {
 		t.Fatalf("change log after the add = %+v (%v), want one row", added, err)
 	}
@@ -166,14 +166,14 @@ func TestPutMatchesByShowNotSpelling(t *testing.T) {
 	e.wantList("after both devices listed another spelling", a)
 	// The log keeps a show's latest change only, so a remove and re-add
 	// would also leave one add: the row itself has to be the first one.
-	if events, _, err := e.svc.GpodderSubChangesSince(e.ctx, e.uc, "", 0); err != nil || len(events) != 1 ||
+	if events, _, err := e.svc.Podcasts.GpodderSubChangesSince(e.ctx, e.uc, "", 0); err != nil || len(events) != 1 ||
 		events[0].ID != added[0].ID || events[0].TsSec != added[0].TsSec || events[0].Action != "add" {
 		t.Fatalf("change log after the respelled uploads = %+v (%v), want the original add %+v unchanged", events, err, added[0])
 	}
 
 	// The export and a device new to the account are told the account's
 	// URL, never the unfetched spelling.
-	if export, err := e.svc.ExportOPML(e.ctx, e.uc); err != nil || !strings.Contains(string(export), `xmlUrl="`+a+`"`) {
+	if export, err := e.svc.Podcasts.ExportOPML(e.ctx, e.uc); err != nil || !strings.Contains(string(export), `xmlUrl="`+a+`"`) {
 		t.Errorf("the export = %s (%v), want the account's %s", export, err, a)
 	}
 	resp, raw := e.call("POST", "/api/2/devices/alice/watch.json", `{"caption":"new"}`, true)
@@ -197,7 +197,7 @@ func TestTheEpisodeFilterMatchesByShowNotSpelling(t *testing.T) {
 	feed := e.feedURLOf(2)
 	e.change("phone", []string{feed}, nil)
 	_, ep := e.episodePID(feed, "Show 2 Pilot")
-	if _, err := e.svc.Checkpoint(e.ctx, e.uc, ep, 30_000, nil); err != nil {
+	if _, err := e.svc.Playback.Checkpoint(e.ctx, e.uc, ep, 30_000, nil); err != nil {
 		t.Fatal(err)
 	}
 	respelled := strings.Replace(feed, "http://", "HTTPS://", 1) + "/"

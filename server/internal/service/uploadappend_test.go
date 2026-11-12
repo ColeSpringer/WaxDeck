@@ -74,7 +74,7 @@ func TestConcurrentAppendsAtOneOffsetLeaveExactlyOneWinner(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			body := &meetReader{r: bytes.NewReader(chunks[i]), meeting: meet}
-			_, errs[i] = svc.AppendUploadData(ctx, uc, sess.ID, 0, body)
+			_, errs[i] = svc.Ingest.AppendUploadData(ctx, uc, sess.ID, 0, body)
 		}()
 	}
 	wg.Wait()
@@ -94,7 +94,7 @@ func TestConcurrentAppendsAtOneOffsetLeaveExactlyOneWinner(t *testing.T) {
 		t.Fatalf("neither append succeeded: %v", errs)
 	}
 
-	got, err := svc.GetUpload(ctx, uc, sess.ID)
+	got, err := svc.Ingest.GetUpload(ctx, uc, sess.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestConcurrentAppendsAtOneOffsetLeaveExactlyOneWinner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	part, err := os.ReadFile(svc.uploadPartPath(row))
+	part, err := os.ReadFile(svc.Ingest.uploadPartPath(row))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestAppendLosingTheAdvanceAnswersConflict(t *testing.T) {
 			t.Errorf("moving the count underneath the append = (%v, %v)", moved, err)
 		}
 	}}
-	_, err = svc.AppendUploadData(ctx, uc, sess.ID, 0, body)
+	_, err = svc.Ingest.AppendUploadData(ctx, uc, sess.ID, 0, body)
 	if KindOf(err) != KindConflict {
 		t.Fatalf("append errored %v (kind %q), want conflict", err, KindOf(err))
 	}
@@ -163,7 +163,7 @@ func TestASessionsIdlenessIsTheServers(t *testing.T) {
 	}
 	read := func() time.Duration {
 		t.Helper()
-		got, err := svc.GetUpload(ctx, uc, sess.ID)
+		got, err := svc.Ingest.GetUpload(ctx, uc, sess.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -195,7 +195,7 @@ func TestASessionsIdlenessIsTheServers(t *testing.T) {
 	}}
 	done := make(chan error, 1)
 	go func() {
-		_, err := svc.AppendUploadData(ctx, uc, sess.ID, 0, body)
+		_, err := svc.Ingest.AppendUploadData(ctx, uc, sess.ID, 0, body)
 		done <- err
 	}()
 	<-reached
@@ -212,19 +212,19 @@ func TestASessionsIdlenessIsTheServers(t *testing.T) {
 
 	// Bytes that arrive on a chunk that then fails still count.
 	quiet()
-	if _, err := svc.AppendUploadData(ctx, uc, sess.ID, 16, &failingReader{r: bytes.NewReader([]byte("bbbb"))}); err == nil {
+	if _, err := svc.Ingest.AppendUploadData(ctx, uc, sess.ID, 16, &failingReader{r: bytes.NewReader([]byte("bbbb"))}); err == nil {
 		t.Fatal("a chunk whose connection dropped was accepted")
 	}
 	if idle := read(); idle > time.Minute {
 		t.Fatalf("idle %v after bytes arrived on a failed chunk, want next to none", idle)
 	}
-	if got, err := svc.GetUpload(ctx, uc, sess.ID); err != nil || got.ReceivedBytes != 16 {
+	if got, err := svc.Ingest.GetUpload(ctx, uc, sess.ID); err != nil || got.ReceivedBytes != 16 {
 		t.Fatalf("received %d (%v), want the 16 kept before", got.ReceivedBytes, err)
 	}
 
 	// A chunk refused before its body is read leaves the idleness alone.
 	quiet()
-	if _, err := svc.AppendUploadData(ctx, uc, sess.ID, 0, bytes.NewReader([]byte{'c'})); KindOf(err) != KindConflict {
+	if _, err := svc.Ingest.AppendUploadData(ctx, uc, sess.ID, 0, bytes.NewReader([]byte{'c'})); KindOf(err) != KindConflict {
 		t.Fatalf("a chunk at a stale offset = %v, want conflict", err)
 	}
 	if idle := read(); idle < 10*time.Minute {
@@ -263,7 +263,7 @@ func TestASessionStaysLiveUntilItsChunkIsCounted(t *testing.T) {
 			}
 			idle := func() time.Duration {
 				t.Helper()
-				got, err := svc.GetUpload(ctx, uc, sess.ID)
+				got, err := svc.Ingest.GetUpload(ctx, uc, sess.ID)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -272,7 +272,7 @@ func TestASessionStaysLiveUntilItsChunkIsCounted(t *testing.T) {
 
 			// Parked once the body is read and before it is counted.
 			reached, release := make(chan struct{}), make(chan struct{})
-			svc.bodyReadHook = func() {
+			svc.Ingest.bodyReadHook = func() {
 				close(reached)
 				<-release
 			}
@@ -280,7 +280,7 @@ func TestASessionStaysLiveUntilItsChunkIsCounted(t *testing.T) {
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
-				_, _ = svc.AppendUploadData(ctx, uc, sess.ID, 0, tc.body())
+				_, _ = svc.Ingest.AppendUploadData(ctx, uc, sess.ID, 0, tc.body())
 			}()
 			select {
 			case <-reached:
@@ -295,7 +295,7 @@ func TestASessionStaysLiveUntilItsChunkIsCounted(t *testing.T) {
 			<-done
 
 			// Counted, or not, it is settled: the session is live no longer.
-			if svc.appendLocks.live(sess.ID) {
+			if svc.Ingest.appendLocks.live(sess.ID) {
 				t.Error("the session still reads as taking bytes after the append ended")
 			}
 			got := idle()
@@ -328,7 +328,7 @@ func TestAppendToASessionDiscardedMidChunkAnswersConflict(t *testing.T) {
 			t.Error(err)
 		}
 	}}
-	_, err = svc.AppendUploadData(ctx, uc, sess.ID, 0, body)
+	_, err = svc.Ingest.AppendUploadData(ctx, uc, sess.ID, 0, body)
 	if KindOf(err) != KindConflict || !strings.Contains(err.Error(), "no longer receiving") {
 		t.Fatalf("append errored %v (kind %q), want the no-longer-receiving conflict", err, KindOf(err))
 	}

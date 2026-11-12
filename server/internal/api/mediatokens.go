@@ -43,7 +43,7 @@ func (s *Server) authorizeMedia(w http.ResponseWriter, r *http.Request, c auth.M
 // authorizeMediaFor is authorizeMedia answering the account the check
 // read, for a route that goes on to read as it.
 func (s *Server) authorizeMediaFor(w http.ResponseWriter, r *http.Request, c auth.MediaClaims) (*service.UserCtx, bool) {
-	uc, err := s.svc.AuthorizeMediaFor(r.Context(), c)
+	uc, err := s.svc.Identity.AuthorizeMediaFor(r.Context(), c)
 	switch {
 	case err == nil:
 		return uc, true

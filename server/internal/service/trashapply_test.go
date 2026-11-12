@@ -123,16 +123,16 @@ func TestTheDeleteVerbsRefuseWhatTheCallerMayNotDo(t *testing.T) {
 		{"no delete right", f.caller(false), "trash"},
 		{"permanent without the admin role", f.caller(true), "permanent"},
 	} {
-		if _, err := f.svc.DeleteItems(f.ctx, c.uc, []string{f.pid}, c.mode, false); KindOf(err) != KindForbidden {
+		if _, err := f.svc.Tools.DeleteItems(f.ctx, c.uc, []string{f.pid}, c.mode, false); KindOf(err) != KindForbidden {
 			t.Errorf("items, %s = %v, want forbidden", c.name, err)
 		}
-		if _, err := f.svc.DeleteItemFiles(f.ctx, c.uc, f.pid, []string{string(f.copy.FilePID)}, c.mode, false); KindOf(err) != KindForbidden {
+		if _, err := f.svc.Tools.DeleteItemFiles(f.ctx, c.uc, f.pid, []string{string(f.copy.FilePID)}, c.mode, false); KindOf(err) != KindForbidden {
 			t.Errorf("files, %s = %v, want forbidden", c.name, err)
 		}
 	}
 	trashFileStillThere(t, f.primary.DisplayPath, "the track")
 	trashFileStillThere(t, f.copy.DisplayPath, "the copy")
-	if _, err := f.svc.DeleteItemFiles(f.ctx, f.caller(true), f.pid, []string{string(f.copy.FilePID)}, "trash", true); err != nil {
+	if _, err := f.svc.Tools.DeleteItemFiles(f.ctx, f.caller(true), f.pid, []string{string(f.copy.FilePID)}, "trash", true); err != nil {
 		t.Fatalf("a trash plan with the delete right = %v, want it planned", err)
 	}
 }
@@ -143,7 +143,7 @@ func TestDeletingAFileOutsideTheCallersLibrariesIsNotFound(t *testing.T) {
 	t.Parallel()
 	f := newTrashCopyFixture(t)
 	curator := f.caller(true, f.home)
-	if _, err := f.svc.DeleteItemFiles(f.ctx, curator, f.pid, []string{string(f.copy.FilePID)}, "trash", false); KindOf(err) != KindNotFound {
+	if _, err := f.svc.Tools.DeleteItemFiles(f.ctx, curator, f.pid, []string{string(f.copy.FilePID)}, "trash", false); KindOf(err) != KindNotFound {
 		t.Fatalf("delete = %v, want not-found", err)
 	}
 	trashFileStillThere(t, f.copy.DisplayPath, "the copy")
@@ -155,7 +155,7 @@ func TestAReadOnlyServerDeletesNoFileOfAnItem(t *testing.T) {
 	t.Parallel()
 	f := newTrashCopyFixture(t)
 	setServerReadOnly(t, f.ctx, f.svc, true)
-	if _, err := f.svc.DeleteItemFiles(f.ctx, f.admin, f.pid, []string{string(f.copy.FilePID)}, "trash", false); KindOf(err) != KindReadOnly {
+	if _, err := f.svc.Tools.DeleteItemFiles(f.ctx, f.admin, f.pid, []string{string(f.copy.FilePID)}, "trash", false); KindOf(err) != KindReadOnly {
 		t.Fatalf("delete = %v, want read-only", err)
 	}
 	trashFileStillThere(t, f.copy.DisplayPath, "the copy")
@@ -189,7 +189,7 @@ func TestAPartlyAppliedDeleteReportsTheSizesItMeasuredFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
-	res, err := f.svc.DeleteItemFiles(f.ctx, f.admin, f.pid, []string{string(f.copy.FilePID), string(stuck.FilePID)}, "trash", false)
+	res, err := f.svc.Tools.DeleteItemFiles(f.ctx, f.admin, f.pid, []string{string(f.copy.FilePID), string(stuck.FilePID)}, "trash", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestAFileSkippedAsTheDeleteRunsStayed(t *testing.T) {
 	t.Parallel()
 	for _, whole := range []bool{false, true} {
 		f := newTrashCopyFixture(t)
-		f.svc.deleteApplyHook = func(ctx context.Context) {
+		f.svc.Tools.deleteApplyHook = func(ctx context.Context) {
 			if _, err := f.svc.lib.SetLibraryReadOnly(ctx, f.elsewhere, true); err != nil {
 				t.Error(err)
 			}
@@ -218,9 +218,9 @@ func TestAFileSkippedAsTheDeleteRunsStayed(t *testing.T) {
 		var res DeleteItemsResultDTO
 		var err error
 		if whole {
-			res, err = f.svc.DeleteItems(f.ctx, f.admin, []string{f.pid}, "trash", false)
+			res, err = f.svc.Tools.DeleteItems(f.ctx, f.admin, []string{f.pid}, "trash", false)
 		} else {
-			_, err = f.svc.DeleteItemFiles(f.ctx, f.admin, f.pid, []string{string(f.copy.FilePID)}, "trash", false)
+			_, err = f.svc.Tools.DeleteItemFiles(f.ctx, f.admin, f.pid, []string{string(f.copy.FilePID)}, "trash", false)
 			if KindOf(err) != KindReadOnly {
 				t.Errorf("the copy alone, skipped as it ran = %v (kind %q), want read-only", err, KindOf(err))
 			}
@@ -256,12 +256,12 @@ func TestACopyJoiningMidDeleteOutsideTheCallersReachStays(t *testing.T) {
 	curator := f.caller(true, f.home)
 	late := filepath.Join(f.copyDir, "late")
 	var joined string
-	f.svc.deletePlanHook = func(ctx context.Context) {
+	f.svc.Tools.deletePlanHook = func(ctx context.Context) {
 		joined = trashCopyInto(t, ctx, f.svc, f.primary.DisplayPath, late)
 	}
 	// The first copy is in the snapshot and left for the caller's reach;
 	// the late one is the gap under test.
-	res, err := f.svc.DeleteItems(f.ctx, curator, []string{f.pid}, "trash", false)
+	res, err := f.svc.Tools.DeleteItems(f.ctx, curator, []string{f.pid}, "trash", false)
 	if err != nil {
 		t.Fatal(err)
 	}

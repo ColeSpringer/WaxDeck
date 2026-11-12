@@ -79,7 +79,7 @@ func (s *Server) ListUploads(ctx context.Context, req ListUploadsRequestObject) 
 	if err != nil {
 		return nil, err
 	}
-	uploads, next, quota, err := s.svc.ListUploadsPage(ctx, uc, deref(req.Params.Cursor), limit)
+	uploads, next, quota, err := s.svc.Ingest.ListUploadsPage(ctx, uc, deref(req.Params.Cursor), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (s *Server) ListUploads(ctx context.Context, req ListUploadsRequestObject) 
 // not a relaxed listLibraries.
 func (s *Server) ListUploadTargets(ctx context.Context, _ ListUploadTargetsRequestObject) (ListUploadTargetsResponseObject, error) {
 	uc := userCtx(ctx)
-	targets, err := s.svc.UploadTargets(ctx, uc)
+	targets, err := s.svc.Ingest.UploadTargets(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +129,7 @@ func (s *Server) CreateUpload(ctx context.Context, req CreateUploadRequestObject
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	u, err := s.svc.CreateUpload(ctx, uc, service.UploadCreateParams{
+	u, err := s.svc.Ingest.CreateUpload(ctx, uc, service.UploadCreateParams{
 		FileName:   req.Body.FileName,
 		SizeBytes:  req.Body.SizeBytes,
 		MediaType:  string(req.Body.MediaType),
@@ -150,7 +150,7 @@ func (s *Server) CreateUpload(ctx context.Context, req CreateUploadRequestObject
 
 func (s *Server) GetUpload(ctx context.Context, req GetUploadRequestObject) (GetUploadResponseObject, error) {
 	uc := userCtx(ctx)
-	u, err := s.svc.GetUpload(ctx, uc, string(req.UploadId))
+	u, err := s.svc.Ingest.GetUpload(ctx, uc, string(req.UploadId))
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +159,7 @@ func (s *Server) GetUpload(ctx context.Context, req GetUploadRequestObject) (Get
 
 func (s *Server) DeleteUpload(ctx context.Context, req DeleteUploadRequestObject) (DeleteUploadResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.DeleteUpload(ctx, uc, string(req.UploadId)); err != nil {
+	if err := s.svc.Ingest.DeleteUpload(ctx, uc, string(req.UploadId)); err != nil {
 		return nil, err
 	}
 	return DeleteUpload204Response{}, nil
@@ -180,7 +180,7 @@ func (s *Server) PutUploadData(ctx context.Context, req PutUploadDataRequestObje
 		return nil, refuse(http.StatusBadRequest, "invalid-request", fmt.Sprintf(
 			"a chunk may carry at most %d bytes; this one declares %d", service.MaxUploadChunk, n))
 	}
-	u, err := s.svc.AppendUploadData(ctx, uc, string(req.UploadId), req.Params.Offset, req.Body)
+	u, err := s.svc.Ingest.AppendUploadData(ctx, uc, string(req.UploadId), req.Params.Offset, req.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +192,7 @@ func (s *Server) CompleteUpload(ctx context.Context, req CompleteUploadRequestOb
 	if s.tooFast(uc) {
 		return nil, pacedOut()
 	}
-	u, err := s.svc.CompleteUpload(ctx, uc, string(req.UploadId))
+	u, err := s.svc.Ingest.CompleteUpload(ctx, uc, string(req.UploadId))
 	if err != nil {
 		kind := service.KindOf(err)
 		if kind == service.KindConflict && errors.Is(err, service.ErrChecksumMismatch) {
@@ -232,7 +232,7 @@ func (s *Server) CreateUploadBatch(ctx context.Context, req CreateUploadBatchReq
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	b, err := s.svc.CreateUploadBatch(ctx, uc, service.UploadBatchCreateParams{
+	b, err := s.svc.Ingest.CreateUploadBatch(ctx, uc, service.UploadBatchCreateParams{
 		Grouping:   string(req.Body.Grouping),
 		MediaType:  string(req.Body.MediaType),
 		LibraryPID: deref(req.Body.LibraryPid),
@@ -252,7 +252,7 @@ func (s *Server) CompleteUploadBatch(ctx context.Context, req CompleteUploadBatc
 	if s.tooFast(uc) {
 		return nil, pacedOut()
 	}
-	b, err := s.svc.CompleteUploadBatch(ctx, uc, string(req.BatchId))
+	b, err := s.svc.Ingest.CompleteUploadBatch(ctx, uc, string(req.BatchId))
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +271,7 @@ func (s *Server) CreateAcquisition(ctx context.Context, req CreateAcquisitionReq
 	if req.Body.Format != nil {
 		format = string(*req.Body.Format)
 	}
-	task, err := s.svc.StartAcquisition(ctx, uc, req.Body.Url, string(req.Body.MediaType), deref(req.Body.LibraryPid), format, req.Body.Identify)
+	task, err := s.svc.Ingest.StartAcquisition(ctx, uc, req.Body.Url, string(req.Body.MediaType), deref(req.Body.LibraryPid), format, req.Body.Identify)
 	if err != nil {
 		if k := service.KindOf(err); k == service.KindInvalid || k == service.KindNotFound {
 			return nil, refuse(http.StatusBadRequest, "invalid-request", serviceMessage(err))
@@ -283,10 +283,10 @@ func (s *Server) CreateAcquisition(ctx context.Context, req CreateAcquisitionReq
 
 func (s *Server) RematchItem(ctx context.Context, req RematchItemRequestObject) (RematchItemResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
-	entryID, err := s.svc.RematchItem(ctx, uc, string(req.Pid))
+	entryID, err := s.svc.Ingest.RematchItem(ctx, uc, string(req.Pid))
 	if err != nil {
 		if service.KindOf(err) == service.KindInvalid {
 			return nil, refuse(http.StatusConflict, "conflict", serviceMessage(err))

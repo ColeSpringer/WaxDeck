@@ -71,13 +71,13 @@ type DiscoverySweepReport struct {
 // would cut an album into as many entries as it had files indexed so
 // far. Waiting for the scan to settle means an album arrives whole,
 // which is the unit the matching engine scores.
-func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, error) {
+func (l *Similarity) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, error) {
 	report := DiscoverySweepReport{}
-	if l.Maintenance() {
+	if l.library.Maintenance() {
 		report.Deferred = true
 		return report, nil
 	}
-	running, err := l.catalogJobRunning(ctx)
+	running, err := l.Jobs.catalogJobRunning(ctx)
 	if err != nil {
 		return report, err
 	}
@@ -244,7 +244,7 @@ func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, e
 		libraryPID := string(it.LibraryPID)
 		mode, ok := modes[libraryPID]
 		if !ok {
-			mode = l.LibraryMatchingMode(ctx, libraryPID)
+			mode = l.Ingest.LibraryMatchingMode(ctx, libraryPID)
 			modes[libraryPID] = mode
 		}
 		// An as-is library is a collection somebody already curated. The
@@ -265,7 +265,7 @@ func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, e
 		if l.kindPinned(ctx, it.PID) {
 			continue
 		}
-		unit, err := l.albumUnit(ctx, it)
+		unit, err := l.Ingest.albumUnit(ctx, it)
 		if err != nil {
 			l.log.Warn("discovery: building an album unit", "item", it.PID, "err", err)
 			continue
@@ -285,7 +285,7 @@ func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, e
 		// opt-out is about what somebody hands the server, and nobody
 		// handed this over. The library's own matching mode is the
 		// switch that covers a scan.
-		entryID, err := l.openReviewEntry(ctx, entry, reviewPayload{Tracks: unit}, true)
+		entryID, err := l.Ingest.openReviewEntry(ctx, entry, reviewPayload{Tracks: unit}, true)
 		if err != nil {
 			l.log.Warn("discovery: opening a review entry", "item", it.PID, "err", err)
 			continue
@@ -302,7 +302,7 @@ func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, e
 	// One marker for the whole pass, whatever it opened. openReviewEntry
 	// deliberately raises none for scan-origin entries.
 	if lastOpened != "" {
-		l.notifyReview(ctx, lastOpened, "")
+		l.Ingest.notifyReview(ctx, lastOpened, "")
 	}
 
 	if capped {
@@ -322,7 +322,7 @@ func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, e
 // kindPinned reports whether someone pinned an item's kind; a read that
 // fails counts as pinned, since leaving an item unidentified is the
 // recoverable side.
-func (l *Library) kindPinned(ctx context.Context, pid model.PID) bool {
+func (l *Similarity) kindPinned(ctx context.Context, pid model.PID) bool {
 	rows, err := l.lib.Provenance(ctx, pid)
 	if err != nil {
 		return true
@@ -345,7 +345,7 @@ func discoveryUnitKey(libraryPID, title, artist string) string {
 
 // rewindDiscoverySweep puts the sweeper at seq, so only what arrives
 // after it is reviewed.
-func (l *Library) rewindDiscoverySweep(ctx context.Context, seq int64) error {
+func (l *Similarity) rewindDiscoverySweep(ctx context.Context, seq int64) error {
 	if err := l.db.SyncStateSet(ctx, discoveryCursorKey, strconv.FormatInt(seq, 10)); err != nil {
 		return &Error{Kind: KindInternal, Err: err}
 	}
@@ -354,7 +354,7 @@ func (l *Library) rewindDiscoverySweep(ctx context.Context, seq int64) error {
 
 // storeDiscoveryCursor advances the stored position, writing nothing
 // when an idle pass read no new changes.
-func (l *Library) storeDiscoveryCursor(ctx context.Context, from, to int64) error {
+func (l *Similarity) storeDiscoveryCursor(ctx context.Context, from, to int64) error {
 	if to == from {
 		return nil
 	}
@@ -364,18 +364,8 @@ func (l *Library) storeDiscoveryCursor(ctx context.Context, from, to int64) erro
 	return nil
 }
 
-// catalogJobRunning reports whether a scan or another catalog job is in
-// flight. It reads the facade rather than the service's own listing,
-// which is role-gated; a job that starts just after this answers only
-// means the pass runs one tick early, and the next one covers what it
-// wrote.
-func (l *Library) catalogJobRunning(ctx context.Context) (bool, error) {
-	_, running, err := l.runningJob(ctx, "", 20)
-	return running, err
-}
-
 // uploadedItems asks which of these items an upload session produced.
-func (l *Library) uploadedItems(ctx context.Context, views []*model.ItemView) (map[string]bool, error) {
+func (l *Similarity) uploadedItems(ctx context.Context, views []*model.ItemView) (map[string]bool, error) {
 	pids := make([]string, 0, len(views))
 	for _, it := range views {
 		if it != nil {

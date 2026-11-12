@@ -10,10 +10,12 @@ import (
 	"time"
 )
 
-// A Library with nothing but the directory-mirror state wired, which is
-// all these methods touch.
+// A bare Library, with no catalog, over the given directory mirrors: the
+// mirror state is all these methods touch.
 func newMirrorLibrary(bases ...string) *Library {
-	return &Library{radioDirectoryMirrorList: bases}
+	l := bareLibrary(&core{})
+	l.Radio.radioDirectoryMirrorList = bases
+	return l
 }
 
 func TestRadioDirectoryMirrorSelection(t *testing.T) {
@@ -24,15 +26,15 @@ func TestRadioDirectoryMirrorSelection(t *testing.T) {
 	// purpose, so it answers alone: rotating away from a deliberate
 	// choice would silently talk to a host nobody asked for.
 	l := newMirrorLibrary("https://mirror-a.example", "https://mirror-b.example")
-	l.radioDirectoryBase = "https://chosen.example/"
-	got := l.radioDirectoryMirrors(ctx)
+	l.Radio.radioDirectoryBase = "https://chosen.example/"
+	got := l.Radio.directoryMirrors(ctx)
 	if len(got) != 1 || got[0] != "https://chosen.example" {
 		t.Fatalf("configured base = %v, want the one base with its slash trimmed", got)
 	}
 
 	// Without one, the mirror list is what gets tried, all of it.
 	l = newMirrorLibrary("https://mirror-a.example", "https://mirror-b.example", "https://mirror-c.example")
-	got = l.radioDirectoryMirrors(ctx)
+	got = l.Radio.directoryMirrors(ctx)
 	if len(got) != 3 {
 		t.Fatalf("mirror list = %v, want all three", got)
 	}
@@ -53,9 +55,9 @@ func TestRadioDirectoryMirrorCooldown(t *testing.T) {
 	// A mirror that just failed sorts last rather than away: on an
 	// afternoon where every mirror is having one, dropping them would
 	// leave nothing to ask.
-	l.coolRadioMirror("https://sick.example")
+	l.Radio.coolRadioMirror("https://sick.example")
 	for i := 0; i < 20; i++ {
-		got := l.radioDirectoryMirrors(ctx)
+		got := l.Radio.directoryMirrors(ctx)
 		if len(got) != 2 {
 			t.Fatalf("cooled mirrors = %v, want both", got)
 		}
@@ -66,13 +68,13 @@ func TestRadioDirectoryMirrorCooldown(t *testing.T) {
 
 	// An expired cooldown stops ordering anything, and clears itself so
 	// the map cannot grow without bound.
-	l.radioMirrorsMu.Lock()
-	l.radioMirrorCold["https://sick.example"] = time.Now().Add(-time.Second)
-	l.radioMirrorsMu.Unlock()
-	l.radioDirectoryMirrors(ctx)
-	l.radioMirrorsMu.Lock()
-	_, still := l.radioMirrorCold["https://sick.example"]
-	l.radioMirrorsMu.Unlock()
+	l.Radio.radioMirrorsMu.Lock()
+	l.Radio.radioMirrorCold["https://sick.example"] = time.Now().Add(-time.Second)
+	l.Radio.radioMirrorsMu.Unlock()
+	l.Radio.directoryMirrors(ctx)
+	l.Radio.radioMirrorsMu.Lock()
+	_, still := l.Radio.radioMirrorCold["https://sick.example"]
+	l.Radio.radioMirrorsMu.Unlock()
 	if still {
 		t.Fatal("an expired cooldown should be forgotten, not kept")
 	}
@@ -136,23 +138,22 @@ func TestCancelledSearchDoesNotCoolMirrors(t *testing.T) {
 	}))
 	t.Cleanup(func() { close(hold); srv.Close() })
 
-	l := &Library{
-		radioDirectoryMirrorList: []string{srv.URL},
-		allowPrivateRadioHosts:   true,
-	}
+	l := bareLibrary(&core{})
+	l.Radio.radioDirectoryMirrorList = []string{srv.URL}
+	l.Radio.allowPrivateRadioHosts = true
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _ = l.SearchRadioDirectory(ctx, nil, "jazz", 5)
+		_, _ = l.Radio.SearchRadioDirectory(ctx, nil, "jazz", 5)
 	}()
 	<-reached
 	cancel()
 	<-done
 
-	l.radioMirrorsMu.Lock()
-	cooled := len(l.radioMirrorCold)
-	l.radioMirrorsMu.Unlock()
+	l.Radio.radioMirrorsMu.Lock()
+	cooled := len(l.Radio.radioMirrorCold)
+	l.Radio.radioMirrorsMu.Unlock()
 	if cooled != 0 {
 		t.Fatalf("%d mirrors cooled by a cancelled search, want none", cooled)
 	}
@@ -162,13 +163,13 @@ func TestCancelledSearchDoesNotCoolMirrors(t *testing.T) {
 // full lookup timeout before falling back to the round-robin name.
 func TestFailedMirrorDiscoveryIsRemembered(t *testing.T) {
 	t.Parallel()
-	l := &Library{}
-	l.radioMirrorsMu.Lock()
-	l.radioMirrors, l.radioMirrorsAt = nil, time.Now()
-	l.radioMirrorsMu.Unlock()
+	l := bareLibrary(&core{})
+	l.Radio.radioMirrorsMu.Lock()
+	l.Radio.radioMirrors, l.Radio.radioMirrorsAt = nil, time.Now()
+	l.Radio.radioMirrorsMu.Unlock()
 
 	start := time.Now()
-	got := l.radioDirectoryMirrors(context.Background())
+	got := l.Radio.directoryMirrors(context.Background())
 	if elapsed := time.Since(start); elapsed > radioMirrorLookupTimeout/2 {
 		t.Fatalf("a remembered failure took %v, want the cached answer", elapsed)
 	}
@@ -183,22 +184,22 @@ func TestFailedMirrorDiscoveryIsRemembered(t *testing.T) {
 // path exists to end.
 func TestCancelledDiscoveryKeepsTheMirrorList(t *testing.T) {
 	t.Parallel()
-	l := &Library{}
-	l.radioMirrorsMu.Lock()
-	l.radioMirrors = []string{"https://de1.example", "https://at1.example"}
+	l := bareLibrary(&core{})
+	l.Radio.radioMirrorsMu.Lock()
+	l.Radio.radioMirrors = []string{"https://de1.example", "https://at1.example"}
 	// Stale, so the next call would refresh.
-	l.radioMirrorsAt = time.Now().Add(-2 * radioMirrorTTL)
-	l.radioMirrorsMu.Unlock()
+	l.Radio.radioMirrorsAt = time.Now().Add(-2 * radioMirrorTTL)
+	l.Radio.radioMirrorsMu.Unlock()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	got := l.radioDirectoryMirrors(ctx)
+	got := l.Radio.directoryMirrors(ctx)
 	if len(got) != 2 {
 		t.Fatalf("mirrors after a cancelled refresh = %v, want the two already known", got)
 	}
-	l.radioMirrorsMu.Lock()
-	held := len(l.radioMirrors)
-	l.radioMirrorsMu.Unlock()
+	l.Radio.radioMirrorsMu.Lock()
+	held := len(l.Radio.radioMirrors)
+	l.Radio.radioMirrorsMu.Unlock()
 	if held != 2 {
 		t.Fatalf("the cached list was overwritten with %d entries", held)
 	}
@@ -217,8 +218,10 @@ func TestUndecodableMirrorsDoNotReportStatus200(t *testing.T) {
 		t.Cleanup(srv.Close)
 		mirrors = append(mirrors, srv.URL)
 	}
-	l := &Library{radioDirectoryMirrorList: mirrors, allowPrivateRadioHosts: true}
-	_, err := l.SearchRadioDirectory(context.Background(), nil, "jazz", 5)
+	l := bareLibrary(&core{})
+	l.Radio.radioDirectoryMirrorList = mirrors
+	l.Radio.allowPrivateRadioHosts = true
+	_, err := l.Radio.SearchRadioDirectory(context.Background(), nil, "jazz", 5)
 	if err == nil {
 		t.Fatal("three undecodable mirrors should not read as an answer")
 	}

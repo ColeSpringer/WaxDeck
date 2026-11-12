@@ -76,7 +76,7 @@ const settingSignupEnabled = "signup:enabled"
 
 // SignupEnabled reports whether open self-serve registration is on.
 // Invites work regardless.
-func (l *Library) SignupEnabled(ctx context.Context) bool {
+func (l *Identity) SignupEnabled(ctx context.Context) bool {
 	v, err := l.db.SettingGet(ctx, settingSignupEnabled)
 	return err == nil && v == "true"
 }
@@ -86,7 +86,7 @@ func (l *Library) SignupEnabled(ctx context.Context) bool {
 // the account activates immediately with the invite's shape. Invalid
 // tokens of every flavor answer the same forbidden, so the endpoint
 // never confirms whether a token exists.
-func (l *Library) Signup(ctx context.Context, username, password, displayName, inviteToken string) (*Account, SignupState, error) {
+func (l *Identity) Signup(ctx context.Context, username, password, displayName, inviteToken string) (*Account, SignupState, error) {
 	if password == "" {
 		return nil, "", errInvalid("password is required")
 	}
@@ -161,7 +161,7 @@ func (l *Library) Signup(ctx context.Context, username, password, displayName, i
 	}
 	// The new account is the actor, as for a request: the server did
 	// nothing here, and "system" would hide who came in on whose invite.
-	l.Audit(ctx, &UserCtx{ID: acct.User.ID}, "user.signup", AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
+	l.Audit.Record(ctx, &UserCtx{ID: acct.User.ID}, "user.signup", AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
 		map[string]any{"invite": iv.ID, "inviteNote": iv.Note, "invitedBy": iv.CreatedBy})
 	return acct, SignupActive, nil
 }
@@ -169,16 +169,16 @@ func (l *Library) Signup(ctx context.Context, username, password, displayName, i
 // notifyAdminsOfSignup announces a new pending registration on the
 // server scope: server targets plus admin personal targets that opted
 // into signup-requested.
-func (l *Library) notifyAdminsOfSignup(ctx context.Context, acct *Account) {
-	l.EmitServerNotification(ctx, "signup-requested",
+func (l *Identity) notifyAdminsOfSignup(ctx context.Context, acct *Account) {
+	l.Integrations.EmitServerNotification(ctx, "signup-requested",
 		"New account request",
 		acct.User.Username+" requested an account and is waiting for approval.")
-	l.Audit(ctx, &UserCtx{ID: acct.User.ID}, "user.request", AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username}, nil)
+	l.Audit.Record(ctx, &UserCtx{ID: acct.User.ID}, "user.request", AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username}, nil)
 }
 
 // PendingAccounts pages pending registrations, oldest first. The cursor
 // is the previous page's last (createdNS, id) pair.
-func (l *Library) PendingAccounts(ctx context.Context, cursor string, limit int) (AccountPage, error) {
+func (l *Identity) PendingAccounts(ctx context.Context, cursor string, limit int) (AccountPage, error) {
 	var afterNS int64
 	var afterID string
 	if cursor != "" {
@@ -217,7 +217,7 @@ func (l *Library) PendingAccounts(ctx context.Context, cursor string, limit int)
 
 // ApproveSignup activates a pending account, assigning its shape in the
 // same step. A user that is not pending conflicts.
-func (l *Library) ApproveSignup(ctx context.Context, actor *UserCtx, userID string, ap SignupApproval) (*Account, error) {
+func (l *Identity) ApproveSignup(ctx context.Context, actor *UserCtx, userID string, ap SignupApproval) (*Account, error) {
 	u, err := l.db.UserByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
@@ -249,7 +249,7 @@ func (l *Library) ApproveSignup(ctx context.Context, actor *UserCtx, userID stri
 	// approval is when it becomes an account, so it is where they land.
 	// An approval of a row somebody disabled meanwhile still gets none:
 	// the predicate lives in the helper, not here.
-	l.seedStartersFor(ctx, u)
+	l.Playlists.seedStartersFor(ctx, u)
 	acct, err := l.accountFor(ctx, u)
 	// Everything the approval left the account holding; an account that
 	// cannot be read back is still recorded as approved.
@@ -257,13 +257,13 @@ func (l *Library) ApproveSignup(ctx context.Context, actor *UserCtx, userID stri
 	if err == nil {
 		detail = AccountGrants(acct)
 	}
-	l.Audit(ctx, actor, "user.approve", AuditTarget{Kind: "user", PID: u.ID, Name: u.Username}, detail)
+	l.Audit.Record(ctx, actor, "user.approve", AuditTarget{Kind: "user", PID: u.ID, Name: u.Username}, detail)
 	return acct, err
 }
 
 // RejectSignup deletes a pending account; reject never deletes an
 // active one.
-func (l *Library) RejectSignup(ctx context.Context, actor *UserCtx, userID string) error {
+func (l *Identity) RejectSignup(ctx context.Context, actor *UserCtx, userID string) error {
 	u, err := l.db.UserByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
@@ -277,13 +277,13 @@ func (l *Library) RejectSignup(ctx context.Context, actor *UserCtx, userID strin
 	if err := l.db.DeleteUser(ctx, userID, false); err != nil {
 		return &Error{Kind: KindInternal, Err: err}
 	}
-	l.Audit(ctx, actor, "user.reject", AuditTarget{Kind: "user", PID: u.ID, Name: u.Username}, nil)
+	l.Audit.Record(ctx, actor, "user.reject", AuditTarget{Kind: "user", PID: u.ID, Name: u.Username}, nil)
 	return nil
 }
 
 // CreateInvite mints an invite token. The token appears only in the
 // returned DTO; the row stores its hash.
-func (l *Library) CreateInvite(ctx context.Context, actor *UserCtx, in InviteCreate) (InviteDTO, error) {
+func (l *Identity) CreateInvite(ctx context.Context, actor *UserCtx, in InviteCreate) (InviteDTO, error) {
 	roles, err := normalizeRoles(in.Roles)
 	if err != nil {
 		return InviteDTO{}, err
@@ -333,13 +333,13 @@ func (l *Library) CreateInvite(ctx context.Context, actor *UserCtx, in InviteCre
 		UploadQuotaBytes: in.UploadQuotaBytes,
 		MaxUses:          in.MaxUses,
 		ExpiresAtNS:      in.ExpiresAtNS,
-		CreatedBy:        l.usernameOf(ctx, actorName(actor)),
+		CreatedBy:        l.Audit.usernameOf(ctx, actorName(actor)),
 		CreatedAtNS:      time.Now().UnixNano(),
 	}
 	if err := l.db.InsertInvite(ctx, iv); err != nil {
 		return InviteDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
-	l.Audit(ctx, actor, "invite.create", AuditTarget{Kind: "invite", PID: iv.ID, Name: iv.Note},
+	l.Audit.Record(ctx, actor, "invite.create", AuditTarget{Kind: "invite", PID: iv.ID, Name: iv.Note},
 		map[string]any{"roles": roles, "maxUses": in.MaxUses})
 	out := l.inviteDTO(iv)
 	out.Token = token
@@ -347,7 +347,7 @@ func (l *Library) CreateInvite(ctx context.Context, actor *UserCtx, in InviteCre
 }
 
 // Invites lists every invite, newest first, without tokens.
-func (l *Library) Invites(ctx context.Context) ([]InviteDTO, error) {
+func (l *Identity) Invites(ctx context.Context) ([]InviteDTO, error) {
 	rows, err := l.db.ListInvites(ctx)
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
@@ -361,7 +361,7 @@ func (l *Library) Invites(ctx context.Context) ([]InviteDTO, error) {
 
 // RevokeInvite stops an invite's token from working; admitted accounts
 // are unaffected.
-func (l *Library) RevokeInvite(ctx context.Context, actor *UserCtx, id string) error {
+func (l *Identity) RevokeInvite(ctx context.Context, actor *UserCtx, id string) error {
 	// Read first, so the entry can name the invite by its note.
 	iv, err := l.db.InviteByID(ctx, id)
 	if err == nil {
@@ -373,11 +373,11 @@ func (l *Library) RevokeInvite(ctx context.Context, actor *UserCtx, id string) e
 		}
 		return &Error{Kind: KindInternal, Err: err}
 	}
-	l.Audit(ctx, actor, "invite.revoke", AuditTarget{Kind: "invite", PID: id, Name: iv.Note}, nil)
+	l.Audit.Record(ctx, actor, "invite.revoke", AuditTarget{Kind: "invite", PID: id, Name: iv.Note}, nil)
 	return nil
 }
 
-func (l *Library) inviteDTO(iv wdb.Invite) InviteDTO {
+func (l *Identity) inviteDTO(iv wdb.Invite) InviteDTO {
 	out := InviteDTO{
 		ID:               iv.ID,
 		Note:             iv.Note,

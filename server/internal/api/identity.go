@@ -15,13 +15,13 @@ import (
 // --- bootstrap ---------------------------------------------------------------------
 
 func (s *Server) GetBootstrapStatus(ctx context.Context, _ GetBootstrapStatusRequestObject) (GetBootstrapStatusResponseObject, error) {
-	required, err := s.svc.BootstrapRequired(ctx)
+	required, err := s.svc.Identity.BootstrapRequired(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return GetBootstrapStatus200JSONResponse{
 		Required:      required,
-		SignupEnabled: ptr(s.svc.SignupEnabled(ctx)),
+		SignupEnabled: ptr(s.svc.Identity.SignupEnabled(ctx)),
 	}, nil
 }
 
@@ -32,7 +32,7 @@ func (s *Server) Bootstrap(ctx context.Context, req BootstrapRequestObject) (Boo
 	if msg := passwordPolicy(req.Body.Password); msg != "" {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", msg)
 	}
-	acct, err := s.svc.Bootstrap(ctx, req.Body.Username, req.Body.Password, deref(req.Body.DisplayName))
+	acct, err := s.svc.Identity.Bootstrap(ctx, req.Body.Username, req.Body.Password, deref(req.Body.DisplayName))
 	if err != nil {
 		if service.KindOf(err) == service.KindConflict {
 			return nil, refuse(http.StatusConflict, "conflict", "the server already has accounts")
@@ -63,7 +63,7 @@ func (s *Server) RefreshToken(ctx context.Context, _ RefreshTokenRequestObject) 
 		return nil, err
 	}
 	return RefreshToken200JSONResponse(LoginResponse{
-		User: userJSON(p.User), Token: token, CsrfToken: p.Session.CSRFToken,
+		User: principalJSON(p.User), Token: token, CsrfToken: p.Session.CSRFToken,
 	}), nil
 }
 
@@ -179,7 +179,7 @@ func (s *Server) RevokeUserSessions(ctx context.Context, req RevokeUserSessionsR
 	if req.UserId != p.User.ID && !p.IsAdmin() {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators only")
 	}
-	acct, err := s.svc.Account(ctx, req.UserId)
+	acct, err := s.svc.Identity.Account(ctx, req.UserId)
 	if err != nil {
 		return nil, err
 	}
@@ -194,12 +194,12 @@ func (s *Server) RevokeUserSessions(ctx context.Context, req RevokeUserSessionsR
 	// Signing an account out everywhere is a deliberate act on every
 	// device it holds, so it is on the record whoever asked - once the
 	// sessions are gone, whatever the gpodder half below answers.
-	s.svc.Audit(ctx, userCtx(ctx), "user.sessions-revoke",
+	s.svc.Audit.Record(ctx, userCtx(ctx), "user.sessions-revoke",
 		service.AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
 		map[string]any{"self": self, "kept": keep != ""})
 	// Everywhere includes the podcast clients signed in over gpodder; a
 	// failure here is reported so the caller tries again.
-	if err := s.svc.EndGpodderSessions(ctx, req.UserId); err != nil {
+	if err := s.svc.Podcasts.EndGpodderSessions(ctx, req.UserId); err != nil {
 		return nil, err
 	}
 	return RevokeUserSessions204Response{}, nil
@@ -248,7 +248,7 @@ func (s *Server) ListUsers(ctx context.Context, req ListUsersRequestObject) (Lis
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.svc.Accounts(ctx, deref(req.Params.Cursor), limit)
+	page, err := s.svc.Identity.Accounts(ctx, deref(req.Params.Cursor), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -294,14 +294,14 @@ func (s *Server) CreateUser(ctx context.Context, req CreateUserRequestObject) (C
 		perms := permissionsFromGen(*req.Body.Permissions)
 		in.Permissions = &perms
 	}
-	acct, err := s.svc.CreateAccount(ctx, in)
+	acct, err := s.svc.Identity.CreateAccount(ctx, in)
 	if err != nil {
 		if service.KindOf(err) == service.KindConflict {
 			return nil, refuse(http.StatusConflict, "conflict", "username is taken")
 		}
 		return nil, err
 	}
-	s.svc.Audit(ctx, userCtx(ctx), "user.create",
+	s.svc.Audit.Record(ctx, userCtx(ctx), "user.create",
 		service.AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
 		map[string]any{"roles": acct.User.Roles})
 	return CreateUser201JSONResponse(userAccountJSON(*acct)), nil
@@ -312,7 +312,7 @@ func (s *Server) GetUser(ctx context.Context, req GetUserRequestObject) (GetUser
 	if req.UserId != p.User.ID && !p.IsAdmin() {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators only")
 	}
-	acct, err := s.svc.Account(ctx, req.UserId)
+	acct, err := s.svc.Identity.Account(ctx, req.UserId)
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +365,7 @@ func (s *Server) UpdateUser(ctx context.Context, req UpdateUserRequestObject) (U
 	if admin && (req.UserId != p.User.ID || req.Body.Roles != nil || req.Body.Disabled != nil ||
 		req.Body.LibraryAccess != nil || req.Body.Permissions != nil ||
 		req.Body.UploadEnabled != nil || req.Body.UploadQuotaBytes != nil) {
-		read, err := s.svc.Account(ctx, req.UserId)
+		read, err := s.svc.Identity.Account(ctx, req.UserId)
 		switch {
 		case err == nil:
 			before = read
@@ -373,7 +373,7 @@ func (s *Server) UpdateUser(ctx context.Context, req UpdateUserRequestObject) (U
 			return nil, err
 		}
 	}
-	acct, err := s.svc.UpdateAccount(ctx, req.UserId, upd)
+	acct, err := s.svc.Identity.UpdateAccount(ctx, req.UserId, upd)
 	if err != nil {
 		return nil, err
 	}
@@ -384,12 +384,12 @@ func (s *Server) UpdateUser(ctx context.Context, req UpdateUserRequestObject) (U
 	// the update happened) and a retry finishes the revoke.
 	var revokeErr error
 	if req.Body.Disabled != nil && *req.Body.Disabled {
-		revokeErr = errors.Join(s.endSessions(ctx, req.UserId, "", ""), s.svc.EndGpodderSessions(ctx, req.UserId))
+		revokeErr = errors.Join(s.endSessions(ctx, req.UserId, "", ""), s.svc.Podcasts.EndGpodderSessions(ctx, req.UserId))
 	}
 	if before != nil {
 		// A save that changed nothing is not an event.
 		if changes := service.AccountChanges(before, acct); len(changes) > 0 {
-			s.svc.Audit(ctx, userCtx(ctx), "user.update",
+			s.svc.Audit.Record(ctx, userCtx(ctx), "user.update",
 				service.AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
 				map[string]any{"changes": changes})
 		}
@@ -413,15 +413,15 @@ func (s *Server) DeleteUser(ctx context.Context, req DeleteUserRequestObject) (D
 	if req.Params.Playlists != nil {
 		opts.Playlists = string(*req.Params.Playlists)
 	}
-	victim, verr := s.svc.Account(ctx, req.UserId)
-	deleted, err := s.svc.DeleteAccount(ctx, uc, req.UserId, opts)
+	victim, verr := s.svc.Identity.Account(ctx, req.UserId)
+	deleted, err := s.svc.Identity.DeleteAccount(ctx, uc, req.UserId, opts)
 	// A deletion that disabled the account is a disable whatever else it
 	// did: its sessions and gpodder logins end now, or they would sign
 	// straight back in if the account is enabled again. A request that has
 	// gone away does not stop that, or the record of what was done.
 	bg := context.WithoutCancel(ctx)
 	if err != nil && deleted.Disabled {
-		if rerr := errors.Join(s.endSessions(bg, req.UserId, "", ""), s.svc.EndGpodderSessions(bg, req.UserId)); rerr != nil {
+		if rerr := errors.Join(s.endSessions(bg, req.UserId, "", ""), s.svc.Podcasts.EndGpodderSessions(bg, req.UserId)); rerr != nil {
 			s.log.Warn("ending the sessions of an account whose deletion stopped", "user", req.UserId, "err", rerr)
 		}
 	}
@@ -432,7 +432,7 @@ func (s *Server) DeleteUser(ctx context.Context, req DeleteUserRequestObject) (D
 			// too, so the retry's entry is not read as the whole of it.
 			auditCtx = bg
 		}
-		s.svc.Audit(auditCtx, uc, "user.delete",
+		s.svc.Audit.Record(auditCtx, uc, "user.delete",
 			service.AuditTarget{Kind: "user", PID: victim.User.ID, Name: victim.User.Username},
 			userDeleteDetail(deleted, err))
 	}
@@ -515,7 +515,7 @@ func (s *Server) SetPassword(ctx context.Context, req SetPasswordRequestObject) 
 	// other accounts.
 	if self {
 		current := deref(req.Body.CurrentPassword)
-		verified, err := s.svc.VerifyLocalLogin(ctx, p.User.Username, current)
+		verified, err := s.svc.Identity.VerifyLocalLogin(ctx, p.User.Username, current)
 		if err != nil {
 			return nil, err
 		}
@@ -524,7 +524,7 @@ func (s *Server) SetPassword(ctx context.Context, req SetPasswordRequestObject) 
 			return nil, refuse(http.StatusForbidden, "forbidden", "wrong current password")
 		}
 	}
-	if err := s.svc.SetAccountPassword(ctx, req.UserId, req.Body.NewPassword); err != nil {
+	if err := s.svc.Identity.SetAccountPassword(ctx, req.UserId, req.Body.NewPassword); err != nil {
 		return nil, err
 	}
 	// Self-change spares the session making the request; an admin reset
@@ -538,10 +538,10 @@ func (s *Server) SetPassword(ctx context.Context, req SetPasswordRequestObject) 
 	}
 	if !self {
 		target := service.AuditTarget{Kind: "user", PID: req.UserId}
-		if acct, err := s.svc.Account(ctx, req.UserId); err == nil {
+		if acct, err := s.svc.Identity.Account(ctx, req.UserId); err == nil {
 			target.Name = acct.User.Username
 		}
-		s.svc.Audit(ctx, userCtx(ctx), "user.password-reset", target, nil)
+		s.svc.Audit.Record(ctx, userCtx(ctx), "user.password-reset", target, nil)
 	}
 	return SetPassword204Response{}, nil
 }
@@ -550,7 +550,7 @@ func (s *Server) SetPassword(ctx context.Context, req SetPasswordRequestObject) 
 
 func (s *Server) GetPrefs(ctx context.Context, _ GetPrefsRequestObject) (GetPrefsResponseObject, error) {
 	uc := userCtx(ctx)
-	p, err := s.svc.Prefs(ctx, uc)
+	p, err := s.svc.Identity.Prefs(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -590,7 +590,7 @@ func (s *Server) PutPrefs(ctx context.Context, req PutPrefsRequestObject) (PutPr
 	if req.Body.BrowseSorts != nil {
 		in.BrowseSorts = *req.Body.BrowseSorts
 	}
-	stored, err := s.svc.PutPrefs(ctx, uc, in)
+	stored, err := s.svc.Identity.PutPrefs(ctx, uc, in)
 	if err != nil {
 		return nil, err
 	}
@@ -648,9 +648,9 @@ func (s *Server) ListLibraries(ctx context.Context, req ListLibrariesRequestObje
 		return nil, err
 	}
 	// A count per library, taken only where it was asked for.
-	libs, err := s.svc.Libraries(ctx)
+	libs, err := s.svc.Roots.Libraries(ctx)
 	if derefBool(req.Params.Counts) {
-		libs, err = s.svc.LibrariesWithCounts(ctx)
+		libs, err = s.svc.Roots.LibrariesWithCounts(ctx)
 	}
 	if err != nil {
 		return nil, err
@@ -669,7 +669,7 @@ func (s *Server) SetStar(ctx context.Context, req SetStarRequestObject) (SetStar
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	st, err := s.svc.SetStar(ctx, uc, req.Pid, req.Body.Starred, req.Body.RecordedAt)
+	st, err := s.svc.Playback.SetStar(ctx, uc, req.Pid, req.Body.Starred, req.Body.RecordedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -681,7 +681,7 @@ func (s *Server) SetPlayed(ctx context.Context, req SetPlayedRequestObject) (Set
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	st, err := s.svc.SetPlayed(ctx, uc, req.Pid,
+	st, err := s.svc.Playback.SetPlayed(ctx, uc, req.Pid,
 		req.Body.Played, req.Body.Finished, req.Body.PlayCount, req.Body.PositionMs, req.Body.RecordedAt)
 	if err != nil {
 		return nil, err
@@ -694,7 +694,7 @@ func (s *Server) SetRating(ctx context.Context, req SetRatingRequestObject) (Set
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	st, err := s.svc.SetRating(ctx, uc, req.Pid, req.Body.Rating, req.Body.RecordedAt)
+	st, err := s.svc.Playback.SetRating(ctx, uc, req.Pid, req.Body.Rating, req.Body.RecordedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -737,7 +737,7 @@ func entityRouteMiss(err error, noun, pid string) error {
 
 func (s *Server) GetArtistPlayState(ctx context.Context, req GetArtistPlayStateRequestObject) (GetArtistPlayStateResponseObject, error) {
 	uc := userCtx(ctx)
-	st, err := s.svc.EntityPlayStateFor(ctx, uc, req.Pid)
+	st, err := s.svc.Identity.EntityPlayStateFor(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, entityRouteMiss(err, "artist", req.Pid)
 	}
@@ -749,7 +749,7 @@ func (s *Server) SetArtistStar(ctx context.Context, req SetArtistStarRequestObje
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	st, err := s.svc.SetEntityStar(ctx, uc, req.Pid, req.Body.Starred, req.Body.RecordedAt)
+	st, err := s.svc.Identity.SetEntityStar(ctx, uc, req.Pid, req.Body.Starred, req.Body.RecordedAt)
 	if err != nil {
 		return nil, entityRouteMiss(err, "artist", req.Pid)
 	}
@@ -761,7 +761,7 @@ func (s *Server) SetArtistRating(ctx context.Context, req SetArtistRatingRequest
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	st, err := s.svc.SetEntityRating(ctx, uc, req.Pid, req.Body.Rating, req.Body.RecordedAt)
+	st, err := s.svc.Identity.SetEntityRating(ctx, uc, req.Pid, req.Body.Rating, req.Body.RecordedAt)
 	if err != nil {
 		return nil, entityRouteMiss(err, "artist", req.Pid)
 	}
@@ -770,7 +770,7 @@ func (s *Server) SetArtistRating(ctx context.Context, req SetArtistRatingRequest
 
 func (s *Server) GetAlbumPlayState(ctx context.Context, req GetAlbumPlayStateRequestObject) (GetAlbumPlayStateResponseObject, error) {
 	uc := userCtx(ctx)
-	st, err := s.svc.EntityPlayStateFor(ctx, uc, req.Pid)
+	st, err := s.svc.Identity.EntityPlayStateFor(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, entityRouteMiss(err, "album", req.Pid)
 	}
@@ -782,7 +782,7 @@ func (s *Server) SetAlbumStar(ctx context.Context, req SetAlbumStarRequestObject
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	st, err := s.svc.SetEntityStar(ctx, uc, req.Pid, req.Body.Starred, req.Body.RecordedAt)
+	st, err := s.svc.Identity.SetEntityStar(ctx, uc, req.Pid, req.Body.Starred, req.Body.RecordedAt)
 	if err != nil {
 		return nil, entityRouteMiss(err, "album", req.Pid)
 	}
@@ -794,7 +794,7 @@ func (s *Server) SetAlbumRating(ctx context.Context, req SetAlbumRatingRequestOb
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	st, err := s.svc.SetEntityRating(ctx, uc, req.Pid, req.Body.Rating, req.Body.RecordedAt)
+	st, err := s.svc.Identity.SetEntityRating(ctx, uc, req.Pid, req.Body.Rating, req.Body.RecordedAt)
 	if err != nil {
 		return nil, entityRouteMiss(err, "album", req.Pid)
 	}
@@ -803,7 +803,7 @@ func (s *Server) SetAlbumRating(ctx context.Context, req SetAlbumRatingRequestOb
 
 func (s *Server) ListStarredEntities(ctx context.Context, _ ListStarredEntitiesRequestObject) (ListStarredEntitiesResponseObject, error) {
 	uc := userCtx(ctx)
-	res, err := s.svc.StarredEntities(ctx, uc)
+	res, err := s.svc.Identity.StarredEntities(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -825,7 +825,7 @@ func userAccountJSON(acct service.Account) UserAccount {
 		Pending:       u.Pending,
 		CreatedAt:     u.CreatedAt,
 		UploadEnabled: u.UploadEnabled,
-		Permissions:   permissionsJSON(service.PermissionsOf(u)),
+		Permissions:   permissionsJSON(u.Permissions()),
 		LibraryAccess: LibraryAccess{
 			Mode: LibraryAccessMode(u.LibraryAccess),
 		},
@@ -836,7 +836,7 @@ func userAccountJSON(acct service.Account) UserAccount {
 	if u.DisplayName != "" {
 		out.DisplayName = ptr(u.DisplayName)
 	}
-	out.HasPassword = ptr(u.PasswordHash != "")
+	out.HasPassword = ptr(u.HasPassword)
 	if u.LibraryAccess == "granted" {
 		pids := acct.LibraryPIDs
 		if pids == nil {

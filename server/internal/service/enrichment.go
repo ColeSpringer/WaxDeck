@@ -25,6 +25,21 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/providers"
 )
 
+// Enrichment is metadata enrichment: its sources and its response cache.
+type Enrichment struct {
+	*core
+	// sources are the server-registered enrichment providers in the
+	// operator's order, and what the catalog's pass runs on.
+	sources *enrichSources
+	// musicbrainzConfigured mirrors whether Config.EnrichmentContact was
+	// set, which is what decides whether the enrichment pass's identity
+	// phases can run. The provider-gated phases run without it, so this
+	// is not "enrichment is configured" - see Enrichment.phases.
+	musicbrainzConfigured bool
+}
+
+func newEnrichment(c *core, _ Config) *Enrichment { return &Enrichment{core: c} }
+
 // enrichAsk dispatches one provider lookup, naming the capability the
 // caller will read on the request itself so a multi-capability provider
 // stops fetching what would be discarded. The port carries the want
@@ -207,7 +222,7 @@ var phaseRungs = map[string]struct {
 
 // switchedOffOpens reports a registered source switched off that serves the
 // phase at its rung, so switching it back on would open the phase.
-func (l *Library) switchedOffOpens(phase string) bool {
+func (l *Enrichment) switchedOffOpens(phase string) bool {
 	g, ok := phaseRungs[phase]
 	if !ok {
 		return false
@@ -227,7 +242,7 @@ func (l *Library) switchedOffOpens(phase string) bool {
 	return false
 }
 
-func (l *Library) switchedOffOpensAny() bool {
+func (l *Enrichment) switchedOffOpensAny() bool {
 	for phase := range phaseRungs {
 		if l.switchedOffOpens(phase) {
 			return true
@@ -240,7 +255,7 @@ const contactKnob = "-enrichment-contact (WAXDECK_ENRICHMENT_CONTACT)"
 
 // phaseNeed words what a phase waits on, in this server's knobs, leaving
 // out the contact once it is set; false for a name that is no phase.
-func (l *Library) phaseNeed(name string) (string, bool) {
+func (l *Enrichment) phaseNeed(name string) (string, bool) {
 	orContact := func(provider string) string {
 		if l.musicbrainzConfigured {
 			return "it needs " + provider + " switched on"
@@ -306,7 +321,7 @@ func builtinFor(want string) (string, bool) {
 }
 
 // builtinServes reports a registered, switched-on built-in serving want.
-func (l *Library) builtinServes(want string) bool {
+func (l *Enrichment) builtinServes(want string) bool {
 	for _, src := range l.sources.resolved() {
 		if src.Enabled && l.sources.builtinWired(src.Name) && builtinWantOf(src.Name) == want {
 			return true
@@ -322,15 +337,15 @@ func builtinWantOf(name string) string {
 	return ""
 }
 
-// enrichmentPhases names the phases a run started now would execute.
-func (l *Library) enrichmentPhases() []string {
+// phases names the phases a run started now would execute.
+func (l *Enrichment) phases() []string {
 	return apiNames(l.lib.EnrichmentPhases())
 }
 
 // fillEnrichmentRoster sets the parts of the status the source order
 // decides: the providers as listed, the phases, and whether any runs.
-func (l *Library) fillEnrichmentRoster(out *EnrichmentStatusDTO) {
-	out.Phases = l.enrichmentPhases()
+func (l *Enrichment) fillEnrichmentRoster(out *EnrichmentStatusDTO) {
+	out.Phases = l.phases()
 	// A pass does something exactly when it has a phase to run, which is
 	// the same rule the catalog refuses on.
 	out.Configured = len(out.Phases) > 0
@@ -360,13 +375,13 @@ func (l *Library) fillEnrichmentRoster(out *EnrichmentStatusDTO) {
 	}
 }
 
-// EnrichmentStatusFor reports the registered providers, the catalog's
+// StatusFor reports the registered providers, the catalog's
 // enrichment coverage, and whether a whole-library pass is running.
-func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (EnrichmentStatusDTO, error) {
+func (l *Enrichment) StatusFor(ctx context.Context, uc *UserCtx) (EnrichmentStatusDTO, error) {
 	if !uc.Admin {
 		return EnrichmentStatusDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	out, err := l.enrichmentProgress(ctx)
+	out, err := l.progress(ctx)
 	if err != nil {
 		return EnrichmentStatusDTO{}, err
 	}
@@ -374,9 +389,9 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 	return out, nil
 }
 
-// enrichmentProgress is the status less its roster: coverage, the running
+// progress is the status less its roster: coverage, the running
 // pass and the newest finished one.
-func (l *Library) enrichmentProgress(ctx context.Context) (EnrichmentStatusDTO, error) {
+func (l *Enrichment) progress(ctx context.Context) (EnrichmentStatusDTO, error) {
 	out := EnrichmentStatusDTO{MusicbrainzConfigured: l.musicbrainzConfigured}
 	cov, err := l.lib.EnrichmentCoverage(ctx)
 	if err != nil {
@@ -428,7 +443,7 @@ func (l *Library) enrichmentProgress(ctx context.Context) (EnrichmentStatusDTO, 
 		}
 	}
 	// A pass later jobs have pushed out of that window.
-	if pid, ok, _ := l.followedJob(ctx, "enrich"); ok && !out.Running {
+	if pid, ok, _ := l.Jobs.followedJob(ctx, "enrich"); ok && !out.Running {
 		out.Running = true
 		out.RunningJob = apiPID(PrefixJob, pid)
 	}
@@ -437,7 +452,7 @@ func (l *Library) enrichmentProgress(ctx context.Context) (EnrichmentStatusDTO, 
 
 // forcedPhases checks a phase-scoped force against what this server runs
 // and names it in the catalog's phases.
-func (l *Library) forcedPhases(force bool, names []string) ([]model.EnrichPhase, error) {
+func (l *Enrichment) forcedPhases(force bool, names []string) ([]model.EnrichPhase, error) {
 	if len(names) == 0 {
 		return nil, nil
 	}
@@ -449,7 +464,7 @@ func (l *Library) forcedPhases(force bool, names []string) ([]model.EnrichPhase,
 
 // phasesByName maps API phase names onto the catalog's phases, refusing a
 // name the API does not know and a phase this server does not run.
-func (l *Library) phasesByName(names []string) ([]model.EnrichPhase, error) {
+func (l *Enrichment) phasesByName(names []string) ([]model.EnrichPhase, error) {
 	if len(names) == 0 {
 		return nil, nil
 	}
@@ -477,7 +492,7 @@ func (l *Library) phasesByName(names []string) ([]model.EnrichPhase, error) {
 // RunEnrichment starts the whole-library pass as a job on the process
 // context, so it outlives the 202 that reported it; forcePhases re-asks
 // those phases alone, and phases limits the pass to the ones named.
-func (l *Library) RunEnrichment(ctx context.Context, uc *UserCtx, force bool, forcePhases, phases []string) (string, error) {
+func (l *Enrichment) RunEnrichment(ctx context.Context, uc *UserCtx, force bool, forcePhases, phases []string) (string, error) {
 	if !uc.Admin {
 		return "", &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -499,23 +514,23 @@ func (l *Library) RunEnrichment(ctx context.Context, uc *UserCtx, force bool, fo
 // startEnrichJob starts a pass on the process context, so it outlives
 // the request, and records who started it, and for a health fix the
 // rule, so its end reaches them.
-func (l *Library) startEnrichJob(ctx context.Context, uc *UserCtx, opts waxbin.EnrichOptions, rule string) (model.PID, error) {
+func (l *Enrichment) startEnrichJob(ctx context.Context, uc *UserCtx, opts waxbin.EnrichOptions, rule string) (model.PID, error) {
 	// WriteTags rather than the catalog's WriteEnrichmentTags option: that
 	// one is fixed at open and the catalog ORs the two, so per-run is what
 	// lets the admin toggle work without a restart.
-	opts.WriteTags = l.enrichWritesTags(ctx)
+	opts.WriteTags = l.Settings.enrichWritesTags(ctx)
 	pid, err := l.lib.StartEnrich(l.procCtx, opts)
 	if err != nil {
 		return "", err
 	}
-	l.adoptJob(ctx, pid, uc.ID, rule)
+	l.Jobs.adoptJob(ctx, pid, uc.ID, rule)
 	return pid, nil
 }
 
 // explainEnrichRefusal words the catalog's refusal of a run for a WaxDeck
 // operator: the catalog's own names WAXBIN_ENRICH_CONTACT, a knob they do
 // not have.
-func (l *Library) explainEnrichRefusal(err error, forcePhases []string) error {
+func (l *Enrichment) explainEnrichRefusal(err error, forcePhases []string) error {
 	if KindOf(classify(err)) != KindUnsupported {
 		return classify(err)
 	}
@@ -549,16 +564,16 @@ const scheduledEnrichLimit = 2000
 // RunScheduledEnrichment starts the nightly catalog pass. Non-forced,
 // so entities already enriched are left alone, and capped; the job row
 // carries the outcome the status surface reads.
-func (l *Library) RunScheduledEnrichment(ctx context.Context) error {
+func (l *Enrichment) RunScheduledEnrichment(ctx context.Context) error {
 	pid, err := l.lib.StartEnrich(l.procCtx, waxbin.EnrichOptions{
-		WriteTags: l.enrichWritesTags(ctx),
+		WriteTags: l.Settings.enrichWritesTags(ctx),
 		Limit:     scheduledEnrichLimit,
 	})
 	if err != nil {
 		return classify(err)
 	}
 	// Its pictures move the artwork epoch when it ends.
-	l.followJob(pid)
+	l.Jobs.followJob(pid)
 	return nil
 }
 
@@ -599,11 +614,11 @@ type EnrichProposalDTO struct {
 // the item through visibility, then run the providers without writing
 // anything. The catalog's built-ins cannot be previewed (their fetch
 // and write are one engine pass), so they are absent here by design.
-func (l *Library) EnrichPreviewFor(ctx context.Context, uc *UserCtx, apiItemPID string, wants []string) (EnrichPreviewDTO, error) {
-	if !l.CanCurateItem(ctx, uc, apiItemPID) {
+func (l *Enrichment) EnrichPreviewFor(ctx context.Context, uc *UserCtx, apiItemPID string, wants []string) (EnrichPreviewDTO, error) {
+	if !l.Ingest.CanCurateItem(ctx, uc, apiItemPID) {
 		return EnrichPreviewDTO{}, &Error{Kind: KindForbidden, Msg: "administrators, or the user whose upload brought the item in"}
 	}
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return EnrichPreviewDTO{}, err
 	}
@@ -614,11 +629,11 @@ func (l *Library) EnrichPreviewFor(ctx context.Context, uc *UserCtx, apiItemPID 
 // through visibility, then run the synchronous fetch - or, with a
 // proposal, commit exactly what the preview answered instead of
 // fetching fresh values the user never saw.
-func (l *Library) EnrichItemFor(ctx context.Context, uc *UserCtx, apiItemPID string, wants []string, proposal *EnrichProposalDTO) (applied, skipped []string, err error) {
-	if !l.CanCurateItem(ctx, uc, apiItemPID) {
+func (l *Enrichment) EnrichItemFor(ctx context.Context, uc *UserCtx, apiItemPID string, wants []string, proposal *EnrichProposalDTO) (applied, skipped []string, err error) {
+	if !l.Ingest.CanCurateItem(ctx, uc, apiItemPID) {
 		return nil, nil, &Error{Kind: KindForbidden, Msg: "administrators, or the user whose upload brought the item in"}
 	}
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -640,7 +655,7 @@ func (l *Library) EnrichItemFor(ctx context.Context, uc *UserCtx, apiItemPID str
 // injected providers, then runs the catalog's key-free built-ins for it,
 // which the injected-provider port cannot reach: the interactive button's
 // path, and a scoped health fix's.
-func (l *Library) enrichItemFully(ctx context.Context, it *model.ItemView, wants []string) (applied, skipped []string, err error) {
+func (l *Enrichment) enrichItemFully(ctx context.Context, it *model.ItemView, wants []string) (applied, skipped []string, err error) {
 	applied, skipped, err = l.enrichItemNow(ctx, it.PID, wants, true)
 	if err != nil {
 		return applied, skipped, err
@@ -655,7 +670,7 @@ func (l *Library) enrichItemFully(ctx context.Context, it *model.ItemView, wants
 // runs only while a want is still unmet: a met one would buy nothing but the
 // pass's other fills, such as the release group's front, a picture its album
 // and every sibling show. Who filled an artifact is read back from provenance.
-func (l *Library) enrichItemCatalogPass(ctx context.Context, it *model.ItemView, wants []string, applied, skipped *[]string) {
+func (l *Enrichment) enrichItemCatalogPass(ctx context.Context, it *model.ItemView, wants []string, applied, skipped *[]string) {
 	var builtinWants []string
 	for _, w := range wants {
 		if l.builtinServes(w) && !l.artifactPresent(ctx, it, w) {
@@ -704,7 +719,7 @@ func (l *Library) enrichItemCatalogPass(ctx context.Context, it *model.ItemView,
 // artifact, using the same presence tests the injected fetch uses: the
 // art resolution chain for cover, stored lyrics for lyrics, the genre
 // scalar for genres.
-func (l *Library) artifactPresent(ctx context.Context, it *model.ItemView, want string) bool {
+func (l *Enrichment) artifactPresent(ctx context.Context, it *model.ItemView, want string) bool {
 	switch want {
 	case enrichWantCover:
 		ref := model.EntityRef{Type: model.ArtTrack, PID: it.PID}
@@ -726,7 +741,7 @@ func (l *Library) artifactPresent(ctx context.Context, it *model.ItemView, want 
 // artifactProvider names who filled the item's artifact, from the
 // catalog's own provenance: the pass asks every provider, not only the
 // built-in a want is named after.
-func (l *Library) artifactProvider(ctx context.Context, it *model.ItemView, want string) string {
+func (l *Enrichment) artifactProvider(ctx context.Context, it *model.ItemView, want string) string {
 	switch want {
 	case enrichWantCover:
 		ref := model.EntityRef{Type: model.ArtTrack, PID: it.PID}
@@ -775,12 +790,12 @@ func dropEntriesWithPrefix(entries []string, prefix string) []string {
 // state loads once and both halves share it: a health fix calls this
 // per item across whole rules, where re-reading would double every
 // facade round trip.
-func (l *Library) EnrichItemNow(ctx context.Context, pid model.PID, wants []string) (applied, skipped []string, err error) {
+func (l *Enrichment) EnrichItemNow(ctx context.Context, pid model.PID, wants []string) (applied, skipped []string, err error) {
 	return l.enrichItemNow(ctx, pid, wants, false)
 }
 
 // enrichItemNow is EnrichItemNow, told whether the catalog's pass follows.
-func (l *Library) enrichItemNow(ctx context.Context, pid model.PID, wants []string, catalogAfter bool) (applied, skipped []string, err error) {
+func (l *Enrichment) enrichItemNow(ctx context.Context, pid model.PID, wants []string, catalogAfter bool) (applied, skipped []string, err error) {
 	if err := validateEnrichWants(wants); err != nil {
 		return nil, nil, err
 	}
@@ -828,7 +843,7 @@ type enrichItemState struct {
 // loadEnrichItemState reads the item, its release status, and - for
 // official content only, mirroring the pre-split order - its field
 // locks. Unofficial content skips every want before locks matter.
-func (l *Library) loadEnrichItemState(ctx context.Context, pid model.PID) (enrichItemState, error) {
+func (l *Enrichment) loadEnrichItemState(ctx context.Context, pid model.PID) (enrichItemState, error) {
 	st := enrichItemState{locked: map[string]bool{}}
 	var err error
 	if st.it, err = l.lib.Get(ctx, pid); err != nil {
@@ -863,7 +878,7 @@ func (l *Library) loadEnrichItemState(ctx context.Context, pid model.PID) (enric
 
 // enrichProposeNow runs the registered providers for the wanted
 // artifacts and reports what they would change, writing nothing.
-func (l *Library) enrichProposeNow(ctx context.Context, pid model.PID, wants []string) (EnrichPreviewDTO, error) {
+func (l *Enrichment) enrichProposeNow(ctx context.Context, pid model.PID, wants []string) (EnrichPreviewDTO, error) {
 	if err := validateEnrichWants(wants); err != nil {
 		return EnrichPreviewDTO{}, err
 	}
@@ -875,7 +890,7 @@ func (l *Library) enrichProposeNow(ctx context.Context, pid model.PID, wants []s
 	return l.enrichPropose(ctx, st, wants), nil
 }
 
-func (l *Library) enrichPropose(ctx context.Context, st enrichItemState, wants []string) EnrichPreviewDTO {
+func (l *Enrichment) enrichPropose(ctx context.Context, st enrichItemState, wants []string) EnrichPreviewDTO {
 	out := EnrichPreviewDTO{Fields: []EnrichFieldProposalDTO{}, Skipped: []string{}}
 	if st.unofficial {
 		for _, w := range wants {
@@ -942,7 +957,7 @@ func enrichWantForField(name string) string {
 // under that mark), book fields must share one provider (the shape an
 // honest propose produces, and what lets the commit stay one edit),
 // and a cover must be a storable image.
-func (l *Library) validateEnrichProposal(wants []string, proposal EnrichProposalDTO) error {
+func (l *Enrichment) validateEnrichProposal(wants []string, proposal EnrichProposalDTO) error {
 	wanted := map[string]bool{}
 	for _, w := range wants {
 		wanted[w] = true
@@ -1003,7 +1018,7 @@ func (l *Library) validateEnrichProposal(wants []string, proposal EnrichProposal
 // enrichCommitProposal is the API's apply-with-proposal entry: load the
 // item state fresh (this is a separate request from the preview) and
 // commit.
-func (l *Library) enrichCommitProposal(ctx context.Context, pid model.PID, wants []string, proposal EnrichProposalDTO) (applied, skipped []string, err error) {
+func (l *Enrichment) enrichCommitProposal(ctx context.Context, pid model.PID, wants []string, proposal EnrichProposalDTO) (applied, skipped []string, err error) {
 	if err := validateEnrichWants(wants); err != nil {
 		return nil, nil, err
 	}
@@ -1019,7 +1034,7 @@ func (l *Library) enrichCommitProposal(ctx context.Context, pid model.PID, wants
 // field locked or filled since the propose is skipped with the reason
 // rather than overwritten, and nothing is fetched - the values written
 // are the proposal's own.
-func (l *Library) enrichCommit(ctx context.Context, st enrichItemState, wants []string, proposal EnrichProposalDTO) (applied, skipped []string, err error) {
+func (l *Enrichment) enrichCommit(ctx context.Context, st enrichItemState, wants []string, proposal EnrichProposalDTO) (applied, skipped []string, err error) {
 	if err := l.validateEnrichProposal(wants, proposal); err != nil {
 		return nil, nil, err
 	}
@@ -1086,7 +1101,7 @@ func namedEnrichProviders(providers []enrich.Provider, log *slog.Logger) []enric
 // itemProviders is what an item's fetch asks for want. When the catalog's
 // pass follows, the list stops at the first switched-on built-in serving
 // it, which that pass asks before the rest; true says it left nothing.
-func (l *Library) itemProviders(st enrichItemState, want string, c enrich.Capability, t enrich.TargetType) ([]enrich.Provider, bool) {
+func (l *Enrichment) itemProviders(st enrichItemState, want string, c enrich.Capability, t enrich.TargetType) ([]enrich.Provider, bool) {
 	all := l.enrichProvidersWith(c, t)
 	if !st.catalogAfter {
 		return all, false
@@ -1108,7 +1123,7 @@ func (l *Library) itemProviders(st enrichItemState, want string, c enrich.Capabi
 
 // enrichProvidersWith returns the enabled providers serving the wanted
 // capability at the target's rung, in the operator's order.
-func (l *Library) enrichProvidersWith(want enrich.Capability, target enrich.TargetType) []enrich.Provider {
+func (l *Enrichment) enrichProvidersWith(want enrich.Capability, target enrich.TargetType) []enrich.Provider {
 	var out []enrich.Provider
 	for _, p := range l.sources.live() {
 		if providers.CapabilitiesAt(p, target).Has(want) {
@@ -1123,7 +1138,7 @@ func (l *Library) enrichProvidersWith(want enrich.Capability, target enrich.Targ
 // preview and its apply is skipped, never overwritten. Presence is
 // judged through the art resolution chain, so an item already covered
 // by its album's art is left alone.
-func (l *Library) coverGuard(ctx context.Context, it *model.ItemView, locked map[string]bool) (skippedEntry string) {
+func (l *Enrichment) coverGuard(ctx context.Context, it *model.ItemView, locked map[string]bool) (skippedEntry string) {
 	// The catalog holds item-level art for tracks and books only, so an
 	// episode write is refused whatever the bytes are. Without this the
 	// want fetches a cover from every provider first and reports "no
@@ -1145,7 +1160,7 @@ func (l *Library) coverGuard(ctx context.Context, it *model.ItemView, locked map
 
 // proposeCover asks the cover providers for one item's front cover and
 // returns the first answer as a proposal, writing nothing.
-func (l *Library) proposeCover(ctx context.Context, st enrichItemState) (proposal *EnrichCoverProposalDTO, skippedEntry string) {
+func (l *Enrichment) proposeCover(ctx context.Context, st enrichItemState) (proposal *EnrichCoverProposalDTO, skippedEntry string) {
 	it, locked := st.it, st.locked
 	if s := l.coverGuard(ctx, it, locked); s != "" {
 		return nil, s
@@ -1189,7 +1204,7 @@ func (l *Library) proposeCover(ctx context.Context, st enrichItemState) (proposa
 
 // commitCover stores a proposed cover. The bytes were validated with
 // the whole proposal before any write.
-func (l *Library) commitCover(ctx context.Context, it *model.ItemView, proposal EnrichCoverProposalDTO, locked map[string]bool) (appliedEntry, skippedEntry string) {
+func (l *Enrichment) commitCover(ctx context.Context, it *model.ItemView, proposal EnrichCoverProposalDTO, locked map[string]bool) (appliedEntry, skippedEntry string) {
 	if s := l.coverGuard(ctx, it, locked); s != "" {
 		return "", s
 	}
@@ -1207,7 +1222,7 @@ func (l *Library) commitCover(ctx context.Context, it *model.ItemView, proposal 
 		l.log.Warn("enrich: applying cover", "provider", proposal.Provider, "item", it.PID, "err", err)
 		return "", "cover: could not be stored"
 	}
-	l.noteArtworkChanged(ctx)
+	l.Playlists.noteArtworkChanged(ctx)
 	return "cover: " + proposal.Provider, ""
 }
 
@@ -1225,7 +1240,7 @@ func genresGuard(it *model.ItemView, locked map[string]bool) (skippedEntry strin
 
 // proposeGenres asks the genre providers and returns the first
 // answer's normalized, capped join as a proposal, writing nothing.
-func (l *Library) proposeGenres(ctx context.Context, st enrichItemState) (proposal *EnrichFieldProposalDTO, skippedEntry string) {
+func (l *Enrichment) proposeGenres(ctx context.Context, st enrichItemState) (proposal *EnrichFieldProposalDTO, skippedEntry string) {
 	it, locked := st.it, st.locked
 	if s := genresGuard(it, locked); s != "" {
 		return nil, s
@@ -1256,7 +1271,7 @@ func (l *Library) proposeGenres(ctx context.Context, st enrichItemState) (propos
 		// spend slots on duplicates; normalizing first also keeps this
 		// path from writing a value the continuous sweeper would rewrite
 		// on its next pass.
-		genres := l.normalizeProviderGenres(ctx, cand.Genres)
+		genres := l.Reads.normalizeProviderGenres(ctx, cand.Genres)
 		if len(genres) == 0 {
 			continue
 		}
@@ -1271,7 +1286,7 @@ func (l *Library) proposeGenres(ctx context.Context, st enrichItemState) (propos
 }
 
 // commitGenres writes a proposed genre scalar.
-func (l *Library) commitGenres(ctx context.Context, it *model.ItemView, proposal EnrichFieldProposalDTO, locked map[string]bool) (appliedEntry, skippedEntry string) {
+func (l *Enrichment) commitGenres(ctx context.Context, it *model.ItemView, proposal EnrichFieldProposalDTO, locked map[string]bool) (appliedEntry, skippedEntry string) {
 	if s := genresGuard(it, locked); s != "" {
 		return "", s
 	}
@@ -1291,7 +1306,7 @@ func (l *Library) commitGenres(ctx context.Context, it *model.ItemView, proposal
 
 // lyricsGuard is the lyrics want's local preconditions, shared by the
 // propose and commit halves.
-func (l *Library) lyricsGuard(ctx context.Context, it *model.ItemView, locked map[string]bool) (skippedEntry string) {
+func (l *Enrichment) lyricsGuard(ctx context.Context, it *model.ItemView, locked map[string]bool) (skippedEntry string) {
 	if it.Kind != model.KindTrack {
 		return "lyrics: music only"
 	}
@@ -1311,7 +1326,7 @@ func (l *Library) lyricsGuard(ctx context.Context, it *model.ItemView, locked ma
 // lrclib built-in is not on the injected-provider port, so with no
 // registered lyrics provider the want reports "no provider" and the
 // whole-library pass remains the way to fetch lyrics.
-func (l *Library) proposeLyrics(ctx context.Context, st enrichItemState) (proposal *EnrichFieldProposalDTO, skippedEntry string) {
+func (l *Enrichment) proposeLyrics(ctx context.Context, st enrichItemState) (proposal *EnrichFieldProposalDTO, skippedEntry string) {
 	it, locked := st.it, st.locked
 	if s := l.lyricsGuard(ctx, it, locked); s != "" {
 		return nil, s
@@ -1352,7 +1367,7 @@ func (l *Library) proposeLyrics(ctx context.Context, st enrichItemState) (propos
 
 // commitLyrics stores proposed lyrics, parsing the proposal's one
 // string back into timed lines when it is LRC.
-func (l *Library) commitLyrics(ctx context.Context, it *model.ItemView, proposal EnrichFieldProposalDTO, locked map[string]bool) (appliedEntry, skippedEntry string) {
+func (l *Enrichment) commitLyrics(ctx context.Context, it *model.ItemView, proposal EnrichFieldProposalDTO, locked map[string]bool) (appliedEntry, skippedEntry string) {
 	if s := l.lyricsGuard(ctx, it, locked); s != "" {
 		return "", s
 	}
@@ -1443,7 +1458,7 @@ func trackValueValid(name, value string) bool {
 // would leave the second's field for the nightly pass to find later.
 // The walk stops early for the same reason upstream's does: once every
 // fillable key is answered there is nothing left to ask about.
-func (l *Library) proposeFields(ctx context.Context, st enrichItemState) (proposals []EnrichFieldProposalDTO, skippedEntry string) {
+func (l *Enrichment) proposeFields(ctx context.Context, st enrichItemState) (proposals []EnrichFieldProposalDTO, skippedEntry string) {
 	it, locked := st.it, st.locked
 	if s := fieldsGuard(it); s != "" {
 		return nil, s
@@ -1523,7 +1538,7 @@ func (l *Library) proposeFields(ctx context.Context, st enrichItemState) (propos
 // so each field carries the provenance the sheet showed for it: the
 // propose half merges per key across providers, so the rows here are
 // not all one provider's the way the book want's are.
-func (l *Library) commitFields(ctx context.Context, it *model.ItemView, proposals []EnrichFieldProposalDTO, locked map[string]bool) (appliedEntry, skippedEntry string) {
+func (l *Enrichment) commitFields(ctx context.Context, it *model.ItemView, proposals []EnrichFieldProposalDTO, locked map[string]bool) (appliedEntry, skippedEntry string) {
 	if s := fieldsGuard(it); s != "" {
 		return "", s
 	}
@@ -1580,7 +1595,7 @@ func bookGuard(it *model.ItemView) (skippedEntry string) {
 // (narrator, publisher, description, identifiers) and returns the
 // first useful answer's fill-when-empty edits as one proposal row per
 // field, writing nothing.
-func (l *Library) proposeBook(ctx context.Context, st enrichItemState) (proposals []EnrichFieldProposalDTO, skippedEntry string) {
+func (l *Enrichment) proposeBook(ctx context.Context, st enrichItemState) (proposals []EnrichFieldProposalDTO, skippedEntry string) {
 	it, locked := st.it, st.locked
 	if s := bookGuard(it); s != "" {
 		return nil, s
@@ -1652,7 +1667,7 @@ func (l *Library) proposeBook(ctx context.Context, st enrichItemState) (proposal
 // fill-when-empty rules, as one edit: validation pinned the proposals
 // to a single provider, so there is no second write to half-fail into
 // a response that says nothing landed.
-func (l *Library) commitBook(ctx context.Context, it *model.ItemView, proposals []EnrichFieldProposalDTO, locked map[string]bool) (appliedEntry, skippedEntry string) {
+func (l *Enrichment) commitBook(ctx context.Context, it *model.ItemView, proposals []EnrichFieldProposalDTO, locked map[string]bool) (appliedEntry, skippedEntry string) {
 	if s := bookGuard(it); s != "" {
 		return "", s
 	}

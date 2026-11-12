@@ -14,7 +14,7 @@ func showEpisodePIDs(t *testing.T, f stubFeedFixture, showPID string) []string {
 	var out []string
 	cursor := ""
 	for {
-		rows, next, err := f.svc.Episodes(f.ctx, f.uc, showPID, cursor, 200)
+		rows, next, err := f.svc.Podcasts.Episodes(f.ctx, f.uc, showPID, cursor, 200)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -32,16 +32,16 @@ func showEpisodePIDs(t *testing.T, f stubFeedFixture, showPID string) []string {
 // the link, answering the members it serves, or nil and the error.
 func sharedList(t *testing.T, f stubFeedFixture, members []string) ([]ItemSummary, error) {
 	t.Helper()
-	pl, err := f.svc.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{Name: "Mixed", Kind: string(model.PlaylistStatic), ItemPIDs: members})
+	pl, err := f.svc.Playlists.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{Name: "Mixed", Kind: string(model.PlaylistStatic), ItemPIDs: members})
 	if err != nil {
 		t.Fatal(err)
 	}
-	sh, err := f.svc.CreateShare(f.ctx, f.uc, pl.PID, 0, false, 0)
+	sh, err := f.svc.Reads.CreateShare(f.ctx, f.uc, pl.PID, 0, false, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, id, _ := parseAPIPID(sh.ID)
-	pub, err := f.svc.ResolveShare(f.ctx, string(id))
+	pub, err := f.svc.Reads.ResolveShare(f.ctx, string(id))
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func TestASharedListCountsOnlyServableMembersAgainstItsCap(t *testing.T) {
 	paid := f.subscribe(t, "https://feeds.example/paid", "rss")
 	open := f.subscribe(t, "https://feeds.example/open", "rss")
 	_, paidShow, _ := parseAPIPID(paid.Show.PID)
-	f.svc.markShowPrivate(f.ctx, string(paidShow))
+	f.svc.Podcasts.markShowPrivate(f.ctx, string(paidShow))
 
 	private := showEpisodePIDs(t, f, paid.Show.PID)
 	if len(private) != 500 {
@@ -91,11 +91,11 @@ func TestResolvingASharedListReadsEachShowOnce(t *testing.T) {
 		sub := f.subscribe(t, fmt.Sprintf("https://feeds.example/show-%d", i), "rss")
 		members = append(members, showEpisodePIDs(t, f, sub.Show.PID)...)
 	}
-	pl, err := f.svc.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{Name: "Mixed", Kind: string(model.PlaylistStatic), ItemPIDs: members})
+	pl, err := f.svc.Playlists.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{Name: "Mixed", Kind: string(model.PlaylistStatic), ItemPIDs: members})
 	if err != nil {
 		t.Fatal(err)
 	}
-	sh, err := f.svc.CreateShare(f.ctx, f.uc, pl.PID, 0, false, 0)
+	sh, err := f.svc.Reads.CreateShare(f.ctx, f.uc, pl.PID, 0, false, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,10 +105,10 @@ func TestResolvingASharedListReadsEachShowOnce(t *testing.T) {
 
 	for _, process := range []string{"cold", "warm"} {
 		if process == "cold" {
-			f.svc.showSources.Clear()
+			f.svc.Podcasts.showSources.Clear()
 		}
 		reads.Store(0)
-		pub, err := f.svc.ResolveShare(f.ctx, string(id))
+		pub, err := f.svc.Reads.ResolveShare(f.ctx, string(id))
 		if err != nil {
 			t.Fatal(err)
 		}

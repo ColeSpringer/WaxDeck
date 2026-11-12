@@ -74,7 +74,7 @@ func plant(t *testing.T, db *sql.DB, want int64, stmt string, args ...any) {
 func seedCatalogDrift(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) CatalogConsistencyDTO {
 	t.Helper()
 	pids := fixtureItemPIDs(t, ctx, svc, uc)
-	if _, err := svc.CreatePlaylist(ctx, uc, PlaylistCreate{
+	if _, err := svc.Playlists.CreatePlaylist(ctx, uc, PlaylistCreate{
 		Name: "Gappy", Kind: "static", Visibility: "private", ItemPIDs: pids[:2],
 	}); err != nil {
 		t.Fatal(err)
@@ -129,9 +129,9 @@ func seedCatalogDrift(t *testing.T, ctx context.Context, svc *Library, uc *UserC
 // which has to have finished.
 func repairSummary(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, taskID string) map[string]any {
 	t.Helper()
-	for svc.DrainLongToolTasks(ctx) {
+	for svc.Tools.DrainLongToolTasks(ctx) {
 	}
-	task, err := svc.GetToolTaskFor(ctx, uc, taskID)
+	task, err := svc.Tools.GetToolTaskFor(ctx, uc, taskID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func afterCheck(t *testing.T, sum map[string]any) CatalogConsistencyDTO {
 // repairEntry is the one catalog.repair audit entry.
 func repairEntry(t *testing.T, ctx context.Context, svc *Library) AuditEventDTO {
 	t.Helper()
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "catalog.repair"}, "", 10)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: "catalog.repair"}, "", 10)
 	if err != nil || len(page.Events) != 1 {
 		t.Fatalf("catalog.repair audit = %+v (%v), want one entry", page.Events, err)
 	}
@@ -322,7 +322,7 @@ func TestARepairTellsClientsTheCatalogMoved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for svc.DrainLongToolTasks(ctx) {
+	for svc.Tools.DrainLongToolTasks(ctx) {
 	}
 	if row, err := svc.db.ToolTaskByID(ctx, task.ID); err != nil || row.State != taskStateFailed {
 		t.Fatalf("the repair refused at its first step = %+v (%v), want it failed", row, err)
@@ -347,7 +347,7 @@ func TestAFailedRepairStepIsNamed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for svc.DrainLongToolTasks(ctx) {
+	for svc.Tools.DrainLongToolTasks(ctx) {
 	}
 	row, err := svc.db.ToolTaskByID(ctx, task.ID)
 	if err != nil {
@@ -414,7 +414,7 @@ func TestARetriedRepairResumesAfterItsLastStep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !svc.DrainLongToolTasks(ctx) {
+	if !svc.Tools.DrainLongToolTasks(ctx) {
 		t.Fatal("the repair did not run")
 	}
 	first := storedSummary(t, ctx, svc, task.ID)
@@ -430,7 +430,7 @@ func TestARetriedRepairResumesAfterItsLastStep(t *testing.T) {
 	}
 
 	ran = nil
-	if !svc.drainToolTasksAt(ctx, wdb.TaskTypes{Only: longToolTasks}, time.Now().Add(time.Hour).UnixNano()) {
+	if !svc.Tools.drainToolTasksAt(ctx, wdb.TaskTypes{Only: longToolTasks}, time.Now().Add(time.Hour).UnixNano()) {
 		t.Fatal("the cut repair did not run again")
 	}
 	rest := []string{catalogRepairArt, catalogRepairTagProvenance, catalogRepairStrandedTags, catalogRepairSearch, catalogRepairVerify}
@@ -481,7 +481,7 @@ func TestACatalogRepairWaitsOutAHandOff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !svc.DrainLongToolTasks(ctx) {
+	if !svc.Tools.DrainLongToolTasks(ctx) {
 		t.Fatal("the repair did not run")
 	}
 	row, err := svc.db.ToolTaskByID(ctx, task.ID)
@@ -501,7 +501,7 @@ func TestACatalogRepairWaitsOutAHandOff(t *testing.T) {
 	if err := svc.lib.EndMaintenance(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if !svc.drainToolTasksAt(ctx, wdb.TaskTypes{Only: longToolTasks}, time.Now().Add(time.Hour).UnixNano()) {
+	if !svc.Tools.drainToolTasksAt(ctx, wdb.TaskTypes{Only: longToolTasks}, time.Now().Add(time.Hour).UnixNano()) {
 		t.Fatal("the waiting repair did not run again")
 	}
 	sum := repairSummary(t, ctx, svc, uc, task.ID)

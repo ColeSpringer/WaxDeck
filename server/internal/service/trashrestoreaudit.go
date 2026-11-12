@@ -12,7 +12,7 @@ import (
 // it is. Read before the restore, since the entry is no longer active
 // after it. An entry the journal no longer lists is described by its id
 // alone.
-func (l *Library) trashRestoreAudit(ctx context.Context, apiTrashID string, pid model.PID) (AuditTarget, map[string]any) {
+func (l *Tools) trashRestoreAudit(ctx context.Context, apiTrashID string, pid model.PID) (AuditTarget, map[string]any) {
 	target := AuditTarget{Kind: "trash", PID: apiTrashID}
 	entries, err := l.lib.Trash(ctx, false, 0)
 	if err != nil {
@@ -27,7 +27,7 @@ func (l *Library) trashRestoreAudit(ctx context.Context, apiTrashID string, pid 
 		target.Name = filepath.Base(name)
 		detail := map[string]any{"path": name, "reason": e.Reason, "sizeBytes": e.Size}
 		if e.LibraryPID != "" {
-			if name := l.libraryName(ctx, e.LibraryPID); name != "" {
+			if name := l.Roots.libraryName(ctx, e.LibraryPID); name != "" {
 				detail["library"] = name
 			}
 		}

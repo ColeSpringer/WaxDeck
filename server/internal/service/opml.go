@@ -211,7 +211,7 @@ func parseOpmlFeeds(data []byte) ([]opmlFeed, error) {
 // permission, and that the server keeps podcasts at all, are checked
 // before the document is parsed, and the subscribes keep running for up
 // to opmlImportBudget after the caller stops waiting.
-func (l *Library) ImportOPML(ctx context.Context, uc *UserCtx, opml []byte) ([]OpmlImportEntry, error) {
+func (l *Podcasts) ImportOPML(ctx context.Context, uc *UserCtx, opml []byte) ([]OpmlImportEntry, error) {
 	if err := requirePodcastManagement(uc); err != nil {
 		return nil, err
 	}
@@ -270,12 +270,12 @@ func subscribeFailure(err error) (sentence, reason string) {
 // subscribed it by, a private show's included: that address is the
 // caller's own, and a stored login is never written. Manual shows have no
 // feed to export.
-func (l *Library) ExportOPML(ctx context.Context, uc *UserCtx) ([]byte, error) {
+func (l *Podcasts) ExportOPML(ctx context.Context, uc *UserCtx) ([]byte, error) {
 	rows, err := l.db.SubscriptionsByUser(ctx, uc.ID)
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
 	}
-	if !l.podcastsVisible(ctx, uc) {
+	if !l.Grants.podcastsVisible(ctx, uc) {
 		rows = nil
 	}
 	byFolder := map[string][]opmlFeed{}

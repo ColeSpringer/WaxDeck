@@ -47,11 +47,11 @@ func linkedFeeds(t *testing.T) string {
 // playEpisode moves the one episode of a show uc follows.
 func (e *env) playEpisode(uc *service.UserCtx, show string) {
 	e.t.Helper()
-	eps, _, err := e.svc.Episodes(e.ctx, uc, show, "", 1)
+	eps, _, err := e.svc.Podcasts.Episodes(e.ctx, uc, show, "", 1)
 	if err != nil || len(eps) != 1 {
 		e.t.Fatalf("episodes = %+v (%v)", eps, err)
 	}
-	if _, err := e.svc.Checkpoint(e.ctx, uc, eps[0].PID, 30_000, nil); err != nil {
+	if _, err := e.svc.Playback.Checkpoint(e.ctx, uc, eps[0].PID, 30_000, nil); err != nil {
 		e.t.Fatal(err)
 	}
 }
@@ -66,7 +66,7 @@ func TestAPrivateShowsPlayCarriesNoOtherAccountsToken(t *testing.T) {
 	host := linkedFeeds(t)
 	members := e.subscribeFirstParty(host + "/members?token=alice")
 	bob := e.listener("bob")
-	if _, _, err := e.svc.Subscribe(e.ctx, bob, service.SubscribeRequest{URL: host + "/members?token=bob"}); err != nil {
+	if _, _, err := e.svc.Podcasts.Subscribe(e.ctx, bob, service.SubscribeRequest{URL: host + "/members?token=bob"}); err != nil {
 		t.Fatal(err)
 	}
 	open := e.subscribeFirstParty(host + "/open")
@@ -74,7 +74,7 @@ func TestAPrivateShowsPlayCarriesNoOtherAccountsToken(t *testing.T) {
 		e.playEpisode(e.uc, show)
 	}
 	e.playEpisode(bob, members)
-	bobs, _, err := e.svc.GpodderActionsSince(e.ctx, bob, "", 0, "", "")
+	bobs, _, err := e.svc.Podcasts.GpodderActionsSince(e.ctx, bob, "", 0, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

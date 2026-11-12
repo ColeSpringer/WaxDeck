@@ -68,7 +68,7 @@ func TestAnUploadAnswersFromItsOwnAppPasswordsReads(t *testing.T) {
 		t.Run(how, func(t *testing.T) {
 			t.Parallel()
 			e := newEnv(t)
-			ap, err := e.svc.CreateAppPassword(e.ctx, e.uc, "laptop")
+			ap, err := e.svc.Identity.CreateAppPassword(e.ctx, e.uc, "laptop")
 			if err != nil {
 				t.Fatal(err)
 			}

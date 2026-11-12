@@ -280,15 +280,15 @@ func TestChaptersCacheHandsOutCopies(t *testing.T) {
 func chaptersLibrary(t *testing.T, budget time.Duration) *Library {
 	t.Helper()
 	_, svc, _ := newCatalogFixture(t)
-	svc.allowPrivateFeedHosts = true
-	svc.chapterDocs.timeout = budget
+	svc.Podcasts.allowPrivateFeedHosts = true
+	svc.Podcasts.chapterDocs.timeout = budget
 	return withOpenShows(svc)
 }
 
 // withOpenShows reads every show as an open feed, so a made-up episode has
 // a show for the fetch to read its terms from.
 func withOpenShows(svc *Library) *Library {
-	svc.showReadHook = func(_ context.Context, pid model.PID) (*model.Podcast, error) {
+	svc.Podcasts.showReadHook = func(_ context.Context, pid model.PID) (*model.Podcast, error) {
 		return &model.Podcast{PID: pid, FeedURL: "https://feeds.example/feed.xml"}, nil
 	}
 	return svc
@@ -319,11 +319,11 @@ func TestChaptersDocumentFetchIsGuarded(t *testing.T) {
 
 	_, closed, _ := newCatalogFixture(t)
 	withOpenShows(closed)
-	if marks, err := closed.fetchChapters(ctx, ep, ep.ChaptersURL, feedLogin{}); err == nil || len(marks) != 0 ||
+	if marks, err := closed.Podcasts.fetchChapters(ctx, ep, ep.ChaptersURL, feedLogin{}); err == nil || len(marks) != 0 ||
 		!strings.Contains(err.Error(), "private address") {
 		t.Fatalf("fetch at a loopback address = %+v, %v; want it refused as private", marks, err)
 	}
-	if got := closed.fetchedChapters(ctx, "", ep); len(got) != 0 {
+	if got := closed.Podcasts.fetchedChapters(ctx, "", ep); len(got) != 0 {
 		t.Errorf("a refused fetch gave chapters %+v", got)
 	}
 	if n := hits.Load(); n != 0 {
@@ -333,13 +333,13 @@ func TestChaptersDocumentFetchIsGuarded(t *testing.T) {
 	// The same fetch with LAN hosts allowed, which also shows the refusal
 	// above was the guard's and not a broken fixture.
 	open := chaptersLibrary(t, 0)
-	marks, err := open.fetchChapters(ctx, ep, ep.ChaptersURL, feedLogin{})
+	marks, err := open.Podcasts.fetchChapters(ctx, ep, ep.ChaptersURL, feedLogin{})
 	if err != nil || len(marks) != 1 || marks[0].Title != "One" || marks[0].EndMS != 60_000 {
 		t.Fatalf("fetch with LAN hosts allowed = %+v, %v", marks, err)
 	}
 
 	body.Store(strings.Repeat("x", chaptersMaxBytes+1))
-	if marks, err := open.fetchChapters(ctx, ep, ep.ChaptersURL, feedLogin{}); err == nil || len(marks) != 0 ||
+	if marks, err := open.Podcasts.fetchChapters(ctx, ep, ep.ChaptersURL, feedLogin{}); err == nil || len(marks) != 0 ||
 		!strings.Contains(err.Error(), "size cap") {
 		t.Errorf("a body past the cap = %+v, %v; want it refused for its size", marks, err)
 	}
@@ -359,7 +359,7 @@ func TestChaptersOfAShowThatCannotBeReadAreNone(t *testing.T) {
 	svc := chaptersLibrary(t, 0)
 	var busy atomic.Bool
 	busy.Store(true)
-	svc.showReadHook = func(_ context.Context, pid model.PID) (*model.Podcast, error) {
+	svc.Podcasts.showReadHook = func(_ context.Context, pid model.PID) (*model.Podcast, error) {
 		if busy.Load() {
 			return nil, errors.New("the catalog is busy")
 		}
@@ -367,14 +367,14 @@ func TestChaptersOfAShowThatCannotBeReadAreNone(t *testing.T) {
 	}
 	ep := chaptersEpisode("ep-1", host.URL+"/chapters.json")
 
-	if got := svc.fetchedChapters(context.Background(), "", ep); len(got) != 0 {
+	if got := svc.Podcasts.fetchedChapters(context.Background(), "", ep); len(got) != 0 {
 		t.Errorf("chapters while the show cannot be read = %+v, want none", got)
 	}
 	if n := hits.Load(); n != 0 {
 		t.Errorf("the host was asked %d times while the show could not be read", n)
 	}
 	busy.Store(false)
-	if got := svc.fetchedChapters(context.Background(), "", ep); len(got) != 1 {
+	if got := svc.Podcasts.fetchedChapters(context.Background(), "", ep); len(got) != 1 {
 		t.Errorf("chapters once the show reads = %+v, want the document's", got)
 	}
 }
@@ -398,10 +398,10 @@ func TestChaptersRedirectsAreCapped(t *testing.T) {
 	svc := chaptersLibrary(t, 0)
 	ctx := context.Background()
 
-	if got := svc.fetchedChapters(ctx, "", chaptersEpisode("ep-near", host.URL+"/hop/4")); len(got) != 1 {
+	if got := svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-near", host.URL+"/hop/4")); len(got) != 1 {
 		t.Errorf("a document four redirects away gave %+v", got)
 	}
-	if got := svc.fetchedChapters(ctx, "", chaptersEpisode("ep-far", host.URL+"/hop/5")); len(got) != 0 {
+	if got := svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-far", host.URL+"/hop/5")); len(got) != 0 {
 		t.Errorf("a document five redirects away gave %+v, want the cap to refuse it", got)
 	}
 }
@@ -427,7 +427,7 @@ func TestChaptersARedirectHopToAPrivateAddressIsRefused(t *testing.T) {
 	ep := chaptersEpisode("ep-1", "http://"+publicAddr+"/c.json")
 
 	routed := func(svc *Library) {
-		transport := svc.transcriptClient().Transport.(*http.Transport)
+		transport := svc.Podcasts.transcriptClient().Transport.(*http.Transport)
 		transport.Proxy = nil
 		guarded := transport.DialContext
 		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -441,7 +441,7 @@ func TestChaptersARedirectHopToAPrivateAddressIsRefused(t *testing.T) {
 	_, closed, _ := newCatalogFixture(t)
 	withOpenShows(closed)
 	routed(closed)
-	if got := closed.fetchedChapters(context.Background(), "", ep); len(got) != 0 {
+	if got := closed.Podcasts.fetchedChapters(context.Background(), "", ep); len(got) != 0 {
 		t.Errorf("a redirect to a private address gave %+v", got)
 	}
 	if n := privateHits.Load(); n != 0 {
@@ -452,7 +452,7 @@ func TestChaptersARedirectHopToAPrivateAddressIsRefused(t *testing.T) {
 	// refusal above was the guard's.
 	open := chaptersLibrary(t, 0)
 	routed(open)
-	if got := open.fetchedChapters(context.Background(), "", ep); len(got) != 1 {
+	if got := open.Podcasts.fetchedChapters(context.Background(), "", ep); len(got) != 1 {
 		t.Errorf("the same chain with LAN hosts allowed gave %+v, want the document", got)
 	}
 }
@@ -472,10 +472,10 @@ func TestChaptersAReaderWhoLeftDoesNotMakeAMiss(t *testing.T) {
 
 	gone, leave := context.WithCancel(context.Background())
 	leave()
-	if got := svc.fetchedChapters(gone, "", ep); len(got) != 0 {
+	if got := svc.Podcasts.fetchedChapters(gone, "", ep); len(got) != 0 {
 		t.Errorf("a cancelled read gave %+v", got)
 	}
-	if got := svc.fetchedChapters(context.Background(), "", ep); len(got) != 1 {
+	if got := svc.Podcasts.fetchedChapters(context.Background(), "", ep); len(got) != 1 {
 		t.Errorf("the read after it gave %+v, want the document: the cancelled one was remembered as a failure", got)
 	}
 	if n := hits.Load(); n != 1 {
@@ -505,7 +505,7 @@ func TestChaptersReadersShareOneFetch(t *testing.T) {
 	const readers = 8
 	results := make(chan []ChapterMark, readers)
 	for range readers {
-		go func() { results <- svc.fetchedChapters(context.Background(), "", ep) }()
+		go func() { results <- svc.Podcasts.fetchedChapters(context.Background(), "", ep) }()
 	}
 	// Long enough for the readers to arrive and wait; any that is late finds
 	// the answer kept instead, and the count is the same.
@@ -540,7 +540,7 @@ func TestChaptersAWaiterKeepsItsOwnContext(t *testing.T) {
 	ep := chaptersEpisode("ep-1", host.URL+"/c.json")
 
 	leader := make(chan []ChapterMark, 1)
-	go func() { leader <- svc.fetchedChapters(context.Background(), "", ep) }()
+	go func() { leader <- svc.Podcasts.fetchedChapters(context.Background(), "", ep) }()
 	for hits.Load() == 0 {
 		time.Sleep(5 * time.Millisecond)
 	}
@@ -548,7 +548,7 @@ func TestChaptersAWaiterKeepsItsOwnContext(t *testing.T) {
 	waiting, giveUp := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer giveUp()
 	started := time.Now()
-	if got := svc.fetchedChapters(waiting, "", ep); len(got) != 0 {
+	if got := svc.Podcasts.fetchedChapters(waiting, "", ep); len(got) != 0 {
 		t.Errorf("a waiter that gave up got %+v", got)
 	}
 	if waited := time.Since(started); waited > 2*time.Second {
@@ -559,7 +559,7 @@ func TestChaptersAWaiterKeepsItsOwnContext(t *testing.T) {
 	if got := <-leader; len(got) != 1 {
 		t.Errorf("the reader who led got %+v after its waiter left", got)
 	}
-	if got := svc.fetchedChapters(context.Background(), "", ep); len(got) != 1 {
+	if got := svc.Podcasts.fetchedChapters(context.Background(), "", ep); len(got) != 1 {
 		t.Errorf("the read after got %+v, want the kept document", got)
 	}
 	if n := hits.Load(); n != 1 {
@@ -613,7 +613,7 @@ func TestChaptersAHostThatDoesNotAnswerCostsOneWait(t *testing.T) {
 	ctx := context.Background()
 
 	started := time.Now()
-	if got := svc.fetchedChapters(ctx, "", chaptersEpisode("ep-a", base+"/a.json")); len(got) != 0 {
+	if got := svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-a", base+"/a.json")); len(got) != 0 {
 		t.Errorf("a host that never answers gave %+v", got)
 	}
 	if waited := time.Since(started); waited < budget-50*time.Millisecond || waited > 5*time.Second {
@@ -621,7 +621,7 @@ func TestChaptersAHostThatDoesNotAnswerCostsOneWait(t *testing.T) {
 	}
 
 	started = time.Now()
-	if got := svc.fetchedChapters(ctx, "", chaptersEpisode("ep-b", base+"/b.json")); len(got) != 0 {
+	if got := svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-b", base+"/b.json")); len(got) != 0 {
 		t.Errorf("another episode of the same host gave %+v", got)
 	}
 	if waited := time.Since(started); waited > budget/2 {
@@ -651,7 +651,7 @@ func TestChaptersAHostThatStallsTheBodyCostsOneWait(t *testing.T) {
 	ctx := context.Background()
 
 	started := time.Now()
-	if got := svc.fetchedChapters(ctx, "", chaptersEpisode("ep-a", host.URL+"/a.json")); len(got) != 0 {
+	if got := svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-a", host.URL+"/a.json")); len(got) != 0 {
 		t.Errorf("a body that never arrives gave %+v", got)
 	}
 	if waited := time.Since(started); waited < budget-50*time.Millisecond || waited > 5*time.Second {
@@ -659,7 +659,7 @@ func TestChaptersAHostThatStallsTheBodyCostsOneWait(t *testing.T) {
 	}
 
 	started = time.Now()
-	if got := svc.fetchedChapters(ctx, "", chaptersEpisode("ep-b", host.URL+"/b.json")); len(got) != 0 {
+	if got := svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-b", host.URL+"/b.json")); len(got) != 0 {
 		t.Errorf("another episode of the same host gave %+v", got)
 	}
 	if waited := time.Since(started); waited > budget/2 {
@@ -688,10 +688,10 @@ func TestChaptersADeadRedirectTargetDoesNotMarkTheFirstHopDown(t *testing.T) {
 	svc := chaptersLibrary(t, time.Second)
 	ctx := context.Background()
 
-	if got := svc.fetchedChapters(ctx, "", chaptersEpisode("ep-a", host.URL+"/a.json")); len(got) != 0 {
+	if got := svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-a", host.URL+"/a.json")); len(got) != 0 {
 		t.Errorf("a document that redirects to a dead host gave %+v", got)
 	}
-	if got := svc.fetchedChapters(ctx, "", chaptersEpisode("ep-b", host.URL+"/b.json")); len(got) != 1 {
+	if got := svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-b", host.URL+"/b.json")); len(got) != 1 {
 		t.Errorf("another document of the healthy first host gave %+v, want it read: the first host was marked down for the dead one's failure", got)
 	}
 }
@@ -713,10 +713,10 @@ func TestChaptersARedirectLoopDoesNotMarkItsHostDown(t *testing.T) {
 	svc := chaptersLibrary(t, 0)
 	ctx := context.Background()
 
-	if got := svc.fetchedChapters(ctx, "", chaptersEpisode("ep-loop", host.URL+"/loop")); len(got) != 0 {
+	if got := svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-loop", host.URL+"/loop")); len(got) != 0 {
 		t.Errorf("a redirect loop gave %+v", got)
 	}
-	if got := svc.fetchedChapters(ctx, "", chaptersEpisode("ep-b", host.URL+"/b.json")); len(got) != 1 {
+	if got := svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-b", host.URL+"/b.json")); len(got) != 1 {
 		t.Errorf("another document of the host gave %+v, want it read: a loop is not a host that does not answer", got)
 	}
 }
@@ -739,13 +739,13 @@ func TestChaptersARedirectToAHostKnownToBeDownIsNotFollowed(t *testing.T) {
 	ctx := context.Background()
 
 	started := time.Now()
-	svc.fetchedChapters(ctx, "", chaptersEpisode("ep-a", host.URL+"/a.json"))
+	svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-a", host.URL+"/a.json"))
 	if waited := time.Since(started); waited < budget-50*time.Millisecond {
 		t.Errorf("the first read took %s, want about the %s budget spent on the dead host", waited, budget)
 	}
 
 	started = time.Now()
-	svc.fetchedChapters(ctx, "", chaptersEpisode("ep-b", host.URL+"/b.json"))
+	svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-b", host.URL+"/b.json"))
 	if waited := time.Since(started); waited > budget/2 {
 		t.Errorf("the second read waited %s on a redirect target already known to be down", waited)
 	}
@@ -770,10 +770,10 @@ func TestChaptersALateHopIsNotBlamedForTheBudgetItWasGiven(t *testing.T) {
 	svc := chaptersLibrary(t, budget)
 	ctx := context.Background()
 
-	svc.fetchedChapters(ctx, "", chaptersEpisode("ep-a", slow.URL+"/a.json"))
+	svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-a", slow.URL+"/a.json"))
 
 	started := time.Now()
-	svc.fetchedChapters(ctx, "", chaptersEpisode("ep-b", "http://"+dead+"/b.json"))
+	svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-b", "http://"+dead+"/b.json"))
 	if waited := time.Since(started); waited < budget-100*time.Millisecond {
 		t.Errorf("a document at the host took %s, want it asked for (about %s): the host was remembered as down for the time the slow one spent", waited, budget)
 	}
@@ -796,10 +796,10 @@ func TestChaptersARedirectToAnotherSchemeBlamesNoOne(t *testing.T) {
 	svc := chaptersLibrary(t, 0)
 	ctx := context.Background()
 
-	if got := svc.fetchedChapters(ctx, "", chaptersEpisode("ep-a", sender.URL+"/a.json")); len(got) != 0 {
+	if got := svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-a", sender.URL+"/a.json")); len(got) != 0 {
 		t.Errorf("a redirect to another scheme gave %+v", got)
 	}
-	if got := svc.fetchedChapters(ctx, "", chaptersEpisode("ep-b", bystander.URL+"/b.json")); len(got) != 1 {
+	if got := svc.Podcasts.fetchedChapters(ctx, "", chaptersEpisode("ep-b", bystander.URL+"/b.json")); len(got) != 1 {
 		t.Errorf("a document at the host the redirect named gave %+v, want it read", got)
 	}
 }
@@ -817,7 +817,7 @@ func TestChaptersACredentialedRedirectLoopIsCutByTheCap(t *testing.T) {
 
 	started := time.Now()
 	login := feedLogin{feedURL: host.URL + "/feed.xml", user: "member", pass: "s3cret"}
-	_, err := svc.fetchChapters(context.Background(), ep, ep.ChaptersURL, login)
+	_, err := svc.Podcasts.fetchChapters(context.Background(), ep, ep.ChaptersURL, login)
 	if err == nil || !strings.Contains(err.Error(), "too many redirects") {
 		t.Fatalf("a credentialed redirect loop = %v, want the redirect cap", err)
 	}
@@ -846,12 +846,12 @@ func TestChaptersAWaiterTakesOverWhenTheLeaderLeaves(t *testing.T) {
 	leading, leave := context.WithCancel(context.Background())
 	defer leave()
 	leader := make(chan []ChapterMark, 1)
-	go func() { leader <- svc.fetchedChapters(leading, "", ep) }()
+	go func() { leader <- svc.Podcasts.fetchedChapters(leading, "", ep) }()
 	for hits.Load() == 0 {
 		time.Sleep(5 * time.Millisecond)
 	}
 	waiter := make(chan []ChapterMark, 1)
-	go func() { waiter <- svc.fetchedChapters(context.Background(), "", ep) }()
+	go func() { waiter <- svc.Podcasts.fetchedChapters(context.Background(), "", ep) }()
 	// Long enough for the waiter to be waiting on the leader.
 	time.Sleep(200 * time.Millisecond)
 	leave()
@@ -910,7 +910,7 @@ func TestEpisodeAddedNSSaysWhenItCannotRead(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	if got := svc.episodeAddedNS(ctx, "01JZX5N8QW3F4V9T2B7KD3M9R6"); got != 0 {
+	if got := svc.Reads.episodeAddedNS(ctx, "01JZX5N8QW3F4V9T2B7KD3M9R6"); got != 0 {
 		t.Errorf("added time of a read that failed = %d, want 0", got)
 	}
 	if out := logs.String(); !strings.Contains(out, "reading an episode's added time") {

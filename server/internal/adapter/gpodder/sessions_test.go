@@ -50,7 +50,7 @@ func TestASignedRequestOpensASession(t *testing.T) {
 	if got := e.withCookie(phone, "GET", "/api/2/devices/alice.json", ""); got != 200 {
 		t.Errorf("the login after 25 signed requests = %d, want 200", got)
 	}
-	if err := e.svc.RevokeAppPassword(e.ctx, e.uc, e.apID); err != nil {
+	if err := e.svc.Identity.RevokeAppPassword(e.ctx, e.uc, e.apID); err != nil {
 		t.Fatal(err)
 	}
 	for name, c := range map[string]*http.Cookie{"login": phone, "signed request": opened} {

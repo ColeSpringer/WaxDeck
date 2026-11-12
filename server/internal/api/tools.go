@@ -60,7 +60,7 @@ func (s *Server) MergeBook(ctx context.Context, req MergeBookRequestObject) (Mer
 		}
 		keep = derefBool(req.Body.KeepOriginals)
 	}
-	task, err := s.svc.StartBookMerge(ctx, uc, string(req.Pid), titles, keep)
+	task, err := s.svc.Tools.StartBookMerge(ctx, uc, string(req.Pid), titles, keep)
 	if err != nil {
 		if service.KindOf(err) == service.KindFeature && s.engineIsAway() {
 			return nil, toolEngineAway(err)
@@ -76,7 +76,7 @@ func (s *Server) SplitBook(ctx context.Context, req SplitBookRequestObject) (Spl
 	if req.Body != nil {
 		keep = derefBool(req.Body.KeepOriginals)
 	}
-	task, err := s.svc.StartBookSplit(ctx, uc, string(req.Pid), keep)
+	task, err := s.svc.Tools.StartBookSplit(ctx, uc, string(req.Pid), keep)
 	if err != nil {
 		if service.KindOf(err) == service.KindFeature && s.engineIsAway() {
 			return nil, toolEngineAway(err)
@@ -105,7 +105,7 @@ func (s *Server) SplitCueRip(ctx context.Context, req SplitCueRipRequestObject) 
 	if req.Body != nil {
 		keep = derefBool(req.Body.KeepOriginals)
 	}
-	task, err := s.svc.StartCueSplit(ctx, uc, string(req.Pid), keep)
+	task, err := s.svc.Tools.StartCueSplit(ctx, uc, string(req.Pid), keep)
 	if err != nil {
 		if service.KindOf(err) == service.KindFeature && s.engineIsAway() {
 			return nil, toolEngineAway(err)
@@ -121,7 +121,7 @@ func (s *Server) ListToolTasks(ctx context.Context, req ListToolTasksRequestObje
 	if err != nil {
 		return nil, err
 	}
-	tasks, next, err := s.svc.ListToolTasksFor(ctx, uc, deref(req.Params.Cursor), limit)
+	tasks, next, err := s.svc.Tools.ListToolTasksFor(ctx, uc, deref(req.Params.Cursor), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +137,7 @@ func (s *Server) ListToolTasks(ctx context.Context, req ListToolTasksRequestObje
 
 func (s *Server) GetToolTask(ctx context.Context, req GetToolTaskRequestObject) (GetToolTaskResponseObject, error) {
 	uc := userCtx(ctx)
-	task, err := s.svc.GetToolTaskFor(ctx, uc, string(req.TaskId))
+	task, err := s.svc.Tools.GetToolTaskFor(ctx, uc, string(req.TaskId))
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (s *Server) GetToolTask(ctx context.Context, req GetToolTaskRequestObject) 
 
 func (s *Server) DeleteToolTask(ctx context.Context, req DeleteToolTaskRequestObject) (DeleteToolTaskResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.DeleteToolTaskFor(ctx, uc, string(req.TaskId)); err != nil {
+	if err := s.svc.Tools.DeleteToolTaskFor(ctx, uc, string(req.TaskId)); err != nil {
 		// A clear kept for the files it could not settle is the service's
 		// conflict, and the table sends its params on: they name the
 		// reason, for a client to word.
@@ -164,7 +164,7 @@ func (s *Server) ClearFinishedToolTasks(ctx context.Context, req ClearFinishedTo
 		}
 		scope = service.ToolTaskScope(*req.Body.Scope)
 	}
-	deleted, kept, err := s.svc.ClearFinishedToolTasksFor(ctx, uc, scope)
+	deleted, kept, err := s.svc.Tools.ClearFinishedToolTasksFor(ctx, uc, scope)
 	if err != nil {
 		return nil, err
 	}

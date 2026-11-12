@@ -13,7 +13,7 @@ import (
 func TestAnIdentifierEditDropsEnrichmentArtButNotAPin(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	it, err := svc.getVisibleItem(ctx, uc, fixtureItemPIDs(t, ctx, svc, uc)[0])
+	it, err := svc.Grants.getVisibleItem(ctx, uc, fixtureItemPIDs(t, ctx, svc, uc)[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestAnIdentifierEditDropsEnrichmentArtButNotAPin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := svc.EditEntity(ctx, "album", apiPID(PrefixAlbum, album),
+	if _, err := svc.Editor.EditEntity(ctx, "album", apiPID(PrefixAlbum, album),
 		map[string]string{"mbid": "0b1d6a4e-6f0e-4b43-9b0f-3f6a1e2c9d10"}, MetadataEditParams{}); err != nil {
 		t.Fatal(err)
 	}

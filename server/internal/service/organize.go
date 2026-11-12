@@ -163,7 +163,7 @@ type OrganizeProfilesDTO struct {
 }
 
 // OrganizeProfilesFor lists the catalog's organize profiles.
-func (l *Library) OrganizeProfilesFor(ctx context.Context, uc *UserCtx) (OrganizeProfilesDTO, error) {
+func (l *Health) OrganizeProfilesFor(ctx context.Context, uc *UserCtx) (OrganizeProfilesDTO, error) {
 	if !uc.Admin {
 		return OrganizeProfilesDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -309,7 +309,7 @@ func usableProfiles(rows []wdb.OrganizeProfile, log *slog.Logger) []wdb.Organize
 
 // PutOrganizeProfile saves a profile, replacing one of the same name, and
 // hands the catalog the new set. Administrators only.
-func (l *Library) PutOrganizeProfile(ctx context.Context, uc *UserCtx, name string, in OrganizeProfileInput) (OrganizeProfileDTO, error) {
+func (l *Health) PutOrganizeProfile(ctx context.Context, uc *UserCtx, name string, in OrganizeProfileInput) (OrganizeProfileDTO, error) {
 	if !uc.Admin {
 		return OrganizeProfileDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -341,7 +341,7 @@ func (l *Library) PutOrganizeProfile(ctx context.Context, uc *UserCtx, name stri
 		l.restoreProfiles(ctx, rows)
 		return OrganizeProfileDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
-	l.Audit(ctx, uc, "organize.profile", AuditTarget{Kind: "organize-profile", Name: name},
+	l.Audit.Record(ctx, uc, "organize.profile", AuditTarget{Kind: "organize-profile", Name: name},
 		map[string]any{"music": in.Music, "audiobook": in.Audiobook, "podcast": in.Podcast, "tagWrite": in.TagWrite,
 			"compilationFolder": folder})
 	for _, p := range l.lib.Profiles() {
@@ -355,7 +355,7 @@ func (l *Library) PutOrganizeProfile(ctx context.Context, uc *UserCtx, name stri
 // DeleteOrganizeProfile removes a saved profile; one a managed library
 // lays out by stays until the library moves off it. Deleting a built-in's
 // override brings the built-in back. Administrators only.
-func (l *Library) DeleteOrganizeProfile(ctx context.Context, uc *UserCtx, name string) error {
+func (l *Health) DeleteOrganizeProfile(ctx context.Context, uc *UserCtx, name string) error {
 	if !uc.Admin {
 		return &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -395,14 +395,14 @@ func (l *Library) DeleteOrganizeProfile(ctx context.Context, uc *UserCtx, name s
 		l.restoreProfiles(ctx, rows)
 		return &Error{Kind: KindInternal, Err: err}
 	}
-	l.Audit(ctx, uc, "organize.profile", AuditTarget{Kind: "organize-profile", Name: name},
+	l.Audit.Record(ctx, uc, "organize.profile", AuditTarget{Kind: "organize-profile", Name: name},
 		map[string]any{"deleted": true})
 	return nil
 }
 
 // restoreProfiles hands the catalog back the saved set a failed save
 // changed.
-func (l *Library) restoreProfiles(ctx context.Context, rows []wdb.OrganizeProfile) {
+func (l *Health) restoreProfiles(ctx context.Context, rows []wdb.OrganizeProfile) {
 	if err := l.lib.SetProfiles(ctx, profileDefs(usableProfiles(rows, l.log))); err != nil {
 		l.log.Warn("restoring the organize profiles after a failed save", "err", err)
 	}
@@ -410,7 +410,7 @@ func (l *Library) restoreProfiles(ctx context.Context, rows []wdb.OrganizeProfil
 
 // PreviewOrganizeProfile renders the sample paths of a profile being
 // edited, without saving it. Administrators only.
-func (l *Library) PreviewOrganizeProfile(ctx context.Context, uc *UserCtx, name string, in OrganizeProfileInput) (OrganizeSampleDTO, error) {
+func (l *Health) PreviewOrganizeProfile(ctx context.Context, uc *UserCtx, name string, in OrganizeProfileInput) (OrganizeSampleDTO, error) {
 	if !uc.Admin {
 		return OrganizeSampleDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -442,7 +442,7 @@ func (l *Library) PreviewOrganizeProfile(ctx context.Context, uc *UserCtx, name 
 
 // SetLibraryProfile names the profile a managed library is laid out by,
 // which the catalog keeps. Administrators only.
-func (l *Library) SetLibraryProfile(ctx context.Context, uc *UserCtx, apiLibraryPID, name string) (LibraryInfo, error) {
+func (l *Health) SetLibraryProfile(ctx context.Context, uc *UserCtx, apiLibraryPID, name string) (LibraryInfo, error) {
 	if !uc.Admin {
 		return LibraryInfo{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -450,7 +450,7 @@ func (l *Library) SetLibraryProfile(ctx context.Context, uc *UserCtx, apiLibrary
 	if !ok || prefix != PrefixLibrary {
 		return LibraryInfo{}, errNotFound("no library with pid " + apiLibraryPID)
 	}
-	lib, err := l.libraryByPID(ctx, pid)
+	lib, err := l.Roots.libraryByPID(ctx, pid)
 	if KindOf(err) == KindNotFound {
 		return LibraryInfo{}, errNotFound("no library with pid " + apiLibraryPID)
 	} else if err != nil {
@@ -469,10 +469,10 @@ func (l *Library) SetLibraryProfile(ctx context.Context, uc *UserCtx, apiLibrary
 	if err != nil {
 		return LibraryInfo{}, classify(err)
 	}
-	l.refreshLibraryState(ctx)
-	l.Audit(ctx, uc, "library.profile", l.libraryAuditTarget(ctx, apiLibraryPID, pid),
+	l.Roots.refreshLibraryState(ctx)
+	l.Audit.Record(ctx, uc, "library.profile", l.Settings.libraryAuditTarget(ctx, apiLibraryPID, pid),
 		map[string]any{"profile": name})
-	return l.libraryInfo(updated), nil
+	return l.Roots.libraryInfo(updated), nil
 }
 
 // organizeScope is what a pass plans over: its items, and the profile
@@ -488,7 +488,7 @@ type organizeScope struct {
 // none is named, and answers the scope it planned, which a job plans again.
 // An unknown profile is invalid-request because preview and apply route no
 // 404.
-func (l *Library) organizePlanFor(ctx context.Context, profile string, apiItemPids []string) (*organize.Plan, organizeScope, error) {
+func (l *Health) organizePlanFor(ctx context.Context, profile string, apiItemPids []string) (*organize.Plan, organizeScope, error) {
 	var sc organizeScope
 	if profile != "" {
 		if !slices.ContainsFunc(l.lib.Profiles(), func(p organize.Profile) bool { return p.Name == profile }) {
@@ -526,8 +526,8 @@ func (l *Library) organizePlanFor(ctx context.Context, profile string, apiItemPi
 // in a read-only library. Every move rather than some: with nothing
 // pending no apply runs, and an apply re-opens a read-only hold and
 // decides it again from the catalog's own flags.
-func (l *Library) holdReadOnly(plan *organize.Plan) {
-	if !l.currentToggles().readOnly {
+func (l *Health) holdReadOnly(plan *organize.Plan) {
+	if !l.Settings.currentToggles().readOnly {
 		return
 	}
 	for i := range plan.Actions {
@@ -564,8 +564,8 @@ const (
 
 // readOnlyCause names what makes a write refused as read-only now: the
 // server's switch, which every write meets first, or a library's flag.
-func (l *Library) readOnlyCause() string {
-	if l.ServerReadOnly() {
+func (l *Health) readOnlyCause() string {
+	if l.Settings.ServerReadOnly() {
 		return serverReadOnlyReason
 	}
 	return readOnlyReason
@@ -573,7 +573,7 @@ func (l *Library) readOnlyCause() string {
 
 // PreviewOrganize plans a pass without touching anything and maps it to
 // the bounded API shape.
-func (l *Library) PreviewOrganize(ctx context.Context, uc *UserCtx, profile string, apiItemPids []string) (OrganizePlanDTO, error) {
+func (l *Health) PreviewOrganize(ctx context.Context, uc *UserCtx, profile string, apiItemPids []string) (OrganizePlanDTO, error) {
 	if !uc.Admin {
 		return OrganizePlanDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -621,7 +621,7 @@ func (l *Library) PreviewOrganize(ctx context.Context, uc *UserCtx, profile stri
 // itemKindsFor batch-resolves the kinds behind a plan's actions so each
 // pid renders with the right API prefix; an unresolvable pid falls back
 // to the track prefix.
-func (l *Library) itemKindsFor(ctx context.Context, actions []*organize.Action) map[model.PID]model.Kind {
+func (l *Health) itemKindsFor(ctx context.Context, actions []*organize.Action) map[model.PID]model.Kind {
 	out := map[model.PID]model.Kind{}
 	pids := make([]model.PID, 0, len(actions))
 	for _, a := range actions {
@@ -658,11 +658,11 @@ func relToRoot(root, src string) string {
 // ApplyOrganize plans a pass and runs it as a catalog job, waiting for
 // the job to end, and reports the outcome. The moved items' path rule is
 // re-checked at once, rather than at the next sweep.
-func (l *Library) ApplyOrganize(ctx context.Context, uc *UserCtx, profile string, apiItemPids []string) (OrganizeReportDTO, error) {
+func (l *Health) ApplyOrganize(ctx context.Context, uc *UserCtx, profile string, apiItemPids []string) (OrganizeReportDTO, error) {
 	if !uc.Admin {
 		return OrganizeReportDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	if err := l.CheckWritable(ctx, ""); err != nil {
+	if err := l.Settings.CheckWritable(ctx, ""); err != nil {
 		return OrganizeReportDTO{}, err
 	}
 	plan, sc, err := l.organizePlanFor(ctx, profile, apiItemPids)
@@ -679,7 +679,7 @@ func (l *Library) ApplyOrganize(ctx context.Context, uc *UserCtx, profile string
 				rep.Holds = append(rep.Holds, organize.HeldMove{FilePID: a.FilePID, Src: a.Src, Dst: a.Dst, Code: a.Code, Reason: a.Reason})
 			}
 		}
-		l.notifyWorkDone(ctx, uc, Job{Kind: "organize", Organize: organizeTally(plan.Profile, rep)})
+		l.Jobs.notifyWorkDone(ctx, uc, Job{Kind: "organize", Organize: organizeTally(plan.Profile, rep)})
 		return l.organizeReport(ctx, "", rep, plan), nil
 	}
 	pid, err := l.lib.RunOrganize(l.procCtx, sc.q, sc.opts)
@@ -700,7 +700,7 @@ func (l *Library) ApplyOrganize(ctx context.Context, uc *UserCtx, profile string
 // (finishOrganizeJob), so a request gone first leaves none of it undone.
 // This one returns once that is done, with what the run recorded; a run
 // that did not finish is a failure.
-func (l *Library) awaitOrganize(ctx context.Context, uc *UserCtx, pid model.PID, items []string) (*organize.RunResult, error) {
+func (l *Health) awaitOrganize(ctx context.Context, uc *UserCtx, pid model.PID, items []string) (*organize.RunResult, error) {
 	settled := l.recordStarter(ctx, uc, pid, items)
 	j, err := l.awaitJob(ctx, pid, 0, nil)
 	if err != nil {
@@ -722,7 +722,7 @@ func (l *Library) awaitOrganize(ctx context.Context, uc *UserCtx, pid model.PID,
 // organizeReport maps a run's report. plan is the dry run before it, which
 // names the item behind each held file; an undo has none, and its holds
 // name files alone.
-func (l *Library) organizeReport(ctx context.Context, pid model.PID, rep *organize.Report, plan *organize.Plan) OrganizeReportDTO {
+func (l *Health) organizeReport(ctx context.Context, pid model.PID, rep *organize.Report, plan *organize.Plan) OrganizeReportDTO {
 	out := OrganizeReportDTO{JobPID: entityAPIPID(PrefixJob, pid), Moved: rep.Moved, Skipped: rep.Skipped,
 		Held: rep.Held, Failed: rep.Errored, DirsPruned: rep.DirsPruned}
 	for _, f := range rep.Failures {
@@ -764,14 +764,14 @@ func (l *Library) organizeReport(ctx context.Context, pid model.PID, rep *organi
 // follower. It answers the request's part in that settle, once the run has
 // ended: settling it there, unless the follower or a waiter of its own got
 // there first, and waiting until it is done.
-func (l *Library) recordStarter(ctx context.Context, uc *UserCtx, pid model.PID, items []string) func(context.Context, *model.Job) error {
+func (l *Health) recordStarter(ctx context.Context, uc *UserCtx, pid model.PID, items []string) func(context.Context, *model.Job) error {
 	ctx = context.WithoutCancel(ctx)
 	o := wdb.JobOrigin{PID: string(pid), UserID: uc.ID, CreatedAtNS: time.Now().UnixNano()}
 	if len(items) > 0 {
 		o.Detail = marshalJSON(organizeOriginDetail{Items: items})
 	}
 	err := l.insertJobOrigin(ctx, o)
-	l.followJob(pid)
+	l.Jobs.followJob(pid)
 	if err != nil {
 		// Nothing durable names the starter yet: a waiter that outlives
 		// the request keeps trying the record, and settles the run.
@@ -796,17 +796,17 @@ func (l *Library) recordStarter(ctx context.Context, uc *UserCtx, pid model.PID,
 	// A run that ended before its record landed may have been read by the
 	// follower with no one to tell, so it is settled now.
 	if j, err := l.lib.Job(ctx, pid); err == nil && j.State != model.JobRunning {
-		l.settleLater(func(ctx context.Context) { l.settleJobOrigin(ctx, j) })
+		l.Jobs.settleLater(func(ctx context.Context) { l.Jobs.settleJobOrigin(ctx, j) })
 	}
 	return func(ctx context.Context, j *model.Job) error {
-		l.settleJobOrigin(ctx, j)
+		l.Jobs.settleJobOrigin(ctx, j)
 		return l.awaitSettled(ctx, pid)
 	}
 }
 
 // originInsert records who started a job: the database's insert, or a
 // test's stand-in.
-func (l *Library) originInsert() func(context.Context, wdb.JobOrigin) error {
+func (l *Health) originInsert() func(context.Context, wdb.JobOrigin) error {
 	if l.jobOriginInsertHook != nil {
 		return l.jobOriginInsertHook
 	}
@@ -815,7 +815,7 @@ func (l *Library) originInsert() func(context.Context, wdb.JobOrigin) error {
 
 // insertJobOrigin records who started a job, trying again for a moment: a
 // busy database's refusal is usually brief.
-func (l *Library) insertJobOrigin(ctx context.Context, o wdb.JobOrigin) error {
+func (l *Health) insertJobOrigin(ctx context.Context, o wdb.JobOrigin) error {
 	insert := l.originInsert()
 	for pause := 100 * time.Millisecond; ; pause *= 4 {
 		err := insert(ctx, o)
@@ -838,7 +838,7 @@ const (
 // A run that ends with none landed is settled here, from what this
 // process holds, so only a database that refused every write for the
 // whole run loses the run's bookkeeping to a stop.
-func (l *Library) settleUnrecorded(ctx context.Context, o wdb.JobOrigin) {
+func (l *Health) settleUnrecorded(ctx context.Context, o wdb.JobOrigin) {
 	insert := l.originInsert()
 	recorded := false
 	pause := originRetryFirst
@@ -861,7 +861,7 @@ func (l *Library) settleUnrecorded(ctx context.Context, o wdb.JobOrigin) {
 	if recorded || insert(ctx, o) == nil {
 		// The follower may have read the end before the record landed,
 		// with no one to tell; the claim keeps the settle once.
-		l.settleJobOrigin(ctx, j)
+		l.Jobs.settleJobOrigin(ctx, j)
 		if err := l.awaitSettled(ctx, j.PID); err != nil && ctx.Err() == nil {
 			l.log.Warn("waiting for an organize run's settle", "job", o.PID, "err", err)
 		}
@@ -871,8 +871,8 @@ func (l *Library) settleUnrecorded(ctx context.Context, o wdb.JobOrigin) {
 	ctx = context.WithoutCancel(ctx)
 	audit := l.finishOrganizeJob(ctx, o, j)
 	ended := []Job{jobDTO(j)}
-	l.nameJobTargets(ctx, ended)
-	l.notifyJobEnd(ctx, o.UserID, ended[0])
+	l.Jobs.nameJobTargets(ctx, ended)
+	l.Jobs.notifyJobEnd(ctx, o.UserID, ended[0])
 	if audit == nil {
 		return
 	}
@@ -883,7 +883,7 @@ func (l *Library) settleUnrecorded(ctx context.Context, o wdb.JobOrigin) {
 
 // awaitSettled waits until a job's end has been settled, by this request
 // or the follower, which drops its origin once done.
-func (l *Library) awaitSettled(ctx context.Context, pid model.PID) error {
+func (l *Health) awaitSettled(ctx context.Context, pid model.PID) error {
 	for pause := 10 * time.Millisecond; ; pause = min(2*pause, organizeJobAwaitCap) {
 		held, err := l.db.HasJobOrigin(ctx, string(pid))
 		if err != nil {
@@ -915,7 +915,7 @@ type organizeOriginDetail struct {
 // row, for a run that failed or was cut short too, as the account that
 // started it, which the settle writes with its own end; nil for a job of
 // another kind.
-func (l *Library) finishOrganizeJob(ctx context.Context, o wdb.JobOrigin, j *model.Job) *wdb.AuditEvent {
+func (l *Health) finishOrganizeJob(ctx context.Context, o wdb.JobOrigin, j *model.Job) *wdb.AuditEvent {
 	if j.Kind != "organize" && j.Kind != "organize-undo" {
 		return nil
 	}
@@ -956,7 +956,7 @@ func (l *Library) finishOrganizeJob(ctx context.Context, o wdb.JobOrigin, j *mod
 // this, so it never plans the whole library; and since each item it
 // re-checks was flagged, one that passes or is gone changed a row, the
 // only health news it sends.
-func (l *Library) recheckRunPaths(ctx context.Context, jobPID string, o wdb.JobOrigin) {
+func (l *Health) recheckRunPaths(ctx context.Context, jobPID string, o wdb.JobOrigin) {
 	var scope organizeOriginDetail
 	if o.Detail != "" {
 		if err := json.Unmarshal([]byte(o.Detail), &scope); err != nil {
@@ -978,14 +978,14 @@ func (l *Library) recheckRunPaths(ctx context.Context, jobPID string, o wdb.JobO
 	if res, err := l.recheckHealthRule(ctx, rulePathMismatch, items); err != nil {
 		l.log.Warn("organize: re-checking the path rule", "job", jobPID, "err", err)
 	} else if res.passing+res.gone > 0 {
-		l.emitEveryoneEvent(ctx, eventHealth)
+		l.Jobs.emitEveryoneEvent(ctx, eventHealth)
 	}
 }
 
 // journalCommitted is how many file moves the organize journal holds
 // committed for a run; 0 when it cannot say. The catalog reads one run's
 // count only as part of the whole listing, which the history keeps.
-func (l *Library) journalCommitted(ctx context.Context, pid model.PID) int {
+func (l *Health) journalCommitted(ctx context.Context, pid model.PID) int {
 	batches, err := l.organizeBatches(ctx)
 	if err != nil {
 		l.log.Warn("organize: reading a run's journal", "job", string(pid), "err", err)
@@ -999,13 +999,13 @@ func (l *Library) journalCommitted(ctx context.Context, pid model.PID) int {
 	return 0
 }
 
-// jobEndAudit is the audit row of a job's end, as Audit writes one, with
+// jobEndAudit is the audit row of a job's end, as Audit.Record writes one, with
 // the account that started the job as its actor (none when no one did).
-func (l *Library) jobEndAudit(ctx context.Context, userID, action string, target AuditTarget, detail map[string]any) *wdb.AuditEvent {
+func (l *Health) jobEndAudit(ctx context.Context, userID, action string, target AuditTarget, detail map[string]any) *wdb.AuditEvent {
 	e := &wdb.AuditEvent{Action: action, TargetKind: target.Kind, TargetPID: target.PID, TargetName: target.Name,
 		Detail: "{}", CreatedAtNS: time.Now().UnixNano()}
 	if userID != "" {
-		e.ActorID, e.ActorName = userID, l.usernameOf(ctx, userID)
+		e.ActorID, e.ActorName = userID, l.Audit.usernameOf(ctx, userID)
 	}
 	if raw, err := json.Marshal(detail); err == nil {
 		e.Detail = string(raw)
@@ -1026,7 +1026,7 @@ var errJobSilent = errors.New("the job stopped reporting progress")
 // answers the job as it ended. A job that reports nothing new for silence,
 // as the waiter's own clock measures it from the last change it saw, is
 // let go with errJobSilent; 0 waits for as long as its row says it runs.
-func (l *Library) awaitJob(ctx context.Context, pid model.PID, silence time.Duration, tick func(context.Context)) (*model.Job, error) {
+func (l *Health) awaitJob(ctx context.Context, pid model.PID, silence time.Duration, tick func(context.Context)) (*model.Job, error) {
 	if l.awaitJobHook != nil {
 		return l.awaitJobHook(ctx, pid, silence, tick)
 	}
@@ -1084,7 +1084,7 @@ func organizeRunResult(j *model.Job) *organize.RunResult {
 // the catalog's journal still holds, newest first by when each started, a
 // page of limit after cursor (every one when limit is not positive),
 // answering the next page's cursor ("" on the last). Administrators only.
-func (l *Library) OrganizeHistory(ctx context.Context, uc *UserCtx, cursor string, limit int) ([]OrganizeBatchDTO, string, error) {
+func (l *Health) OrganizeHistory(ctx context.Context, uc *UserCtx, cursor string, limit int) ([]OrganizeBatchDTO, string, error) {
 	if !uc.Admin {
 		return nil, "", &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -1141,16 +1141,14 @@ type organizeHistory struct {
 // organizeBatches is every run the organize journal holds, newest first by
 // when each started, listed again only once the catalog has changed since
 // the last listing. Callers share the slice and never change it.
-func (l *Library) organizeBatches(ctx context.Context) ([]model.OrganizeBatch, error) {
+func (l *Health) organizeBatches(ctx context.Context) ([]model.OrganizeBatch, error) {
 	// The position before the listing: a change during it only makes the
 	// next call list again.
 	seq, err := l.lib.LatestChangeSeq(ctx)
 	if err != nil {
 		return nil, classify(err)
 	}
-	l.feed.mu.Lock()
-	gen := l.feed.gen
-	l.feed.mu.Unlock()
+	gen := l.library.feedGeneration()
 	h := &l.history
 	h.mu.Lock()
 	if h.read && h.seq == seq && h.gen == gen {
@@ -1179,7 +1177,7 @@ func (l *Library) organizeBatches(ctx context.Context) ([]model.OrganizeBatch, e
 
 // forgetOrganizeHistory drops the kept listing after a change to the
 // journal the catalog records no change for: the scheduled prune.
-func (l *Library) forgetOrganizeHistory() {
+func (l *Health) forgetOrganizeHistory() {
 	h := &l.history
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -1191,14 +1189,14 @@ func (l *Library) forgetOrganizeHistory() {
 // undo lays out by none), decoding that one field of the run's report. A
 // finished run's is kept for the next listing, and only the listed runs'
 // are, so the memory is the listing's size.
-func (l *Library) runProfilesOf(ctx context.Context, batches []model.OrganizeBatch) map[model.PID]string {
+func (l *Health) runProfilesOf(ctx context.Context, batches []model.OrganizeBatch) map[model.PID]string {
 	return l.runProfilesWith(ctx, batches, l.lib.Job)
 }
 
 // runProfilesWith is runProfilesOf reading each run's job with read. The
 // lock guards the memory, never a read of the catalog, so listings do not
 // wait on each other's reads.
-func (l *Library) runProfilesWith(ctx context.Context, batches []model.OrganizeBatch,
+func (l *Health) runProfilesWith(ctx context.Context, batches []model.OrganizeBatch,
 	read func(context.Context, model.PID) (*model.Job, error)) map[model.PID]string {
 	kept := make(map[model.PID]string, len(batches))
 	var unread []model.PID
@@ -1235,7 +1233,7 @@ func (l *Library) runProfilesWith(ctx context.Context, batches []model.OrganizeB
 // UndoOrganize moves back what an organize run moved, as a catalog job of
 // its own, waits for it, and reports it as an applied pass. Administrators
 // only.
-func (l *Library) UndoOrganize(ctx context.Context, uc *UserCtx, apiJobPID string) (OrganizeReportDTO, error) {
+func (l *Health) UndoOrganize(ctx context.Context, uc *UserCtx, apiJobPID string) (OrganizeReportDTO, error) {
 	if !uc.Admin {
 		return OrganizeReportDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -1243,7 +1241,7 @@ func (l *Library) UndoOrganize(ctx context.Context, uc *UserCtx, apiJobPID strin
 	if !ok || prefix != PrefixJob {
 		return OrganizeReportDTO{}, errNotFound("no job with pid " + apiJobPID)
 	}
-	if err := l.CheckWritable(ctx, ""); err != nil {
+	if err := l.Settings.CheckWritable(ctx, ""); err != nil {
 		return OrganizeReportDTO{}, err
 	}
 	pid, err := l.lib.RunOrganizeUndo(l.procCtx, undone)

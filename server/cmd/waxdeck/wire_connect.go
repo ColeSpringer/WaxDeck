@@ -49,8 +49,8 @@ func startConnect(ctx context.Context, group *supervise.Group, casting castingCo
 		Sink:                 &api.ConnectSink{Svc: svc},
 		Bases:                bases,
 		InvalidatePlayer:     hub.MarkPlayerAll,
-		SharedOutputsAllowed: svc.UserSharedOutputsAllowed,
-		EntriesVisible:       svc.QueueEntriesVisible,
+		SharedOutputsAllowed: svc.Grants.UserSharedOutputsAllowed,
+		EntriesVisible:       svc.Playback.QueueEntriesVisible,
 		Logger:               log,
 	})
 	if err != nil {

@@ -15,7 +15,7 @@ func (s *Server) GetSimilarTracks(ctx context.Context, req GetSimilarTracksReque
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.svc.SimilarTracksFor(ctx, uc, req.Pid, limit)
+	res, err := s.svc.Similarity.SimilarTracksFor(ctx, uc, req.Pid, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (s *Server) CreateInstantMix(ctx context.Context, req CreateInstantMixReque
 		}
 		in.ExcludePIDs = *req.Body.ExcludePids
 	}
-	res, err := s.svc.InstantMix(ctx, uc, in)
+	res, err := s.svc.Similarity.InstantMix(ctx, uc, in)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func (s *Server) GetSonicPath(ctx context.Context, req GetSonicPathRequestObject
 			return nil, refuse(http.StatusBadRequest, "invalid-request", "length must be between 3 and 50")
 		}
 	}
-	res, err := s.svc.SonicPathFor(ctx, uc, req.Params.From, req.Params.To, length)
+	res, err := s.svc.Similarity.SonicPathFor(ctx, uc, req.Params.From, req.Params.To, length)
 	if err != nil {
 		return nil, err
 	}

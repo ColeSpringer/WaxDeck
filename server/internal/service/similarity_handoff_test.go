@@ -15,7 +15,7 @@ func sonicQueueFixture(t *testing.T) (context.Context, *Library, int) {
 	t.Helper()
 	ctx, svc, uc := newCatalogFixture(t)
 	enableSonicAnalysis(t, ctx, svc, uc)
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	queued := queueDepth(t, ctx, svc)
@@ -62,7 +62,7 @@ func TestTheEmbeddedAnalysisWaitsOutAHandOff(t *testing.T) {
 	handOff(t, ctx, svc, false)
 
 	an := &windowAnalyzer{}
-	if worked, err := svc.DrainEmbeddedAnalysis(ctx, an); worked || err != nil {
+	if worked, err := svc.Similarity.DrainEmbeddedAnalysis(ctx, an); worked || err != nil {
 		t.Errorf("drain during the hand-off = %v, %v; want it idle", worked, err)
 	}
 	if got := unleased(t, ctx, svc); got != queued {
@@ -78,7 +78,7 @@ func TestAHandOffBeginningMidBatchDropsNoSonicAnalysis(t *testing.T) {
 	handOff(t, ctx, svc, true)
 
 	an := &windowAnalyzer{}
-	if _, err := svc.DrainEmbeddedAnalysis(ctx, an); KindOf(err) != KindMaintenance {
+	if _, err := svc.Similarity.DrainEmbeddedAnalysis(ctx, an); KindOf(err) != KindMaintenance {
 		t.Errorf("drain during the hand-off: %v, want a catalog-maintenance failure", err)
 	}
 	if got := queueDepth(t, ctx, svc); got != queued {
@@ -99,7 +99,7 @@ func TestAHandOffBeginningBetweenTheReadsDropsNoSonicAnalysis(t *testing.T) {
 	}
 
 	an := &windowAnalyzer{}
-	if _, err := svc.DrainEmbeddedAnalysis(ctx, an); KindOf(err) != KindMaintenance {
+	if _, err := svc.Similarity.DrainEmbeddedAnalysis(ctx, an); KindOf(err) != KindMaintenance {
 		t.Errorf("drain during the hand-off: %v, want a catalog-maintenance failure", err)
 	}
 	if got := queueDepth(t, ctx, svc); got != queued {
@@ -120,7 +120,7 @@ func TestAFailedFileReadDropsNoSonicAnalysis(t *testing.T) {
 	}
 
 	an := &windowAnalyzer{}
-	if _, err := svc.DrainEmbeddedAnalysis(ctx, an); err != nil {
+	if _, err := svc.Similarity.DrainEmbeddedAnalysis(ctx, an); err != nil {
 		t.Errorf("drain with unreadable files: %v, want the batch to go on", err)
 	}
 	if got := queueDepth(t, ctx, svc); got != queued {
@@ -159,7 +159,7 @@ func TestAnUnreadableFileLeavesTheRestOfASonicBatchServed(t *testing.T) {
 		return read(ctx, pid)
 	}
 
-	if worked, err := svc.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{}); !worked || err != nil {
+	if worked, err := svc.Similarity.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{}); !worked || err != nil {
 		t.Fatalf("drain = %v, %v; want the batch served", worked, err)
 	}
 	if got := embeddingCount(t, ctx, svc); got != queued-1 {
@@ -185,7 +185,7 @@ func TestAnUnreadableItemLeavesTheRestOfASonicBatchServed(t *testing.T) {
 		return read(ctx, pid)
 	}
 
-	if worked, err := svc.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{}); !worked || err != nil {
+	if worked, err := svc.Similarity.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{}); !worked || err != nil {
 		t.Fatalf("drain = %v, %v; want the batch served", worked, err)
 	}
 	if got := embeddingCount(t, ctx, svc); got != queued-1 {
@@ -212,7 +212,7 @@ func TestAnUnreadableItemLeavesTheRestOfASimilarityLeaseServed(t *testing.T) {
 		return read(ctx, pid)
 	}
 
-	work, err := svc.LeaseSimilarityWork(ctx, 50, true)
+	work, err := svc.Similarity.LeaseSimilarityWork(ctx, 50, true)
 	if err != nil {
 		t.Fatalf("lease: %v, want the batch served", err)
 	}
@@ -249,7 +249,7 @@ func TestACancelledLeaseStopsReadingItsBatch(t *testing.T) {
 		return nil, reqCtx.Err()
 	}
 
-	work, err := svc.LeaseSimilarityWork(reqCtx, 50, true)
+	work, err := svc.Similarity.LeaseSimilarityWork(reqCtx, 50, true)
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("lease of a cancelled request: %v, want the cancellation", err)
 	}
@@ -296,7 +296,7 @@ func TestAnUnreadableRowIsPacedLikeAnAnalyzedOne(t *testing.T) {
 				}
 			})
 
-			if _, err := svc.DrainEmbeddedAnalysis(drainCtx, &windowAnalyzer{}); err != nil {
+			if _, err := svc.Similarity.DrainEmbeddedAnalysis(drainCtx, &windowAnalyzer{}); err != nil {
 				t.Fatal(err)
 			}
 			if len(at) != 2 {
@@ -316,7 +316,7 @@ func TestTheSimilarityLeaseWaitsOutAHandOff(t *testing.T) {
 	ctx, svc, queued := sonicQueueFixture(t)
 	handOff(t, ctx, svc, false)
 
-	if work, err := svc.LeaseSimilarityWork(ctx, 50, true); err != nil || len(work) != 0 {
+	if work, err := svc.Similarity.LeaseSimilarityWork(ctx, 50, true); err != nil || len(work) != 0 {
 		t.Errorf("lease during the hand-off = %v, %v; want nothing", work, err)
 	}
 	if got := unleased(t, ctx, svc); got != queued {
@@ -331,7 +331,7 @@ func TestAHandOffBeginningMidLeaseDropsNoSimilarityWork(t *testing.T) {
 	ctx, svc, queued := sonicQueueFixture(t)
 	handOff(t, ctx, svc, true)
 
-	if _, err := svc.LeaseSimilarityWork(ctx, 50, true); KindOf(err) != KindMaintenance {
+	if _, err := svc.Similarity.LeaseSimilarityWork(ctx, 50, true); KindOf(err) != KindMaintenance {
 		t.Errorf("lease during the hand-off: %v, want a catalog-maintenance failure", err)
 	}
 	if got := queueDepth(t, ctx, svc); got != queued {
@@ -363,7 +363,7 @@ func TestAVanishedTrackLeavesTheAnalysisQueue(t *testing.T) {
 
 	enqueue("ghost-drained")
 	for {
-		worked, err := svc.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{})
+		worked, err := svc.Similarity.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -376,7 +376,7 @@ func TestAVanishedTrackLeavesTheAnalysisQueue(t *testing.T) {
 	}
 
 	enqueue("ghost-leased")
-	work, err := svc.LeaseSimilarityWork(ctx, 50, true)
+	work, err := svc.Similarity.LeaseSimilarityWork(ctx, 50, true)
 	if err != nil {
 		t.Fatal(err)
 	}

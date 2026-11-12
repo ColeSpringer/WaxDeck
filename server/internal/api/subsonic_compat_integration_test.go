@@ -475,10 +475,10 @@ func TestSubsonicIndexesLastModifiedMovesWithContentOnly(t *testing.T) {
 	// read past the last row that changed content, and the feed's own
 	// position until then. A star after the first look puts a row past
 	// that one, so a position below the feed's is the content position.
-	h.svc.CatalogContentSeq(ctx)
+	h.svc.Reads.CatalogContentSeq(ctx)
 	mustOK(t, h, secret, "test", "star", "&id="+track)
 	deadline := time.Now().Add(30 * time.Second)
-	for feed := h.svc.CatalogTailSeq(); h.svc.CatalogContentSeq(ctx) >= feed; feed = h.svc.CatalogTailSeq() {
+	for feed := h.svc.CatalogTailSeq(); h.svc.Reads.CatalogContentSeq(ctx) >= feed; feed = h.svc.CatalogTailSeq() {
 		if time.Now().After(deadline) {
 			t.Fatal("the change feed never read past the catalog's last content change")
 		}

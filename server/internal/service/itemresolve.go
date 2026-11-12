@@ -25,7 +25,7 @@ const maxItemLookup = 100
 // the re-add brings back. One out of the caller's sight, a grant or a
 // content rule away, is left out unnamed, because each of those can end
 // with the item back, and a client dropping it would turn that into a loss.
-func (l *Library) ResolveItems(ctx context.Context, uc *UserCtx, apiPIDs []string) ([]ItemSummary, []string, error) {
+func (l *Reads) ResolveItems(ctx context.Context, uc *UserCtx, apiPIDs []string) ([]ItemSummary, []string, error) {
 	if len(apiPIDs) > maxItemLookup {
 		return nil, nil, errInvalid(fmt.Sprintf("at most %d pids", maxItemLookup))
 	}
@@ -53,13 +53,13 @@ func (l *Library) ResolveItems(ctx context.Context, uc *UserCtx, apiPIDs []strin
 	for _, v := range views {
 		read = append(read, v)
 	}
-	verdicts, err := l.tagVerdicts(ctx, uc, read)
+	verdicts, err := l.Grants.tagVerdicts(ctx, uc, read)
 	if err != nil {
 		return nil, nil, err
 	}
 	shown := make(map[model.PID]bool, len(views))
 	for pid, v := range views {
-		shown[pid] = l.viewVisible(ctx, uc, v) && l.contentAllows(ctx, uc, verdicts, v)
+		shown[pid] = l.Grants.viewVisible(ctx, uc, v) && l.Grants.contentAllows(ctx, uc, verdicts, v)
 	}
 
 	out := make([]ItemSummary, 0, len(asks))

@@ -27,7 +27,7 @@ func (s *Server) serveJoinedMP3(w http.ResponseWriter, r *http.Request, pid, mt 
 	if _, _, ok := s.verifiedMedia(w, r, mt, auth.MediaWant{Purposes: purposes, PID: pid, Shape: service.JoinShape}); !ok {
 		return
 	}
-	parts, err := s.svc.StreamParts(r.Context(), pid)
+	parts, err := s.svc.Playback.StreamParts(r.Context(), pid)
 	if err != nil {
 		refuseJoin(w, s.kindOf(err))
 		return

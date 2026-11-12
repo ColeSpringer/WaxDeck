@@ -13,7 +13,7 @@ import (
 // sweepWoken reports, and consumes, a pending wakeup of the sweep loop.
 func sweepWoken(svc *Library) bool {
 	select {
-	case <-svc.simWake:
+	case <-svc.Similarity.simWake:
 		return true
 	default:
 		return false
@@ -27,7 +27,7 @@ func startSweeps(t *testing.T, ctx context.Context, svc *Library, s similaritySc
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_ = svc.runSimilaritySweeps(loopCtx, s)
+		_ = svc.Similarity.runSimilaritySweeps(loopCtx, s)
 	}()
 	t.Cleanup(func() { stop(); <-done })
 }
@@ -89,7 +89,7 @@ func TestAScannedTrackIsQueuedWithoutWaitingForTheBackstop(t *testing.T) {
 		extra: func(_ *testing.T, dir string) { libDir = dir },
 	})
 	enableSonicAnalysis(t, ctx, svc, uc)
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	queued := queueDepth(t, ctx, svc)
@@ -127,7 +127,7 @@ func TestASweepWaitsForArrivalsToStop(t *testing.T) {
 	ctx, svc, _ := quietFixture(t, true)
 	startSweeps(t, ctx, svc, similaritySchedule{first: time.Hour, settle: 500 * time.Millisecond, backstop: time.Hour})
 	for end := time.Now().Add(1500 * time.Millisecond); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
-		svc.similarityWakeup()
+		svc.Similarity.wakeup()
 	}
 	if depth := queueDepth(t, ctx, svc); depth != 0 {
 		t.Fatalf("queue depth %d while arrivals kept coming, want no sweep yet", depth)
@@ -149,7 +149,7 @@ func TestTheBackstopSweepsAScanThatNeverGoesQuiet(t *testing.T) {
 			case <-stop:
 				return
 			case <-time.After(20 * time.Millisecond):
-				svc.similarityWakeup()
+				svc.Similarity.wakeup()
 			}
 		}
 	}()
@@ -165,8 +165,8 @@ func TestASweepHeldOffByMaintenanceRunsWhenItEnds(t *testing.T) {
 	gen := svc.suspendGen.Add(1)
 	svc.maintenance.Store(true)
 	startSweeps(t, ctx, svc, similaritySchedule{first: time.Hour, settle: 20 * time.Millisecond, backstop: time.Hour})
-	svc.similarityWakeup()
-	waitFor(t, func() bool { return len(svc.simWake) == 0 }, "the loop taking the wakeup")
+	svc.Similarity.wakeup()
+	waitFor(t, func() bool { return len(svc.Similarity.simWake) == 0 }, "the loop taking the wakeup")
 	time.Sleep(200 * time.Millisecond) // ten settles: its sweep has found the hand-off
 	if depth := queueDepth(t, ctx, svc); depth != 0 {
 		t.Fatalf("queue depth %d during the hand-off, want none", depth)

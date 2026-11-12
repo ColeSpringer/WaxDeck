@@ -52,11 +52,11 @@ func transcriptShow(t *testing.T, docs ...transcriptDoc) (context.Context, *Libr
 		cfg.PodcastRootName = "podcasts"
 		cfg.AllowPrivateFeedHosts = true
 	})
-	sub, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: ts.URL + "/feed.xml"})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: ts.URL + "/feed.xml"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	eps, _, err := svc.Episodes(ctx, uc, sub.Show.PID, "", 50)
+	eps, _, err := svc.Podcasts.Episodes(ctx, uc, sub.Show.PID, "", 50)
 	if err != nil || len(eps) != len(docs) {
 		t.Fatalf("episodes = %d (%v), want %d", len(eps), err, len(docs))
 	}
@@ -93,7 +93,7 @@ func TestAnOversizedTranscriptIsRefusedAndNotKept(t *testing.T) {
 	docs := []transcriptDoc{vttDoc(tiny), vttDoc(vttOf(40_000, strings.Repeat("y", 120)))}
 	ctx, svc, uc, pids, _ := transcriptShow(t, docs...)
 	for i, pid := range pids {
-		_, err := svc.Transcript(ctx, uc, pid)
+		_, err := svc.Podcasts.Transcript(ctx, uc, pid)
 		var se *Error
 		if !errors.As(err, &se) || se.Kind != KindUpstream || FeedFailureReason(err) != reasonTooLarge ||
 			se.Msg != transcriptSentences[reasonTooLarge] {
@@ -122,7 +122,7 @@ func TestTheTranscriptCacheHoldsItsBound(t *testing.T) {
 	}
 	read := func(i int) {
 		t.Helper()
-		if tx, err := svc.Transcript(ctx, uc, pids[i]); err != nil || len(tx.Cues) != 20 {
+		if tx, err := svc.Podcasts.Transcript(ctx, uc, pids[i]); err != nil || len(tx.Cues) != 20 {
 			t.Fatalf("transcript %d = %d cues (%v)", i, len(tx.Cues), err)
 		}
 	}
@@ -131,7 +131,7 @@ func TestTheTranscriptCacheHoldsItsBound(t *testing.T) {
 	if err != nil || one == 0 {
 		t.Fatalf("one row = %d bytes (%v)", one, err)
 	}
-	svc.transcriptCacheBytes = 2*one + one/2
+	svc.Podcasts.transcriptCacheBytes = 2*one + one/2
 	read(1)
 	ago := func(d time.Duration) int64 { return time.Now().Add(-d).UnixNano() }
 	if err := svc.db.TouchTranscriptCache(ctx, bare[0], ago(3*time.Hour)); err != nil {
@@ -151,8 +151,8 @@ func TestTheTranscriptCacheHoldsItsBound(t *testing.T) {
 			t.Errorf("transcript %d kept = %v, want %v", i, kept, want)
 		}
 	}
-	if _, size, err := svc.db.TranscriptCacheSize(ctx); err != nil || size > svc.transcriptCacheBytes {
-		t.Errorf("cache = %d bytes (%v), want at most %d", size, err, svc.transcriptCacheBytes)
+	if _, size, err := svc.db.TranscriptCacheSize(ctx); err != nil || size > svc.Podcasts.transcriptCacheBytes {
+		t.Errorf("cache = %d bytes (%v), want at most %d", size, err, svc.Podcasts.transcriptCacheBytes)
 	}
 }
 
@@ -176,7 +176,7 @@ func TestATranscriptPastTheCueCapIsRefused(t *testing.T) {
 	}
 	ctx, svc, uc, pids, _ := transcriptShow(t, docs...)
 	for i, pid := range pids {
-		_, err := svc.Transcript(ctx, uc, pid)
+		_, err := svc.Podcasts.Transcript(ctx, uc, pid)
 		if FeedFailureReason(err) != reasonTooLarge {
 			t.Errorf("%s document of %d cues: %v, want the too-large refusal", docs[i].typ, transcriptMaxCues+1, err)
 		}
@@ -187,7 +187,7 @@ func TestATranscriptPastTheCueCapIsRefused(t *testing.T) {
 	}
 	at := vttDoc(vttOf(transcriptMaxCues, "word"))
 	ctx, svc, uc, pids, _ = transcriptShow(t, at)
-	if tx, err := svc.Transcript(ctx, uc, pids[0]); err != nil || len(tx.Cues) != transcriptMaxCues {
+	if tx, err := svc.Podcasts.Transcript(ctx, uc, pids[0]); err != nil || len(tx.Cues) != transcriptMaxCues {
 		t.Errorf("a document at the cap = %d cues (%v), want all %d", len(tx.Cues), err, transcriptMaxCues)
 	}
 }
@@ -212,7 +212,7 @@ func TestACachedRowPastTheCapIsNotDecoded(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := fetched.Load()
-	tx, err := svc.Transcript(ctx, uc, pids[0])
+	tx, err := svc.Podcasts.Transcript(ctx, uc, pids[0])
 	if err != nil || len(tx.Cues) != 1 || tx.Cues[0].Text != "fresh" {
 		t.Fatalf("transcript = %d cues (%v), want the one fetched again", len(tx.Cues), err)
 	}

@@ -15,7 +15,7 @@ import (
 // many items it lets through, which also proves the node compiles.
 func scopedCount(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) (query.Query, int) {
 	t.Helper()
-	q := visibleItems().WhereNode(svc.callerScopeNode(ctx, uc, svc.newSubscriptionFilter(uc), true)).Build()
+	q := visibleItems().WhereNode(svc.Playlists.callerScopeNode(ctx, uc, svc.Podcasts.newSubscriptionFilter(uc), true)).Build()
 	page, err := svc.lib.QueryPage(ctx, q, "", 100, false, model.PID(uc.CatalogPID))
 	if err != nil {
 		t.Fatalf("running the caller scope: %v", err)
@@ -97,7 +97,7 @@ func TestCallerScopeNodeChunksPast500Shows(t *testing.T) {
 
 	// The followed-episodes shelves scope by the same set and compile too.
 	for _, f := range []SubscribedEpisodeFilter{EpisodesLatest, EpisodesUnplayed, EpisodesInProgress} {
-		if _, _, err := svc.SubscribedEpisodes(ctx, uc, f, "", 20); err != nil {
+		if _, _, err := svc.Podcasts.SubscribedEpisodes(ctx, uc, f, "", 20); err != nil {
 			t.Errorf("%s episodes for a follower of 1001 shows: %v", f, err)
 		}
 	}
@@ -121,8 +121,8 @@ func TestListingQueryReadsTheFollowSetOnlyWhereEpisodesCanList(t *testing.T) {
 		{"audiobooks", ItemFilter{MediaType: "audiobook"}, false},
 		{"an artist", ItemFilter{Facet: "artist", FacetKey: "ar-unknown"}, false},
 	} {
-		subs := svc.newSubscriptionFilter(uc)
-		b, _, err := svc.listingQuery(ctx, uc, visibleItems(), tc.filter, subs)
+		subs := svc.Podcasts.newSubscriptionFilter(uc)
+		b, _, err := svc.Reads.listingQuery(ctx, uc, visibleItems(), tc.filter, subs)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.name, err)
 		}

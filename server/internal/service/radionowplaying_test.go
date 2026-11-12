@@ -158,8 +158,8 @@ func TestRadioNowPlayingItemAnswersOnlyATrackWithACover(t *testing.T) {
 		{"Nobody At All - Nothing Here", ""},
 	}
 	for _, tc := range cases {
-		if got := svc.RadioNowPlayingItem(ctx, uc, "rs-01TEST", "Deck FM", tc.line); got != tc.want {
-			t.Errorf("RadioNowPlayingItem(%q) = %q, want %q", tc.line, got, tc.want)
+		if got := svc.Radio.NowPlayingItem(ctx, uc, "rs-01TEST", "Deck FM", tc.line); got != tc.want {
+			t.Errorf("NowPlayingItem(%q) = %q, want %q", tc.line, got, tc.want)
 		}
 	}
 }
@@ -175,10 +175,10 @@ func TestRadioNowPlayingItemDoesNotKeepAFailedRead(t *testing.T) {
 
 	gone, cancel := context.WithCancel(ctx)
 	cancel()
-	if got := svc.RadioNowPlayingItem(gone, uc, "rs-01TEST", "Deck FM", line); got != "" {
+	if got := svc.Radio.NowPlayingItem(gone, uc, "rs-01TEST", "Deck FM", line); got != "" {
 		t.Fatalf("a cancelled read answered %q", got)
 	}
-	if got := svc.RadioNowPlayingItem(ctx, uc, "rs-01TEST", "Deck FM", line); got != covered {
+	if got := svc.Radio.NowPlayingItem(ctx, uc, "rs-01TEST", "Deck FM", line); got != covered {
 		t.Fatalf("after a failed read the title answered %q, want %q", got, covered)
 	}
 }
@@ -189,7 +189,7 @@ func TestHasFrontArtReadsNotFoundAsNoCover(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	for _, pid := range []string{"zz-not-a-pid", "tr-01M3DWQMGG0MMBGARZ8K6RMV4Z"} {
-		if has, err := svc.hasFrontArt(ctx, pid); err != nil || has {
+		if has, err := svc.Radio.hasFrontArt(ctx, pid); err != nil || has {
 			t.Errorf("hasFrontArt(%q) = %v, %v; want false, nil", pid, has, err)
 		}
 	}
@@ -197,7 +197,7 @@ func TestHasFrontArtReadsNotFoundAsNoCover(t *testing.T) {
 
 func itemPIDByTitle(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, title string) string {
 	t.Helper()
-	page, err := svc.Items(ctx, uc, ItemFilter{}, "", 50)
+	page, err := svc.Reads.Items(ctx, uc, ItemFilter{}, "", 50)
 	if err != nil {
 		t.Fatalf("listing items: %v", err)
 	}

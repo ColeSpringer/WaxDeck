@@ -80,28 +80,28 @@ func TestFeedTitlesAreClippedWhereverTheyAreShown(t *testing.T) {
 		clipped(what, rest, full)
 	}
 
-	sub, _, err := svc.Subscribe(ctx, admin, SubscribeRequest{URL: host.URL + "/feed.xml"})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, admin, SubscribeRequest{URL: host.URL + "/feed.xml"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	clipped("the subscribe answer", sub.Show.Title, showTitle)
-	detail, err := svc.PodcastDetailFor(ctx, admin, sub.Show.PID)
+	detail, err := svc.Podcasts.DetailFor(ctx, admin, sub.Show.PID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	clipped("the show detail", detail.Show.Title, showTitle)
-	subs, _, err := svc.Subscriptions(ctx, admin, "", 10, false)
+	subs, _, err := svc.Podcasts.Subscriptions(ctx, admin, "", 10, false)
 	if err != nil || len(subs) != 1 {
 		t.Fatalf("subscriptions = %+v (%v), want one", subs, err)
 	}
 	clipped("the subscription list", subs[0].Show.Title, showTitle)
-	cards, _, err := svc.EntityCards(ctx, admin, []string{sub.Show.PID})
+	cards, _, err := svc.Reads.EntityCards(ctx, admin, []string{sub.Show.PID})
 	if err != nil || len(cards) != 1 {
 		t.Fatalf("cards = %+v (%v), want the show's", cards, err)
 	}
 	clipped("the show's card", cards[0].Title, showTitle)
 
-	eps, _, err := svc.Episodes(ctx, admin, sub.Show.PID, "", 10)
+	eps, _, err := svc.Podcasts.Episodes(ctx, admin, sub.Show.PID, "", 10)
 	if err != nil || len(eps) != 1 {
 		t.Fatalf("episodes = %+v (%v), want one", eps, err)
 	}
@@ -109,12 +109,12 @@ func TestFeedTitlesAreClippedWhereverTheyAreShown(t *testing.T) {
 	clipped("the episode row", ep.Title, episodeTitle)
 	clipped("the episode row's show", ep.Artist, showTitle)
 	clipped("the episode row's album", ep.Album, showTitle)
-	epDetail, err := svc.EpisodeDetailFor(ctx, admin, ep.PID)
+	epDetail, err := svc.Podcasts.EpisodeDetailFor(ctx, admin, ep.PID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	clipped("the episode detail", epDetail.Title, episodeTitle)
-	found, err := svc.Search(ctx, admin, "zebra", 10)
+	found, err := svc.Reads.Search(ctx, admin, "zebra", 10)
 	if err != nil || len(found.Episodes) != 1 {
 		t.Fatalf("search = %+v (%v), want the episode", found.Episodes, err)
 	}
@@ -128,24 +128,24 @@ func TestFeedTitlesAreClippedWhereverTheyAreShown(t *testing.T) {
 	row := summary(it)
 	clipped("an item row", row.Title, episodeTitle)
 	clipped("an item row's artist", row.Artist, showTitle)
-	queue, err := svc.QueueEntries(ctx, admin.ID, []string{ep.PID})
+	queue, err := svc.Playback.QueueEntries(ctx, admin.ID, []string{ep.PID})
 	if err != nil || len(queue) != 1 {
 		t.Fatalf("queue = %+v (%v), want the episode", queue, err)
 	}
 	clipped("the queue entry", queue[0].Title, episodeTitle)
 	clipped("the queue entry's artist", queue[0].Artist, showTitle)
 
-	share, err := svc.CreateShare(ctx, admin, ep.PID, 0, false, 0)
+	share, err := svc.Reads.CreateShare(ctx, admin, ep.PID, 0, false, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	clipped("the new share", share.TargetTitle, episodeTitle)
-	shares, err := svc.Shares(ctx, admin, false, "", 10)
+	shares, err := svc.Reads.Shares(ctx, admin, false, "", 10)
 	if err != nil || len(shares.Shares) != 1 {
 		t.Fatalf("shares = %+v (%v), want one", shares, err)
 	}
 	clipped("the share listing", shares.Shares[0].TargetTitle, episodeTitle)
-	public, err := svc.ResolveShare(ctx, strings.TrimPrefix(share.ID, "sh-"))
+	public, err := svc.Reads.ResolveShare(ctx, strings.TrimPrefix(share.ID, "sh-"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,31 +156,31 @@ func TestFeedTitlesAreClippedWhereverTheyAreShown(t *testing.T) {
 		ItemPID: string(bareEp), MediaType: "podcast", StartedAt: time.Now().Add(-time.Minute), MsPlayed: 60_000}}); err != nil {
 		t.Fatal(err)
 	}
-	log, err := svc.ListenLog(ctx, admin, "", "", 10)
+	log, err := svc.Reads.ListenLog(ctx, admin, "", "", 10)
 	if err != nil || len(log.Sessions) != 1 {
 		t.Fatalf("listening log = %+v (%v), want the session", log, err)
 	}
 	clipped("the listening log", log.Sessions[0].Title, episodeTitle)
 	clipped("the listening log's artist", log.Sessions[0].Artist, showTitle)
-	top, err := svc.TopListFor(ctx, admin, "shows", "30d", 10)
+	top, err := svc.Reads.TopListFor(ctx, admin, "shows", "30d", 10)
 	if err != nil || len(top.Entries) != 1 {
 		t.Fatalf("top shows = %+v (%v), want the show", top, err)
 	}
 	clipped("the top shows", top.Entries[0].Name, showTitle)
 
-	if err := svc.QueueEpisodeFetch(ctx, admin, ep.PID); err != nil {
+	if err := svc.Podcasts.QueueEpisodeFetch(ctx, admin, ep.PID); err != nil {
 		t.Fatal(err)
 	}
-	svc.DrainFetchQueue(ctx)
+	svc.Podcasts.DrainFetchQueue(ctx)
 	_, bareShow, _ := parseAPIPID(sub.Show.PID)
-	if _, err := svc.syncShow(ctx, bareShow, syncOwn); err != nil {
+	if _, err := svc.Podcasts.syncShow(ctx, bareShow, syncOwn); err != nil {
 		t.Fatal(err)
 	}
 	broken.Store(1)
 	for range feedDisableAfter {
-		_, _ = svc.syncShow(ctx, bareShow, syncOwn)
+		_, _ = svc.Podcasts.syncShow(ctx, bareShow, syncOwn)
 	}
-	page, err := svc.Notifications(ctx, admin, "", 100)
+	page, err := svc.Integrations.Notifications(ctx, admin, "", 100)
 	if err != nil {
 		t.Fatal(err)
 	}

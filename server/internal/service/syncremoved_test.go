@@ -35,19 +35,19 @@ func newRemovedFixture(t *testing.T) removedFixture {
 		t.Fatalf("snapshot = %d entries (%v), want 4", len(snap.Entries), err)
 	}
 	f.snapshot = snap.NextSince
-	if _, err := svc.DeleteItems(ctx, admin, []string{f.trashed, f.purged}, "trash", false); err != nil {
+	if _, err := svc.Tools.DeleteItems(ctx, admin, []string{f.trashed, f.purged}, "trash", false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.DeleteItems(ctx, admin, []string{f.erased}, "permanent", false); err != nil {
+	if _, err := svc.Tools.DeleteItems(ctx, admin, []string{f.erased}, "permanent", false); err != nil {
 		t.Fatal(err)
 	}
-	entries, err := svc.TrashEntries(ctx, admin, false, 100)
+	entries, err := svc.Tools.TrashEntries(ctx, admin, false, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
 		if e.ItemPID == f.purged {
-			if _, err := svc.PurgeTrashEntry(ctx, admin, e.ID); err != nil {
+			if _, err := svc.Tools.PurgeTrashEntry(ctx, admin, e.ID); err != nil {
 				t.Fatal(err)
 			}
 			return f
@@ -118,7 +118,7 @@ func TestRemovedItemsFollowTheDeltasTombstoneRule(t *testing.T) {
 // sat there, and is once the journal no longer holds it.
 func TestRemovedItemsFollowTheTrashJournal(t *testing.T) {
 	f := newRemovedFixture(t)
-	entries, err := f.svc.TrashEntries(f.ctx, f.admin, false, 100)
+	entries, err := f.svc.Tools.TrashEntries(f.ctx, f.admin, false, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestRemovedItemsFollowTheTrashJournal(t *testing.T) {
 	if got, err := f.svc.RemovedItems(f.ctx, []string{f.trashed}); err != nil || len(got) != 0 {
 		t.Fatalf("a restorable item was named: %v (%v)", got, err)
 	}
-	if _, err := f.svc.PurgeTrashEntry(f.ctx, f.admin, entry); err != nil {
+	if _, err := f.svc.Tools.PurgeTrashEntry(f.ctx, f.admin, entry); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := f.svc.RemovedItems(f.ctx, []string{f.trashed}); err != nil || !slices.Equal(got, []string{f.trashed}) {

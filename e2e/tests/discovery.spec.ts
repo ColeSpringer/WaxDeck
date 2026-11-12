@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures';
 import { J, T } from './driver';
+import { MediaTraffic } from './support/media';
 
 // The discovery slice over the real stack: an instant mix started from
 // a playing track in the browser, the sonic surfaces (similar tracks
@@ -45,7 +46,11 @@ test('an instant mix starts from any playing track', async ({ app }) => {
   // the seed mixable. On this library those rows are the only mixable
   // tracks there are: any mix at all is drawn from played history,
   // which is the reopened pool this spec pins. Paused at once so the
-  // second-long fixture tracks cannot march the queue while it runs.
+  // second-long fixture tracks cannot march the queue while it runs, and
+  // held mid-fetch for the rest of the test, so the seed cannot run out
+  // before the pause lands on it; nothing after the pause plays it.
+  const traffic = await MediaTraffic.watch(app.page);
+  await traffic.holdFromTop(app.seed, pid);
   await app.nav.enter('tracks');
   await app.music.play(pid);
   await app.player.pause();
@@ -85,12 +90,16 @@ test('sonic coverage answers similar tracks and a sonic path', async ({ app }) =
   // just proved has neighbours: the list screen and the basis chip it
   // draws are shared with the instant mix, which reaches them from the
   // home shelf rather than from the player.
+  //
+  // Paused, like the sibling above, and held mid-fetch the same way: the
+  // fixture tracks are seconds long, and similar-tracks reads the
+  // player's current item - a queue still marching could hand it a
+  // neighbour with no proven coverage. pause() also expands the player,
+  // which runSimilarTracks needs.
+  const traffic = await MediaTraffic.watch(app.page);
+  await traffic.holdFromTop(app.seed, charlie);
   await app.nav.enter('tracks');
   await app.music.play(charlie);
-  // Paused, like the sibling above: the fixture tracks are seconds
-  // long, and similar-tracks reads the player's current item - a queue
-  // still marching could hand it a neighbour with no proven coverage.
-  // pause() also expands the player, which runSimilarTracks needs.
   await app.player.pause();
   await app.discovery.runSimilarTracks();
   // Sonic exactly, not either engine: the seed is the item the API

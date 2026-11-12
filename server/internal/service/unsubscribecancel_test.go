@@ -13,7 +13,7 @@ import (
 // the package's membership hook.
 func TestAnUnsubscribeCanceledRightAfterItsCommitFilesItsEvent(t *testing.T) {
 	ctx, svc, uc, feed := openPodcastFixture(t)
-	if _, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: feed}); err != nil {
+	if _, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: feed}); err != nil {
 		t.Fatal(err)
 	}
 	shows, err := svc.db.SubscribedShowPIDsByUser(ctx, uc.ID)
@@ -28,7 +28,7 @@ func TestAnUnsubscribeCanceledRightAfterItsCommitFilesItsEvent(t *testing.T) {
 		}
 	}
 	t.Cleanup(func() { testHookMembership = nil })
-	if err := svc.Unsubscribe(req, uc, apiPID(PrefixPodcast, model.PID(shows[0])), false); err != nil {
+	if err := svc.Podcasts.Unsubscribe(req, uc, apiPID(PrefixPodcast, model.PID(shows[0])), false); err != nil {
 		t.Errorf("an unsubscribe canceled past its commit = %v, want it done", err)
 	}
 	testHookMembership = nil

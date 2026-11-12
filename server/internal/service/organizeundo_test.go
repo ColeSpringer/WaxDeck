@@ -11,14 +11,12 @@ import (
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/organize"
-
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // auditDetail is the newest audit row of action, which has to exist.
 func auditDetail(t *testing.T, ctx context.Context, svc *Library, action string) map[string]any {
 	t.Helper()
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: action}, "", 10)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: action}, "", 10)
 	if err != nil || len(page.Events) == 0 {
 		t.Fatalf("audit %s = %+v (%v), want a row", action, page.Events, err)
 	}
@@ -31,14 +29,14 @@ func auditDetail(t *testing.T, ctx context.Context, svc *Library, action string)
 func TestApplyAnswersItsJobAndHistoryListsIt(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, path, _ := managedTrackFixture(t)
-	rep, err := svc.ApplyOrganize(ctx, uc, "", nil)
+	rep, err := svc.Health.ApplyOrganize(ctx, uc, "", nil)
 	if err != nil || rep.Moved != 1 || !strings.HasPrefix(rep.JobPID, PrefixJob+"-") {
 		t.Fatalf("apply = %+v (%v), want the track moved by a job", rep, err)
 	}
 	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("the track is still where it was (%v)", err)
 	}
-	runs, _, err := svc.OrganizeHistory(ctx, uc, "", 10)
+	runs, _, err := svc.Health.OrganizeHistory(ctx, uc, "", 10)
 	if err != nil || len(runs) != 1 {
 		t.Fatalf("history = %+v (%v), want the one run", runs, err)
 	}
@@ -59,11 +57,11 @@ func TestApplyAnswersItsJobAndHistoryListsIt(t *testing.T) {
 func TestAnUndoMovesFilesBackAndIsListedInTurn(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, path, pid := managedTrackFixture(t)
-	rep, err := svc.ApplyOrganize(ctx, uc, "", nil)
+	rep, err := svc.Health.ApplyOrganize(ctx, uc, "", nil)
 	if err != nil || rep.Moved != 1 {
 		t.Fatalf("apply = %+v (%v)", rep, err)
 	}
-	undo, err := svc.UndoOrganize(ctx, uc, rep.JobPID)
+	undo, err := svc.Health.UndoOrganize(ctx, uc, rep.JobPID)
 	if err != nil || undo.Moved != 1 || undo.JobPID == "" || undo.JobPID == rep.JobPID {
 		t.Fatalf("undo = %+v (%v), want the track moved back by a job of its own", undo, err)
 	}
@@ -74,7 +72,7 @@ func TestAnUndoMovesFilesBackAndIsListedInTurn(t *testing.T) {
 	if it, err := svc.lib.Get(ctx, bare); err != nil || string(it.Path) != path {
 		t.Fatalf("the catalog has the track at %v (%v), want %s", it, err, path)
 	}
-	runs, _, err := svc.OrganizeHistory(ctx, uc, "", 10)
+	runs, _, err := svc.Health.OrganizeHistory(ctx, uc, "", 10)
 	if err != nil || len(runs) != 2 {
 		t.Fatalf("history = %+v (%v), want the run and its undo", runs, err)
 	}
@@ -88,7 +86,7 @@ func TestAnUndoMovesFilesBackAndIsListedInTurn(t *testing.T) {
 		d["moved"] != float64(1) {
 		t.Errorf("audit = %v, want the undo recorded with both jobs", d)
 	}
-	job, err := svc.JobStatus(ctx, undo.JobPID)
+	job, err := svc.Jobs.Status(ctx, undo.JobPID)
 	if err != nil || job.Kind != "organize-undo" || job.Organize == nil || job.Organize.Moved != 1 {
 		t.Fatalf("job = %+v (%v), want the undo's tally", job, err)
 	}
@@ -102,13 +100,13 @@ func TestAnUndoMovesFilesBackAndIsListedInTurn(t *testing.T) {
 func TestApplyRechecksThePathRule(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, _ := managedTrackFixture(t)
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if counts, err := svc.db.HealthRuleCounts(ctx); err != nil || counts[rulePathMismatch] != 1 {
 		t.Fatalf("path-mismatch = %d (%v), want the misplaced track", counts[rulePathMismatch], err)
 	}
-	if _, err := svc.ApplyOrganize(ctx, uc, "", nil); err != nil {
+	if _, err := svc.Health.ApplyOrganize(ctx, uc, "", nil); err != nil {
 		t.Fatal(err)
 	}
 	if counts, err := svc.db.HealthRuleCounts(ctx); err != nil || counts[rulePathMismatch] != 0 {
@@ -122,16 +120,16 @@ func TestApplyRechecksThePathRule(t *testing.T) {
 func TestUndoWhileAScanHoldsTheLeaseIsCatalogBusy(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, stray := fillerLibrary(t)
-	rep, err := svc.ApplyOrganize(ctx, uc, "", []string{stray})
+	rep, err := svc.Health.ApplyOrganize(ctx, uc, "", []string{stray})
 	if err != nil || rep.Moved != 1 {
 		t.Fatalf("apply = %+v (%v)", rep, err)
 	}
 	scan := startForcedRescan(t, ctx, svc)
-	if _, err := svc.UndoOrganize(ctx, uc, rep.JobPID); KindOf(err) != KindCatalogBusy {
+	if _, err := svc.Health.UndoOrganize(ctx, uc, rep.JobPID); KindOf(err) != KindCatalogBusy {
 		t.Fatalf("undo during the rescan = %v, want catalog-busy", err)
 	}
 	waitForEnd(t, ctx, svc, scan)
-	if undo, err := svc.UndoOrganize(ctx, uc, rep.JobPID); err != nil || undo.Moved != 1 {
+	if undo, err := svc.Health.UndoOrganize(ctx, uc, rep.JobPID); err != nil || undo.Moved != 1 {
 		t.Fatalf("undo after the rescan = %+v (%v), want the stray moved back", undo, err)
 	}
 }
@@ -141,12 +139,12 @@ func TestUndoWhileAScanHoldsTheLeaseIsCatalogBusy(t *testing.T) {
 func TestAnUndoRefusesWhatItCannotUndo(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, path, _ := managedTrackFixture(t)
-	rep, err := svc.ApplyOrganize(ctx, uc, "", nil)
+	rep, err := svc.Health.ApplyOrganize(ctx, uc, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, pid := range []string{"jb-nope", apiPID(PrefixJob, model.NewPID()), apiPID(PrefixTrack, model.NewPID())} {
-		if _, err := svc.UndoOrganize(ctx, uc, pid); KindOf(err) != KindNotFound {
+		if _, err := svc.Health.UndoOrganize(ctx, uc, pid); KindOf(err) != KindNotFound {
 			t.Errorf("undo of %s = %v, want not-found", pid, err)
 		}
 	}
@@ -155,17 +153,17 @@ func TestAnUndoRefusesWhatItCannotUndo(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForJob(t, ctx, svc, scan)
-	if _, err := svc.UndoOrganize(ctx, uc, apiPID(PrefixJob, scan)); KindOf(err) != KindInvalid {
+	if _, err := svc.Health.UndoOrganize(ctx, uc, apiPID(PrefixJob, scan)); KindOf(err) != KindInvalid {
 		t.Errorf("undo of a scan = %v, want invalid", err)
 	}
-	if _, err := svc.UndoOrganize(ctx, &UserCtx{ID: "listener"}, rep.JobPID); KindOf(err) != KindForbidden {
+	if _, err := svc.Health.UndoOrganize(ctx, &UserCtx{ID: "listener"}, rep.JobPID); KindOf(err) != KindForbidden {
 		t.Errorf("undo by a listener = %v, want forbidden", err)
 	}
-	if _, _, err := svc.OrganizeHistory(ctx, &UserCtx{ID: "listener"}, "", 10); KindOf(err) != KindForbidden {
+	if _, _, err := svc.Health.OrganizeHistory(ctx, &UserCtx{ID: "listener"}, "", 10); KindOf(err) != KindForbidden {
 		t.Errorf("history for a listener = %v, want forbidden", err)
 	}
 	setServerReadOnly(t, ctx, svc, true)
-	if _, err := svc.UndoOrganize(ctx, uc, rep.JobPID); KindOf(err) != KindReadOnly {
+	if _, err := svc.Health.UndoOrganize(ctx, uc, rep.JobPID); KindOf(err) != KindReadOnly {
 		t.Errorf("undo on a read-only server = %v, want read-only", err)
 	}
 	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
@@ -178,17 +176,17 @@ func TestAnUndoRefusesWhatItCannotUndo(t *testing.T) {
 func TestThePruneKeepsAnOrganizeRunInsideTheWindow(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, _ := managedTrackFixture(t)
-	rep, err := svc.ApplyOrganize(ctx, uc, "", nil)
+	rep, err := svc.Health.ApplyOrganize(ctx, uc, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.RunPrune(ctx); err != nil {
+	if err := svc.Integrations.RunPrune(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if runs, _, err := svc.OrganizeHistory(ctx, uc, "", 10); err != nil || len(runs) != 1 || runs[0].JobPID != rep.JobPID {
+	if runs, _, err := svc.Health.OrganizeHistory(ctx, uc, "", 10); err != nil || len(runs) != 1 || runs[0].JobPID != rep.JobPID {
 		t.Fatalf("history after the prune = %+v (%v), want the run kept", runs, err)
 	}
-	if _, err := svc.UndoOrganize(ctx, uc, rep.JobPID); err != nil {
+	if _, err := svc.Health.UndoOrganize(ctx, uc, rep.JobPID); err != nil {
 		t.Fatalf("undo after the prune = %v", err)
 	}
 }
@@ -197,11 +195,11 @@ func TestThePruneKeepsAnOrganizeRunInsideTheWindow(t *testing.T) {
 func TestAnOrganizeHistoryWithNoLimitListsEveryRun(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, _ := managedTrackFixture(t)
-	rep, err := svc.ApplyOrganize(ctx, uc, "", nil)
+	rep, err := svc.Health.ApplyOrganize(ctx, uc, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	runs, next, err := svc.OrganizeHistory(ctx, uc, "", 0)
+	runs, next, err := svc.Health.OrganizeHistory(ctx, uc, "", 0)
 	if err != nil || len(runs) != 1 || runs[0].JobPID != rep.JobPID || next != "" {
 		t.Fatalf("history = %+v (next %q, %v), want the one run and no cursor", runs, next, err)
 	}

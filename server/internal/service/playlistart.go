@@ -80,7 +80,7 @@ func reshufflesEveryRead(pl *model.Playlist) bool {
 //
 // Failures are logged, not returned: a playlist that cannot be
 // decorated still lists.
-func (l *Library) syncPlaylistCover(ctx context.Context, pl *model.Playlist, items []*model.ItemView) {
+func (l *Playlists) syncPlaylistCover(ctx context.Context, pl *model.Playlist, items []*model.ItemView) {
 	rec, err := l.db.PlaylistCoverFor(ctx, string(pl.PID))
 	switch {
 	case err == nil:
@@ -122,7 +122,7 @@ func (l *Library) syncPlaylistCover(ctx context.Context, pl *model.Playlist, ite
 	}
 	defer l.releaseCoverSync(pl.PID)
 
-	covers := l.playlistCoverSources(ctx, items)
+	covers := l.coverSources(ctx, items)
 	raw, drawn, err := composePlaylistCover(covers)
 	if err != nil {
 		// Record the fingerprint anyway. The remaining failure modes are
@@ -162,7 +162,7 @@ func (l *Library) syncPlaylistCover(ctx context.Context, pl *model.Playlist, ite
 // recordGeneratedCover stamps the member set and art epoch a generated
 // cover was built at, so the next read knows it is current, and the
 // members its tiles came from (nil where that is not known).
-func (l *Library) recordGeneratedCover(ctx context.Context, playlistPID model.PID, fingerprint string, sources []string) {
+func (l *Playlists) recordGeneratedCover(ctx context.Context, playlistPID model.PID, fingerprint string, sources []string) {
 	if l.coverRecordHook != nil {
 		if err := l.coverRecordHook(); err != nil {
 			l.log.Warn("recording playlist cover state", "playlist", playlistPID, "err", err)
@@ -184,7 +184,7 @@ func (l *Library) recordGeneratedCover(ctx context.Context, playlistPID model.PI
 // false when another is already running. Losing the race is not an
 // error: the winner produces the same image, and the loser's read serves
 // whatever is stored, which is at worst one refresh behind.
-func (l *Library) claimCoverSync(playlistPID model.PID) bool {
+func (l *Playlists) claimCoverSync(playlistPID model.PID) bool {
 	l.coverSyncMu.Lock()
 	defer l.coverSyncMu.Unlock()
 	if l.coverSyncing == nil {
@@ -197,7 +197,7 @@ func (l *Library) claimCoverSync(playlistPID model.PID) bool {
 	return true
 }
 
-func (l *Library) releaseCoverSync(playlistPID model.PID) {
+func (l *Playlists) releaseCoverSync(playlistPID model.PID) {
 	l.coverSyncMu.Lock()
 	defer l.coverSyncMu.Unlock()
 	delete(l.coverSyncing, playlistPID)
@@ -209,13 +209,13 @@ type coverTile struct {
 	bytes  []byte
 }
 
-// playlistCoverSources resolves member covers in order, keeping the
+// coverSources resolves member covers in order, keeping the
 // first few that differ. Deduplication is by the catalog's own source
 // hash, so a playlist drawn from one album tiles that album's cover
 // once rather than four times -- a track resolves its album's art when
 // it carries none of its own, which is exactly when the four would
 // collide.
-func (l *Library) playlistCoverSources(ctx context.Context, items []*model.ItemView) []coverTile {
+func (l *Playlists) coverSources(ctx context.Context, items []*model.ItemView) []coverTile {
 	seen := make(map[string]bool, art.MosaicTiles)
 	out := make([]coverTile, 0, art.MosaicTiles)
 	for i, it := range items {
@@ -264,7 +264,7 @@ func (l *Library) playlistCoverSources(ctx context.Context, items []*model.ItemV
 // reader is shown the first member it is offered that has a cover. Nil
 // keeps the stored cover: for the owner, a reader who sees everything,
 // a cover somebody chose, and a reader its members are all shown to.
-func (l *Library) readerPlaylistCover(ctx context.Context, uc *UserCtx, pl *model.Playlist) (*model.EntityRef, error) {
+func (l *Playlists) readerPlaylistCover(ctx context.Context, uc *UserCtx, pl *model.Playlist) (*model.EntityRef, error) {
 	if string(pl.OwnerPID) == uc.CatalogPID || seesEverything(uc) {
 		return nil, nil
 	}
@@ -289,7 +289,7 @@ func (l *Library) readerPlaylistCover(ctx context.Context, uc *UserCtx, pl *mode
 // coverSourcesShown reports whether the reader is offered every member a
 // generated cover was drawn from, a read of those few alone. A member the
 // catalog no longer holds is not offered.
-func (l *Library) coverSourcesShown(ctx context.Context, uc *UserCtx, pl *model.Playlist, sources []string) (bool, error) {
+func (l *Playlists) coverSourcesShown(ctx context.Context, uc *UserCtx, pl *model.Playlist, sources []string) (bool, error) {
 	pids := make([]model.PID, 0, len(sources))
 	for _, s := range sources {
 		if !slices.Contains(pids, model.PID(s)) {
@@ -325,7 +325,7 @@ func (l *Library) coverSourcesShown(ctx context.Context, uc *UserCtx, pl *model.
 // kept for the reader while the catalog, its artwork and the playlist
 // hold still, and for a minute at most: who follows which show, which
 // decides the episodes it is offered, is no catalog change.
-func (l *Library) readerMemberCover(ctx context.Context, uc *UserCtx, pl *model.Playlist) (*model.EntityRef, error) {
+func (l *Playlists) readerMemberCover(ctx context.Context, uc *UserCtx, pl *model.Playlist) (*model.EntityRef, error) {
 	head, err := l.lib.LatestChangeSeq(ctx)
 	if err != nil {
 		return nil, classify(err)
@@ -335,7 +335,7 @@ func (l *Library) readerMemberCover(ctx context.Context, uc *UserCtx, pl *model.
 		return nil, &Error{Kind: KindInternal, Err: err}
 	}
 	key := readerCoverKey{playlist: pl.PID, user: uc.ID, scope: uc.ScopeKey()}
-	stamp := readerCoverStamp{generation: l.catalogGeneration(), head: head, art: epoch, updated: pl.UpdatedAt}
+	stamp := readerCoverStamp{generation: l.library.catalogGeneration(), head: head, art: epoch, updated: pl.UpdatedAt}
 	ref, held := l.readerCovers.get(key, stamp)
 	if !held {
 		if ref, err = l.firstShownCover(ctx, uc, pl); err != nil {
@@ -352,8 +352,8 @@ func (l *Library) readerMemberCover(ctx context.Context, uc *UserCtx, pl *model.
 // firstShownCover reads the playlist's members and answers the cover of
 // the first, among the first coverScanDepth, that the reader is offered
 // and that has one; nil for none.
-func (l *Library) firstShownCover(ctx context.Context, uc *UserCtx, pl *model.Playlist) (*model.EntityRef, error) {
-	items, err := l.playlistMembers(ctx, pl)
+func (l *Playlists) firstShownCover(ctx context.Context, uc *UserCtx, pl *model.Playlist) (*model.EntityRef, error) {
+	items, err := l.members(ctx, pl)
 	if err != nil {
 		return nil, err
 	}
@@ -464,7 +464,7 @@ func composePlaylistCover(covers []coverTile) ([]byte, []string, error) {
 // so generated playlist covers built from it refresh on their next read.
 // Failures are logged: a missed bump leaves a mosaic stale until the
 // membership next changes, which is not worth failing an art edit over.
-func (l *Library) noteArtworkChanged(ctx context.Context) {
+func (l *Playlists) noteArtworkChanged(ctx context.Context) {
 	if err := l.db.BumpArtEpoch(ctx); err != nil {
 		l.log.Warn("recording an artwork change", "err", err)
 	}
@@ -475,7 +475,7 @@ func (l *Library) noteArtworkChanged(ctx context.Context) {
 // store then fails. Claiming first is what keeps a concurrent playlist
 // read from regenerating the mosaic over the upload between the two
 // writes.
-func (l *Library) claimPlaylistCoverCustom(ctx context.Context, playlistPID model.PID) (func(), error) {
+func (l *Playlists) claimPlaylistCoverCustom(ctx context.Context, playlistPID model.PID) (func(), error) {
 	prev, err := l.db.PlaylistCoverFor(ctx, string(playlistPID))
 	switch {
 	case err == nil:
@@ -508,7 +508,7 @@ func (l *Library) claimPlaylistCoverCustom(ctx context.Context, playlistPID mode
 // path passes the members it already had; this is for the write paths,
 // where a membership change should show on the playlist grid without
 // waiting for someone to open the playlist.
-func (l *Library) refreshPlaylistCover(ctx context.Context, pl *model.Playlist) {
+func (l *Playlists) refreshPlaylistCover(ctx context.Context, pl *model.Playlist) {
 	items, err := l.lib.Playlists().Items(ctx, pl.PID, pl.OwnerPID)
 	if err != nil {
 		l.log.Warn("loading playlist members for its cover", "playlist", pl.PID, "err", err)

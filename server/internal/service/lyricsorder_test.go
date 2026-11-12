@@ -56,7 +56,7 @@ func storeOutOfOrderLyrics(t *testing.T) (context.Context, *Library, *UserCtx, m
 func TestItemLyricsServesSyncedLinesInTimeOrder(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, pid := storeOutOfOrderLyrics(t)
-	got, err := svc.ItemLyrics(ctx, uc, pid)
+	got, err := svc.Reads.ItemLyrics(ctx, uc, pid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestItemLyricsServesSyncedLinesInTimeOrder(t *testing.T) {
 func TestItemMetadataRendersSyncedLyricsInTimeOrder(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, pid := storeOutOfOrderLyrics(t)
-	md, err := svc.ItemMetadataFor(ctx, uc, pid)
+	md, err := svc.Editor.ItemMetadataFor(ctx, uc, pid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestAnEnrichmentPreviewProposesSyncedLyricsInTimeOrder(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openLyricsFixture(t, unsortedLyricist{})
 	pid, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
-	pre, err := svc.EnrichPreviewFor(ctx, uc, pid, []string{enrichWantLyrics})
+	pre, err := svc.Enrichment.EnrichPreviewFor(ctx, uc, pid, []string{enrichWantLyrics})
 	if err != nil {
 		t.Fatal(err)
 	}

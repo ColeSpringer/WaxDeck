@@ -39,5 +39,14 @@ export abstract class Surface {
   control(id: string): Locator {
     return this.ctx.page.locator(sem(id));
   }
+
+  /// The shell toast whose action carries `actionId`, named by its
+  /// sentence. The action folds the toast into one node with children,
+  /// which Flutter labels by `aria-label` and draws no text for: the only
+  /// text with those words is the live region's announcement, which the
+  /// engine empties 300 ms later, so `text` finds it only by luck.
+  toast(actionId: string): Locator {
+    return this.control(actionId).locator('xpath=..');
+  }
 }
 

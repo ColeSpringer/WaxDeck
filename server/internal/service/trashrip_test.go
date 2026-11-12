@@ -16,7 +16,7 @@ func TestACueRipIsDeletedWholeOrNotAtAll(t *testing.T) {
 	one, two, _ := carvedTracks(t, ctx, svc, uc)
 
 	for _, dryRun := range []bool{true, false} {
-		_, err := svc.DeleteItems(ctx, uc, []string{one}, "trash", dryRun)
+		_, err := svc.Tools.DeleteItems(ctx, uc, []string{one}, "trash", dryRun)
 		if KindOf(err) != KindInvalid || !errors.Is(err, ErrCueRipPart) {
 			t.Fatalf("deleting one track of a rip (dry run %v) = %v, want the cue-rip refusal", dryRun, err)
 		}
@@ -25,7 +25,7 @@ func TestACueRipIsDeletedWholeOrNotAtAll(t *testing.T) {
 		}
 	}
 
-	res, err := svc.DeleteItems(ctx, uc, []string{one, two}, "trash", true)
+	res, err := svc.Tools.DeleteItems(ctx, uc, []string{one, two}, "trash", true)
 	if err != nil {
 		t.Fatal(err)
 	}

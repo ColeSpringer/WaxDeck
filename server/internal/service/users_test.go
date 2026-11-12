@@ -1,6 +1,7 @@
 package service
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -11,13 +12,13 @@ func TestAccountUpdateEmitsOnlyForRightsChanges(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "listener", Password: "correct-horse",
 	})
 	if err != nil {
 		t.Fatalf("creating the account: %v", err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatalf("building a user context: %v", err)
 	}
@@ -26,7 +27,7 @@ func TestAccountUpdateEmitsOnlyForRightsChanges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("minting a cursor: %v", err)
 	}
-	if _, err := svc.UpdateAccount(ctx, acct.User.ID, AccountUpdate{
+	if _, err := svc.Identity.UpdateAccount(ctx, acct.User.ID, AccountUpdate{
 		Roles: []string{"admin"},
 	}); err != nil {
 		t.Fatalf("granting the role: %v", err)
@@ -46,7 +47,7 @@ func TestAccountUpdateEmitsOnlyForRightsChanges(t *testing.T) {
 	// re-reads the session for it.
 	since = delta.NextSince
 	name := "Listener"
-	if _, err := svc.UpdateAccount(ctx, acct.User.ID, AccountUpdate{
+	if _, err := svc.Identity.UpdateAccount(ctx, acct.User.ID, AccountUpdate{
 		DisplayName: &name,
 	}); err != nil {
 		t.Fatalf("renaming: %v", err)
@@ -61,7 +62,7 @@ func TestAccountUpdateEmitsOnlyForRightsChanges(t *testing.T) {
 
 	// Writing the same roles back changes nothing either.
 	since = delta.NextSince
-	if _, err := svc.UpdateAccount(ctx, acct.User.ID, AccountUpdate{
+	if _, err := svc.Identity.UpdateAccount(ctx, acct.User.ID, AccountUpdate{
 		Roles: []string{"admin"},
 	}); err != nil {
 		t.Fatalf("re-granting the role: %v", err)
@@ -78,7 +79,7 @@ func TestAccountUpdateEmitsOnlyForRightsChanges(t *testing.T) {
 	since = delta.NextSince
 	perms := DefaultPermissions()
 	perms.Download = false
-	if _, err := svc.UpdateAccount(ctx, acct.User.ID, AccountUpdate{
+	if _, err := svc.Identity.UpdateAccount(ctx, acct.User.ID, AccountUpdate{
 		Permissions: &perms,
 	}); err != nil {
 		t.Fatalf("revoking downloads: %v", err)
@@ -100,48 +101,71 @@ func TestDisabledUserFailsEveryUserCtxByIDCall(t *testing.T) {
 	ctx, svc, admin := newCatalogFixture(t)
 	track := fixtureItemPIDs(t, ctx, svc, admin)[0]
 
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "listener", Password: "correct-horse"})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "listener", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := acct.User.ID
-	if _, err := svc.UserCtxByID(ctx, id); err != nil {
+	if _, err := svc.Grants.UserCtxByID(ctx, id); err != nil {
 		t.Fatalf("an enabled account: %v", err)
 	}
-	if !svc.UserSharedOutputsAllowed(id) {
+	if !svc.Grants.UserSharedOutputsAllowed(id) {
 		t.Fatal("the default toggles do not allow shared outputs; the disabled case below proves nothing")
 	}
 
 	off := true
-	if _, err := svc.UpdateAccount(ctx, id, AccountUpdate{Disabled: &off}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, id, AccountUpdate{Disabled: &off}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.UserCtxByID(ctx, id); KindOf(err) != KindNotFound {
+	if _, err := svc.Grants.UserCtxByID(ctx, id); KindOf(err) != KindNotFound {
 		t.Errorf("UserCtxByID for a disabled account = %v, want not-found", err)
 	}
-	if _, err := svc.QueueEntries(ctx, id, []string{track}); KindOf(err) != KindNotFound {
+	if _, err := svc.Playback.QueueEntries(ctx, id, []string{track}); KindOf(err) != KindNotFound {
 		t.Errorf("QueueEntries for a disabled account = %v, want not-found", err)
 	}
-	if svc.UserSharedOutputsAllowed(id) {
+	if svc.Grants.UserSharedOutputsAllowed(id) {
 		t.Error("a disabled account may still drive shared outputs")
 	}
 
 	on := false
-	if _, err := svc.UpdateAccount(ctx, id, AccountUpdate{Disabled: &on}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, id, AccountUpdate{Disabled: &on}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.QueueEntries(ctx, id, []string{track}); err != nil {
+	if _, err := svc.Playback.QueueEntries(ctx, id, []string{track}); err != nil {
 		t.Errorf("QueueEntries after re-enabling: %v", err)
 	}
 
-	pending, err := svc.CreateAccount(ctx, AccountCreate{Username: "applicant", Password: "correct-horse", Pending: true})
+	pending, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "applicant", Password: "correct-horse", Pending: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.UserCtxByID(ctx, pending.User.ID); KindOf(err) != KindNotFound {
+	if _, err := svc.Grants.UserCtxByID(ctx, pending.User.ID); KindOf(err) != KindNotFound {
 		t.Errorf("UserCtxByID for a pending account = %v, want not-found", err)
 	}
-	if svc.UserSharedOutputsAllowed(pending.User.ID) {
+	if svc.Grants.UserSharedOutputsAllowed(pending.User.ID) {
 		t.Error("a pending account may drive shared outputs")
+	}
+}
+
+// A User or a gpodder session the service did not build holds no row, so
+// acting on one is refused as not found rather than dereferenced.
+func TestAHandBuiltHandleIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newAdminFixture(t)
+	for name, u := range map[string]*User{"nil": nil, "zero": {}, "hand-built": {ID: "us-nobody", Username: "nobody"}} {
+		if _, err := svc.Grants.UserCtxFor(ctx, u); KindOf(err) != KindNotFound {
+			t.Errorf("UserCtxFor a %s User = %v, want not-found", name, err)
+		}
+		if _, _, err := svc.Podcasts.GpodderOpenSession(ctx, u, "ap-nothing"); KindOf(err) != KindNotFound {
+			t.Errorf("GpodderOpenSession for a %s User = %v, want not-found", name, err)
+		}
+		if got := u.Permissions(); !reflect.DeepEqual(got, Permissions{}) {
+			t.Errorf("a %s User's permissions = %+v, want none", name, got)
+		}
+	}
+	for name, s := range map[string]*GpodderSession{"nil": nil, "zero": {}} {
+		if _, _, err := svc.Podcasts.GpodderSessionUsed(ctx, s); KindOf(err) != KindNotFound {
+			t.Errorf("GpodderSessionUsed for a %s session = %v, want not-found", name, err)
+		}
 	}
 }

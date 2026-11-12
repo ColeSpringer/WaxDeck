@@ -18,7 +18,7 @@ func TestShareLiveFollowsTheLinkAndItsOwner(t *testing.T) {
 	ownerID, owner := shareOwner(t, ctx, svc, "publisher")
 	mint := func() (bare, apiID string) {
 		t.Helper()
-		sh, err := svc.CreateShare(ctx, owner, track, 0, false, 0)
+		sh, err := svc.Reads.CreateShare(ctx, owner, track, 0, false, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -27,17 +27,17 @@ func TestShareLiveFollowsTheLinkAndItsOwner(t *testing.T) {
 	}
 	gone := func(id, what string) {
 		t.Helper()
-		if err := svc.ShareLive(ctx, id); KindOf(err) != KindNotFound {
+		if err := svc.Reads.ShareLive(ctx, id); KindOf(err) != KindNotFound {
 			t.Errorf("%s: %v, want not-found", what, err)
 		}
 	}
 
 	live, _ := mint()
-	if err := svc.ShareLive(ctx, live); err != nil {
+	if err := svc.Reads.ShareLive(ctx, live); err != nil {
 		t.Fatalf("a fresh link: %v", err)
 	}
 	revoked, apiID := mint()
-	if err := svc.RevokeShare(ctx, owner, apiID); err != nil {
+	if err := svc.Reads.RevokeShare(ctx, owner, apiID); err != nil {
 		t.Fatal(err)
 	}
 	gone(revoked, "a revoked link")
@@ -52,7 +52,7 @@ func TestShareLiveFollowsTheLinkAndItsOwner(t *testing.T) {
 	gone(ulid.Make().String(), "a link that never was")
 
 	disabled := true
-	if _, err := svc.UpdateAccount(ctx, ownerID, AccountUpdate{Disabled: &disabled}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, ownerID, AccountUpdate{Disabled: &disabled}); err != nil {
 		t.Fatal(err)
 	}
 	gone(live, "the link of an owner who can no longer sign in")

@@ -19,11 +19,11 @@ import (
 func TestTrackFactsCarryLibraryAndFile(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	libs, err := svc.Libraries(ctx)
+	libs, err := svc.Roots.Libraries(ctx)
 	if err != nil || len(libs) != 1 {
 		t.Fatalf("libraries = %+v (%v), want the fixture root", libs, err)
 	}
-	rows, err := svc.TrackFacts(ctx, uc)
+	rows, err := svc.Reads.TrackFacts(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestEntityFactsCarryTheAlbumYear(t *testing.T) {
 			t.Fatal(err)
 		}
 	}})
-	rows, err := svc.TrackFacts(ctx, uc)
+	rows, err := svc.Reads.TrackFacts(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestEntityFactsCarryTheAlbumYear(t *testing.T) {
 	if album == "" || artist == "" {
 		t.Fatal("the dated album is not in the sweep")
 	}
-	facts, err := svc.EntityFacts(ctx, []string{album, artist, "nonsense"})
+	facts, err := svc.Reads.EntityFacts(ctx, []string{album, artist, "nonsense"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,12 +89,12 @@ func TestEntityFactsCarryTheAlbumYear(t *testing.T) {
 func TestFileFactsAreBoundedAndCached(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	rows, err := svc.TrackFacts(ctx, uc)
+	rows, err := svc.Reads.TrackFacts(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var reads atomic.Int64
-	svc.fileReadHook = func(ctx context.Context, pid model.PID) (*model.File, error) {
+	svc.Reads.fileReadHook = func(ctx context.Context, pid model.PID) (*model.File, error) {
 		reads.Add(1)
 		return svc.lib.File(ctx, pid)
 	}
@@ -102,7 +102,7 @@ func TestFileFactsAreBoundedAndCached(t *testing.T) {
 	for _, tr := range rows {
 		pids = append(pids, tr.FilePID)
 	}
-	facts := svc.FileFacts(ctx, pids)
+	facts := svc.Reads.FileFacts(ctx, pids)
 	if len(facts) != len(rows) {
 		t.Fatalf("facts for %d of %d files", len(facts), len(rows))
 	}
@@ -114,14 +114,14 @@ func TestFileFactsAreBoundedAndCached(t *testing.T) {
 	if n := reads.Load(); n != int64(len(rows)) {
 		t.Fatalf("reads = %d, want one per file", n)
 	}
-	svc.FileFacts(ctx, pids)
+	svc.Reads.FileFacts(ctx, pids)
 	if n := reads.Load(); n != int64(len(rows)) {
 		t.Fatalf("a second call read %d more files, want none", n-int64(len(rows)))
 	}
 	// A play anywhere moves the catalog's feed position; it changes no
 	// file, so it does not empty the cache.
 	tail := svc.CatalogTailSeq()
-	if _, err := svc.Checkpoint(ctx, uc, rows[0].PID, 1000, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, rows[0].PID, 1000, nil); err != nil {
 		t.Fatal(err)
 	}
 	for deadline := time.Now().Add(10 * time.Second); svc.CatalogTailSeq() == tail; {
@@ -130,7 +130,7 @@ func TestFileFactsAreBoundedAndCached(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	svc.FileFacts(ctx, pids)
+	svc.Reads.FileFacts(ctx, pids)
 	if n := reads.Load(); n != int64(len(rows)) {
 		t.Fatalf("a call after a play read %d more files, want none", n-int64(len(rows)))
 	}
@@ -140,7 +140,7 @@ func TestFileFactsAreBoundedAndCached(t *testing.T) {
 		unknown = append(unknown, FileAPIPID(ulid.Make().String()))
 	}
 	reads.Store(0)
-	if got := svc.FileFacts(ctx, unknown); len(got) != 0 {
+	if got := svc.Reads.FileFacts(ctx, unknown); len(got) != 0 {
 		t.Fatalf("facts for files that do not exist: %v", got)
 	}
 	if n := reads.Load(); n != fileFactsReadCap {
@@ -158,29 +158,29 @@ func TestTrackFactsSurviveAPlay(t *testing.T) {
 	// feed's position, which every row it reads moves: sweep once it has
 	// caught up, so the play is the only thing left to move it.
 	feedCaughtUp(t, ctx, svc)
-	rows, err := svc.TrackFacts(ctx, uc)
+	rows, err := svc.Reads.TrackFacts(ctx, uc)
 	if err != nil || len(rows) == 0 {
 		t.Fatalf("rows = %d (%v)", len(rows), err)
 	}
 	tail := svc.CatalogTailSeq()
-	if _, err := svc.Checkpoint(ctx, uc, rows[0].PID, 1000, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, rows[0].PID, 1000, nil); err != nil {
 		t.Fatal(err)
 	}
 	feedCaughtUp(t, ctx, svc)
 	if svc.CatalogTailSeq() == tail {
 		t.Fatal("the feed position never moved after a checkpoint")
 	}
-	again, err := svc.TrackFacts(ctx, uc)
+	again, err := svc.Reads.TrackFacts(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if &again[0] != &rows[0] {
 		t.Fatal("a play re-swept the catalog")
 	}
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "more", Path: t.TempDir(), Media: "music"}); err != nil {
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "more", Path: t.TempDir(), Media: "music"}); err != nil {
 		t.Fatal(err)
 	}
-	third, err := svc.TrackFacts(ctx, uc)
+	third, err := svc.Reads.TrackFacts(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,16 +197,16 @@ func TestContentPositionWaitsForTheFeed(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	album, _ := fixtureEntityPIDs(t, ctx, svc, uc)
-	before := svc.CatalogContentSeq(ctx)
-	if _, err := svc.EditEntity(ctx, "album", album, map[string]string{"label": "Night Shift"}, MetadataEditParams{}); err != nil {
+	before := svc.Reads.CatalogContentSeq(ctx)
+	if _, err := svc.Editor.EditEntity(ctx, "album", album, map[string]string{"label": "Night Shift"}, MetadataEditParams{}); err != nil {
 		t.Fatal(err)
 	}
-	svc.trackFacts.feedHook = func() int64 { return before }
-	gap := svc.CatalogContentSeq(ctx)
-	svc.trackFacts.feedHook = nil
+	svc.Reads.trackFacts.feedHook = func() int64 { return before }
+	gap := svc.Reads.CatalogContentSeq(ctx)
+	svc.Reads.trackFacts.feedHook = nil
 	var caught int64
 	for deadline := time.Now().Add(10 * time.Second); ; {
-		if caught = svc.CatalogContentSeq(ctx); caught != before {
+		if caught = svc.Reads.CatalogContentSeq(ctx); caught != before {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -228,7 +228,7 @@ func TestContentPositionFollowsContentOnly(t *testing.T) {
 	track, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
 	trashed, _ := fixtureTrackPID(t, ctx, svc, uc, "Basalt Steps")
 	kinded, _ := fixtureTrackPID(t, ctx, svc, uc, "Cobalt Sky")
-	libs, err := svc.Libraries(ctx)
+	libs, err := svc.Roots.Libraries(ctx)
 	if err != nil || len(libs) != 1 {
 		t.Fatalf("libraries = %+v (%v)", libs, err)
 	}
@@ -246,7 +246,7 @@ func TestContentPositionFollowsContentOnly(t *testing.T) {
 			}
 			time.Sleep(5 * time.Millisecond)
 		}
-		return svc.CatalogContentSeq(ctx)
+		return svc.Reads.CatalogContentSeq(ctx)
 	}
 	r := 60
 	for _, op := range []struct {
@@ -254,25 +254,28 @@ func TestContentPositionFollowsContentOnly(t *testing.T) {
 		moves bool
 		do    func() error
 	}{
-		{"a checkpoint", false, func() error { _, err := svc.Checkpoint(ctx, uc, track, 1000, nil); return err }},
-		{"an item star", false, func() error { _, err := svc.SetStar(ctx, uc, track, true, nil); return err }},
-		{"an entity rating", false, func() error { _, err := svc.SetEntityRating(ctx, uc, survivor, &r, nil); return err }},
+		{"a checkpoint", false, func() error { _, err := svc.Playback.Checkpoint(ctx, uc, track, 1000, nil); return err }},
+		{"an item star", false, func() error { _, err := svc.Playback.SetStar(ctx, uc, track, true, nil); return err }},
+		{"an entity rating", false, func() error { _, err := svc.Identity.SetEntityRating(ctx, uc, survivor, &r, nil); return err }},
 		{"an account", false, func() error {
-			_, err := svc.CreateAccount(ctx, AccountCreate{Username: "someone", Password: "correct-horse-3"})
+			_, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "someone", Password: "correct-horse-3"})
 			return err
 		}},
 		{"an item edit", true, func() error {
-			_, err := svc.EditItemMetadata(ctx, uc, track, map[string]string{"title": "Amber Waves Again"}, MetadataEditParams{})
+			_, err := svc.Editor.EditItemMetadata(ctx, uc, track, map[string]string{"title": "Amber Waves Again"}, MetadataEditParams{})
 			return err
 		}},
 		{"an entity edit", true, func() error {
-			_, err := svc.EditEntity(ctx, "album", survivor, map[string]string{"label": "Night Shift"}, MetadataEditParams{})
+			_, err := svc.Editor.EditEntity(ctx, "album", survivor, map[string]string{"label": "Night Shift"}, MetadataEditParams{})
 			return err
 		}},
-		{"a merge", true, func() error { _, err := svc.MergeDuplicates(ctx, uc, "album", survivor, []string{loser}); return err }},
-		{"a trash", true, func() error { _, err := svc.DeleteItems(ctx, uc, []string{trashed}, "trash", false); return err }},
+		{"a merge", true, func() error {
+			_, err := svc.Health.MergeDuplicates(ctx, uc, "album", survivor, []string{loser})
+			return err
+		}},
+		{"a trash", true, func() error { _, err := svc.Tools.DeleteItems(ctx, uc, []string{trashed}, "trash", false); return err }},
 		{"a kind change", true, func() error {
-			job, err := svc.SetItemsKind(ctx, uc, []string{kinded}, "audiobook", false)
+			job, err := svc.Reads.SetItemsKind(ctx, uc, []string{kinded}, "audiobook", false)
 			if err != nil {
 				return err
 			}
@@ -281,10 +284,10 @@ func TestContentPositionFollowsContentOnly(t *testing.T) {
 			return nil
 		}},
 		{"a new library", true, func() error {
-			_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "more", Path: t.TempDir()})
+			_, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "more", Path: t.TempDir()})
 			return err
 		}},
-		{"a library's media", true, func() error { _, err := svc.SetLibraryMedia(ctx, uc, libs[0].PID, "music"); return err }},
+		{"a library's media", true, func() error { _, err := svc.Roots.SetLibraryMedia(ctx, uc, libs[0].PID, "music"); return err }},
 	} {
 		before := settled()
 		if err := op.do(); err != nil {
@@ -302,54 +305,54 @@ func TestContentPositionFollowsContentOnly(t *testing.T) {
 func TestCatalogWatchFailsClosed(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
-	svc.trackFacts.feedHook = func() int64 { return 1 << 50 }
+	svc.Reads.trackFacts.feedHook = func() int64 { return 1 << 50 }
 	settledEpoch := func() uint64 {
 		t.Helper()
-		svc.CatalogContentSeq(ctx)
-		epoch, _ := svc.entityEpoch(ctx)
+		svc.Reads.CatalogContentSeq(ctx)
+		epoch, _ := svc.Reads.entityEpoch(ctx)
 		return epoch
 	}
 
 	epoch := settledEpoch()
-	last := svc.CatalogContentSeq(ctx)
+	last := svc.Reads.CatalogContentSeq(ctx)
 	head, err := svc.lib.LatestChangeSeq(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.trackFacts.headHook = func(ctx context.Context) (int64, error) { return head + 1, nil }
-	svc.trackFacts.changesHook = func(ctx context.Context, since int64) ([]model.Change, error) {
+	svc.Reads.trackFacts.headHook = func(ctx context.Context) (int64, error) { return head + 1, nil }
+	svc.Reads.trackFacts.changesHook = func(ctx context.Context, since int64) ([]model.Change, error) {
 		return nil, errors.New("catalog busy")
 	}
-	if got := svc.CatalogContentSeq(ctx); got != last {
+	if got := svc.Reads.CatalogContentSeq(ctx); got != last {
 		t.Errorf("a failed look answered %d, want the last good %d", got, last)
 	}
 	// It says it could not tell, and leaves the count to the look that can.
-	if got, ok := svc.entityEpoch(ctx); ok || got != epoch {
+	if got, ok := svc.Reads.entityEpoch(ctx); ok || got != epoch {
 		t.Errorf("a failed look answered the entity count %d (told: %v), want %d and that it could not tell", got, ok, epoch)
 	}
 
-	svc.trackFacts.changesHook = func(ctx context.Context, since int64) ([]model.Change, error) {
+	svc.Reads.trackFacts.changesHook = func(ctx context.Context, since int64) ([]model.Change, error) {
 		return nil, waxerr.New(waxerr.CodeNotFound, "test", "pruned")
 	}
-	if got, ok := svc.entityEpoch(ctx); !ok || got <= epoch {
+	if got, ok := svc.Reads.entityEpoch(ctx); !ok || got <= epoch {
 		t.Errorf("a pruned log left the entity count at %d (told: %v), want it moved past %d", got, ok, epoch)
 	}
 
 	// Far behind: every page is state rows, more than one look reads.
 	epoch = settledEpoch()
-	svc.trackFacts.headHook = func(ctx context.Context) (int64, error) { return head + 10_000_000, nil }
-	svc.trackFacts.changesHook = func(ctx context.Context, since int64) ([]model.Change, error) {
+	svc.Reads.trackFacts.headHook = func(ctx context.Context) (int64, error) { return head + 10_000_000, nil }
+	svc.Reads.trackFacts.changesHook = func(ctx context.Context, since int64) ([]model.Change, error) {
 		rows := make([]model.Change, 1000)
 		for i := range rows {
 			rows[i] = model.Change{Seq: since + int64(i) + 1, EntityType: "play_state"}
 		}
 		return rows, nil
 	}
-	svc.trackFacts.feedHook = func() int64 { return 1 << 62 }
-	if got := svc.CatalogContentSeq(ctx); got&(1<<40-1) != head+10_000_000 {
+	svc.Reads.trackFacts.feedHook = func() int64 { return 1 << 62 }
+	if got := svc.Reads.CatalogContentSeq(ctx); got&(1<<40-1) != head+10_000_000 {
 		t.Errorf("a log too far behind answered content %d, want its head %d", got&(1<<40-1), head+10_000_000)
 	}
-	if got, ok := svc.entityEpoch(ctx); !ok || got <= epoch {
+	if got, ok := svc.Reads.entityEpoch(ctx); !ok || got <= epoch {
 		t.Errorf("a log too far behind left the entity count at %d (told: %v), want it moved past %d", got, ok, epoch)
 	}
 }
@@ -359,18 +362,18 @@ func TestCatalogWatchFailsClosed(t *testing.T) {
 func TestCatalogWatchIdleLookReadsTheHead(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
-	svc.CatalogContentSeq(ctx)
+	svc.Reads.CatalogContentSeq(ctx)
 	var heads, pages atomic.Int64
-	svc.trackFacts.headHook = func(ctx context.Context) (int64, error) {
+	svc.Reads.trackFacts.headHook = func(ctx context.Context) (int64, error) {
 		heads.Add(1)
 		return svc.lib.LatestChangeSeq(ctx)
 	}
-	svc.trackFacts.changesHook = func(ctx context.Context, since int64) ([]model.Change, error) {
+	svc.Reads.trackFacts.changesHook = func(ctx context.Context, since int64) ([]model.Change, error) {
 		pages.Add(1)
 		return svc.lib.Changes(ctx, since)
 	}
-	svc.CatalogContentSeq(ctx)
-	svc.entityEpoch(ctx)
+	svc.Reads.CatalogContentSeq(ctx)
+	svc.Reads.entityEpoch(ctx)
 	if heads.Load() != 2 || pages.Load() != 0 {
 		t.Fatalf("two idle looks read the head %d times and %d pages, want 2 and 0", heads.Load(), pages.Load())
 	}

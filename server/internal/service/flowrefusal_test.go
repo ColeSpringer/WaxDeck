@@ -37,32 +37,32 @@ func (f *fakeFlowRoots) offersOf(name string) int {
 func TestAnAnswersResyncLeavesARefusalItsOwnEngineGave(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
-	libDir := svc.RootTable()[0].Path
+	libDir := svc.Roots.Table()[0].Path
 	bridge := &hookedFlowRoots{}
 	bridge.refuse(errors.New("opening root: no such file or directory"))
-	svc.FollowEngine(ctx, bridge)
-	waitFor(t, func() bool { return svc.flowRefusedAt("lib", libDir) }, "the boot's offer of lib refused")
+	svc.Roots.FollowEngine(ctx, bridge)
+	waitFor(t, func() bool { return svc.Roots.flowRefusedAt("lib", libDir) }, "the boot's offer of lib refused")
 	bridge.down()
 
 	// The answer's re-sync waits on the lock this offer holds.
-	svc.flowSyncMu.Lock()
+	svc.Roots.flowSyncMu.Lock()
 	bridge.up(ctx)
-	if warning := svc.teachFlowRoot(ctx, bridge, "lib", libDir); warning == "" {
-		svc.flowSyncMu.Unlock()
+	if warning := svc.Roots.teachFlowRoot(ctx, bridge, "lib", libDir); warning == "" {
+		svc.Roots.flowSyncMu.Unlock()
 		t.Fatal("the engine that answered took lib, want it refused")
 	}
 	// The re-sync's pass takes this owed unmount off first, which marks it.
 	if err := svc.db.SettingSet(ctx, flowUnmountKey+"marker", "/gone", time.Now().UnixNano()); err != nil {
-		svc.flowSyncMu.Unlock()
+		svc.Roots.flowSyncMu.Unlock()
 		t.Fatal(err)
 	}
 	bridge.refuse(nil)
-	svc.flowSyncMu.Unlock()
+	svc.Roots.flowSyncMu.Unlock()
 	waitFor(t, func() bool { return slices.Contains(bridge.removedNames(), "marker") }, "the answer's re-sync to run")
 	// It holds the lock for its whole pass.
-	svc.flowSyncMu.Lock()
+	svc.Roots.flowSyncMu.Lock()
 	offers := bridge.offersOf("lib")
-	svc.flowSyncMu.Unlock()
+	svc.Roots.flowSyncMu.Unlock()
 	if offers != 2 {
 		t.Fatalf("lib offered %d times, want twice: at the boot, and once after the answer", offers)
 	}
@@ -97,24 +97,24 @@ func TestNothingIsRefusedWhileTheEngineIsAway(t *testing.T) {
 		Roots:      []flow.Root{{Name: "configured", Path: configured}},
 		ConfigPath: configPath,
 		Tokens:     auth.NewMediaTokens([]byte("test-secret-test-secret-test-sec"), 0),
-		Resolver:   svc,
+		Resolver:   svc.Playback,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.FollowEngine(ctx, bridge)
+	svc.Roots.FollowEngine(ctx, bridge)
 	if err := bridge.Connect(ctx); err != nil {
 		t.Fatal(err)
 	}
 	later := filepath.Join(t.TempDir(), "later")
-	if info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "later", Path: later, AllowAbsent: true}); err != nil || info.StreamingWarning == "" {
+	if info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "later", Path: later, AllowAbsent: true}); err != nil || info.StreamingWarning == "" {
 		t.Fatalf("an absent folder: %+v %v, want the sidecar's refusal", info, err)
 	}
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
-	if !svc.flowRefusedAt("later", later) {
+	if !svc.Roots.flowRefusedAt("later", later) {
 		t.Fatal("the missing folder's refusal was not remembered")
 	}
 
@@ -130,19 +130,19 @@ func TestNothingIsRefusedWhileTheEngineIsAway(t *testing.T) {
 	if _, err := svc.Rescan(ctx, false); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return !svc.flowRefusedAt("later", later) }, "the old refusal forgotten once the folder is back")
+	waitFor(t, func() bool { return !svc.Roots.flowRefusedAt("later", later) }, "the old refusal forgotten once the folder is back")
 	talks := t.TempDir()
-	if info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "talks", Path: talks}); err != nil ||
+	if info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "talks", Path: talks}); err != nil ||
 		!strings.Contains(info.StreamingWarning, "when the streaming engine answers again") {
 		t.Fatalf("a library created while the engine is away: %+v %v, want it to wait for the engine", info, err)
 	}
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the second create's scan to end")
-	svc.flowSyncMu.Lock()
-	refused := len(svc.flowRefused)
-	svc.flowSyncMu.Unlock()
+	svc.Roots.flowSyncMu.Lock()
+	refused := len(svc.Roots.flowRefused)
+	svc.Roots.flowSyncMu.Unlock()
 	if refused != 0 {
 		t.Errorf("%d roots remembered as refused while the engine was away, want none", refused)
 	}
@@ -167,9 +167,9 @@ func TestNothingIsRefusedWhileTheEngineIsAway(t *testing.T) {
 		names := bridge.RootNames()
 		return slices.Contains(names, "later") && slices.Contains(names, "talks")
 	}, "both offered and taken at the engine's answer")
-	svc.flowSyncMu.Lock()
+	svc.Roots.flowSyncMu.Lock()
 	reloaded := reloads() - before
-	svc.flowSyncMu.Unlock()
+	svc.Roots.flowSyncMu.Unlock()
 	if reloaded != 2 {
 		t.Errorf("the answer reloaded %d times, want one offer of each", reloaded)
 	}

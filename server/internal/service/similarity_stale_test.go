@@ -49,7 +49,7 @@ func newRewrittenTrackWith(t *testing.T, extra func(t *testing.T, dir string)) r
 		},
 	})
 	enableSonicAnalysis(t, ctx, svc, uc)
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	pid := itemPIDByTitle(t, ctx, svc, uc, "Delta Groove")
@@ -105,7 +105,7 @@ func (s rewrittenTrack) rewrite(t *testing.T) {
 func (s rewrittenTrack) drain(t *testing.T, an SonicAnalyzer) {
 	t.Helper()
 	for {
-		worked, err := s.svc.DrainEmbeddedAnalysis(s.ctx, an)
+		worked, err := s.svc.Similarity.DrainEmbeddedAnalysis(s.ctx, an)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -169,7 +169,7 @@ func TestAStaleSonicAnalysisNeverFilesTheAudioThatReplacedIt(t *testing.T) {
 	}
 
 	// The replacement is analyzed under its own key.
-	if _, err := s.svc.SimilaritySweep(s.ctx); err != nil {
+	if _, err := s.svc.Similarity.Sweep(s.ctx); err != nil {
 		t.Fatal(err)
 	}
 	s.drain(t, an)
@@ -190,7 +190,7 @@ func TestASonicReportForAudioTheTrackNoLongerHoldsIsRefused(t *testing.T) {
 	}
 	s.rewrite(t)
 
-	res, err := s.svc.IngestEmbeddings(s.ctx, "test", 8, []EmbeddingUpload{
+	res, err := s.svc.Similarity.IngestEmbeddings(s.ctx, "test", 8, []EmbeddingUpload{
 		{PID: w.PID, Essence: w.Essence, Vector: []float32{1, 0, 0, 0, 0, 0, 0, 0}},
 	})
 	if err != nil {
@@ -268,7 +268,7 @@ func TestADroppedRowLeavesItsAudioToAnotherTrack(t *testing.T) {
 	}{
 		{"rewritten", func(t *testing.T, s rewrittenTrack) { s.rewrite(t) }},
 		{"trashed", func(t *testing.T, s rewrittenTrack) {
-			if _, err := s.svc.DeleteItems(s.ctx, s.uc, []string{s.pid}, "trash", false); err != nil {
+			if _, err := s.svc.Tools.DeleteItems(s.ctx, s.uc, []string{s.pid}, "trash", false); err != nil {
 				t.Fatal(err)
 			}
 		}},
@@ -288,12 +288,12 @@ func TestADroppedRowLeavesItsAudioToAnotherTrack(t *testing.T) {
 				t.Fatalf("the shared audio is queued for %s, want %s, the track the change moves", got, s.bare)
 			}
 			tc.change(t, s)
-			if _, err := s.svc.SimilaritySweep(s.ctx); err != nil {
+			if _, err := s.svc.Similarity.Sweep(s.ctx); err != nil {
 				t.Fatal(err)
 			}
 
 			s.drain(t, &windowAnalyzer{})
-			if _, err := s.svc.SimilaritySweep(s.ctx); err != nil {
+			if _, err := s.svc.Similarity.Sweep(s.ctx); err != nil {
 				t.Fatal(err)
 			}
 			s.drain(t, &windowAnalyzer{})
@@ -332,11 +332,11 @@ func TestAVectorReportedForATrashedTrackIsRefused(t *testing.T) {
 	if !ok {
 		t.Fatal("the track was not handed out")
 	}
-	if _, err := s.svc.DeleteItems(s.ctx, s.uc, []string{s.pid}, "trash", false); err != nil {
+	if _, err := s.svc.Tools.DeleteItems(s.ctx, s.uc, []string{s.pid}, "trash", false); err != nil {
 		t.Fatal(err)
 	}
 
-	res, err := s.svc.IngestEmbeddings(s.ctx, "test", 8, []EmbeddingUpload{
+	res, err := s.svc.Similarity.IngestEmbeddings(s.ctx, "test", 8, []EmbeddingUpload{
 		{PID: w.PID, Essence: w.Essence, Vector: []float32{1, 0, 0, 0, 0, 0, 0, 0}},
 	})
 	if err != nil {

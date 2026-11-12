@@ -22,16 +22,16 @@ type EngineState struct {
 // from what it said before puts the pid-less server marker on every
 // account's stream, so open clients read /health again; the first word,
 // at startup, is no change.
-func (l *Library) SetEngineState(ctx context.Context, st EngineState) {
+func (l *Roots) SetEngineState(ctx context.Context, st EngineState) {
 	if prev := l.streaming.Swap(&st); prev == nil || *prev == st {
 		return
 	}
-	l.emitEveryoneEvent(ctx, eventServer)
+	l.Jobs.emitEveryoneEvent(ctx, eventServer)
 }
 
 // EngineState is the engine's state as last recorded, the zero state
 // before anything was.
-func (l *Library) EngineState() EngineState {
+func (l *Roots) EngineState() EngineState {
 	if st := l.streaming.Load(); st != nil {
 		return *st
 	}
@@ -57,7 +57,7 @@ type EngineBridge interface {
 // engine and it is offered again when the engine answers, and so is one
 // held for an answer that crossed nothing (a reload that ran out of time
 // while the engine stayed up). Called once, before the bridge runs.
-func (l *Library) FollowEngine(ctx context.Context, b EngineBridge) {
+func (l *Roots) FollowEngine(ctx context.Context, b EngineBridge) {
 	l.SetEngineState(ctx, EngineState{Configured: true})
 	l.SetFlowRoots(b)
 	b.OnUp(func(ctx context.Context, st flow.Status) {
@@ -77,7 +77,7 @@ func (l *Library) FollowEngine(ctx context.Context, b EngineBridge) {
 // OfferHeldRoots offers the engine again the roots it held for an answer,
 // which were told they wait as a refused root is: their refusal is let go
 // and the root sync offers them, off the caller.
-func (l *Library) OfferHeldRoots(held []string) {
+func (l *Roots) OfferHeldRoots(held []string) {
 	l.workers.GoOnce(l.procCtx, "flow-roots", func(ctx context.Context) error {
 		l.flowSyncMu.Lock()
 		for _, name := range held {
@@ -90,7 +90,7 @@ func (l *Library) OfferHeldRoots(held []string) {
 }
 
 // engineAway reports a configured engine that is not answering.
-func (l *Library) engineAway() bool {
+func (l *Roots) engineAway() bool {
 	st := l.EngineState()
 	return st.Configured && !st.Connected
 }
@@ -101,7 +101,7 @@ func (l *Library) engineAway() bool {
 // the engine answering now, stands, so a root offered between its answer
 // and this re-sync is not offered twice. Run off the caller, since each
 // offer is a request to the engine.
-func (l *Library) ResyncFlowRoots() {
+func (l *Roots) ResyncFlowRoots() {
 	outages := l.flowOutages.Load()
 	l.workers.GoOnce(l.procCtx, "flow-roots", func(ctx context.Context) error {
 		l.flowSyncMu.Lock()
@@ -114,14 +114,10 @@ func (l *Library) ResyncFlowRoots() {
 
 // needsEngine refuses a request only the streaming engine serves, saying
 // so for an engine that is away rather than missing.
-func (l *Library) needsEngine(what string) error {
+func (l *Roots) needsEngine(what string) error {
 	msg := what + " needs the streaming engine"
 	if l.engineAway() {
 		msg += ", which is not reachable right now"
 	}
 	return &Error{Kind: KindFeature, Msg: msg}
 }
-
-// PodcastsOn reports whether this server keeps podcasts: false when its
-// podcast directory is turned off, which refuses every subscribe.
-func (l *Library) PodcastsOn() bool { return l.podcastDir != "" }

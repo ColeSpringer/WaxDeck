@@ -45,7 +45,7 @@ func nowPlayingMemoKey(userID, apiStationPID string) string {
 	return userID + "\x00" + apiStationPID
 }
 
-func (l *Library) cachedNowPlayingItem(userID, apiStationPID, title string) (string, bool) {
+func (l *Radio) cachedNowPlayingItem(userID, apiStationPID, title string) (string, bool) {
 	l.nowPlayingMemoMu.Lock()
 	defer l.nowPlayingMemoMu.Unlock()
 	entry, ok := l.nowPlayingMemos[nowPlayingMemoKey(userID, apiStationPID)]
@@ -57,13 +57,13 @@ func (l *Library) cachedNowPlayingItem(userID, apiStationPID, title string) (str
 
 // forgetNowPlayingMemos drops every memo, whose pids name a catalog that
 // was replaced.
-func (l *Library) forgetNowPlayingMemos() {
+func (l *Radio) forgetNowPlayingMemos() {
 	l.nowPlayingMemoMu.Lock()
 	defer l.nowPlayingMemoMu.Unlock()
 	l.nowPlayingMemos = nil
 }
 
-func (l *Library) memoNowPlayingItem(userID, apiStationPID, title, pid string) {
+func (l *Radio) memoNowPlayingItem(userID, apiStationPID, title, pid string) {
 	l.nowPlayingMemoMu.Lock()
 	defer l.nowPlayingMemoMu.Unlock()
 	if l.nowPlayingMemos == nil {
@@ -101,7 +101,7 @@ var radioTitleNoise = []string{
 	"hq",
 }
 
-// RadioNowPlayingItem resolves a station's announced title to a library
+// NowPlayingItem resolves a station's announced title to a library
 // track pid, empty when there is no confident match.
 //
 // The title is passed in rather than read here, and that is what keeps
@@ -113,7 +113,7 @@ var radioTitleNoise = []string{
 // Best effort by construction and by contract: the spec says the field
 // is absent more often than not and that a client falls back to the
 // station's artwork. Nothing downstream treats it as authoritative.
-func (l *Library) RadioNowPlayingItem(ctx context.Context, uc *UserCtx, apiStationPID, stationName, raw string) string {
+func (l *Radio) NowPlayingItem(ctx context.Context, uc *UserCtx, apiStationPID, stationName, raw string) string {
 	if raw == "" {
 		return ""
 	}
@@ -137,7 +137,7 @@ func (l *Library) RadioNowPlayingItem(ctx context.Context, uc *UserCtx, apiStati
 // resolveNowPlayingItem answers only a match with a cover, since the
 // face draws the pid's own. The memo keeps that answer per title, so
 // art added later shows from the station's next announcement.
-func (l *Library) resolveNowPlayingItem(ctx context.Context, uc *UserCtx, stationName, raw string) (string, error) {
+func (l *Radio) resolveNowPlayingItem(ctx context.Context, uc *UserCtx, stationName, raw string) (string, error) {
 	artist, title, ok := parseRadioTitle(raw, stationName)
 	if !ok {
 		return "", nil
@@ -156,7 +156,7 @@ func (l *Library) resolveNowPlayingItem(ctx context.Context, uc *UserCtx, statio
 // hasFrontArt walks the chain a front-cover read walks, off the row
 // alone, for a search hit the search already checked for visibility. An
 // error is a failed read, not the absence of a cover.
-func (l *Library) hasFrontArt(ctx context.Context, apiPID string) (bool, error) {
+func (l *Radio) hasFrontArt(ctx context.Context, apiPID string) (bool, error) {
 	_, pid, ok := parseAPIPID(apiPID)
 	if !ok {
 		return false, nil
@@ -181,7 +181,7 @@ func (l *Library) hasFrontArt(ctx context.Context, apiPID string) (bool, error) 
 // what marks a saved song "in your library now" has to be the same
 // judgement that drew its cover on the face, or the two surfaces would
 // disagree about whether the same announcement matches.
-func (l *Library) matchLibraryTrack(ctx context.Context, uc *UserCtx, rawArtist, rawTitle string) (string, error) {
+func (l *Radio) matchLibraryTrack(ctx context.Context, uc *UserCtx, rawArtist, rawTitle string) (string, error) {
 	artist, title := normalizeRadioField(rawArtist), normalizeRadioField(rawTitle)
 	// Both halves have to survive normalization. A title alone matches
 	// every cover version there is, and the artist is what makes the
@@ -196,7 +196,7 @@ func (l *Library) matchLibraryTrack(ctx context.Context, uc *UserCtx, rawArtist,
 	// Both halves, because a title alone matches every cover version and
 	// the artist is what makes the answer this recording. A small limit:
 	// the top hits are the only ones a confident match could be in.
-	hits, err := l.Search(ctx, uc, artist+" "+title, 5)
+	hits, err := l.Reads.Search(ctx, uc, artist+" "+title, 5)
 	if err != nil {
 		return "", err
 	}

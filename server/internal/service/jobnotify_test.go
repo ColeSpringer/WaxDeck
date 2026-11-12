@@ -16,13 +16,13 @@ import (
 // addAdmin makes a second administrator.
 func addAdmin(t *testing.T, ctx context.Context, svc *Library, name string) *UserCtx {
 	t.Helper()
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: name, Password: "correct-horse", Roles: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func addAdmin(t *testing.T, ctx context.Context, svc *Library, name string) *Use
 // inboxOf is every row in one account's inbox with an event among events.
 func inboxOf(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, events ...string) []InboxNotification {
 	t.Helper()
-	page, err := svc.Notifications(ctx, uc, "", 100)
+	page, err := svc.Integrations.Notifications(ctx, uc, "", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestAJobThatEndsBeforeItsStarterIsRecordedStillTellsThem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.adoptJob(ctx, res.JobPID, a.ID, "")
+	svc.Jobs.adoptJob(ctx, res.JobPID, a.ID, "")
 	waitForInbox(t, ctx, svc, a, "job-finished")
 	rows := inboxOf(t, ctx, svc, a, "job-finished")
 	if len(rows) != 1 || rows[0].TargetPID != apiPID(PrefixJob, res.JobPID) {
@@ -187,7 +187,7 @@ func TestAFailedJobSaysWhy(t *testing.T) {
 		if err := svc.db.InsertJobOrigin(ctx, wdb.JobOrigin{PID: string(pid), UserID: a.ID, CreatedAtNS: 1}); err != nil {
 			t.Fatal(err)
 		}
-		svc.settleJobOrigin(ctx, &model.Job{PID: pid, Kind: "analyze", State: tc.state, Error: tc.reason})
+		svc.Jobs.settleJobOrigin(ctx, &model.Job{PID: pid, Kind: "analyze", State: tc.state, Error: tc.reason})
 		want[pid] = tc.body
 	}
 	rows := inboxOf(t, ctx, svc, a, "job-finished", "job-failed")
@@ -210,23 +210,23 @@ func TestAFailedJobSaysWhy(t *testing.T) {
 func TestHealthSweepRequestClears(t *testing.T) {
 	t.Parallel()
 	ctx, svc, a := openEnrichFixture(t, func(*Config) {})
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if svc.HealthSweepDue(ctx) {
+	if svc.Health.SweepDue(ctx) {
 		t.Fatal("a sweep is due right after one ran")
 	}
-	if err := svc.QueueHealthSweep(ctx, a); err != nil {
+	if err := svc.Health.QueueHealthSweep(ctx, a); err != nil {
 		t.Fatal(err)
 	}
-	if sum, err := svc.HealthSummaryFor(ctx, a); err != nil || !sum.Sweeping || !svc.HealthSweepDue(ctx) {
-		t.Fatalf("after the request: sweeping %v, due %v (%v); want both", sum.Sweeping, svc.HealthSweepDue(ctx), err)
+	if sum, err := svc.Health.SummaryFor(ctx, a); err != nil || !sum.Sweeping || !svc.Health.SweepDue(ctx) {
+		t.Fatalf("after the request: sweeping %v, due %v (%v); want both", sum.Sweeping, svc.Health.SweepDue(ctx), err)
 	}
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if sum, err := svc.HealthSummaryFor(ctx, a); err != nil || sum.Sweeping || svc.HealthSweepDue(ctx) {
-		t.Fatalf("after the sweep: sweeping %v, due %v (%v); want neither", sum.Sweeping, svc.HealthSweepDue(ctx), err)
+	if sum, err := svc.Health.SummaryFor(ctx, a); err != nil || sum.Sweeping || svc.Health.SweepDue(ctx) {
+		t.Fatalf("after the sweep: sweeping %v, due %v (%v); want neither", sum.Sweeping, svc.Health.SweepDue(ctx), err)
 	}
 }
 
@@ -235,10 +235,10 @@ func TestHealthSweepRequestClears(t *testing.T) {
 func TestSynchronousWorkTellsTheAdministratorToo(t *testing.T) {
 	t.Parallel()
 	ctx, svc, a := openEnrichFixture(t, func(c *Config) { c.Roots[0].Managed = true })
-	if _, err := svc.EmptyTrash(ctx, a); err != nil {
+	if _, err := svc.Tools.EmptyTrash(ctx, a); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.ApplyOrganize(ctx, a, "waxbin-native", nil); err != nil {
+	if _, err := svc.Health.ApplyOrganize(ctx, a, "waxbin-native", nil); err != nil {
 		t.Fatal(err)
 	}
 	titles := map[string]string{}
@@ -274,44 +274,44 @@ func markers(t *testing.T, ctx context.Context, svc *Library, userID, kind, pid 
 func TestAFailedSweepAnswersItsRequestAndSaysSo(t *testing.T) {
 	t.Parallel()
 	ctx, svc, a := openEnrichFixture(t, func(*Config) {})
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.QueueHealthSweep(ctx, a); err != nil {
+	if err := svc.Health.QueueHealthSweep(ctx, a); err != nil {
 		t.Fatal(err)
 	}
 	seen := markers(t, ctx, svc, a.ID, eventHealth, "")
-	req := svc.sweepRequest(ctx)
-	svc.sweeping.Store(true)
-	svc.sweepEnded(ctx, req, errors.New("the disk went away"))
-	sum, err := svc.HealthSummaryFor(ctx, a)
-	if err != nil || sum.Sweeping || !sum.SweepFailed || svc.HealthSweepDue(ctx) {
+	req := svc.Health.sweepRequest(ctx)
+	svc.Health.sweeping.Store(true)
+	svc.Health.sweepEnded(ctx, req, errors.New("the disk went away"))
+	sum, err := svc.Health.SummaryFor(ctx, a)
+	if err != nil || sum.Sweeping || !sum.SweepFailed || svc.Health.SweepDue(ctx) {
 		t.Fatalf("after a failed sweep: sweeping %v, failed %v, due %v (%v); want failed alone",
-			sum.Sweeping, sum.SweepFailed, svc.HealthSweepDue(ctx), err)
+			sum.Sweeping, sum.SweepFailed, svc.Health.SweepDue(ctx), err)
 	}
 	if n := markers(t, ctx, svc, a.ID, eventHealth, ""); n != seen+1 {
 		t.Fatalf("markers = %d, want the failure told once (%d)", n, seen+1)
 	}
-	svc.sweepEnded(ctx, "", errors.New("the disk is still gone"))
+	svc.Health.sweepEnded(ctx, "", errors.New("the disk is still gone"))
 	if n := markers(t, ctx, svc, a.ID, eventHealth, ""); n != seen+1 {
 		t.Fatalf("markers = %d after a second failure, want no more (%d)", n, seen+1)
 	}
 	// A request that fails in the same run still ends, and clients
 	// reading it as sweeping have to hear so.
-	if err := svc.QueueHealthSweep(ctx, a); err != nil {
+	if err := svc.Health.QueueHealthSweep(ctx, a); err != nil {
 		t.Fatal(err)
 	}
 	seen = markers(t, ctx, svc, a.ID, eventHealth, "")
-	svc.sweeping.Store(true)
-	svc.sweepEnded(ctx, svc.sweepRequest(ctx), errors.New("the disk is gone for good"))
+	svc.Health.sweeping.Store(true)
+	svc.Health.sweepEnded(ctx, svc.Health.sweepRequest(ctx), errors.New("the disk is gone for good"))
 	if n := markers(t, ctx, svc, a.ID, eventHealth, ""); n != seen+1 {
 		t.Fatalf("markers = %d after a requested sweep failed again, want its end told (%d)", n, seen+1)
 	}
 	seen = markers(t, ctx, svc, a.ID, eventHealth, "")
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if sum, err := svc.HealthSummaryFor(ctx, a); err != nil || sum.SweepFailed {
+	if sum, err := svc.Health.SummaryFor(ctx, a); err != nil || sum.SweepFailed {
 		t.Fatalf("after a sweep that landed: failed %v (%v), want cleared", sum.SweepFailed, err)
 	}
 	if n := markers(t, ctx, svc, a.ID, eventHealth, ""); n != seen+1 {

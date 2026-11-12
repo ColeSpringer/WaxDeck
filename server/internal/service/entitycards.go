@@ -72,7 +72,7 @@ var entityCardKind = map[string]string{
 // gone-for-you-today may be back tomorrow and a client that pruned it
 // would have turned a temporary state into a permanent loss. Departed
 // is the signal a pinned list prunes on.
-func (l *Library) EntityCards(ctx context.Context, uc *UserCtx, apiPIDs []string) ([]EntityCard, []string, error) {
+func (l *Reads) EntityCards(ctx context.Context, uc *UserCtx, apiPIDs []string) ([]EntityCard, []string, error) {
 	if len(apiPIDs) > maxEntityCards {
 		return nil, nil, errInvalid(fmt.Sprintf("at most %d pids", maxEntityCards))
 	}
@@ -156,7 +156,7 @@ func (l *Library) EntityCards(ctx context.Context, uc *UserCtx, apiPIDs []string
 // (EntityByPIDs omits unknown pids rather than erroring). An entity the
 // read DID answer but the gate hides is out of the cards and out of
 // departed both - it exists, and a widened grant brings it back.
-func (l *Library) entityKindCards(ctx context.Context, uc *UserCtx, prefix string, pids []model.PID) (map[string]EntityCard, map[string]bool, error) {
+func (l *Reads) entityKindCards(ctx context.Context, uc *UserCtx, prefix string, pids []model.PID) (map[string]EntityCard, map[string]bool, error) {
 	kind, ok := entityKindForPrefix(prefix)
 	if !ok {
 		return nil, nil, errInvalid("no entity kind for prefix " + prefix)
@@ -215,7 +215,7 @@ func (l *Library) entityKindCards(ctx context.Context, uc *UserCtx, prefix strin
 // title is the name), and a failed hop leaves the line empty rather than
 // failing the whole read: a card with no artist under it still opens the
 // right screen, and a shelf is not worth an error page.
-func (l *Library) entityArtistNames(ctx context.Context, prefix string, infos map[model.PID]*read.EntityInfo) map[model.PID]string {
+func (l *Reads) entityArtistNames(ctx context.Context, prefix string, infos map[model.PID]*read.EntityInfo) map[model.PID]string {
 	if prefix != PrefixAlbum && prefix != PrefixReleaseGroup {
 		return nil
 	}
@@ -287,10 +287,10 @@ func (l *Library) entityArtistNames(ctx context.Context, prefix string, infos ma
 // exists and is somebody else's private list is only invisible - the
 // owner sharing it again brings the card back, and pruning the pin
 // meanwhile would make that a loss.
-func (l *Library) playlistCards(ctx context.Context, uc *UserCtx, pids []model.PID) (map[string]EntityCard, map[string]bool, error) {
+func (l *Reads) playlistCards(ctx context.Context, uc *UserCtx, pids []model.PID) (map[string]EntityCard, map[string]bool, error) {
 	out := make(map[string]EntityCard, len(pids))
 	departed := map[string]bool{}
-	narrow := l.staticMemberNarrow(ctx, uc)
+	narrow := l.Playlists.staticMemberNarrow(ctx, uc)
 	for _, pid := range pids {
 		api := apiPID(PrefixPlaylist, pid)
 		pl, err := l.lib.Playlists().Get(ctx, pid)
@@ -307,7 +307,7 @@ func (l *Library) playlistCards(ctx context.Context, uc *UserCtx, pids []model.P
 		// The listing row's count, not the opened playlist's: one live
 		// indexed COUNT for a static list and deliberately absent for a
 		// smart one, which is the same trade a grid of tiles makes.
-		dto := l.playlistDTO(ctx, uc, pl, false, narrow)
+		dto := l.Playlists.dto(ctx, uc, pl, false, narrow)
 		out[api] = EntityCard{
 			PID:       api,
 			Kind:      entityCardKind[PrefixPlaylist],
@@ -328,8 +328,8 @@ func (l *Library) playlistCards(ctx context.Context, uc *UserCtx, pids []model.P
 // keeps its unpin row for exactly this state. Departed is a subscribed
 // show the server no longer has - the one absence resubscribing cannot
 // mend.
-func (l *Library) showCards(ctx context.Context, uc *UserCtx, pids []model.PID) (map[string]EntityCard, map[string]bool, error) {
-	subs, err := l.subscribedShowSet(ctx, uc)
+func (l *Reads) showCards(ctx context.Context, uc *UserCtx, pids []model.PID) (map[string]EntityCard, map[string]bool, error) {
+	subs, err := l.Podcasts.subscribedShowSet(ctx, uc)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -340,7 +340,7 @@ func (l *Library) showCards(ctx context.Context, uc *UserCtx, pids []model.PID) 
 			continue
 		}
 		api := apiPID(PrefixPodcast, pid)
-		pod, err := l.getShow(ctx, api)
+		pod, err := l.Podcasts.getShow(ctx, api)
 		if err != nil {
 			if KindOf(err) == KindNotFound {
 				departed[api] = true
@@ -367,7 +367,7 @@ func (l *Library) showCards(ctx context.Context, uc *UserCtx, pids []model.PID) 
 // sight - a grant, a content rule, the trash a restore could empty - is
 // dropped without being departed, because each of those states can end
 // with the book back.
-func (l *Library) bookCards(ctx context.Context, uc *UserCtx, pids []model.PID) (map[string]EntityCard, map[string]bool, error) {
+func (l *Reads) bookCards(ctx context.Context, uc *UserCtx, pids []model.PID) (map[string]EntityCard, map[string]bool, error) {
 	out := make(map[string]EntityCard, len(pids))
 	departed := map[string]bool{}
 	for _, pid := range pids {
@@ -384,7 +384,7 @@ func (l *Library) bookCards(ctx context.Context, uc *UserCtx, pids []model.PID) 
 			departed[api] = true
 			continue
 		}
-		if archived(it) || !l.viewVisible(ctx, uc, it) || !l.allowedByContent(ctx, uc, it) {
+		if archived(it) || !l.Grants.viewVisible(ctx, uc, it) || !l.Grants.allowedByContent(ctx, uc, it) {
 			continue
 		}
 		out[api] = EntityCard{

@@ -60,7 +60,7 @@ func TestAToolTrashThatLeavesAPartSaysWhichPartStayed(t *testing.T) {
 		t.Fatalf("parts = %d, want the two discs as one book", parts)
 	}
 	lockFolder(t, filepath.Join(root, "Tool Book", "CD2"))
-	trashed, err := svc.trashToolFiles(ctx, partFiles(t, ctx, svc, book), taskTypeBookMerge)
+	trashed, err := svc.Tools.trashToolFiles(ctx, partFiles(t, ctx, svc, book), taskTypeBookMerge)
 	if KindOf(err) != KindStorageUnwritable || !errors.Is(err, errToolPermanent) || trashed != 1 {
 		t.Fatalf("trash = %d, %v (kind %q), want one trashed and a permanent refusal", trashed, err, KindOf(err))
 	}
@@ -111,12 +111,12 @@ func TestAMergeOfABookPartlyInAReadOnlyLibraryIsRefused(t *testing.T) {
 	}
 	// The flag reaches the write checks on the catalog's change event,
 	// which a loaded run can deliver after the merge asks; read it now.
-	svc.refreshLibraryState(ctx)
-	svc.SetFlowJobs(newFakeBookEngine(t))
-	if _, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false); KindOf(err) != KindReadOnly {
+	svc.Roots.refreshLibraryState(ctx)
+	svc.Tools.SetFlowJobs(newFakeBookEngine(t))
+	if _, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false); KindOf(err) != KindReadOnly {
 		t.Fatalf("merge = %v (kind %q), want read-only", err, KindOf(err))
 	}
-	if tasks, _, err := svc.ListToolTasksFor(ctx, uc, "", 10); err != nil || len(tasks) != 0 {
+	if tasks, _, err := svc.Tools.ListToolTasksFor(ctx, uc, "", 10); err != nil || len(tasks) != 0 {
 		t.Fatalf("tasks = %+v (%v), want nothing queued", tasks, err)
 	}
 }
@@ -128,11 +128,11 @@ func TestACueSplitWhoseRipStaysFailsSayingSo(t *testing.T) {
 	skipWithoutUnwritablePaths(t)
 	ctx, svc, uc := newCueFixture(t)
 	one, _, _ := carvedTracks(t, ctx, svc, uc)
-	seed, err := svc.getVisibleItem(ctx, uc, one)
+	seed, err := svc.Grants.getVisibleItem(ctx, uc, one)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rip, _, err := svc.cueRip(ctx, seed)
+	rip, _, err := svc.Tools.cueRip(ctx, seed)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func TestACueSplitWhoseRipStaysFailsSayingSo(t *testing.T) {
 		t.Fatal(err)
 	}
 	lockFolder(t, filepath.Dir(string(file.Path)))
-	err = svc.trashRip(ctx, rip)
+	err = svc.Tools.trashRip(ctx, rip)
 	if !errors.Is(err, errToolPermanent) || KindOf(err) != KindStorageUnwritable ||
 		!strings.Contains(err.Error(), "Rip Album.flac") || !strings.Contains(err.Error(), "the rip stays beside the tracks split from it") {
 		t.Fatalf("trash of the rip = %v (kind %q), want a permanent refusal saying the rip stays", err, KindOf(err))

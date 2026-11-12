@@ -29,7 +29,7 @@ func (h *Handler) getSimilarSongs(w http.ResponseWriter, r *http.Request, uc *se
 		h.fail(w, r, 70, "no such id")
 		return
 	}
-	res, err := h.svc.SimilarTracksFor(r.Context(), uc, seedPID, count)
+	res, err := h.svc.Similarity.SimilarTracksFor(r.Context(), uc, seedPID, count)
 	if err != nil {
 		h.failFromService(w, r, err, "finding similar songs failed")
 		return
@@ -76,7 +76,7 @@ func (h *Handler) getSonicSimilarTracks(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	count := clampCount(formInt(r, "count", 50))
-	res, err := h.svc.SimilarTracksFor(r.Context(), uc, id, count)
+	res, err := h.svc.Similarity.SimilarTracksFor(r.Context(), uc, id, count)
 	if err != nil {
 		h.failFromService(w, r, err, "finding sonic similar tracks failed")
 		return
@@ -109,7 +109,7 @@ func (h *Handler) findSonicPath(w http.ResponseWriter, r *http.Request, uc *serv
 	if length > 50 {
 		length = 50
 	}
-	res, err := h.svc.SonicPathFor(r.Context(), uc, from, to, length)
+	res, err := h.svc.Similarity.SonicPathFor(r.Context(), uc, from, to, length)
 	if err != nil {
 		h.failFromService(w, r, err, "finding a sonic path failed")
 		return

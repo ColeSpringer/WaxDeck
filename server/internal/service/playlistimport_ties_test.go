@@ -29,7 +29,7 @@ func TestPlaylistImportKeepsTheCopyTheAlbumNames(t *testing.T) {
 	}
 	lowest, named := namesakes[0], namesakes[1]
 
-	out, err := f.svc.ImportStreamingPlaylist(ctx, f.uc, PlaylistImportInput{
+	out, err := f.svc.Playlists.ImportStreamingPlaylist(ctx, f.uc, PlaylistImportInput{
 		Source: "portable", Name: "Named copy",
 		Refs: []PortableRefDTO{
 			{Kind: "track", MBID: mbid, Artist: "Twice Artist", Title: "Twice Song", Album: named.Album},
@@ -79,7 +79,7 @@ func TestPlaylistImportLooksPastAHiddenCopy(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	libs, err := f.svc.Libraries(ctx)
+	libs, err := f.svc.Roots.Libraries(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestPlaylistImportLooksPastAHiddenCopy(t *testing.T) {
 			ID: f.uc.ID, CatalogPID: f.uc.CatalogPID,
 			Libraries: map[string]bool{libraryOf[copies[c.visible].Album]: true},
 		}
-		out, err := f.svc.ImportStreamingPlaylist(ctx, reader, PlaylistImportInput{
+		out, err := f.svc.Playlists.ImportStreamingPlaylist(ctx, reader, PlaylistImportInput{
 			Source: "portable", Name: c.what,
 			Refs: []PortableRefDTO{{
 				Kind: "track", MBID: mbid, Artist: "Split Artist", Title: "Split Song", Album: copies[c.hidden].Album,

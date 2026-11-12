@@ -29,11 +29,11 @@ func TestARefusedBookToolProbesTheRootsAgain(t *testing.T) {
 	if parts != 2 {
 		t.Fatalf("parts = %d, want the two as one book", parts)
 	}
-	svc.SetFlowJobs(newFakeBookEngine(t))
-	waitFor(t, svc.rootProbe.idle, "the boot probe pass to end")
+	svc.Tools.SetFlowJobs(newFakeBookEngine(t))
+	waitFor(t, svc.Roots.rootProbe.idle, "the boot probe pass to end")
 	lockFolder(t, dir)
 	passes := countProbePasses(svc)
-	if _, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false); KindOf(err) != KindStorageUnwritable {
+	if _, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false); KindOf(err) != KindStorageUnwritable {
 		t.Fatalf("merge = %v, want storage-unwritable", err)
 	}
 	waitFor(t, func() bool { return passes.Load() >= 1 }, "a probe pass after the refused merge")

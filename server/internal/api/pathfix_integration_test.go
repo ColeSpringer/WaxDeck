@@ -13,7 +13,7 @@ import (
 func TestHealthPathFixNeedsAScope(t *testing.T) {
 	t.Parallel()
 	h := newManagedHarness(t)
-	if err := h.svc.RunHealthSweep(context.Background()); err != nil {
+	if err := h.svc.Health.RunHealthSweep(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	resp := h.postJSON(t, "/api/v1/library/health/fix", map[string]any{"rule": "path-mismatch"})
@@ -36,7 +36,7 @@ func TestAScopedPathFixMovesOneItem(t *testing.T) {
 	if fix.TaskId == nil || fix.JobPid != nil || fix.Queued != 1 {
 		t.Fatalf("fix = %+v, want one item on a task", fix)
 	}
-	for h.svc.DrainLongToolTasks(context.Background()) {
+	for h.svc.Tools.DrainLongToolTasks(context.Background()) {
 	}
 	task := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+*fix.TaskId, h.token))
 	if task.State != "done" || task.Summary == nil {

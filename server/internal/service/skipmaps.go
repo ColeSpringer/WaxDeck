@@ -65,8 +65,8 @@ var errAnalysisStale = errors.New("the item no longer holds the queued audio")
 // SkipMapFor answers one item's skip map, queuing analysis on a miss
 // when the item is mappable. partIndex selects a multi-file book's
 // part (ignored elsewhere).
-func (l *Library) SkipMapFor(ctx context.Context, uc *UserCtx, apiItemPID string, partIndex int) (SkipMapResult, error) {
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+func (l *Tools) SkipMapFor(ctx context.Context, uc *UserCtx, apiItemPID string, partIndex int) (SkipMapResult, error) {
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return SkipMapResult{}, err
 	}
@@ -133,7 +133,7 @@ func (l *Library) SkipMapFor(ctx context.Context, uc *UserCtx, apiItemPID string
 		if away {
 			// Waiting on the engine, not unmappable: the analysis runs when
 			// it answers.
-			return SkipMapResult{}, l.needsEngine("a skip map")
+			return SkipMapResult{}, l.Roots.needsEngine("a skip map")
 		}
 		if !stale {
 			// A true miss has no spans to serve yet.
@@ -167,7 +167,7 @@ func (l *Library) SkipMapFor(ctx context.Context, uc *UserCtx, apiItemPID string
 // to advertise dsp.silenceDetector) or an absent jobs surface keeps the
 // stored map in service, so a detector upgrade re-analyzes lazily on
 // access rather than dropping usable maps it cannot yet rebuild.
-func (l *Library) silenceMapStale(m wdb.SilenceMap) bool {
+func (l *Tools) silenceMapStale(m wdb.SilenceMap) bool {
 	if l.flowJobs == nil || !l.flowJobs.JobsSupported() {
 		return false
 	}
@@ -181,7 +181,7 @@ func (l *Library) silenceMapStale(m wdb.SilenceMap) bool {
 // no part, so they read through the item as they always did: two or
 // more files is the whole condition, and both callers have to agree on
 // it or one would echo a part the other refuses.
-func (l *Library) resolvePart(ctx context.Context, it *model.ItemView, partIndex int) (string, *int, error) {
+func (l *Tools) resolvePart(ctx context.Context, it *model.ItemView, partIndex int) (string, *int, error) {
 	if it.Kind != model.KindBook {
 		return "", nil, nil
 	}
@@ -201,22 +201,22 @@ func (l *Library) resolvePart(ctx context.Context, it *model.ItemView, partIndex
 
 // streamFile resolves the file a skip map describes: the named part,
 // or the item's own backing file.
-func (l *Library) streamFile(ctx context.Context, it *model.ItemView, filePID string) (*model.File, error) {
+func (l *Tools) streamFile(ctx context.Context, it *model.ItemView, filePID string) (*model.File, error) {
 	if filePID != "" {
-		return l.fileByPID(ctx, model.PID(filePID))
+		return l.Playback.fileByPID(ctx, model.PID(filePID))
 	}
 	loc, err := l.paths.Locate(ctx, it.PID)
 	if err != nil {
 		return nil, classify(err)
 	}
-	return l.fileByPID(ctx, loc.FilePID)
+	return l.Playback.fileByPID(ctx, loc.FilePID)
 }
 
 // enqueueAnalysisForItem queues silence analysis for an item's backing
 // file, best effort (a fetch that lands without a map gets one on the
 // first skip-map request instead). One queued while the engine is away
 // runs once it answers.
-func (l *Library) enqueueAnalysisForItem(ctx context.Context, pid model.PID) {
+func (l *Tools) enqueueAnalysisForItem(ctx context.Context, pid model.PID) {
 	if l.flowJobs == nil || (!l.flowJobs.JobsSupported() && !l.jobsAway()) {
 		return
 	}
@@ -236,7 +236,7 @@ func (l *Library) enqueueAnalysisForItem(ctx context.Context, pid model.PID) {
 // jobsAway reports a configured engine that is not answering now, read
 // off the bridge where it says, so analysis waits for it; an engine that
 // answers without a jobs surface is not away.
-func (l *Library) jobsAway() bool {
+func (l *Tools) jobsAway() bool {
 	if l.flowJobs == nil {
 		return false
 	}
@@ -262,14 +262,14 @@ type FlowJobs interface {
 // SetFlowJobs wires the bridge's jobs surface after both sides exist
 // (the bridge needs the service as its resolver, so construction is
 // two-phase).
-func (l *Library) SetFlowJobs(j FlowJobs) { l.flowJobs = j }
+func (l *Tools) SetFlowJobs(j FlowJobs) { l.flowJobs = j }
 
 // DrainAnalysisQueue works one queued analysis; returns false when the
 // queue is idle so the caller can sleep. A hand-off leaves the queue
 // waiting for it, as does a shutdown, whenever either begins: neither is a
 // verdict on the audio, so the entry is handed back uncounted.
-func (l *Library) DrainAnalysisQueue(ctx context.Context) bool {
-	if l.Maintenance() || l.flowJobs == nil || !l.flowJobs.JobsSupported() {
+func (l *Tools) DrainAnalysisQueue(ctx context.Context) bool {
+	if l.library.Maintenance() || l.flowJobs == nil || !l.flowJobs.JobsSupported() {
 		return false
 	}
 	row, err := l.db.LeaseAnalysis(ctx, time.Now().UnixNano(), analysisLease.Nanoseconds(), analysisMaxAttempts)
@@ -318,7 +318,7 @@ func (l *Library) DrainAnalysisQueue(ctx context.Context) bool {
 // file and refuses on an absent library root, which is the dropped-mount
 // distinction usableSource draws by hand. Never fails the drain -- the analysis
 // entry is moot either way.
-func (l *Library) markAudioMissing(ctx context.Context, queueKey string) {
+func (l *Tools) markAudioMissing(ctx context.Context, queueKey string) {
 	itemPID, _, _ := strings.Cut(queueKey, "|")
 	if itemPID == "" {
 		return
@@ -350,46 +350,28 @@ func (l *Library) markAudioMissing(ctx context.Context, queueKey string) {
 
 // markMissing is the catalog's mark-missing, through markMissingHook in a
 // test.
-func (l *Library) markMissing(ctx context.Context, pid model.PID) (model.MarkMissingOutcome, error) {
+func (l *Tools) markMissing(ctx context.Context, pid model.PID) (model.MarkMissingOutcome, error) {
 	if l.markMissingHook != nil {
 		return l.markMissingHook(ctx, pid)
 	}
 	return l.lib.MarkMissing(ctx, pid, waxbin.MarkMissingOptions{Force: false})
 }
 
-// itemFile reads an item and its file as the catalog holds them now,
-// through the seams a test fails reads by: not-found when either is gone,
-// as an item in the trash keeps no file.
-func (l *Library) itemFile(ctx context.Context, pid model.PID) (*model.ItemView, *model.File, error) {
-	it, err := l.catalogItem(ctx, pid)
-	if err != nil {
-		return nil, nil, classify(err)
-	}
-	if it.FilePID == "" {
-		return nil, nil, errNotFound("the item has no file")
-	}
-	f, err := l.fileByPID(ctx, it.FilePID)
-	if err != nil {
-		return nil, nil, err
-	}
-	return it, f, nil
-}
-
 // entryFile reads the file a queued analysis names as the catalog holds
 // it now, not through the located-path cache, which can still name a file
 // that moved or what took its place: the named part's, or the item's own.
-func (l *Library) entryFile(ctx context.Context, itemPID, filePID string) (*model.File, error) {
+func (l *Tools) entryFile(ctx context.Context, itemPID, filePID string) (*model.File, error) {
 	if filePID == "" {
-		_, f, err := l.itemFile(ctx, model.PID(itemPID))
+		_, f, err := l.Playback.itemFile(ctx, model.PID(itemPID))
 		return f, err
 	}
-	return l.fileByPID(ctx, model.PID(filePID))
+	return l.Playback.fileByPID(ctx, model.PID(filePID))
 }
 
 // holdsEssence checks that the catalog, read now, still backs the item, or
 // its named part, with a file of the given essence at path:
 // errAnalysisStale when it does not.
-func (l *Library) holdsEssence(ctx context.Context, itemPID, filePID, essence, path string) error {
+func (l *Tools) holdsEssence(ctx context.Context, itemPID, filePID, essence, path string) error {
 	f, err := l.entryFile(ctx, itemPID, filePID)
 	switch {
 	case KindOf(err) == KindNotFound:
@@ -406,7 +388,7 @@ func (l *Library) holdsEssence(ctx context.Context, itemPID, filePID, essence, p
 // when the catalog names bytes that are not there, a retryable error when
 // the library root itself is missing, which is storage that has not
 // arrived rather than audio that is gone.
-func (l *Library) usableSource(path string) error {
+func (l *Tools) usableSource(path string) error {
 	if path == "" {
 		return errAnalysisMoot
 	}
@@ -424,10 +406,10 @@ func (l *Library) usableSource(path string) error {
 // storageRootFor answers the library root a path sits under, longest match,
 // or "" for none: the root table and podcast dir, not the catalog's
 // attribution, which only carries roots with a display path.
-func (l *Library) storageRootFor(path string) string {
+func (l *Tools) storageRootFor(path string) string {
 	clean := filepath.Clean(path)
 	best := ""
-	for _, dir := range append([]string{l.podcastDir}, rootPaths(l.libraryRoots())...) {
+	for _, dir := range append([]string{l.Podcasts.podcastDir}, rootPaths(l.Roots.libraryRoots())...) {
 		if dir == "" {
 			continue
 		}
@@ -450,7 +432,7 @@ func rootPaths(roots []Root) []string {
 	return out
 }
 
-func (l *Library) runAnalysis(ctx context.Context, row wdb.QueueRow) error {
+func (l *Tools) runAnalysis(ctx context.Context, row wdb.QueueRow) error {
 	itemPID, filePID, _ := strings.Cut(row.ItemPID, "|")
 	f, err := l.entryFile(ctx, itemPID, filePID)
 	if KindOf(err) == KindNotFound {

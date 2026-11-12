@@ -15,11 +15,11 @@ func TestAShareMemberWithoutAFileHasNoAudioUnlessItRelays(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	show := model.PID("01SHOWFORTRASHEDMEMBERS000")
-	svc.showSources.Store(show, model.SourceRSS)
+	svc.Podcasts.showSources.Store(show, model.SourceRSS)
 	feedEpisode := func(pid model.PID) *model.Episode {
 		return &model.Episode{PID: pid, PodcastPID: show, EnclosureURL: "https://feeds.example/ep.mp3"}
 	}
-	svc.episodeReadHook = func(_ context.Context, pids []model.PID) ([]*model.Episode, error) {
+	svc.Podcasts.episodeReadHook = func(_ context.Context, pids []model.PID) ([]*model.Episode, error) {
 		out := make([]*model.Episode, 0, len(pids))
 		for _, pid := range pids {
 			out = append(out, feedEpisode(pid))
@@ -36,7 +36,7 @@ func TestAShareMemberWithoutAFileHasNoAudioUnlessItRelays(t *testing.T) {
 		{PID: "01REMOTETRACK0000000000000", Kind: model.KindTrack, State: model.StateRemote},
 		{PID: "01MISSINGEPISODE0000000000", Kind: model.KindEpisode, State: model.StateMissing, PodcastPID: show},
 	}
-	audio, err := svc.shareAudio(ctx, views, nil)
+	audio, err := svc.Reads.shareAudio(ctx, views, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

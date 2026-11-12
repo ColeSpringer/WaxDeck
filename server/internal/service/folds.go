@@ -50,7 +50,7 @@ type foldReader func(context.Context, model.MergeEntity) ([]model.EntityFold, er
 
 // ListEntityFolds pages every type's folds, by type, then key. A
 // non-positive limit lists them all. Administrators only.
-func (l *Library) ListEntityFolds(ctx context.Context, uc *UserCtx, cursor string, limit int) ([]EntityFoldDTO, string, error) {
+func (l *Reads) ListEntityFolds(ctx context.Context, uc *UserCtx, cursor string, limit int) ([]EntityFoldDTO, string, error) {
 	if !uc.Admin {
 		return nil, "", &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -121,7 +121,7 @@ func foldsAfter(ctx context.Context, read foldReader, cursor string, limit int) 
 // moved, replaced or retagged, and the files the entity holds stay with
 // it until they change or move; a rescan, forced or not, leaves an
 // unchanged file where it is. Administrators only.
-func (l *Library) UnfoldEntities(ctx context.Context, uc *UserCtx, entityType string, keys []string) error {
+func (l *Reads) UnfoldEntities(ctx context.Context, uc *UserCtx, entityType string, keys []string) error {
 	if !uc.Admin {
 		return &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -135,7 +135,7 @@ func (l *Library) UnfoldEntities(ctx context.Context, uc *UserCtx, entityType st
 	if err := l.lib.UnfoldEntity(ctx, et, keys...); err != nil {
 		return classify(err)
 	}
-	l.Audit(ctx, uc, "entity.unfold", AuditTarget{Kind: entityType}, map[string]any{"keys": keys})
+	l.Audit.Record(ctx, uc, "entity.unfold", AuditTarget{Kind: entityType}, map[string]any{"keys": keys})
 	return nil
 }
 
@@ -213,7 +213,7 @@ func folderPlaces(libs []*model.Library, names map[model.PID]string, items []*mo
 // placeAlbumFolds places album folds by the files of the albums they
 // name: a folder a key holds is one the album's files sit in, and such a
 // file, present at the last scan, says which library and where in it.
-func (l *Library) placeAlbumFolds(ctx context.Context, folds []model.EntityFold) (map[string]placement, error) {
+func (l *Reads) placeAlbumFolds(ctx context.Context, folds []model.EntityFold) (map[string]placement, error) {
 	var albums []string
 	for _, f := range folds {
 		if f.EntityType == model.MergeAlbum && readFoldKey(f.EntityType, f.Key).folder != "" &&
@@ -230,7 +230,7 @@ func (l *Library) placeAlbumFolds(ctx context.Context, folds []model.EntityFold)
 	}
 	names := make(map[model.PID]string, len(libs))
 	for _, lib := range libs {
-		names[lib.PID] = l.libraryInfo(lib).Name
+		names[lib.PID] = l.Roots.libraryInfo(lib).Name
 	}
 	var items []*model.ItemView
 	for chunk := range slices.Chunk(albums, catalogSetCap) {

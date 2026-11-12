@@ -27,7 +27,7 @@ func (s *Server) enclosurePlayInfo(ctx context.Context, userID, cred, pid string
 	if s.media == nil || !errors.Is(cause, service.ErrEpisodeNotFetched) {
 		return GetPlayInfo200JSONResponse{}, false
 	}
-	src, ok := s.svc.PassthroughEpisode(ctx, userID, pid)
+	src, ok := s.svc.Podcasts.PassthroughEpisode(ctx, userID, pid)
 	if !ok {
 		return GetPlayInfo200JSONResponse{}, false
 	}
@@ -72,7 +72,7 @@ func (r *ConnectResolver) enclosureItem(ctx context.Context, userID, pid string,
 	if r.Media == nil || force != "" || !errors.Is(cause, service.ErrEpisodeNotFetched) {
 		return "", "", false
 	}
-	src, ok := r.Svc.PassthroughEpisode(ctx, userID, pid)
+	src, ok := r.Svc.Podcasts.PassthroughEpisode(ctx, userID, pid)
 	if !ok {
 		return "", "", false
 	}
@@ -154,7 +154,7 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 	if !s.authorizeMedia(w, r, claims) {
 		return
 	}
-	src, err := s.svc.EnclosureStreamSource(r.Context(), user, pid)
+	src, err := s.svc.Podcasts.EnclosureStreamSource(r.Context(), user, pid)
 	if err != nil {
 		switch s.kindOf(err) {
 		case service.KindNotFound, service.KindInvalid:
@@ -420,7 +420,7 @@ func (s *Server) fetchEnclosure(ctx context.Context, r *http.Request, src servic
 			req.Header.Set("If-Range", v)
 		}
 	}
-	return s.svc.FetchEnclosure(req, src)
+	return s.svc.Podcasts.FetchEnclosure(req, src)
 }
 
 // enclosureRequest builds one outbound GET at target on the feed's
@@ -539,7 +539,7 @@ func (s *Server) warmEnclosure(pid string, src service.EnclosureSource) {
 		}
 		// One byte: the chain is walked by the request, not by the body.
 		req.Header.Set("Range", "bytes=0-0")
-		resp, err := s.svc.FetchEnclosure(req, src)
+		resp, err := s.svc.Podcasts.FetchEnclosure(req, src)
 		if err != nil {
 			// Nothing to report: the relay will walk the chain itself
 			// and answer the listener with whatever this would have

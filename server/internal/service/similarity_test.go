@@ -55,7 +55,7 @@ func newCueFixtureSplitAt(t *testing.T, split string) (context.Context, *Library
 func carvedTracks(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) (one, two, ripEssence string) {
 	t.Helper()
 	for _, pid := range fixtureItemPIDs(t, ctx, svc, uc) {
-		it, err := svc.getVisibleItem(ctx, uc, pid)
+		it, err := svc.Grants.getVisibleItem(ctx, uc, pid)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -90,15 +90,15 @@ func leaseAll(t *testing.T, ctx context.Context, svc *Library) map[string]Simila
 // forgetSweep makes the next sweep walk the catalog afresh, as the first
 // after a restart does.
 func forgetSweep(svc *Library) {
-	svc.simSweepVersion.Store(0)
-	svc.simIndex.Store(nil)
+	svc.Similarity.simSweepVersion.Store(0)
+	svc.Similarity.simIndex.Store(nil)
 }
 
 // leaseAllServing leases as a worker for a server that can, or cannot,
 // serve a carved track's window.
 func leaseAllServing(t *testing.T, ctx context.Context, svc *Library, windows bool) map[string]SimilarityWorkItem {
 	t.Helper()
-	work, err := svc.LeaseSimilarityWork(ctx, 50, windows)
+	work, err := svc.Similarity.LeaseSimilarityWork(ctx, 50, windows)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestSweepKeysCarvedTracksByTheirWindow(t *testing.T) {
 	ctx, svc, uc := newCueFixture(t)
 	one, two, rip := carvedTracks(t, ctx, svc, uc)
 
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	work := leaseAll(t, ctx, svc)
@@ -147,7 +147,7 @@ func TestSweepKeepsWindowedVectors(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCueFixture(t)
 
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	work := leaseAll(t, ctx, svc)
@@ -159,7 +159,7 @@ func TestSweepKeepsWindowedVectors(t *testing.T) {
 		}
 	}
 	forgetSweep(svc)
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if got := embeddingCount(t, ctx, svc); got != len(work) {
@@ -175,7 +175,7 @@ func TestCarvedSiblingsAreSonicNeighbours(t *testing.T) {
 	ctx, svc, uc := newCueFixture(t)
 	one, two, _ := carvedTracks(t, ctx, svc, uc)
 
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	var uploads []EmbeddingUpload
@@ -186,11 +186,11 @@ func TestCarvedSiblingsAreSonicNeighbours(t *testing.T) {
 		}
 		uploads = append(uploads, EmbeddingUpload{PID: pid, Essence: w.Essence, Vector: vec})
 	}
-	if _, err := svc.IngestEmbeddings(ctx, "test", 8, uploads); err != nil {
+	if _, err := svc.Similarity.IngestEmbeddings(ctx, "test", 8, uploads); err != nil {
 		t.Fatal(err)
 	}
 
-	res, err := svc.SimilarTracksFor(ctx, uc, one, 5)
+	res, err := svc.Similarity.SimilarTracksFor(ctx, uc, one, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,12 +227,12 @@ func TestEmbeddedAnalysisReadsACarvedTracksWindow(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCueFixture(t)
 
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	an := &windowAnalyzer{}
 	for {
-		worked, err := svc.DrainEmbeddedAnalysis(ctx, an)
+		worked, err := svc.Similarity.DrainEmbeddedAnalysis(ctx, an)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -257,7 +257,7 @@ func TestATrackTooShortToAnalyzeIsNotQueued(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCueFixtureSplitAt(t, "00:05:00")
 	_, short, _ := carvedTracks(t, ctx, svc, uc)
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, queued := leaseAll(t, ctx, svc)[short]; queued {
@@ -280,12 +280,12 @@ func (a *refusingAnalyzer) AnalyzeFileWindow(context.Context, string, int64, int
 func TestARefusedTrackIsNotQueuedAgain(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCueFixture(t)
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	an := &refusingAnalyzer{}
 	for {
-		worked, err := svc.DrainEmbeddedAnalysis(ctx, an)
+		worked, err := svc.Similarity.DrainEmbeddedAnalysis(ctx, an)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -295,10 +295,10 @@ func TestARefusedTrackIsNotQueuedAgain(t *testing.T) {
 	}
 	asked := an.asked
 	forgetSweep(svc)
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if worked, err := svc.DrainEmbeddedAnalysis(ctx, an); err != nil || worked || an.asked != asked {
+	if worked, err := svc.Similarity.DrainEmbeddedAnalysis(ctx, an); err != nil || worked || an.asked != asked {
 		t.Fatalf("after a second sweep: worked %v (%v), asked %d more times", worked, err, an.asked-asked)
 	}
 	if depth := queueDepth(t, ctx, svc); depth != 0 {
@@ -312,7 +312,7 @@ func TestAWorkerThatCannotReadAWindowIsNotHandedOne(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCueFixture(t)
 	one, two, _ := carvedTracks(t, ctx, svc, uc)
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	work := leaseAllServing(t, ctx, svc, false)
@@ -324,7 +324,7 @@ func TestAWorkerThatCannotReadAWindowIsNotHandedOne(t *testing.T) {
 	}
 	an := &windowAnalyzer{}
 	for {
-		worked, err := svc.DrainEmbeddedAnalysis(ctx, an)
+		worked, err := svc.Similarity.DrainEmbeddedAnalysis(ctx, an)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -344,7 +344,7 @@ func TestTrashingACarvedRipKeepsEverySiblingsVector(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCueFixture(t)
 	one, two, _ := carvedTracks(t, ctx, svc, uc)
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	work := leaseAll(t, ctx, svc)
@@ -355,11 +355,11 @@ func TestTrashingACarvedRipKeepsEverySiblingsVector(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := svc.DeleteItems(ctx, uc, []string{one, two}, "trash", false); err != nil {
+	if _, err := svc.Tools.DeleteItems(ctx, uc, []string{one, two}, "trash", false); err != nil {
 		t.Fatal(err)
 	}
 	forgetSweep(svc)
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if got := embeddingCount(t, ctx, svc); got != len(work) {
@@ -373,7 +373,7 @@ func TestAFailedReadPrunesNothing(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCueFixture(t)
 	carvedTracks(t, ctx, svc, uc)
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	work := leaseAll(t, ctx, svc)
@@ -388,7 +388,7 @@ func TestAFailedReadPrunesNothing(t *testing.T) {
 		return nil, errors.New("database is locked")
 	}
 	forgetSweep(svc)
-	if _, err := svc.SimilaritySweep(ctx); err == nil {
+	if _, err := svc.Similarity.Sweep(ctx); err == nil {
 		t.Error("a sweep that could not read the catalog reported success")
 	}
 	if got := embeddingCount(t, ctx, svc); got != len(work) {

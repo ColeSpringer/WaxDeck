@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
+	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
 // deviceJSON is one row of the device listing.
@@ -76,7 +76,7 @@ type actionsPageJSON struct {
 
 // actionJSON renders a stored action back onto the wire; empty device
 // and timestamp fields and unset integers stay omitted.
-func actionJSON(a wdb.GpodderAction) episodeActionJSON {
+func actionJSON(a service.GpodderAction) episodeActionJSON {
 	return episodeActionJSON{
 		Podcast: a.PodcastURL, Episode: a.EpisodeURL, GUID: looseGUID(a.GUID), Action: a.Action,
 		Device: a.DeviceID, Timestamp: a.ActionTS,

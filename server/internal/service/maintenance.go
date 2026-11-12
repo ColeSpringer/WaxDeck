@@ -69,7 +69,7 @@ func (l *Library) endMaintenance(gen uint64) {
 	if l.suspendGen.Load() == gen {
 		l.maintenance.Store(false)
 		// A sweep the hand-off held off runs now, not at the backstop.
-		l.similarityWakeup()
+		l.Similarity.wakeup()
 	}
 }
 
@@ -127,12 +127,12 @@ func (l *Library) onReopen(ctx context.Context, ev waxbin.ReopenEvent) {
 	defer l.recoverHook("reopen")
 	// Whoever held the catalog may have pruned the organize journal, which
 	// records no change.
-	l.forgetOrganizeHistory()
+	l.Health.forgetOrganizeHistory()
 	if ev.Replaced {
 		l.catalogReplaced(ctx, ev.Seq, l.tsOf(ctx, ev.Seq))
 		return
 	}
-	l.refreshLibraryState(ctx)
+	l.Roots.refreshLibraryState(ctx)
 	l.settleAfterReopen()
 }
 
@@ -149,8 +149,8 @@ func (l *Library) recoverHook(name string) {
 // settles the origins of jobs it lost.
 func (l *Library) settleAfterReopen() {
 	l.workers.GoOnce(l.procCtx, "reopen-settle", func(ctx context.Context) error {
-		for wait := time.Second; l.usersUnmapped.Load() && wait <= 16*time.Second; wait *= 2 {
-			if err := l.reconcileCatalogUsers(ctx); err == nil {
+		for wait := time.Second; l.Identity.usersUnmapped.Load() && wait <= 16*time.Second; wait *= 2 {
+			if err := l.Identity.reconcileCatalogUsers(ctx); err == nil {
 				break
 			}
 			select {
@@ -159,11 +159,11 @@ func (l *Library) settleAfterReopen() {
 			case <-time.After(wait):
 			}
 		}
-		if err := l.settleRoots(ctx); err != nil {
+		if err := l.Roots.settleRoots(ctx); err != nil {
 			l.log.Warn("registering the configured roots after a reopen", "err", err)
 		}
-		l.syncFlowRoots(ctx)
-		l.settleOrigins(ctx)
+		l.Roots.syncFlowRoots(ctx)
+		l.Jobs.settleOrigins(ctx)
 		return nil
 	})
 }
@@ -204,25 +204,25 @@ func (l *Library) catalogReplaced(ctx context.Context, seq, ts int64) bool {
 	}
 	l.persistFeedCursor(ctx, true)
 
-	if err := l.reconcileCatalogUsers(ctx); err != nil {
+	if err := l.Identity.reconcileCatalogUsers(ctx); err != nil {
 		l.log.Warn("mapping accounts to the replaced catalog's users", "err", err)
 	}
-	l.refreshLibraryState(ctx)
+	l.Roots.refreshLibraryState(ctx)
 	if err := l.paths.Poll(ctx); err != nil {
 		l.log.Warn("dropping the replaced catalog's file locations", "err", err)
 	}
-	l.InvalidatePodpingFeeds()
-	l.forgetNowPlayingMemos()
-	if _, err := l.rewindGenreSweep(ctx); err != nil {
+	l.Podcasts.InvalidatePodpingFeeds()
+	l.Radio.forgetNowPlayingMemos()
+	if _, err := l.Reads.rewindGenreSweep(ctx); err != nil {
 		l.log.Warn("rewinding the genre sweep over the replaced catalog", "err", err)
 	}
-	if err := l.rewindDiscoverySweep(ctx, seq); err != nil {
+	if err := l.Similarity.rewindDiscoverySweep(ctx, seq); err != nil {
 		l.log.Warn("rewinding the discovery sweep over the replaced catalog", "err", err)
 	}
-	l.jobs.forget()
+	l.Jobs.jobs.forget()
 	l.fireCatalogResync()
 	l.settleAfterReopen()
-	l.similarityWakeup()
+	l.Similarity.wakeup()
 	return true
 }
 

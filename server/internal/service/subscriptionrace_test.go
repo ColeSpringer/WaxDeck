@@ -102,17 +102,17 @@ func waitBriefly(done <-chan error) (error, bool) {
 // add.
 func TestAResubscribeCannotLandInsideAnUnsubscribe(t *testing.T) {
 	ctx, svc, uc, feed := openPodcastFixture(t)
-	sub, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: feed})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: feed})
 	if err != nil {
 		t.Fatal(err)
 	}
 	arrived, release := stallAt(t, "unsubscribe")
 	unsubscribed := make(chan error, 1)
-	go func() { unsubscribed <- svc.Unsubscribe(ctx, uc, sub.Show.PID, false) }()
+	go func() { unsubscribed <- svc.Podcasts.Unsubscribe(ctx, uc, sub.Show.PID, false) }()
 	<-arrived
 	subscribed := make(chan error, 1)
 	go func() {
-		_, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: feed})
+		_, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: feed})
 		subscribed <- err
 	}()
 	subErr, early := waitBriefly(subscribed)
@@ -136,22 +136,22 @@ func TestAResubscribeCannotLandInsideAnUnsubscribe(t *testing.T) {
 // lands after it, so the show ends unfollowed with nothing holding it.
 func TestAnUnsubscribeCannotLandInsideASubscribe(t *testing.T) {
 	ctx, svc, uc, feed := openPodcastFixture(t)
-	sub, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: feed})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: feed})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.Unsubscribe(ctx, uc, sub.Show.PID, false); err != nil {
+	if err := svc.Podcasts.Unsubscribe(ctx, uc, sub.Show.PID, false); err != nil {
 		t.Fatal(err)
 	}
 	arrived, release := stallAt(t, "attach")
 	subscribed := make(chan error, 1)
 	go func() {
-		_, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: feed})
+		_, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: feed})
 		subscribed <- err
 	}()
 	<-arrived
 	unsubscribed := make(chan error, 1)
-	go func() { unsubscribed <- svc.Unsubscribe(ctx, uc, sub.Show.PID, false) }()
+	go func() { unsubscribed <- svc.Podcasts.Unsubscribe(ctx, uc, sub.Show.PID, false) }()
 	unsubErr, early := waitBriefly(unsubscribed)
 	release()
 	if err := <-subscribed; err != nil {
@@ -174,13 +174,13 @@ func TestTwoUploadsAtOnceFileOneRow(t *testing.T) {
 	arrived, release := stallAt(t, "notice")
 	first := make(chan error, 1)
 	go func() {
-		_, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{gone}, nil)
+		_, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{gone}, nil)
 		first <- err
 	}()
 	<-arrived
 	second := make(chan error, 1)
 	go func() {
-		_, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{gone}, nil)
+		_, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{gone}, nil)
 		second <- err
 	}()
 	err2, early := waitBriefly(second)
@@ -194,7 +194,7 @@ func TestTwoUploadsAtOnceFileOneRow(t *testing.T) {
 	if err2 != nil {
 		t.Fatal(err2)
 	}
-	page, err := svc.Notifications(ctx, uc, "", 50)
+	page, err := svc.Integrations.Notifications(ctx, uc, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,19 +214,19 @@ func TestTwoUploadsAtOnceFileOneRow(t *testing.T) {
 // it, and the settings write says it found nothing to change.
 func TestASettingsWriteCannotResubscribe(t *testing.T) {
 	ctx, svc, uc, feed := openPodcastFixture(t)
-	sub, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: feed})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: feed})
 	if err != nil {
 		t.Fatal(err)
 	}
 	arrived, release := stallAt(t, "settings")
 	written := make(chan error, 1)
 	go func() {
-		_, err := svc.PutSubscriptionSettings(ctx, uc, sub.Show.PID, SubscriptionSettings{Folder: "News"})
+		_, err := svc.Podcasts.PutSubscriptionSettings(ctx, uc, sub.Show.PID, SubscriptionSettings{Folder: "News"})
 		written <- err
 	}()
 	<-arrived
 	unsubscribed := make(chan error, 1)
-	go func() { unsubscribed <- svc.Unsubscribe(ctx, uc, sub.Show.PID, false) }()
+	go func() { unsubscribed <- svc.Podcasts.Unsubscribe(ctx, uc, sub.Show.PID, false) }()
 	unsubErr, early := waitBriefly(unsubscribed)
 	release()
 	if err := <-written; err != nil && KindOf(err) != KindNotFound {
@@ -245,7 +245,7 @@ func TestASettingsWriteCannotResubscribe(t *testing.T) {
 // account's lock free: the account's next change goes through.
 func TestAPanicInsideAMembershipChangeFreesTheLock(t *testing.T) {
 	ctx, svc, uc, feed := openPodcastFixture(t)
-	sub, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: feed})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: feed})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,9 +254,9 @@ func TestAPanicInsideAMembershipChangeFreesTheLock(t *testing.T) {
 		step   string
 		change func()
 	}{
-		{"unsubscribe", func() { _ = svc.Unsubscribe(ctx, uc, sub.Show.PID, false) }},
-		{"attach", func() { _, _, _ = svc.Subscribe(ctx, uc, SubscribeRequest{URL: feed}) }},
-		{"settings", func() { _, _ = svc.PutSubscriptionSettings(ctx, uc, sub.Show.PID, SubscriptionSettings{}) }},
+		{"unsubscribe", func() { _ = svc.Podcasts.Unsubscribe(ctx, uc, sub.Show.PID, false) }},
+		{"attach", func() { _, _, _ = svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: feed}) }},
+		{"settings", func() { _, _ = svc.Podcasts.PutSubscriptionSettings(ctx, uc, sub.Show.PID, SubscriptionSettings{}) }},
 	} {
 		testHookMembership = func(s string) {
 			if s == c.step {
@@ -271,7 +271,7 @@ func TestAPanicInsideAMembershipChangeFreesTheLock(t *testing.T) {
 		next := make(chan struct{})
 		go func() {
 			defer close(next)
-			_, _ = svc.PutSubscriptionSettings(ctx, uc, sub.Show.PID, SubscriptionSettings{})
+			_, _ = svc.Podcasts.PutSubscriptionSettings(ctx, uc, sub.Show.PID, SubscriptionSettings{})
 		}()
 		select {
 		case <-next:

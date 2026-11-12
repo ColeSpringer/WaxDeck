@@ -69,11 +69,11 @@ var starterSeedMu sync.Mutex
 // account is or a disabled one gets a starter down whichever path
 // forgot. Never fatal to its caller - an account with no starter is a
 // working account, and the next boot offers it again.
-func (l *Library) seedStartersFor(ctx context.Context, u *wdb.User) {
+func (l *Playlists) seedStartersFor(ctx context.Context, u *wdb.User) {
 	if !seedableAccount(u) {
 		return
 	}
-	uc, err := l.UserCtx(ctx, u)
+	uc, err := l.Grants.UserCtx(ctx, u)
 	if err == nil {
 		err = l.seedStarterPlaylists(ctx, uc)
 	}
@@ -89,7 +89,7 @@ func (l *Library) seedStartersFor(ctx context.Context, u *wdb.User) {
 // dry-run evaluation and emits a server event, none of which belongs on
 // the path of somebody opening their playlists. The two moments are
 // account creation and the boot reconcile.
-func (l *Library) seedStarterPlaylists(ctx context.Context, uc *UserCtx) error {
+func (l *Playlists) seedStarterPlaylists(ctx context.Context, uc *UserCtx) error {
 	starterSeedMu.Lock()
 	defer starterSeedMu.Unlock()
 	row, ok, err := l.db.StarterPlaylist(ctx, uc.ID, starterMostPlayed)
@@ -99,7 +99,7 @@ func (l *Library) seedStarterPlaylists(ctx context.Context, uc *UserCtx) error {
 	// Dismissal is final, and checked before existence: an account that
 	// threw the starter away is not offered it again, whatever became
 	// of the playlist afterwards.
-	if ok && (row.Dismissed || l.playlistExists(ctx, uc, model.PID(row.PlaylistPID))) {
+	if ok && (row.Dismissed || l.exists(ctx, uc, model.PID(row.PlaylistPID))) {
 		return nil
 	}
 	q, err := ruleToQuery(starterMostPlayedRule())
@@ -116,7 +116,7 @@ func (l *Library) seedStarterPlaylists(ctx context.Context, uc *UserCtx) error {
 	return l.db.PutStarterPlaylist(ctx, uc.ID, starterMostPlayed, string(catalogPID), time.Now().UnixNano())
 }
 
-// playlistExists reports whether the account still owns the playlist
+// exists reports whether the account still owns the playlist
 // this pid names.
 //
 // A point read rather than a listing: the reconcile asks this once per
@@ -127,7 +127,7 @@ func (l *Library) seedStarterPlaylists(ctx context.Context, uc *UserCtx) error {
 // account whose catalog was rebuilt under the WaxDeck database. Any
 // other failure answers true, because seeding on an unreadable catalog
 // would mint a duplicate on every boot.
-func (l *Library) playlistExists(ctx context.Context, uc *UserCtx, playlistPID model.PID) bool {
+func (l *Playlists) exists(ctx context.Context, uc *UserCtx, playlistPID model.PID) bool {
 	pl, err := l.lib.Playlists().Get(ctx, playlistPID)
 	switch {
 	case err == nil:
@@ -147,7 +147,7 @@ func (l *Library) playlistExists(ctx context.Context, uc *UserCtx, playlistPID m
 // dismisses the owner's, not their own. A deleted account's starters go
 // with its rows and need no dismissal. A pid that is nobody's starter
 // matches no row.
-func (l *Library) dismissStarterPlaylist(ctx context.Context, ownerID string, playlistPID model.PID) {
+func (l *Playlists) dismissStarterPlaylist(ctx context.Context, ownerID string, playlistPID model.PID) {
 	if err := l.db.DismissStarterPlaylist(ctx, ownerID, string(playlistPID)); err != nil {
 		l.log.Warn("dismissing starter playlist", "user", ownerID, "playlist", playlistPID, "err", err)
 	}
@@ -161,7 +161,7 @@ func (l *Library) dismissStarterPlaylist(ctx context.Context, ownerID string, pl
 // whose playlist has since gone missing from the catalog. Those only
 // change at a start, so a boot pass is the whole schedule. A failure is
 // logged per account and never stops the others or the server.
-func (l *Library) reconcileStarterPlaylists(ctx context.Context) error {
+func (l *Playlists) reconcileStarterPlaylists(ctx context.Context) error {
 	const page = 100
 	cursor := ""
 	for {
@@ -189,7 +189,7 @@ func (l *Library) reconcileStarterPlaylists(ctx context.Context) error {
 // before giving up. The cursor is the previous page's last username, so
 // a page that cannot be read is not a page that can be stepped over:
 // the sweep either gets it or ends there.
-func (l *Library) listUsersRetrying(ctx context.Context, cursor string, limit int) ([]*wdb.User, error) {
+func (l *Playlists) listUsersRetrying(ctx context.Context, cursor string, limit int) ([]*wdb.User, error) {
 	var err error
 	for attempt := range starterSeedRetries {
 		var users []*wdb.User

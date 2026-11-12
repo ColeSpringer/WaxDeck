@@ -127,7 +127,7 @@ func (l *Library) restorableItems(ctx context.Context, pids []model.PID) func() 
 			for _, row := range rows {
 				lib := string(row.LibraryPID)
 				if lib == "" {
-					if found, err := l.libraryForPath(ctx, row.OrigDisplay); err == nil {
+					if found, err := l.Grants.libraryForPath(ctx, row.OrigDisplay); err == nil {
 						lib = found
 					}
 				}
@@ -170,7 +170,7 @@ func (l *Library) archivedInReach(ctx context.Context, uc *UserCtx, reach *delta
 	case uc.AllLibraries:
 		return true
 	case it.Kind == model.KindEpisode:
-		return l.podcastsVisible(ctx, uc)
+		return l.Grants.podcastsVisible(ctx, uc)
 	}
 	if restorable != nil {
 		if places, ok := restorable()[string(it.PID)]; ok {
@@ -344,6 +344,31 @@ type syncFeed struct {
 // feedKey names a change row across catalogs: a replaced catalog reuses
 // seqs, so the timestamp tells two rows at one seq apart.
 type feedKey struct{ seq, ts int64 }
+
+// CatalogTailSeq is the catalog's feed position under the generation
+// mint count, packed high so it only grows, across a replaced catalog
+// too. Holds while tail < 2^40. Every change-log row moves it, a play
+// or a star included; Reads.CatalogContentSeq is the one only content moves.
+func (l *Library) CatalogTailSeq() int64 {
+	l.feed.mu.Lock()
+	defer l.feed.mu.Unlock()
+	return l.feed.mints<<40 | l.feed.tail
+}
+
+// catalogGeneration counts the catalog's generations: a reset, a restore
+// or a repair moves it, and nothing short of one does.
+func (l *Library) catalogGeneration() int64 {
+	l.feed.mu.Lock()
+	defer l.feed.mu.Unlock()
+	return l.feed.mints
+}
+
+// feedGeneration is the generation the catalog feed streams under.
+func (l *Library) feedGeneration() string {
+	l.feed.mu.Lock()
+	defer l.feed.mu.Unlock()
+	return l.feed.gen
+}
 
 // Sync-state keys in waxdeck.db.
 const (
@@ -599,7 +624,7 @@ func (l *Library) advanceFeed(ctx context.Context, ch model.Change) {
 	}
 	l.feed.mu.Unlock()
 	if ch.EntityType == "job" {
-		l.followJob(ch.EntityPID)
+		l.Jobs.followJob(ch.EntityPID)
 	}
 	if ch.EntityType == "item" {
 		l.wakeLibraryJournal()
@@ -610,7 +635,7 @@ func (l *Library) advanceFeed(ctx context.Context, ch model.Change) {
 	// already drop departed tracks; so do new file rows, which every
 	// episode download writes.
 	if !history && ((ch.EntityType == "item" && ch.Op == model.OpCreate) || ch.EntityType == "library") {
-		l.similarityWakeup()
+		l.Similarity.wakeup()
 	}
 	// A root added or re-flagged elsewhere (the CLI, a restore) reaches
 	// the root table here; mid-hand-off the reopen hook rebuilds it. The
@@ -619,8 +644,8 @@ func (l *Library) advanceFeed(ctx context.Context, ch model.Change) {
 	// table before it fixed the boot's head, and the library table is read
 	// on first use from a catalog already holding those rows.
 	if ch.EntityType == "library" && !history && !l.Maintenance() {
-		l.refreshLibraryState(ctx)
-		l.podcastLibraryMayHaveLanded()
+		l.Roots.refreshLibraryState(ctx)
+		l.Grants.podcastLibraryMayHaveLanded()
 	}
 	// Items feed summary mirrors; podcast rows feed show lists. Both
 	// travel the catalog stream (a show is not per-user state).
@@ -667,20 +692,6 @@ func (l *Library) CatalogWakeups() <-chan struct{} { return l.catalogWake }
 // changed. Lossy by design (a dropped hint is covered by the next one
 // or a poll).
 func (l *Library) UserEventWakeups() <-chan string { return l.userWake }
-
-// emitUserEvent appends to the server stream and wakes the hub, whether
-// or not the request that made the change is still there. Event loss never
-// fails the mutation: the stream is an invalidation signal, not the state.
-func (l *Library) emitUserEvent(ctx context.Context, userID, kind, itemPID string) {
-	if _, err := l.db.AppendEvent(context.WithoutCancel(ctx), userID, kind, itemPID); err != nil {
-		l.log.Warn("appending server event", "kind", kind, "err", err)
-		return
-	}
-	select {
-	case l.userWake <- userID:
-	default:
-	}
-}
 
 // --- cursors -----------------------------------------------------------------
 
@@ -824,40 +835,6 @@ func decodeServerCursor(s string) (serverCursor, bool) {
 	return c, true
 }
 
-// grantEpoch reads the user's current visibility epoch (0 until ever
-// bumped).
-func (l *Library) grantEpoch(ctx context.Context, userID string) (int64, error) {
-	return l.epoch(ctx, syncKeyGrantEpoch+userID)
-}
-
-// bumpGrantEpoch retires the user's outstanding catalog cursors after a
-// visibility change; their next delta answers sync-reset and the
-// re-snapshot reflects the new grants.
-func (l *Library) bumpGrantEpoch(ctx context.Context, userID string) {
-	l.bumpEpoch(ctx, syncKeyGrantEpoch+userID)
-}
-
-// reachChanged follows a change to what the account may see: its catalog
-// cursors and its timelines end, and its server stream is told of every
-// show it follows, so each device re-reads the subscription as the new
-// rules have it (absent while the podcast library is out of reach, back
-// once it is not) without a reset, which would drop the account marker
-// the same change sends. It runs whether or not the request that made the
-// change is still there: the grants are written.
-func (l *Library) reachChanged(ctx context.Context, userID string) {
-	ctx = context.WithoutCancel(ctx)
-	l.bumpGrantEpoch(ctx, userID)
-	l.bumpReachEpoch(ctx, userID)
-	shows, err := l.db.SubscribedShowPIDsByUser(ctx, userID)
-	if err != nil {
-		l.log.Warn("listing an account's shows for its stream", "user", userID, "err", err)
-		return
-	}
-	for _, show := range shows {
-		l.emitUserEvent(ctx, userID, eventSubscription, show)
-	}
-}
-
 // --- catalog sync ------------------------------------------------------------
 
 // SyncCatalogSnapshot serves one keyset page of the full mirror. The
@@ -872,7 +849,7 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 	showsDone := false
 	afterShow := ""
 	if cursor == "" {
-		epoch, err := l.grantEpoch(ctx, uc.ID)
+		epoch, err := l.Grants.grantEpoch(ctx, uc.ID)
 		if err != nil {
 			return CatalogSnapshotPage{}, err
 		}
@@ -880,7 +857,7 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 		// it, and an administrator narrowing the account in between would
 		// stamp a page served under the old rules with the epoch that
 		// retires them, so no delta would ever take those items back.
-		if uc, err = l.userCtxByID(ctx, uc.ID); err != nil {
+		if uc, err = l.Grants.UserCtxByID(ctx, uc.ID); err != nil {
 			return CatalogSnapshotPage{}, err
 		}
 		l.feed.mu.Lock()
@@ -936,24 +913,24 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 	// Content rules narrow the query itself: a tag rule per row would be
 	// one tag read for every item of a restricted caller's first sync.
 	b := visibleItems()
-	for _, n := range l.contentNarrow(ctx, uc) {
+	for _, n := range l.Grants.contentNarrow(ctx, uc) {
 		b.WhereNode(n)
 	}
 	page, err := l.lib.QueryPage(ctx, b.Build(), inner, limit, false, model.PID(uc.CatalogPID))
 	if err != nil {
 		return CatalogSnapshotPage{}, classify(err)
 	}
-	subs := l.newSubscriptionFilter(uc)
+	subs := l.Podcasts.newSubscriptionFilter(uc)
 	// The query carries no grant, so the rows are sifted first and only
 	// those the caller is sent are hydrated: a caller who cannot see the
 	// podcast library reads no episode for a page of them.
 	visible := make([]*model.ItemView, 0, len(page.Items))
 	for _, it := range page.Items {
-		if l.viewVisible(ctx, uc, it) {
+		if l.Grants.viewVisible(ctx, uc, it) {
 			visible = append(visible, it)
 		}
 	}
-	eps, err := l.episodeBatchFor(ctx, syncEpisodeViews(visible))
+	eps, err := l.Podcasts.episodeBatchFor(ctx, syncEpisodeViews(visible))
 	if err != nil {
 		return CatalogSnapshotPage{}, err
 	}
@@ -980,10 +957,10 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 // per-user views over the shared catalog. Returns the page and the
 // last pid when more remain.
 func (l *Library) snapshotShows(ctx context.Context, uc *UserCtx, afterShow string, limit int) ([]CatalogSyncEntry, string, error) {
-	if !l.podcastsVisible(ctx, uc) {
+	if !l.Grants.podcastsVisible(ctx, uc) {
 		return nil, "", nil
 	}
-	own, err := l.accountFeedURLs(ctx, uc.ID)
+	own, err := l.Podcasts.accountFeedURLs(ctx, uc.ID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -1010,7 +987,7 @@ func (l *Library) snapshotShows(ctx context.Context, uc *UserCtx, afterShow stri
 		if len(entries) == limit {
 			return entries, last, nil
 		}
-		show, err := l.showDTO(ctx, uc, pod, false, url)
+		show, err := l.Podcasts.showDTO(ctx, uc, pod, false, url)
 		if err != nil {
 			return nil, "", err
 		}
@@ -1046,10 +1023,10 @@ func (l *Library) itemSyncEntry(ctx context.Context, subs *subscriptionFilter, r
 	entry := CatalogSyncEntry{Op: syncOpUpsert, PID: s.PID, Item: &s}
 	if it.Kind == model.KindEpisode {
 		ep := eps.eps[it.PID]
-		if ep == nil || !subs.allowsShow(ctx, l, string(ep.PodcastPID)) {
+		if ep == nil || !subs.allowsShow(ctx, l.Podcasts, string(ep.PodcastPID)) {
 			return CatalogSyncEntry{}, false
 		}
-		sum := l.episodeSummary(ctx, ep, eps.facts)
+		sum := l.Podcasts.episodeSummary(ctx, ep, eps.facts)
 		entry.Episode = &sum
 	}
 	return entry, true
@@ -1080,7 +1057,7 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 	if !ok {
 		return CatalogDelta{}, errInvalid("malformed sync cursor")
 	}
-	curEpoch, err := l.grantEpoch(ctx, uc.ID)
+	curEpoch, err := l.Grants.grantEpoch(ctx, uc.ID)
 	if err != nil {
 		return CatalogDelta{}, err
 	}
@@ -1178,7 +1155,7 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 		if c.seq < place.start {
 			return CatalogDelta{}, ErrSyncReset
 		}
-		reach = &deltaReach{uc: uc, podcasts: l.podcastsVisible(ctx, uc)}
+		reach = &deltaReach{uc: uc, podcasts: l.Grants.podcastsVisible(ctx, uc)}
 	}
 	if len(order) == 0 {
 		return out, nil
@@ -1199,8 +1176,8 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 			byPID[v.PID] = v
 		}
 	}
-	showsVisible := l.podcastsVisible(ctx, uc)
-	subs := l.newSubscriptionFilter(uc)
+	showsVisible := l.Grants.podcastsVisible(ctx, uc)
+	subs := l.Podcasts.newSubscriptionFilter(uc)
 	// The addresses the caller follows its shows by, read for the first
 	// show row the page sends.
 	var own map[string]string
@@ -1224,12 +1201,12 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 		if key.kind != "item" || v == nil || ops[key] == string(model.OpDelete) || archived(v) {
 			continue
 		}
-		if l.viewVisible(ctx, uc, v) && l.allowedByContent(ctx, uc, v) {
+		if l.Grants.viewVisible(ctx, uc, v) && l.Grants.allowedByContent(ctx, uc, v) {
 			sent[v.PID] = true
 			views = append(views, v)
 		}
 	}
-	eps, err := l.episodeBatchFor(ctx, syncEpisodeViews(views))
+	eps, err := l.Podcasts.episodeBatchFor(ctx, syncEpisodeViews(views))
 	if err != nil {
 		return CatalogDelta{}, err
 	}
@@ -1271,15 +1248,15 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 			}
 			// Show rows fan out only to their subscribers; everyone else
 			// never mirrored the show, so skipping is a no-op for them.
-			if !subs.allowsShow(ctx, l, string(pod.PID)) {
+			if !subs.allowsShow(ctx, l.Podcasts, string(pod.PID)) {
 				continue
 			}
 			if own == nil {
-				if own, err = l.accountFeedURLs(ctx, uc.ID); err != nil {
+				if own, err = l.Podcasts.accountFeedURLs(ctx, uc.ID); err != nil {
 					return CatalogDelta{}, err
 				}
 			}
-			show, err := l.showDTO(ctx, uc, pod, false, own[string(pod.PID)])
+			show, err := l.Podcasts.showDTO(ctx, uc, pod, false, own[string(pod.PID)])
 			if err != nil {
 				return CatalogDelta{}, err
 			}
@@ -1559,7 +1536,7 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 				continue
 			}
 			seenPrefs = true
-			p, err := l.Prefs(ctx, uc)
+			p, err := l.Identity.Prefs(ctx, uc)
 			if err != nil {
 				return ServerDelta{}, err
 			}
@@ -1571,7 +1548,7 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 			seenSub[e.ItemPID] = true
 			ev := ServerSyncEvent{Kind: eventSubscription, PID: apiPID(PrefixPodcast, model.PID(e.ItemPID))}
 			if !podcastsKnown {
-				podcastsKnown, podcasts = true, l.podcastsVisible(ctx, uc)
+				podcastsKnown, podcasts = true, l.Grants.podcastsVisible(ctx, uc)
 			}
 			// Hydrate fresh: subscribed carries the current subscription,
 			// unsubscribed carries none (the removal is the payload), and a
@@ -1581,7 +1558,7 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 				continue
 			}
 			if pod, err := l.lib.Podcasts().Get(ctx, model.PID(e.ItemPID)); err == nil {
-				if sub, err := l.subscriptionFor(ctx, uc, pod); err == nil {
+				if sub, err := l.Podcasts.subscriptionFor(ctx, uc, pod); err == nil {
 					ev.Subscription = &sub
 				} else if !errors.Is(err, wdb.ErrNotFound) && KindOf(err) != KindNotFound {
 					l.log.Warn("hydrating subscription event", "show", e.ItemPID, "err", err)
@@ -1624,7 +1601,7 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 			// Hydrate fresh: a playlist the caller can still read
 			// carries its current state; one that is gone or now
 			// private carries none (the absence is the payload).
-			if pl, err := l.PlaylistByPID(ctx, uc, ev.PID); err == nil {
+			if pl, err := l.Playlists.ByPID(ctx, uc, ev.PID); err == nil {
 				ev.Playlist = &pl
 			} else if KindOf(err) != KindNotFound {
 				l.log.Warn("hydrating playlist event", "playlist", e.ItemPID, "err", err)
@@ -1648,7 +1625,7 @@ func (l *Library) hydratePlayState(ctx context.Context, uc *UserCtx, barePID str
 		}
 		return "", PlayState{}, classify(err)
 	}
-	if !uc.AllLibraries && !l.viewVisible(ctx, uc, it) {
+	if !uc.AllLibraries && !l.Grants.viewVisible(ctx, uc, it) {
 		return "", PlayState{}, nil
 	}
 	apiItem := itemAPIPID(it)
@@ -1667,7 +1644,7 @@ func (l *Library) PlayStates(ctx context.Context, uc *UserCtx, apiPIDs []string)
 	}
 	items := make([]visibleItem, 0, len(apiPIDs))
 	for _, apiItem := range apiPIDs {
-		it, err := l.getVisibleItem(ctx, uc, apiItem)
+		it, err := l.Grants.getVisibleItem(ctx, uc, apiItem)
 		if err != nil {
 			if KindOf(err) == KindNotFound || KindOf(err) == KindInvalid {
 				continue

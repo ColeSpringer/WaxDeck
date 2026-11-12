@@ -43,11 +43,11 @@ func TestAFileToolWaitsForAnEngineThatIsAway(t *testing.T) {
 		t.Parallel()
 		ctx, svc, uc, book, dir, engine := bookToolFixture(t, false)
 		away := &awayEngine{fakeBookEngine: engine}
-		svc.SetFlowJobs(away)
-		if _, err := svc.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
+		svc.Tools.SetFlowJobs(away)
+		if _, err := svc.Playback.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
 			t.Fatal(err)
 		}
-		task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+		task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -63,8 +63,8 @@ func TestAFileToolWaitsForAnEngineThatIsAway(t *testing.T) {
 		t.Parallel()
 		ctx, svc, uc, book, _, engine := chapteredBookFixture(t)
 		away := &awayEngine{fakeBookEngine: engine}
-		svc.SetFlowJobs(away)
-		task, err := svc.StartBookSplit(ctx, uc, apiPID(PrefixBook, book), false)
+		svc.Tools.SetFlowJobs(away)
+		task, err := svc.Tools.StartBookSplit(ctx, uc, apiPID(PrefixBook, book), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -82,8 +82,8 @@ func TestAFileToolWaitsForAnEngineThatIsAway(t *testing.T) {
 		t.Parallel()
 		ctx, svc, uc, one, _, engine := cueSplitFixture(t)
 		away := &awayEngine{fakeBookEngine: engine}
-		svc.SetFlowJobs(away)
-		task, err := svc.StartCueSplit(ctx, uc, one, false)
+		svc.Tools.SetFlowJobs(away)
+		task, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -108,24 +108,24 @@ func TestAFileToolWaitsForAnEngineThatIsAway(t *testing.T) {
 func TestAResumableTaskIsNeverFailedByItsAttemptCount(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, book, dir, _ := bookToolFixture(t, false)
-	if _, err := svc.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
 		t.Fatal(err)
 	}
-	task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for n, step := range []string{"staged", "trashed"} {
-		svc.toolStepHook = stopAt(step, nil)
+		svc.Tools.toolStepHook = stopAt(step, nil)
 		if err := attempt(t, ctx, svc, n+1); !errors.Is(err, errStopped) {
 			t.Fatalf("attempt %d = %v, want it stopped after %s", n+1, err, step)
 		}
 	}
-	svc.toolStepHook = stopAt("placed", nil)
+	svc.Tools.toolStepHook = stopAt("placed", nil)
 	if !drainAt(ctx, svc, 3) {
 		t.Fatal("the worker found no task")
 	}
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	if got := toolTask(t, ctx, svc, task.ID); got.State != "running" {
 		t.Fatalf("task after its third attempt stopped = %s (error %q), want it left to run again", got.State, got.Error)
 	}
@@ -149,20 +149,20 @@ func TestAFileToolOnAServerWithoutAnEngineFailsAtOnce(t *testing.T) {
 			switch kind {
 			case "merge":
 				c, s, uc, book, _, _ := bookToolFixture(t, false)
-				task, err := s.StartBookMerge(c, uc, apiPID(PrefixBook, book), nil, false)
+				task, err := s.Tools.StartBookMerge(c, uc, apiPID(PrefixBook, book), nil, false)
 				if err != nil {
 					t.Fatal(err)
 				}
 				ctx, svc, id = c, s, task.ID
 			default:
 				c, s, uc, one, _, _ := cueSplitFixture(t)
-				task, err := s.StartCueSplit(c, uc, one, false)
+				task, err := s.Tools.StartCueSplit(c, uc, one, false)
 				if err != nil {
 					t.Fatal(err)
 				}
 				ctx, svc, id = c, s, task.ID
 			}
-			svc.SetFlowJobs(nil)
+			svc.Tools.SetFlowJobs(nil)
 			if !drainAt(ctx, svc, 1) {
 				t.Fatal("the worker found no task")
 			}

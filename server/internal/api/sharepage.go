@@ -53,7 +53,7 @@ func (s *Server) resolveShareRequest(r *http.Request) (*service.SharePublic, str
 	if err != nil {
 		return nil, "", errNoShare
 	}
-	pub, err := s.svc.ResolveShare(r.Context(), id)
+	pub, err := s.svc.Reads.ResolveShare(r.Context(), id)
 	if service.KindOf(err) == service.KindMaintenance {
 		return nil, "", err
 	}
@@ -106,7 +106,7 @@ func (s *Server) ServeSharePage(w http.ResponseWriter, r *http.Request) {
 	// for the placeholder afterwards.
 	art := false
 	if pub.ArtItemPID != "" {
-		blob, err := s.svc.PublicArt(r.Context(), pub.ArtItemPID, shareArtSize)
+		blob, err := s.svc.Reads.PublicArt(r.Context(), pub.ArtItemPID, shareArtSize)
 		art = err == nil && !artTooBigForSize(blob)
 	}
 	page := newSharePage(pub, loc, "/s/"+url.PathEscape(r.PathValue("token")), art, s.publicBase)
@@ -254,7 +254,7 @@ func (s *Server) ServeShareStream(w http.ResponseWriter, r *http.Request) {
 	// audio starts, so a refusal on the way counts nothing.
 	var count func()
 	if r.Method == http.MethodGet && countableShareFetch(r.Header.Get("Range")) {
-		count = func() { s.svc.CountSharePlay(r.Context(), id) }
+		count = func() { s.svc.Reads.CountSharePlay(r.Context(), id) }
 	}
 	counter := countSharePlay(bound, count)
 	if audio == service.ShareAudioRelay {
@@ -293,7 +293,7 @@ func (s *Server) ServeShareStream(w http.ResponseWriter, r *http.Request) {
 // answers the request to serve from, and over, which the caller defers.
 func (s *Server) beginShareTransfer(w http.ResponseWriter, r *http.Request, shareID string, expiresAt time.Time) (bound *stallBoundWriter, served *http.Request, over func()) {
 	ctx, cancel := context.WithCancel(r.Context())
-	live := func() bool { return service.KindOf(s.svc.ShareLive(ctx, shareID)) != service.KindNotFound }
+	live := func() bool { return service.KindOf(s.svc.Reads.ShareLive(ctx, shareID)) != service.KindNotFound }
 	bound = s.boundWrites(w, live)
 	bound.rangeAsked = r.Header.Get("Range") != ""
 	t := &shareTransfer{w: bound, cancel: cancel}
@@ -324,7 +324,7 @@ func (s *Server) relayShareEpisode(w http.ResponseWriter, r *http.Request, owner
 		return
 	}
 	defer release()
-	src, err := s.svc.EnclosureStreamSource(r.Context(), "", pid)
+	src, err := s.svc.Podcasts.EnclosureStreamSource(r.Context(), "", pid)
 	if err != nil {
 		switch s.kindOf(err) {
 		case service.KindNotFound, service.KindInvalid, service.KindForbidden:
@@ -432,7 +432,7 @@ func (s *Server) ServeShareArt(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not-found", "no artwork")
 		return
 	}
-	blob, err := s.svc.PublicArt(r.Context(), pub.ArtItemPID, shareArtSize)
+	blob, err := s.svc.Reads.PublicArt(r.Context(), pub.ArtItemPID, shareArtSize)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not-found", "no artwork")
 		return
@@ -482,7 +482,7 @@ func shareMember(pub *service.SharePublic, r *http.Request) (service.ItemSummary
 
 // serveShareFile serves the item's original bytes with Range support.
 func (s *Server) serveShareFile(w http.ResponseWriter, r *http.Request, apiItemPID string, attachment bool) {
-	f, err := s.svc.DownloadSource(r.Context(), apiItemPID, "")
+	f, err := s.svc.Playback.DownloadSource(r.Context(), apiItemPID, "")
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not-found", "the file is not available")
 		return

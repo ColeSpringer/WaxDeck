@@ -30,7 +30,7 @@ func oneSpan(context.Context, string) (flow.SilenceAnalysis, error) {
 // surface whose runs measure, and answers the essence it is queued under.
 func (s rewrittenTrack) queueSilence(t *testing.T, measure func(context.Context, string) (flow.SilenceAnalysis, error)) string {
 	t.Helper()
-	s.svc.SetFlowJobs(silenceJobs{stubFlowJobs{jobs: true, version: "v1"}, measure})
+	s.svc.Tools.SetFlowJobs(silenceJobs{stubFlowJobs{jobs: true, version: "v1"}, measure})
 	essence := s.key(t)
 	if err := s.svc.db.EnqueueAnalysis(s.ctx, essence, string(s.bare), 1); err != nil {
 		t.Fatal(err)
@@ -53,7 +53,7 @@ func TestAHandOffBeginningMidDrainSpendsNoSilenceAttempt(t *testing.T) {
 	s.queueSilence(t, oneSpan)
 	handOff(t, s.ctx, s.svc, true)
 
-	if s.svc.DrainAnalysisQueue(s.ctx) {
+	if s.svc.Tools.DrainAnalysisQueue(s.ctx) {
 		t.Error("the drain went on through a hand-off")
 	}
 	if row, err := silenceRowFree(t, s.ctx, s.svc); err != nil || row.Attempts != 0 {
@@ -76,7 +76,7 @@ func TestAShutdownMidAnalysisSpendsNoSilenceAttempt(t *testing.T) {
 		return flow.SilenceAnalysis{}, fmt.Errorf("waiting for the job: %w", ctx.Err())
 	})
 
-	if s.svc.DrainAnalysisQueue(drainCtx) {
+	if s.svc.Tools.DrainAnalysisQueue(drainCtx) {
 		t.Error("the drain went on after its context ended")
 	}
 	if row, err := silenceRowFree(t, s.ctx, s.svc); err != nil || row.Attempts != 0 {

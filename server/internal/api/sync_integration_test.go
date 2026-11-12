@@ -757,10 +757,10 @@ func TestAppPasswordLifecycle(t *testing.T) {
 	// The secret round-trips through the verification paths the
 	// Subsonic adapter will use.
 	ctx := context.Background()
-	if u, _, err := h.svc.VerifyAppPasswordKey(ctx, created.Secret); err != nil || u == nil {
+	if u, _, err := h.svc.Identity.VerifyAppPasswordKey(ctx, created.Secret); err != nil || u == nil {
 		t.Fatalf("apiKey verify = (%v, %v), want the admin", u, err)
 	}
-	if u, _, _ := h.svc.VerifyAppPasswordKey(ctx, "WRONGWRONGWRONGWRONGWRONGW"); u != nil {
+	if u, _, _ := h.svc.Identity.VerifyAppPasswordKey(ctx, "WRONGWRONGWRONGWRONGWRONGW"); u != nil {
 		t.Fatal("wrong apiKey verified")
 	}
 
@@ -769,7 +769,7 @@ func TestAppPasswordLifecycle(t *testing.T) {
 		t.Fatalf("revoke status = %d", resp.StatusCode)
 	}
 	resp.Body.Close()
-	if u, _, _ := h.svc.VerifyAppPasswordKey(ctx, created.Secret); u != nil {
+	if u, _, _ := h.svc.Identity.VerifyAppPasswordKey(ctx, created.Secret); u != nil {
 		t.Fatal("revoked app password still verifies")
 	}
 	resp = h.deleteReq(t, "/api/v1/users/me/app-passwords/"+created.Id)
@@ -1398,7 +1398,7 @@ func TestSignOutEverywhereEndsGpodderLogins(t *testing.T) {
 	secret := decode[AppPasswordCreated](t, resp).Secret
 	login := func() string {
 		t.Helper()
-		_, cookie, _, err := h.svc.GpodderLogin(ctx, "podsync", "podsync", secret)
+		_, cookie, _, err := h.svc.Podcasts.GpodderLogin(ctx, "podsync", "podsync", secret)
 		if err != nil || cookie == "" {
 			t.Fatalf("gpodder login = %q, %v", cookie, err)
 		}
@@ -1406,7 +1406,7 @@ func TestSignOutEverywhereEndsGpodderLogins(t *testing.T) {
 	}
 	alive := func(cookie string) bool {
 		t.Helper()
-		u, err := h.svc.GpodderSessionUser(ctx, cookie)
+		u, err := h.svc.Podcasts.GpodderSessionUser(ctx, cookie)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1541,7 +1541,7 @@ func gpodderLoginAs(t *testing.T, h *harness, username, token string) string {
 	t.Helper()
 	resp := reqAs(t, h, "POST", "/api/v1/users/me/app-passwords", token, map[string]any{"label": "podcasts"})
 	secret := decode[AppPasswordCreated](t, resp).Secret
-	_, cookie, _, err := h.svc.GpodderLogin(context.Background(), username, username, secret)
+	_, cookie, _, err := h.svc.Podcasts.GpodderLogin(context.Background(), username, username, secret)
 	if err != nil || cookie == "" {
 		t.Fatalf("gpodder login = %q, %v", cookie, err)
 	}
@@ -1577,7 +1577,7 @@ func TestDisableReportsARevokeThatFailed(t *testing.T) {
 		// The half that did not fail ended all the same.
 		wantStatus(t, disable(false), 200, "re-enabling before the retry")
 		if table == "sessions" {
-			if u, err := h.svc.GpodderSessionUser(context.Background(), cookie); err != nil || u != nil {
+			if u, err := h.svc.Podcasts.GpodderSessionUser(context.Background(), cookie); err != nil || u != nil {
 				t.Errorf("the gpodder login a failed session revoke left = %v, %v", u, err)
 			}
 		} else {
@@ -1586,7 +1586,7 @@ func TestDisableReportsARevokeThatFailed(t *testing.T) {
 		wantStatus(t, disable(true), 200, "the retry")
 		wantStatus(t, disable(false), 200, "re-enabling")
 		wantStatus(t, get(t, h.ts, "/api/v1/auth/sessions", token), 401, "the session after a "+table+" failure")
-		if u, err := h.svc.GpodderSessionUser(context.Background(), cookie); err != nil || u != nil {
+		if u, err := h.svc.Podcasts.GpodderSessionUser(context.Background(), cookie); err != nil || u != nil {
 			t.Errorf("the gpodder login after a %s failure = %v, %v", table, u, err)
 		}
 	}

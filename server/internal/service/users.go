@@ -16,12 +16,68 @@ import (
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
+// User is an account as the service answers it: an Account's, one named
+// by username, or the one a credential check or a gpodder session
+// verified, which a caller hands back to act as it (Grants.UserCtxFor, a
+// gpodder session opened for it).
+// Only the service builds one: its fields are a read-only view of the
+// row it keeps, and a zero or hand-built User is refused as an account
+// that does not exist wherever it is acted on.
+type User struct {
+	ID               string
+	Username         string
+	DisplayName      string
+	Roles            []string
+	Disabled         bool
+	Pending          bool
+	LibraryAccess    string
+	UploadEnabled    bool
+	UploadQuotaBytes int64
+	HasPassword      bool
+	CreatedAt        time.Time
+	row              *wdb.User
+}
+
+func userOf(u *wdb.User) *User {
+	return &User{
+		ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, Roles: u.Roles,
+		Disabled: u.Disabled, Pending: u.Pending, LibraryAccess: u.LibraryAccess,
+		UploadEnabled: u.UploadEnabled, UploadQuotaBytes: u.UploadQuotaBytes,
+		HasPassword: u.PasswordHash != "", CreatedAt: u.CreatedAt, row: u,
+	}
+}
+
+// held is the row u was built over, or not-found for a User the service
+// did not build.
+func (u *User) held() (*wdb.User, error) {
+	if u == nil || u.row == nil {
+		return nil, errNotFound("no such user")
+	}
+	return u.row, nil
+}
+
+// Permissions is the account's own permission set, as PermissionsOf
+// reads it; none for a User the service did not build.
+func (u *User) Permissions() Permissions {
+	row, err := u.held()
+	if err != nil {
+		return Permissions{}
+	}
+	return permissionsOf(row)
+}
+
 // Account is one account with its server-side extras: granted library
 // PIDs (API-prefixed) and linked identities.
 type Account struct {
-	User        *wdb.User
+	User        *User
 	LibraryPIDs []string
-	Identities  []wdb.Identity
+	Identities  []LinkedIdentity
+}
+
+// LinkedIdentity is an OIDC identity linked to an account.
+type LinkedIdentity struct {
+	Provider string
+	Email    string
 }
 
 // AccountPage is one keyset page of accounts.
@@ -71,7 +127,7 @@ var validRoles = map[string]bool{"admin": true, "user": true}
 // administrator. Keying on administrators rather than accounts means
 // an OIDC login that provisioned a plain account first never closes
 // the setup door on an adminless server.
-func (l *Library) BootstrapRequired(ctx context.Context) (bool, error) {
+func (l *Identity) BootstrapRequired(ctx context.Context) (bool, error) {
 	n, err := l.db.CountEnabledAdmins(ctx)
 	if err != nil {
 		return false, &Error{Kind: KindInternal, Err: err}
@@ -84,7 +140,7 @@ func (l *Library) BootstrapRequired(ctx context.Context) (bool, error) {
 // which is guarded on "no enabled administrator exists" in a single
 // atomic statement: two concurrent bootstraps with different usernames
 // both pass any separate count, but only one guarded insert applies.
-func (l *Library) Bootstrap(ctx context.Context, username, password, displayName string) (*Account, error) {
+func (l *Identity) Bootstrap(ctx context.Context, username, password, displayName string) (*Account, error) {
 	acct, err := l.createAccount(ctx, AccountCreate{
 		Username:    username,
 		Password:    password,
@@ -107,13 +163,13 @@ func (l *Library) Bootstrap(ctx context.Context, username, password, displayName
 // collides). The catalog user is created first; if the username then
 // turns out taken, the catalog row is orphaned, which the pre-check
 // makes rare and the dangling-tolerant design makes harmless.
-func (l *Library) CreateAccount(ctx context.Context, in AccountCreate) (*Account, error) {
+func (l *Identity) CreateAccount(ctx context.Context, in AccountCreate) (*Account, error) {
 	return l.createAccount(ctx, in, false)
 }
 
 // createAccount is CreateAccount plus the bootstrap door's atomic
 // only-while-adminless guard.
-func (l *Library) createAccount(ctx context.Context, in AccountCreate, onlyIfNoAdmin bool) (*Account, error) {
+func (l *Identity) createAccount(ctx context.Context, in AccountCreate, onlyIfNoAdmin bool) (*Account, error) {
 	username := strings.TrimSpace(in.Username)
 	if username == "" || username != in.Username {
 		return nil, errInvalid("username must not be empty or carry surrounding whitespace")
@@ -185,12 +241,12 @@ func (l *Library) createAccount(ctx context.Context, in AccountCreate, onlyIfNoA
 	// through here - an admin create, a signup, an OIDC provision, and
 	// the bootstrap - except approval, which turns a pending row into an
 	// account of its own and seeds there.
-	l.seedStartersFor(ctx, u)
+	l.Playlists.seedStartersFor(ctx, u)
 	return l.accountFor(ctx, u)
 }
 
 // Account fetches one account with its extras.
-func (l *Library) Account(ctx context.Context, id string) (*Account, error) {
+func (l *Identity) Account(ctx context.Context, id string) (*Account, error) {
 	u, err := l.db.UserByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
@@ -203,7 +259,7 @@ func (l *Library) Account(ctx context.Context, id string) (*Account, error) {
 
 // Accounts pages all accounts by username. The cursor is the previous
 // page's last lowercased username, opaque to callers.
-func (l *Library) Accounts(ctx context.Context, cursor string, limit int) (AccountPage, error) {
+func (l *Identity) Accounts(ctx context.Context, cursor string, limit int) (AccountPage, error) {
 	users, err := l.db.ListUsers(ctx, cursor, limit+1)
 	if err != nil {
 		return AccountPage{}, &Error{Kind: KindInternal, Err: err}
@@ -230,7 +286,7 @@ func (l *Library) Accounts(ctx context.Context, cursor string, limit int) (Accou
 // last enabled administrator conflicts, so the server can never lock
 // every admin out; the guard rides the update statement itself, so two
 // concurrent admin-removing updates cannot both pass a stale count.
-func (l *Library) UpdateAccount(ctx context.Context, id string, upd AccountUpdate) (*Account, error) {
+func (l *Identity) UpdateAccount(ctx context.Context, id string, upd AccountUpdate) (*Account, error) {
 	u, err := l.db.UserByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
@@ -365,7 +421,7 @@ func AccountChanges(before, after *Account) map[string]map[string]any {
 	record("libraryAccess.mode", b.LibraryAccess == a.LibraryAccess, b.LibraryAccess, a.LibraryAccess)
 	record("libraryAccess.libraryPids", sameSet(before.LibraryPIDs, after.LibraryPIDs),
 		list(before.LibraryPIDs), list(after.LibraryPIDs))
-	pb, pa := permissionsOf(b), permissionsOf(a)
+	pb, pa := b.Permissions(), a.Permissions()
 	record("permissions.download", pb.Download == pa.Download, pb.Download, pa.Download)
 	record("permissions.delete", pb.Delete == pa.Delete, pb.Delete, pa.Delete)
 	record("permissions.explicitContent", pb.Explicit == pa.Explicit, pb.Explicit, pa.Explicit)
@@ -381,7 +437,7 @@ func AccountChanges(before, after *Account) map[string]map[string]any {
 // AccountGrants is what an account holds, under AccountChanges' names:
 // its roles, library access, uploads and permissions.
 func AccountGrants(a *Account) map[string]any {
-	u, p := a.User, permissionsOf(a.User)
+	u, p := a.User, a.User.Permissions()
 	return map[string]any{
 		"roles":                        append([]string{}, u.Roles...),
 		"uploadEnabled":                u.UploadEnabled,
@@ -467,7 +523,7 @@ func (d AccountDeleted) Changed() bool {
 // result says what was done even when the error is not nil. Only one
 // deletion of an account runs at a time. The account's public share links
 // are not handed to anyone: they end with it.
-func (l *Library) DeleteAccount(ctx context.Context, actor *UserCtx, id string, opts AccountDeletion) (AccountDeleted, error) {
+func (l *Identity) DeleteAccount(ctx context.Context, actor *UserCtx, id string, opts AccountDeletion) (AccountDeleted, error) {
 	if _, running := l.deletingAccounts.LoadOrStore(id, struct{}{}); running {
 		return AccountDeleted{}, &Error{Kind: KindConflict, Msg: "this account is already being deleted"}
 	}
@@ -540,7 +596,7 @@ func (l *Library) DeleteAccount(ctx context.Context, actor *UserCtx, id string, 
 func sharedPlaylist(pl *model.Playlist) bool { return pl.Visibility == model.VisibilityShared }
 
 // ownedPlaylists lists the playlists the catalog says the account owns.
-func (l *Library) ownedPlaylists(ctx context.Context, u *wdb.User) ([]*model.Playlist, error) {
+func (l *Identity) ownedPlaylists(ctx context.Context, u *wdb.User) ([]*model.Playlist, error) {
 	// An empty pid names the catalog's default user, whose playlists are
 	// nobody's to take.
 	catalogUser := l.catalogPID(u)
@@ -564,7 +620,7 @@ func (l *Library) ownedPlaylists(ctx context.Context, u *wdb.User) ([]*model.Pla
 // shared playlists: the one named, else the actor. Nil when the playlists
 // are deleted instead, and when there is no actor and nobody named, which
 // DeleteAccount refuses if there is anything to hand over.
-func (l *Library) playlistTaker(ctx context.Context, actor *UserCtx, victim *wdb.User, opts AccountDeletion) (*wdb.User, error) {
+func (l *Identity) playlistTaker(ctx context.Context, actor *UserCtx, victim *wdb.User, opts AccountDeletion) (*wdb.User, error) {
 	switch opts.Playlists {
 	case "", PlaylistsTransfer:
 	case PlaylistsDelete:
@@ -596,7 +652,7 @@ func (l *Library) playlistTaker(ctx context.Context, actor *UserCtx, victim *wdb
 	case taker.Pending:
 		return nil, errInvalid("that signup has not been approved yet")
 	}
-	switch known, err := l.hasCatalogUser(ctx, taker); {
+	switch known, err := l.Playlists.hasCatalogUser(ctx, taker); {
 	case err != nil:
 		return nil, err
 	case !known:
@@ -611,7 +667,7 @@ func (l *Library) playlistTaker(ctx context.Context, actor *UserCtx, victim *wdb
 // shared playlist changing hands or going is news to every other account's
 // stream. A playlist someone else deleted meanwhile has nothing left to
 // settle. The result says what was done even when the error is not nil.
-func (l *Library) settlePlaylists(ctx context.Context, victim *wdb.User, owned []*model.Playlist, taker *wdb.User) (AccountDeleted, error) {
+func (l *Identity) settlePlaylists(ctx context.Context, victim *wdb.User, owned []*model.Playlist, taker *wdb.User) (AccountDeleted, error) {
 	var out AccountDeleted
 	var handed, removed []*model.Playlist
 	leaving := map[model.PID]bool{}
@@ -624,7 +680,7 @@ func (l *Library) settlePlaylists(ctx context.Context, victim *wdb.User, owned [
 		leaving[pl.PID] = true
 	}
 	for _, pl := range handed {
-		fixed, err := l.handOverPlaylist(ctx, victim, taker, pl, leaving)
+		fixed, err := l.Playlists.handOverPlaylist(ctx, victim, taker, pl, leaving)
 		if err != nil {
 			if err = l.unlessGone(ctx, pl, err); err != nil {
 				return out, err
@@ -633,14 +689,14 @@ func (l *Library) settlePlaylists(ctx context.Context, victim *wdb.User, owned [
 		}
 		out.PlaylistsTransferred++
 		out.TransferredTo = taker.Username
-		l.announcePlaylist(ctx, victim.ID, string(pl.PID))
+		l.Playlists.announcePlaylist(ctx, victim.ID, string(pl.PID))
 		if fixed != "" {
 			out.PlaylistsFixed++
-			l.announcePlaylist(ctx, victim.ID, string(fixed))
+			l.Playlists.announcePlaylist(ctx, victim.ID, string(fixed))
 		}
 	}
 	for _, pl := range removed {
-		if err := l.removePlaylist(ctx, pl); err != nil {
+		if err := l.Playlists.removePlaylist(ctx, pl); err != nil {
 			if err = l.unlessGone(ctx, pl, err); err != nil {
 				return out, err
 			}
@@ -648,11 +704,11 @@ func (l *Library) settlePlaylists(ctx context.Context, victim *wdb.User, owned [
 		}
 		out.PlaylistsDeleted++
 		if sharedPlaylist(pl) {
-			l.announcePlaylist(ctx, victim.ID, string(pl.PID))
+			l.Playlists.announcePlaylist(ctx, victim.ID, string(pl.PID))
 		}
 	}
 	// What earlier attempts left of playlists that are not handed over now.
-	if err := l.settleHandoverLeftovers(ctx, victim, taker, &out); err != nil {
+	if err := l.Playlists.settleHandoverLeftovers(ctx, victim, taker, &out); err != nil {
 		return out, err
 	}
 	return out, nil
@@ -662,18 +718,18 @@ func (l *Library) settlePlaylists(ctx context.Context, victim *wdb.User, owned [
 // account's were being settled. A not-found about a playlist that is still
 // there is about an account the catalog does not know, which is not the
 // account being deleted, whatever it says.
-func (l *Library) unlessGone(ctx context.Context, pl *model.Playlist, err error) error {
+func (l *Identity) unlessGone(ctx context.Context, pl *model.Playlist, err error) error {
 	if KindOf(err) != KindNotFound {
 		return err
 	}
-	if l.playlistGone(ctx, pl.PID) {
+	if l.Playlists.gone(ctx, pl.PID) {
 		return nil
 	}
 	return &Error{Kind: KindInternal, Err: err}
 }
 
 // SetAccountPassword replaces the account's password hash.
-func (l *Library) SetAccountPassword(ctx context.Context, id, newPassword string) error {
+func (l *Identity) SetAccountPassword(ctx context.Context, id, newPassword string) error {
 	u, err := l.db.UserByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
@@ -698,7 +754,7 @@ func (l *Library) SetAccountPassword(ctx context.Context, id, newPassword string
 // distinguishing, so the response never confirms an account exists. A
 // dummy verification keeps the timing of "unknown user" and "wrong
 // password" alike.
-func (l *Library) VerifyLocalLogin(ctx context.Context, username, password string) (*wdb.User, error) {
+func (l *Identity) VerifyLocalLogin(ctx context.Context, username, password string) (*User, error) {
 	u, err := l.db.UserByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
@@ -714,7 +770,7 @@ func (l *Library) VerifyLocalLogin(ctx context.Context, username, password strin
 	if !auth.VerifyPassword(u.PasswordHash, password) {
 		return nil, nil
 	}
-	return u, nil
+	return userOf(u), nil
 }
 
 // dummyHash burns the same argon2 work as a real verification when the
@@ -747,7 +803,7 @@ type OidcIdentity struct {
 // username is disambiguated with a numeric suffix. When the provider
 // carries a group-claim role mapping, every login re-applies it, so
 // the IdP stays authoritative over OIDC accounts' roles.
-func (l *Library) ResolveOidcAccount(ctx context.Context, ident OidcIdentity) (*Account, error) {
+func (l *Identity) ResolveOidcAccount(ctx context.Context, ident OidcIdentity) (*Account, error) {
 	existing, err := l.db.IdentityBySubject(ctx, ident.Provider, ident.Subject)
 	if err == nil {
 		u, err := l.db.UserByID(ctx, existing.UserID)
@@ -916,8 +972,8 @@ func sameRoles(a, b []string) bool {
 }
 
 // accountFor assembles the account DTO.
-func (l *Library) accountFor(ctx context.Context, u *wdb.User) (*Account, error) {
-	acct := &Account{User: u}
+func (l *Identity) accountFor(ctx context.Context, u *wdb.User) (*Account, error) {
+	acct := &Account{User: userOf(u)}
 	if u.LibraryAccess == "granted" {
 		pids, err := l.db.LibraryGrants(ctx, u.ID)
 		if err != nil {
@@ -931,7 +987,9 @@ func (l *Library) accountFor(ctx context.Context, u *wdb.User) (*Account, error)
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
 	}
-	acct.Identities = idents
+	for _, ident := range idents {
+		acct.Identities = append(acct.Identities, LinkedIdentity{Provider: ident.Provider, Email: ident.Email})
+	}
 	return acct, nil
 }
 

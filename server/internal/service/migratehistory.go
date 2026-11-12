@@ -63,7 +63,7 @@ type migratePlay struct {
 // step. Misses are cached too, so a track absent from the library costs
 // one lookup however many times it was played.
 type migrateHistory struct {
-	l      *Library
+	l      *Migrate
 	uc     *UserCtx
 	source string
 	dryRun bool
@@ -83,7 +83,7 @@ type migrateHistory struct {
 	sum  *migrationSummary
 }
 
-func (l *Library) newMigrateHistory(uc *UserCtx, p migrationParams, sum *migrationSummary) *migrateHistory {
+func (l *Migrate) newMigrateHistory(uc *UserCtx, p migrationParams, sum *migrationSummary) *migrateHistory {
 	return &migrateHistory{
 		l: l, uc: uc, source: p.Source, dryRun: p.DryRun,
 		resolved: map[string]*model.ItemView{},
@@ -176,7 +176,7 @@ func (h *migrateHistory) flush(ctx context.Context) error {
 	if len(h.pending) == 0 {
 		return nil
 	}
-	res, err := h.l.ingestListens(ctx, h.uc, h.pending, listenIngestOptions{announcedByCaller: true})
+	res, err := h.l.Playback.ingestListens(ctx, h.uc, h.pending, listenIngestOptions{announcedByCaller: true})
 	h.sum.Listens += res.Accepted
 	h.sum.noteRefusedListens(res.Rejected)
 	h.pending = h.pending[:0]
@@ -235,7 +235,7 @@ func (h *migrateHistory) star(ctx context.Context, p migratePlay) error {
 	}
 	// The source's own time, so a backdated import cannot overwrite a
 	// star set here more recently.
-	if _, err := h.l.SetStar(ctx, h.uc, apiPID(PrefixTrack, it.PID), true, recordedTime(p.At)); err != nil {
+	if _, err := h.l.Playback.SetStar(ctx, h.uc, apiPID(PrefixTrack, it.PID), true, recordedTime(p.At)); err != nil {
 		if migrateWriteSkippable(err) {
 			return nil
 		}

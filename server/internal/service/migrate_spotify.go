@@ -55,7 +55,7 @@ type spotifyLibrary struct {
 // runSpotifyImport replays a staged Spotify account export onto the
 // target account: every play with the time it happened, and the saved
 // tracks as stars.
-func (l *Library) runSpotifyImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams) (migrationSummary, error) {
+func (l *Migrate) runSpotifyImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams) (migrationSummary, error) {
 	sum := migrationSummary{Source: p.Source, DryRun: p.DryRun, Samples: migrationSamples{Unmatched: []string{}}}
 	row, archive, err := l.migrationExportFile(ctx, p.ExportID)
 	if err != nil {
@@ -66,7 +66,7 @@ func (l *Library) runSpotifyImport(ctx context.Context, t *wdb.ToolTask, uc *Use
 		return sum, fmt.Errorf("%w: the uploaded export cannot be read: %v", errToolPermanent, err)
 	}
 	defer zr.Close()
-	prog := newToolProgress(l, t)
+	prog := newToolProgress(l.Tools, t)
 	hist := l.newMigrateHistory(uc, p, &sum)
 	// Reporting is the importer's only lease renewal, and one history
 	// file can be a hundred thousand plays: without a tick from inside
@@ -253,7 +253,7 @@ func spotifyMsPlayed(ms int64) int64 {
 	return ms
 }
 
-func (l *Library) addSpotifyBasic(ctx context.Context, hist *migrateHistory, r spotifyBasicRow) error {
+func (l *Migrate) addSpotifyBasic(ctx context.Context, hist *migrateHistory, r spotifyBasicRow) error {
 	if r.TrackName == "" {
 		return nil
 	}
@@ -275,7 +275,7 @@ func (l *Library) addSpotifyBasic(ctx context.Context, hist *migrateHistory, r s
 	})
 }
 
-func (l *Library) addSpotifyExtended(ctx context.Context, hist *migrateHistory, r spotifyExtendedRow) error {
+func (l *Migrate) addSpotifyExtended(ctx context.Context, hist *migrateHistory, r spotifyExtendedRow) error {
 	// A row with no track name is a podcast episode or an audiobook
 	// chapter, which shares the file and resolves against nothing in a
 	// music catalog.
@@ -298,7 +298,7 @@ func (l *Library) addSpotifyExtended(ctx context.Context, hist *migrateHistory, 
 	})
 }
 
-func (l *Library) importSpotifyLibrary(ctx context.Context, hist *migrateHistory, f *zip.File, budget *int64) error {
+func (l *Migrate) importSpotifyLibrary(ctx context.Context, hist *migrateHistory, f *zip.File, budget *int64) error {
 	// Bounded on its own as well as against the run's budget: this file
 	// is one object rather than a list, so it is decoded whole and held
 	// whole - the streaming the history gets does not apply. A list of

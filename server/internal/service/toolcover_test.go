@@ -19,7 +19,7 @@ func TestArtProvenanceMatchesWhatAResolveAnswers(t *testing.T) {
 	pid := fixtureItemPIDs(t, ctx, svc, uc)[0]
 	giveCovers(t, ctx, svc, uc, []string{pid}, coverPNG(t, 60))
 
-	it, err := svc.getVisibleItem(ctx, uc, pid)
+	it, err := svc.Grants.getVisibleItem(ctx, uc, pid)
 	if err != nil {
 		t.Fatalf("resolving item: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestArtProvenanceRefusesWhenThereIsNoCover(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pid := fixtureItemPIDs(t, ctx, svc, uc)[0]
-	it, err := svc.getVisibleItem(ctx, uc, pid)
+	it, err := svc.Grants.getVisibleItem(ctx, uc, pid)
 	if err != nil {
 		t.Fatalf("resolving item: %v", err)
 	}

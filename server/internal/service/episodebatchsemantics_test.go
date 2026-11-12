@@ -69,7 +69,7 @@ func TestASyncWithoutPodcastsReadsNoEpisodes(t *testing.T) {
 		t.Errorf("a music-only snapshot carried %d episodes after %d episode reads, want none of either", len(got), reads.Load())
 	}
 	feed.retitle("Remastered")
-	if _, err := f.svc.RefreshPodcast(f.ctx, f.uc, sub.Show.PID); err != nil {
+	if _, err := f.svc.Podcasts.RefreshPodcast(f.ctx, f.uc, sub.Show.PID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := deltaEpisodes(f, music, since); err != nil {
@@ -94,14 +94,14 @@ func TestEpisodePagesSkipAMissingEpisodeAndFailOnAFailedRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	feed.retitle("Remastered")
-	if _, err := f.svc.RefreshPodcast(f.ctx, f.uc, sub.Show.PID); err != nil {
+	if _, err := f.svc.Podcasts.RefreshPodcast(f.ctx, f.uc, sub.Show.PID); err != nil {
 		t.Fatal(err)
 	}
 	gone := all[3]
 	_, goneBare, _ := parseAPIPID(gone)
 	broken := errors.New("the episode read broke")
 	var fail bool
-	f.svc.episodeReadHook = func(ctx context.Context, pids []model.PID) ([]*model.Episode, error) {
+	f.svc.Podcasts.episodeReadHook = func(ctx context.Context, pids []model.PID) ([]*model.Episode, error) {
 		if fail {
 			return nil, broken
 		}
@@ -116,7 +116,7 @@ func TestEpisodePagesSkipAMissingEpisodeAndFailOnAFailedRead(t *testing.T) {
 	}
 	surfaces := map[string]func() (map[string]bool, error){
 		"the cross-show listing": func() (map[string]bool, error) {
-			rows, _, err := f.svc.SubscribedEpisodes(f.ctx, f.uc, EpisodesLatest, "", 25)
+			rows, _, err := f.svc.Podcasts.SubscribedEpisodes(f.ctx, f.uc, EpisodesLatest, "", 25)
 			got := map[string]bool{}
 			for _, r := range rows {
 				got[r.PID] = true

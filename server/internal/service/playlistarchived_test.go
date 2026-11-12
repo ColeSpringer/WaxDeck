@@ -24,7 +24,7 @@ import (
 // deleted-but-restorable item.
 func trashItems(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, pids ...string) {
 	t.Helper()
-	if _, err := svc.DeleteItems(ctx, uc, pids, "trash", false); err != nil {
+	if _, err := svc.Tools.DeleteItems(ctx, uc, pids, "trash", false); err != nil {
 		t.Fatalf("trashing %v: %v", pids, err)
 	}
 }
@@ -33,7 +33,7 @@ func trashItems(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, pi
 // API pid.
 func smartPlaylist(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, name, visibility string, rule SmartRule) string {
 	t.Helper()
-	pl, err := svc.CreatePlaylist(ctx, uc, PlaylistCreate{
+	pl, err := svc.Playlists.CreatePlaylist(ctx, uc, PlaylistCreate{
 		Name: name, Kind: "smart", Visibility: visibility, Rule: &rule,
 	})
 	if err != nil {
@@ -53,7 +53,7 @@ func memberPIDs(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, pl
 	var out []string
 	cursor := ""
 	for {
-		page, err := svc.PlaylistItems(ctx, uc, plPID, cursor, 50)
+		page, err := svc.Playlists.Items(ctx, uc, plPID, cursor, 50)
 		if err != nil {
 			t.Fatalf("paging playlist members: %v", err)
 		}
@@ -106,7 +106,7 @@ func TestSmartPlaylistLimitSurvivesTheArchivedFilter(t *testing.T) {
 	// The editor and the saved list have to agree, which is the whole
 	// point: PreviewRule already evaluated the predicate inside the
 	// query, so it was right and the listing was short.
-	preview, err := svc.PreviewRule(ctx, uc, rule, 50)
+	preview, err := svc.Playlists.PreviewRule(ctx, uc, rule, 50)
 	if err != nil {
 		t.Fatalf("previewing rule: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestSmartPlaylistLimitSurvivesTheArchivedFilter(t *testing.T) {
 
 	// And the count the DTO reports is the same number the listing hands
 	// back, rather than the rule's unfiltered match count.
-	pl, err := svc.PlaylistByPID(ctx, uc, plPID)
+	pl, err := svc.Playlists.ByPID(ctx, uc, plPID)
 	if err != nil {
 		t.Fatalf("reading playlist: %v", err)
 	}
@@ -199,7 +199,7 @@ func samePIDs(a, b []string) bool {
 }
 
 // TestSharedSmartPlaylistEvaluatesAsItsOwner is the contract
-// PlaylistItems documents and the reason the member read passes
+// Playlists.Items documents and the reason the member read passes
 // pl.OwnerPID rather than copying PreviewRule's caller pid: a shared
 // list holding a per-user predicate has to answer every reader with the
 // owner's evaluation, or two accounts see two different playlists under
@@ -211,7 +211,7 @@ func TestSharedSmartPlaylistEvaluatesAsItsOwner(t *testing.T) {
 
 	// The owner stars one track, so `starred is true` names exactly one
 	// item for them and nothing at all for anybody else.
-	if _, err := svc.SetStar(ctx, uc, pids[0], true, nil); err != nil {
+	if _, err := svc.Playback.SetStar(ctx, uc, pids[0], true, nil); err != nil {
 		t.Fatalf("starring: %v", err)
 	}
 	plPID := smartPlaylist(t, ctx, svc, uc, "What I starred", "shared", SmartRule{
@@ -226,11 +226,11 @@ func TestSharedSmartPlaylistEvaluatesAsItsOwner(t *testing.T) {
 		t.Fatalf("owner's own view of the list = %v, want [%s]", mine, pids[0])
 	}
 
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "reader", Password: "correct-horse"})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "reader", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := svc.UserCtx(ctx, acct.User)
+	other, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestSharedSmartPlaylistEvaluatesAsItsOwner(t *testing.T) {
 	if !samePIDs(mine, theirs) {
 		t.Errorf("a second reader sees %v, the owner %v", theirs, mine)
 	}
-	pl, err := svc.PlaylistByPID(ctx, other, plPID)
+	pl, err := svc.Playlists.ByPID(ctx, other, plPID)
 	if err != nil {
 		t.Fatalf("second reader reading the playlist: %v", err)
 	}
@@ -257,7 +257,7 @@ func TestStaticPlaylistCountMatchesItsListing(t *testing.T) {
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:4]
 	plPID := playlistWith(t, ctx, svc, uc, "Road Trip", pids)
 
-	pl, err := svc.PlaylistByPID(ctx, uc, plPID)
+	pl, err := svc.Playlists.ByPID(ctx, uc, plPID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ func TestStaticPlaylistCountMatchesItsListing(t *testing.T) {
 	if len(listed) != 3 {
 		t.Fatalf("listing holds %d members after trashing one, want 3", len(listed))
 	}
-	pl, err = svc.PlaylistByPID(ctx, uc, plPID)
+	pl, err = svc.Playlists.ByPID(ctx, uc, plPID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +289,7 @@ func TestStaticPlaylistCountMatchesItsListing(t *testing.T) {
 // listedCount reads one playlist's count off the listing page.
 func listedCount(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, plPID string) int {
 	t.Helper()
-	page, err := svc.Playlists(ctx, uc, "", "", 50)
+	page, err := svc.Playlists.List(ctx, uc, "", "", 50)
 	if err != nil {
 		t.Fatalf("listing playlists: %v", err)
 	}
@@ -332,7 +332,7 @@ func TestListingCountIsLive(t *testing.T) {
 		t.Errorf("listing count right after the trash = %d, member listing holds %d",
 			got, len(listed))
 	}
-	pl, err := svc.PlaylistByPID(ctx, uc, plPID)
+	pl, err := svc.Playlists.ByPID(ctx, uc, plPID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +364,7 @@ func TestStaticCountCountsEntriesNotItems(t *testing.T) {
 // TestReplaceRefusesWhenAMemberIsTrashed is the third arm the guard was
 // missing. A client PUTting back the listing it can see would otherwise
 // store a member list with the trashed row silently dropped, and a
-// restore would never re-add it - which contradicts PlaylistItems' own
+// restore would never re-add it - which contradicts Playlists.Items' own
 // promise that positions are kept "so a restore lands where it was".
 func TestReplaceRefusesWhenAMemberIsTrashed(t *testing.T) {
 	t.Parallel()
@@ -378,20 +378,20 @@ func TestReplaceRefusesWhenAMemberIsTrashed(t *testing.T) {
 		t.Fatalf("listing holds %d members, want 2", len(visible))
 	}
 
-	if err := svc.ReplacePlaylistItems(ctx, uc, plPID, visible, nil); KindOf(err) != KindConflict {
+	if err := svc.Playlists.ReplacePlaylistItems(ctx, uc, plPID, visible, nil); KindOf(err) != KindConflict {
 		t.Fatalf("replacing with the visible listing = %v, want a conflict", err)
 	}
 
 	// The refusal wrote nothing, so the hidden member is still stored and
 	// a restore puts it back where it was.
-	entries, err := svc.TrashEntries(ctx, uc, false, 50)
+	entries, err := svc.Tools.TrashEntries(ctx, uc, false, 50)
 	if err != nil {
 		t.Fatalf("listing trash: %v", err)
 	}
 	if len(entries) != 1 {
 		t.Fatalf("trash holds %d entries, want 1", len(entries))
 	}
-	if err := svc.RestoreTrashEntry(ctx, uc, entries[0].ID); err != nil {
+	if err := svc.Tools.RestoreTrashEntry(ctx, uc, entries[0].ID); err != nil {
 		t.Fatalf("restoring: %v", err)
 	}
 	if got := memberPIDs(t, ctx, svc, uc, plPID); !samePIDs(got, pids) {
@@ -409,7 +409,7 @@ func TestStaticCountIsScopedToTheCallersGrants(t *testing.T) {
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:3]
 	plPID := playlistWith(t, ctx, svc, uc, "Everything", pids)
 
-	elsewhere, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "other", Path: t.TempDir()})
+	elsewhere, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "other", Path: t.TempDir()})
 	if err != nil {
 		t.Fatalf("adding a second library: %v", err)
 	}
@@ -419,7 +419,7 @@ func TestStaticCountIsScopedToTheCallersGrants(t *testing.T) {
 		ID: uc.ID, CatalogPID: uc.CatalogPID,
 		Libraries: map[string]bool{strings.TrimPrefix(elsewhere.PID, PrefixLibrary+"-"): true},
 	}
-	pl, err := svc.PlaylistByPID(ctx, blind, plPID)
+	pl, err := svc.Playlists.ByPID(ctx, blind, plPID)
 	if err != nil {
 		t.Fatalf("restricted reader reading the playlist: %v", err)
 	}
@@ -434,7 +434,7 @@ func TestStaticCountIsScopedToTheCallersGrants(t *testing.T) {
 	// And a caller with no grant at all counts nothing: an empty allow
 	// list compiles to 1=0 rather than to "no filter".
 	none := &UserCtx{ID: uc.ID, CatalogPID: uc.CatalogPID}
-	pl, err = svc.PlaylistByPID(ctx, none, plPID)
+	pl, err = svc.Playlists.ByPID(ctx, none, plPID)
 	if err != nil {
 		t.Fatalf("ungranted reader reading the playlist: %v", err)
 	}
@@ -454,7 +454,7 @@ func TestSharedStaticCountIsTheViewersNotTheOwners(t *testing.T) {
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:3]
 
-	pl, err := svc.CreatePlaylist(ctx, uc, PlaylistCreate{
+	pl, err := svc.Playlists.CreatePlaylist(ctx, uc, PlaylistCreate{
 		Name: "Shared", Kind: "static", Visibility: "shared", ItemPIDs: pids,
 	})
 	if err != nil {
@@ -464,30 +464,30 @@ func TestSharedStaticCountIsTheViewersNotTheOwners(t *testing.T) {
 		t.Fatalf("owner's count = %v, want 3", pl.ItemCount)
 	}
 
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "reader", Password: "correct-horse"})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "reader", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := svc.UserCtx(ctx, acct.User)
+	other, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Same list, a reader granted a library that holds nothing of it.
-	elsewhere, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "other", Path: t.TempDir()})
+	elsewhere, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "other", Path: t.TempDir()})
 	if err != nil {
 		t.Fatalf("adding a second library: %v", err)
 	}
 	other.AllLibraries = false
 	other.Libraries = map[string]bool{strings.TrimPrefix(elsewhere.PID, PrefixLibrary+"-"): true}
 
-	theirs, err := svc.PlaylistByPID(ctx, other, pl.PID)
+	theirs, err := svc.Playlists.ByPID(ctx, other, pl.PID)
 	if err != nil {
 		t.Fatalf("second reader reading the shared list: %v", err)
 	}
 	if theirs.ItemCount == nil || *theirs.ItemCount != 0 {
 		t.Errorf("second reader's count = %v, want 0 - they can see none of it", theirs.ItemCount)
 	}
-	mine, err := svc.PlaylistByPID(ctx, uc, pl.PID)
+	mine, err := svc.Playlists.ByPID(ctx, uc, pl.PID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -509,7 +509,7 @@ func TestPlaylistRuleField(t *testing.T) {
 	pids := fixtureItemPIDs(t, ctx, svc, uc)
 	archive := playlistWith(t, ctx, svc, uc, "Archive", pids[:2])
 
-	vocab, err := svc.RuleVocabulary(ctx, uc)
+	vocab, err := svc.Playlists.RuleVocabulary(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -559,7 +559,7 @@ func TestPlaylistRuleField(t *testing.T) {
 
 	// The stored rule reads back as the API pid it was written with, not
 	// as the bare engine value.
-	pl, err := svc.PlaylistByPID(ctx, uc, inside)
+	pl, err := svc.Playlists.ByPID(ctx, uc, inside)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -578,7 +578,7 @@ func TestPlaylistRuleField(t *testing.T) {
 
 	// Refusals: an operator the field does not offer, and a value that
 	// is not a playlist pid.
-	_, err = svc.CreatePlaylist(ctx, uc, PlaylistCreate{
+	_, err = svc.Playlists.CreatePlaylist(ctx, uc, PlaylistCreate{
 		Name: "Bad op", Kind: "smart", Visibility: "private",
 		Rule: &SmartRule{Root: RuleNode{
 			Type: "condition", Field: "playlist", Op: "contains", Value: archive,
@@ -587,7 +587,7 @@ func TestPlaylistRuleField(t *testing.T) {
 	if KindOf(err) != KindInvalid {
 		t.Errorf("`contains` on a playlist field = %v, want invalid", err)
 	}
-	_, err = svc.CreatePlaylist(ctx, uc, PlaylistCreate{
+	_, err = svc.Playlists.CreatePlaylist(ctx, uc, PlaylistCreate{
 		Name: "Bad value", Kind: "smart", Visibility: "private",
 		Rule: &SmartRule{Root: RuleNode{
 			Type: "condition", Field: "playlist", Op: "is", Value: "tr-nonsense",
@@ -690,7 +690,7 @@ func TestSharedListHidesTagDeniedMembers(t *testing.T) {
 	f := newGenreFixture(t)
 	f.tag(t, "Canonical", "MOOD", "calm")
 	pids := genreTrackPIDs(t, f, "Lowercase", "Canonical", "Off Tree")
-	pl, err := f.svc.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{
+	pl, err := f.svc.Playlists.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{
 		Name: "Mixed", Kind: "static", Visibility: "shared", ItemPIDs: pids,
 	})
 	if err != nil {
@@ -702,7 +702,7 @@ func TestSharedListHidesTagDeniedMembers(t *testing.T) {
 	if got := memberPIDs(t, f.ctx, f.svc, kid, pl.PID); !samePIDs(got, want) {
 		t.Errorf("restricted reader lists %v, want %v", got, want)
 	}
-	opened, err := f.svc.PlaylistByPID(f.ctx, kid, pl.PID)
+	opened, err := f.svc.Playlists.ByPID(f.ctx, kid, pl.PID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -730,7 +730,7 @@ func TestReplaceRefusesWhenAMemberIsContentHidden(t *testing.T) {
 
 	kid := f.restricted(nil, []TagRule{{Key: "MOOD", Value: "calm"}})
 	visible := memberPIDs(t, f.ctx, f.svc, kid, plPID)
-	if err := f.svc.ReplacePlaylistItems(f.ctx, kid, plPID, visible, nil); KindOf(err) != KindConflict {
+	if err := f.svc.Playlists.ReplacePlaylistItems(f.ctx, kid, plPID, visible, nil); KindOf(err) != KindConflict {
 		t.Fatalf("replacing with the narrowed listing = %v, want a conflict", err)
 	}
 	if got := memberPIDs(t, f.ctx, f.svc, f.uc, plPID); !samePIDs(got, pids) {
@@ -746,14 +746,14 @@ func TestContainsItemDoesNotProbeAHiddenItem(t *testing.T) {
 	f := newGenreFixture(t)
 	f.tag(t, "Canonical", "MOOD", "calm")
 	pids := genreTrackPIDs(t, f, "Lowercase", "Canonical")
-	if _, err := f.svc.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{
+	if _, err := f.svc.Playlists.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{
 		Name: "Mixed", Kind: "static", Visibility: "shared", ItemPIDs: pids,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	holding := func(uc *UserCtx, item string) int {
 		t.Helper()
-		page, err := f.svc.Playlists(f.ctx, uc, item, "", 50)
+		page, err := f.svc.Playlists.List(f.ctx, uc, item, "", 50)
 		if err != nil {
 			t.Fatalf("filtering by %s: %v", item, err)
 		}
@@ -775,7 +775,7 @@ func TestContainsItemDoesNotProbeAHiddenItem(t *testing.T) {
 // every fixture track is outside their grant.
 func blindReader(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) *UserCtx {
 	t.Helper()
-	elsewhere, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "other", Path: t.TempDir()})
+	elsewhere, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "other", Path: t.TempDir()})
 	if err != nil {
 		t.Fatalf("adding a second library: %v", err)
 	}
@@ -794,25 +794,25 @@ func TestImportDropsWhatTheCallerCannotSee(t *testing.T) {
 	blind := blindReader(t, ctx, svc, uc)
 
 	text := PlaylistImportInput{Source: "text", Name: "Road Tape", Payload: "Test Ensemble - Amber Waves\n"}
-	out, err := svc.ImportStreamingPlaylist(ctx, blind, text)
+	out, err := svc.Playlists.ImportStreamingPlaylist(ctx, blind, text)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if out.Resolved != 0 || len(out.Missing) != 1 || out.PlaylistPID != "" {
 		t.Errorf("restricted text import = %+v, want one miss and no playlist", out)
 	}
-	if out, err = svc.ImportStreamingPlaylist(ctx, uc, text); err != nil || out.Resolved != 1 {
+	if out, err = svc.Playlists.ImportStreamingPlaylist(ctx, uc, text); err != nil || out.Resolved != 1 {
 		t.Errorf("unrestricted text import = %+v (%v), want the track resolved", out, err)
 	}
 
 	// Portable refs resolve on the strong rungs, which a hidden match
 	// cannot pass either.
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:2]
-	_, refs, err := svc.ExportPlaylistPortable(ctx, uc, playlistWith(t, ctx, svc, uc, "Source", pids))
+	_, refs, err := svc.Playlists.ExportPlaylistPortable(ctx, uc, playlistWith(t, ctx, svc, uc, "Source", pids))
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err = svc.ImportStreamingPlaylist(ctx, blind, PlaylistImportInput{Source: "portable", Refs: refs})
+	out, err = svc.Playlists.ImportStreamingPlaylist(ctx, blind, PlaylistImportInput{Source: "portable", Refs: refs})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -828,7 +828,7 @@ func TestImportM3UDropsUnreachablePaths(t *testing.T) {
 	ctx, svc, uc := newCatalogFixture(t)
 	blind := blindReader(t, ctx, svc, uc)
 	track := fixtureItemPIDs(t, ctx, svc, uc)[0]
-	it, err := svc.getVisibleItem(ctx, uc, track)
+	it, err := svc.Grants.getVisibleItem(ctx, uc, track)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -837,7 +837,7 @@ func TestImportM3UDropsUnreachablePaths(t *testing.T) {
 	paths := []string{it.DisplayPath, filepath.Base(it.DisplayPath)}
 	doc := "#EXTM3U\n" + strings.Join(paths, "\n") + "\n"
 
-	mine, err := svc.ImportPlaylistM3U(ctx, uc, "Mine", "", doc)
+	mine, err := svc.Playlists.ImportPlaylistM3U(ctx, uc, "Mine", "", doc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -848,7 +848,7 @@ func TestImportM3UDropsUnreachablePaths(t *testing.T) {
 		t.Errorf("unrestricted members = %v, want %v", got, []string{track})
 	}
 
-	theirs, err := svc.ImportPlaylistM3U(ctx, blind, "Theirs", "", doc)
+	theirs, err := svc.Playlists.ImportPlaylistM3U(ctx, blind, "Theirs", "", doc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -870,7 +870,7 @@ func TestSharedListExportsOnlyTheViewersMembers(t *testing.T) {
 	f.tag(t, "Canonical", "MOOD", "calm")
 	hidden := f.itemNamed(t, "Canonical")
 	pids := genreTrackPIDs(t, f, "Lowercase", "Canonical", "Off Tree")
-	pl, err := f.svc.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{
+	pl, err := f.svc.Playlists.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{
 		Name: "Mixed", Kind: "static", Visibility: "shared", ItemPIDs: pids,
 	})
 	if err != nil {
@@ -878,7 +878,7 @@ func TestSharedListExportsOnlyTheViewersMembers(t *testing.T) {
 	}
 	kid := f.calmDenied()
 
-	doc, err := f.svc.ExportPlaylistM3U(f.ctx, kid, pl.PID)
+	doc, err := f.svc.Playlists.ExportPlaylistM3U(f.ctx, kid, pl.PID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -888,7 +888,7 @@ func TestSharedListExportsOnlyTheViewersMembers(t *testing.T) {
 	if n := strings.Count(doc, "#EXTINF:"); n != 2 {
 		t.Errorf("the restricted export holds %d entries, want 2:\n%s", n, doc)
 	}
-	_, refs, err := f.svc.ExportPlaylistPortable(f.ctx, kid, pl.PID)
+	_, refs, err := f.svc.Playlists.ExportPlaylistPortable(f.ctx, kid, pl.PID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -903,7 +903,7 @@ func TestSharedListExportsOnlyTheViewersMembers(t *testing.T) {
 
 	// The owner's export is the catalog's own document, byte for byte:
 	// the importer's label pick reads that format back.
-	mine, err := f.svc.ExportPlaylistM3U(f.ctx, f.uc, pl.PID)
+	mine, err := f.svc.Playlists.ExportPlaylistM3U(f.ctx, f.uc, pl.PID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -915,7 +915,7 @@ func TestSharedListExportsOnlyTheViewersMembers(t *testing.T) {
 	if mine != want.String() {
 		t.Errorf("owner export =\n%s\nwant the catalog's\n%s", mine, want.String())
 	}
-	if _, refs, err := f.svc.ExportPlaylistPortable(f.ctx, f.uc, pl.PID); err != nil || len(refs) != 3 {
+	if _, refs, err := f.svc.Playlists.ExportPlaylistPortable(f.ctx, f.uc, pl.PID); err != nil || len(refs) != 3 {
 		t.Errorf("owner portable export = %d refs (%v), want 3", len(refs), err)
 	}
 }
@@ -940,7 +940,7 @@ func TestShuffledSmartListExportsPortably(t *testing.T) {
 	}
 	everything := slices.Sorted(slices.Values(genreFixtureTitles))
 	for range 3 {
-		_, refs, err := f.svc.ExportPlaylistPortable(f.ctx, f.uc, pl)
+		_, refs, err := f.svc.Playlists.ExportPlaylistPortable(f.ctx, f.uc, pl)
 		if err != nil {
 			t.Fatalf("owner export: %v", err)
 		}
@@ -948,7 +948,7 @@ func TestShuffledSmartListExportsPortably(t *testing.T) {
 			t.Errorf("owner export = %v, want %v", got, everything)
 		}
 	}
-	_, refs, err := f.svc.ExportPlaylistPortable(f.ctx, f.calmDenied(), pl)
+	_, refs, err := f.svc.Playlists.ExportPlaylistPortable(f.ctx, f.calmDenied(), pl)
 	if err != nil {
 		t.Fatalf("restricted export: %v", err)
 	}
@@ -961,14 +961,7 @@ func TestShuffledSmartListExportsPortably(t *testing.T) {
 // shareOwner creates a plain account and returns its id and context.
 func shareOwner(t *testing.T, ctx context.Context, svc *Library, name string) (string, *UserCtx) {
 	t.Helper()
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: name, Password: "correct-horse"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	uc, err := svc.UserCtx(ctx, acct.User)
-	if err != nil {
-		t.Fatal(err)
-	}
+	acct, uc := playlistMember(t, ctx, svc, name)
 	return acct.User.ID, uc
 }
 
@@ -977,7 +970,7 @@ func shareOwner(t *testing.T, ctx context.Context, svc *Library, name string) (s
 func resolvedShare(t *testing.T, ctx context.Context, svc *Library, apiShareID string) int {
 	t.Helper()
 	_, id, _ := parseAPIPID(apiShareID)
-	pub, err := svc.ResolveShare(ctx, string(id))
+	pub, err := svc.Reads.ResolveShare(ctx, string(id))
 	if KindOf(err) == KindNotFound {
 		return -1
 	}
@@ -996,17 +989,17 @@ func TestResolveShareServesTheOwnersCurrentReach(t *testing.T) {
 	pids := fixtureItemPIDs(t, ctx, svc, admin)[:2]
 	ownerID, owner := shareOwner(t, ctx, svc, "publisher")
 
-	pl, err := svc.CreatePlaylist(ctx, owner, PlaylistCreate{Name: "Out", Kind: "static", ItemPIDs: pids})
+	pl, err := svc.Playlists.CreatePlaylist(ctx, owner, PlaylistCreate{Name: "Out", Kind: "static", ItemPIDs: pids})
 	if err != nil {
 		t.Fatal(err)
 	}
-	album, err := svc.getVisibleItem(ctx, admin, pids[0])
+	album, err := svc.Grants.getVisibleItem(ctx, admin, pids[0])
 	if err != nil {
 		t.Fatal(err)
 	}
 	var shares []string
 	for _, target := range []string{pl.PID, apiPID(PrefixAlbum, album.AlbumPID), pids[1]} {
-		info, err := svc.CreateShare(ctx, owner, target, 0, false, 0)
+		info, err := svc.Reads.CreateShare(ctx, owner, target, 0, false, 0)
 		if err != nil {
 			t.Fatalf("sharing %s: %v", target, err)
 		}
@@ -1016,12 +1009,12 @@ func TestResolveShareServesTheOwnersCurrentReach(t *testing.T) {
 		shares = append(shares, info.ID)
 	}
 
-	elsewhere, err := svc.AddLibrary(ctx, admin, AddLibraryInput{Name: "other", Path: t.TempDir()})
+	elsewhere, err := svc.Roots.AddLibrary(ctx, admin, AddLibraryInput{Name: "other", Path: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	granted := "granted"
-	if _, err := svc.UpdateAccount(ctx, ownerID, AccountUpdate{AccessMode: &granted, LibraryPIDs: []string{elsewhere.PID}}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, ownerID, AccountUpdate{AccessMode: &granted, LibraryPIDs: []string{elsewhere.PID}}); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range shares {
@@ -1031,14 +1024,14 @@ func TestResolveShareServesTheOwnersCurrentReach(t *testing.T) {
 	}
 
 	all := "all"
-	if _, err := svc.UpdateAccount(ctx, ownerID, AccountUpdate{AccessMode: &all}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, ownerID, AccountUpdate{AccessMode: &all}); err != nil {
 		t.Fatal(err)
 	}
 	if n := resolvedShare(t, ctx, svc, shares[0]); n != 2 {
 		t.Errorf("the playlist share after the grant came back serves %d, want 2", n)
 	}
 	off, on := true, false
-	if _, err := svc.UpdateAccount(ctx, ownerID, AccountUpdate{Disabled: &off}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, ownerID, AccountUpdate{Disabled: &off}); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range shares {
@@ -1046,7 +1039,7 @@ func TestResolveShareServesTheOwnersCurrentReach(t *testing.T) {
 			t.Errorf("share %s of a disabled owner serves %d items, want not-found", id, n)
 		}
 	}
-	if _, err := svc.UpdateAccount(ctx, ownerID, AccountUpdate{Disabled: &on}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, ownerID, AccountUpdate{Disabled: &on}); err != nil {
 		t.Fatal(err)
 	}
 	if n := resolvedShare(t, ctx, svc, shares[2]); n != 1 {
@@ -1062,15 +1055,15 @@ func TestResolveShareHidesWhatTheOwnersRulesDeny(t *testing.T) {
 	f := newGenreFixture(t)
 	pids := genreTrackPIDs(t, f, "Lowercase", "Canonical")
 	ownerID, owner := shareOwner(t, f.ctx, f.svc, "publisher")
-	pl, err := f.svc.CreatePlaylist(f.ctx, owner, PlaylistCreate{Name: "Out", Kind: "static", ItemPIDs: pids})
+	pl, err := f.svc.Playlists.CreatePlaylist(f.ctx, owner, PlaylistCreate{Name: "Out", Kind: "static", ItemPIDs: pids})
 	if err != nil {
 		t.Fatal(err)
 	}
-	list, err := f.svc.CreateShare(f.ctx, owner, pl.PID, 0, false, 0)
+	list, err := f.svc.Reads.CreateShare(f.ctx, owner, pl.PID, 0, false, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	track, err := f.svc.CreateShare(f.ctx, owner, pids[1], 0, false, 0)
+	track, err := f.svc.Reads.CreateShare(f.ctx, owner, pids[1], 0, false, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1078,7 +1071,7 @@ func TestResolveShareHidesWhatTheOwnersRulesDeny(t *testing.T) {
 	f.tag(t, "Canonical", "MOOD", "calm")
 	perms := DefaultPermissions()
 	perms.TagDeny = []TagRule{{Key: "MOOD", Value: "calm"}}
-	if _, err := f.svc.UpdateAccount(f.ctx, ownerID, AccountUpdate{Permissions: &perms}); err != nil {
+	if _, err := f.svc.Identity.UpdateAccount(f.ctx, ownerID, AccountUpdate{Permissions: &perms}); err != nil {
 		t.Fatal(err)
 	}
 	if n := resolvedShare(t, f.ctx, f.svc, list.ID); n != 1 {
@@ -1099,14 +1092,14 @@ func TestPreviewTotalCountsOnlyWhatTheCallerCanSee(t *testing.T) {
 	f.tag(t, "Canonical", "MOOD", "calm")
 	rule := SmartRule{Root: allMusic()}
 
-	mine, err := f.svc.PreviewRule(f.ctx, f.uc, rule, 50)
+	mine, err := f.svc.Playlists.PreviewRule(f.ctx, f.uc, rule, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if mine.Total != 5 || len(mine.Items) != 5 {
 		t.Fatalf("unrestricted preview = %d of %d, want 5 of 5", len(mine.Items), mine.Total)
 	}
-	theirs, err := f.svc.PreviewRule(f.ctx, f.calmDenied(), rule, 50)
+	theirs, err := f.svc.Playlists.PreviewRule(f.ctx, f.calmDenied(), rule, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1118,7 +1111,7 @@ func TestPreviewTotalCountsOnlyWhatTheCallerCanSee(t *testing.T) {
 			t.Errorf("the restricted preview lists the denied track")
 		}
 	}
-	blind, err := f.svc.PreviewRule(f.ctx, blindReader(t, f.ctx, f.svc, f.uc), rule, 50)
+	blind, err := f.svc.Playlists.PreviewRule(f.ctx, blindReader(t, f.ctx, f.svc, f.uc), rule, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1134,7 +1127,7 @@ func TestPreviewTotalCountsOnlyWhatTheCallerCanSee(t *testing.T) {
 func TestUploadDuplicateNamesOnlyWhatTheUploaderCanSee(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	it, err := svc.getVisibleItem(ctx, uc, fixtureItemPIDs(t, ctx, svc, uc)[0])
+	it, err := svc.Grants.getVisibleItem(ctx, uc, fixtureItemPIDs(t, ctx, svc, uc)[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1148,7 +1141,7 @@ func TestUploadDuplicateNamesOnlyWhatTheUploaderCanSee(t *testing.T) {
 		SHA256: hex.EncodeToString(sum[:]),
 	}
 
-	mine, err := svc.CreateUpload(ctx, uc, params)
+	mine, err := svc.Ingest.CreateUpload(ctx, uc, params)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1157,7 +1150,7 @@ func TestUploadDuplicateNamesOnlyWhatTheUploaderCanSee(t *testing.T) {
 	}
 	blind := blindReader(t, ctx, svc, uc)
 	blind.UploadEnabled = true
-	theirs, err := svc.CreateUpload(ctx, blind, params)
+	theirs, err := svc.Ingest.CreateUpload(ctx, blind, params)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1175,7 +1168,7 @@ func TestSyncedMembersBackOffAnEditMadeSinceTheRead(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)
-	created, err := svc.CreatePlaylist(ctx, uc, PlaylistCreate{Name: "Synced", Kind: "static", ItemPIDs: pids[:1]})
+	created, err := svc.Playlists.CreatePlaylist(ctx, uc, PlaylistCreate{Name: "Synced", Kind: "static", ItemPIDs: pids[:1]})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1184,11 +1177,11 @@ func TestSyncedMembersBackOffAnEditMadeSinceTheRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.AddPlaylistItems(ctx, uc, created.PID, pids[1:2]); err != nil {
+	if err := svc.Playlists.AddPlaylistItems(ctx, uc, created.PID, pids[1:2]); err != nil {
 		t.Fatal(err)
 	}
 	_, other, _ := parseAPIPID(pids[2])
-	if err := svc.setSyncedMembers(ctx, uc, read, []model.PID{other}); KindOf(err) != KindConflict {
+	if err := svc.Playlists.setSyncedMembers(ctx, uc, read, []model.PID{other}); KindOf(err) != KindConflict {
 		t.Errorf("a run writing over an edit made since its read = %v, want a conflict", err)
 	}
 	if got := memberPIDs(t, ctx, svc, uc, created.PID); !slices.Equal(got, pids[:2]) {
@@ -1216,7 +1209,7 @@ func TestPortableExportNeverPairsAcrossAnEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 	byArtist := map[string]string{}
-	page, err := f.svc.Items(f.ctx, f.uc, ItemFilter{}, "", 100)
+	page, err := f.svc.Reads.Items(f.ctx, f.uc, ItemFilter{}, "", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1229,10 +1222,10 @@ func TestPortableExportNeverPairsAcrossAnEdit(t *testing.T) {
 	if seen == "" || hidden == "" {
 		t.Fatalf("twins = %v", byArtist)
 	}
-	if _, err := f.svc.SetItemTag(f.ctx, f.uc, hidden, "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
+	if _, err := f.svc.Editor.SetItemTag(f.ctx, f.uc, hidden, "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
 		t.Fatal(err)
 	}
-	pl, err := f.svc.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{
+	pl, err := f.svc.Playlists.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{
 		Name: "Twins", Kind: "static", Visibility: "shared", ItemPIDs: []string{hidden, seen},
 	})
 	if err != nil {
@@ -1259,7 +1252,7 @@ func TestPortableExportNeverPairsAcrossAnEdit(t *testing.T) {
 				return
 			default:
 			}
-			if err := f.svc.ReplacePlaylistItems(f.ctx, f.uc, pl.PID, orders[i%2], nil); err != nil {
+			if err := f.svc.Playlists.ReplacePlaylistItems(f.ctx, f.uc, pl.PID, orders[i%2], nil); err != nil {
 				t.Error(err)
 				return
 			}
@@ -1268,7 +1261,7 @@ func TestPortableExportNeverPairsAcrossAnEdit(t *testing.T) {
 	}()
 	export := func() ([]PortableRefDTO, error) {
 		t.Helper()
-		_, refs, err := f.svc.ExportPlaylistPortable(f.ctx, kid, pl.PID)
+		_, refs, err := f.svc.Playlists.ExportPlaylistPortable(f.ctx, kid, pl.PID)
 		for _, r := range refs {
 			if r.Artist == "Hidden Twin" {
 				t.Fatalf("an export handed out the hidden twin's ref: %+v", r)
@@ -1297,10 +1290,10 @@ func TestCreatePlaylistLeavesNothingWhenItsMembersFail(t *testing.T) {
 	pids := fixtureItemPIDs(t, ctx, svc, uc)
 	execCatalog(t, svc.catalogPath, `CREATE TRIGGER refuse_members BEFORE INSERT ON playlist_item
 		BEGIN SELECT RAISE(ABORT, 'refused'); END`)
-	if _, err := svc.CreatePlaylist(ctx, uc, PlaylistCreate{Name: "Doomed", Kind: "static", ItemPIDs: pids[:1]}); err == nil {
+	if _, err := svc.Playlists.CreatePlaylist(ctx, uc, PlaylistCreate{Name: "Doomed", Kind: "static", ItemPIDs: pids[:1]}); err == nil {
 		t.Fatal("a create whose members failed answered success")
 	}
-	page, err := svc.Playlists(ctx, uc, "", "", 100)
+	page, err := svc.Playlists.List(ctx, uc, "", "", 100)
 	if err != nil {
 		t.Fatal(err)
 	}

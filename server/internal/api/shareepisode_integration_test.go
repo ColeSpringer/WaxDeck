@@ -486,7 +486,7 @@ func TestAShareRelayNeverSpendsTheOwnersFeedLogin(t *testing.T) {
 	})
 	_, ep := firstEpisode(t, h, feed.feedURL(), map[string]any{"username": "member", "password": "secret"})
 	owner := adminUserID(t, h)
-	if src, err := h.svc.EnclosureStreamSource(context.Background(), owner, ep.Pid); err != nil || src.AuthUser != "member" {
+	if src, err := h.svc.Podcasts.EnclosureStreamSource(context.Background(), owner, ep.Pid); err != nil || src.AuthUser != "member" {
 		t.Fatalf("the owner's own source = %+v, %v; want it to carry the show's login", src, err)
 	}
 

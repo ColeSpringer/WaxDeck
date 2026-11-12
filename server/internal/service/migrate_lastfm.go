@@ -53,15 +53,15 @@ func lastPage(pg scrobble.HistoryPage, page, limit int) bool {
 
 // runLastfmImport replays a Last.fm account's scrobble history and
 // loved tracks onto the target account, newest first.
-func (l *Library) runLastfmImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams) (migrationSummary, error) {
+func (l *Migrate) runLastfmImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams) (migrationSummary, error) {
 	sum := migrationSummary{Source: p.Source, DryRun: p.DryRun, Samples: migrationSamples{Unmatched: []string{}}}
-	client := l.lastfmClient()
+	client := l.Integrations.lastfmClient()
 	if client == nil {
 		// Permanent, and worded as the thing to go and do: without the
 		// server's API credentials there is nothing to retry.
 		return sum, fmt.Errorf("%w: configure the server's Last.fm API key first", errToolPermanent)
 	}
-	prog := newToolProgress(l, t)
+	prog := newToolProgress(l.Tools, t)
 	hist := l.newMigrateHistory(uc, p, &sum)
 
 	if p.History {

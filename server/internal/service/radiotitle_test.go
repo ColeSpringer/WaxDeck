@@ -5,19 +5,26 @@ import (
 	"time"
 )
 
+// nowPlaying is the title a station last announced and the picture
+// announced with it, while the announcement is fresh.
+func nowPlaying(l *Library, pid string) (string, string) {
+	a := l.Radio.NowPlayingAnnouncement(pid)
+	return a.Title, a.ArtURL
+}
+
 // ageRadioTitle backdates both of a station's clocks, so either bound
 // can be crossed without waiting it out.
 func ageRadioTitle(t *testing.T, l *Library, pid string, by time.Duration) {
 	t.Helper()
-	l.radioTitlesMu.Lock()
-	defer l.radioTitlesMu.Unlock()
-	entry, ok := l.radioTitles[pid]
+	l.Radio.radioTitlesMu.Lock()
+	defer l.Radio.radioTitlesMu.Unlock()
+	entry, ok := l.Radio.radioTitles[pid]
 	if !ok {
 		t.Fatalf("no observed title for %q to age", pid)
 	}
 	entry.seenNS -= int64(by)
 	entry.announcedNS -= int64(by)
-	l.radioTitles[pid] = entry
+	l.Radio.radioTitles[pid] = entry
 }
 
 // The bug this whole rung was blanking on: a station announces a title
@@ -28,13 +35,13 @@ func TestALongTrackKeepsItsTitleWhileTheStreamRuns(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
 
-	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "https://art.example/orn.png")
+	svc.Radio.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "https://art.example/orn.png")
 	ageRadioTitle(t, svc, "rs-1", radioTitleFreshFor+time.Minute)
 
 	// The empty blocks a station sends between announcements are what
 	// actually recur, and they say the stream is still running.
-	svc.NoteRadioAlive("rs-1")
-	title, artURL := svc.RadioNowPlayingMeta("rs-1")
+	svc.Radio.NoteRadioAlive("rs-1")
+	title, artURL := nowPlaying(svc, "rs-1")
 	if title != "Charlie Parker - Ornithology" {
 		t.Fatalf("title after a liveness block = %q, want the announced song", title)
 	}
@@ -44,9 +51,9 @@ func TestALongTrackKeepsItsTitleWhileTheStreamRuns(t *testing.T) {
 
 	// The control, on its own station: nothing says the stream is alive,
 	// so it reads as one that closed.
-	svc.NoteRadioMeta("rs-2", "Charlie Parker - Ornithology", "")
+	svc.Radio.NoteRadioMeta("rs-2", "Charlie Parker - Ornithology", "")
 	ageRadioTitle(t, svc, "rs-2", radioTitleFreshFor+time.Minute)
-	if title, _ := svc.RadioNowPlayingMeta("rs-2"); title != "" {
+	if title, _ := nowPlaying(svc, "rs-2"); title != "" {
 		t.Fatalf("stale title = %q, want it dropped", title)
 	}
 }
@@ -58,13 +65,13 @@ func TestAStaleTitleIsReclaimedWhereItIsFound(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
 
-	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "")
+	svc.Radio.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "")
 	ageRadioTitle(t, svc, "rs-1", radioTitleHoldFor+time.Minute)
-	svc.RadioNowPlayingMeta("rs-1")
+	nowPlaying(svc, "rs-1")
 
-	svc.radioTitlesMu.Lock()
-	_, held := svc.radioTitles["rs-1"]
-	svc.radioTitlesMu.Unlock()
+	svc.Radio.radioTitlesMu.Lock()
+	_, held := svc.Radio.radioTitles["rs-1"]
+	svc.Radio.radioTitlesMu.Unlock()
 	if held {
 		t.Fatal("a dead entry survived the read that found it")
 	}
@@ -74,20 +81,20 @@ func TestAStaleTitleIsReclaimedWhereItIsFound(t *testing.T) {
 func TestDeletingAStationForgetsItsTitle(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
-	st, err := svc.CreateRadioStation(ctx, admin, RadioStationEdit{
+	st, err := svc.Radio.CreateRadioStation(ctx, admin, RadioStationEdit{
 		Name: "Groove Salad", StreamURL: "https://ice.example.net/groove",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.NoteRadioMeta(st.PID, "Bluetech - Finding The Future", "")
-	if err := svc.DeleteRadioStation(ctx, st.PID); err != nil {
+	svc.Radio.NoteRadioMeta(st.PID, "Bluetech - Finding The Future", "")
+	if err := svc.Radio.DeleteRadioStation(ctx, st.PID); err != nil {
 		t.Fatal(err)
 	}
 
-	svc.radioTitlesMu.Lock()
-	_, held := svc.radioTitles[st.PID]
-	svc.radioTitlesMu.Unlock()
+	svc.Radio.radioTitlesMu.Lock()
+	_, held := svc.Radio.radioTitles[st.PID]
+	svc.Radio.radioTitlesMu.Unlock()
 	if held {
 		t.Fatal("a deleted station kept its observed title")
 	}
@@ -101,21 +108,21 @@ func TestATitleNobodyRenewsEventuallyGoesQuiet(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
 
-	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "https://art.example/orn.png")
+	svc.Radio.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "https://art.example/orn.png")
 	ageRadioTitle(t, svc, "rs-1", radioTitleHoldFor+time.Minute)
 
 	// The stream is demonstrably alive - this is not the stale-stream
 	// case, it is the station that stopped talking.
-	svc.NoteRadioAlive("rs-1")
-	title, artURL := svc.RadioNowPlayingMeta("rs-1")
+	svc.Radio.NoteRadioAlive("rs-1")
+	title, artURL := nowPlaying(svc, "rs-1")
 	if title != "" || artURL != "" {
 		t.Fatalf("unrenewed title = (%q, %q), want the face to fall back", title, artURL)
 	}
 
 	// And it comes back the moment the station says anything, including
 	// the same song.
-	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "https://art.example/orn.png")
-	if title, _ := svc.RadioNowPlayingMeta("rs-1"); title != "Charlie Parker - Ornithology" {
+	svc.Radio.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "https://art.example/orn.png")
+	if title, _ := nowPlaying(svc, "rs-1"); title != "Charlie Parker - Ornithology" {
 		t.Fatalf("re-announced title = %q, want it back", title)
 	}
 }
@@ -129,11 +136,11 @@ func TestALongItemSurvivesWellPastASong(t *testing.T) {
 
 	// A classical work, a DJ set, a prog side - all announced once and
 	// left to run far longer than any single.
-	svc.NoteRadioMeta("rs-1", "Pink Floyd - Echoes", "")
+	svc.Radio.NoteRadioMeta("rs-1", "Pink Floyd - Echoes", "")
 	ageRadioTitle(t, svc, "rs-1", 30*time.Minute)
-	svc.NoteRadioAlive("rs-1")
+	svc.Radio.NoteRadioAlive("rs-1")
 
-	if title, _ := svc.RadioNowPlayingMeta("rs-1"); title != "Pink Floyd - Echoes" {
+	if title, _ := nowPlaying(svc, "rs-1"); title != "Pink Floyd - Echoes" {
 		t.Fatalf("title after half an hour = %q, want it standing", title)
 	}
 }
@@ -144,8 +151,8 @@ func TestLivenessDoesNotInventATitle(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
 
-	svc.NoteRadioAlive("rs-unheard")
-	if title, _ := svc.RadioNowPlayingMeta("rs-unheard"); title != "" {
+	svc.Radio.NoteRadioAlive("rs-unheard")
+	if title, _ := nowPlaying(svc, "rs-unheard"); title != "" {
 		t.Fatalf("title = %q, want nothing", title)
 	}
 }
@@ -157,10 +164,10 @@ func TestAnEmptyAnnouncementIsNotAClear(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
 
-	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "https://art.example/orn.png")
-	svc.NoteRadioMeta("rs-1", "", "")
+	svc.Radio.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "https://art.example/orn.png")
+	svc.Radio.NoteRadioMeta("rs-1", "", "")
 
-	title, artURL := svc.RadioNowPlayingMeta("rs-1")
+	title, artURL := nowPlaying(svc, "rs-1")
 	if title != "Charlie Parker - Ornithology" || artURL != "https://art.example/orn.png" {
 		t.Fatalf("after an empty announcement = (%q, %q), want the song to stand", title, artURL)
 	}
@@ -173,11 +180,11 @@ func TestAnEmptyAnnouncementKeepsTheStreamFresh(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
 
-	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "")
+	svc.Radio.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "")
 	ageRadioTitle(t, svc, "rs-1", radioTitleFreshFor+time.Minute)
-	svc.NoteRadioMeta("rs-1", "", "")
+	svc.Radio.NoteRadioMeta("rs-1", "", "")
 
-	if title, _ := svc.RadioNowPlayingMeta("rs-1"); title != "Charlie Parker - Ornithology" {
+	if title, _ := nowPlaying(svc, "rs-1"); title != "Charlie Parker - Ornithology" {
 		t.Fatalf("title = %q, want it held", title)
 	}
 }
@@ -189,24 +196,24 @@ func TestATitleChangeWakesTheStation(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
 	var woke []string
-	svc.SetRadioInvalidator(func(station string) { woke = append(woke, station) })
+	svc.Radio.SetRadioInvalidator(func(station string) { woke = append(woke, station) })
 
-	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "")
+	svc.Radio.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "")
 	if len(woke) != 1 || woke[0] != "rs-1" {
 		t.Fatalf("first title woke %v, want rs-1 once", woke)
 	}
 	// The same announcement again changes nothing a face draws.
-	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "")
+	svc.Radio.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "")
 	if len(woke) != 1 {
 		t.Fatalf("a repeated title woke %v, want no second wake", woke)
 	}
-	svc.NoteRadioMeta("rs-1", "Pink Floyd - Echoes", "")
+	svc.Radio.NoteRadioMeta("rs-1", "Pink Floyd - Echoes", "")
 	if len(woke) != 2 {
 		t.Fatalf("the next title woke %v, want a second wake", woke)
 	}
 	// An empty announcement is not a title, and neither is liveness.
-	svc.NoteRadioMeta("rs-1", "", "")
-	svc.NoteRadioAlive("rs-1")
+	svc.Radio.NoteRadioMeta("rs-1", "", "")
+	svc.Radio.NoteRadioAlive("rs-1")
 	if len(woke) != 2 {
 		t.Fatalf("an empty block woke %v", woke)
 	}

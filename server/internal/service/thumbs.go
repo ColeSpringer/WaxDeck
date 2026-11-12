@@ -90,7 +90,7 @@ func (l *Library) PruneThumbnails(ctx context.Context, uc *UserCtx, olderThanSec
 	if err != nil {
 		return ThumbPruneDTO{}, classify(err)
 	}
-	l.Audit(ctx, uc, "thumbnails.prune", AuditTarget{Kind: "thumbnails"},
+	l.Audit.Record(ctx, uc, "thumbnails.prune", AuditTarget{Kind: "thumbnails"},
 		pruneAuditDetail(removed, freed, olderThanSeconds, maxBytes))
 	return ThumbPruneDTO{Removed: removed, FreedBytes: freed}, nil
 }

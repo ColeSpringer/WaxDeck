@@ -494,7 +494,7 @@ func TestReidentifyDuringAnInFlightRunIsNotLost(t *testing.T) {
 	drained := make(chan struct{})
 	go func() {
 		defer close(drained)
-		for l := 0; l < 100 && h.svc.DrainMatchQueue(context.Background()); l++ {
+		for l := 0; l < 100 && h.svc.Ingest.DrainMatchQueue(context.Background()); l++ {
 		}
 	}()
 	select {

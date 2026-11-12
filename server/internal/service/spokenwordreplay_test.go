@@ -40,10 +40,10 @@ func TestReplayedCrossingsDoNotCountPerCheckpoint(t *testing.T) {
 	// no live checkpoint - one would leave a position stamp newer than
 	// the replays below, and the replay guard would drop them before
 	// they ever reached a crossing.
-	if _, err := svc.SetPlayed(ctx, uc, book, true, true, nil, nil, nil); err != nil {
+	if _, err := svc.Playback.SetPlayed(ctx, uc, book, true, true, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SetPlayed(ctx, uc, book, false, false, nil, nil, nil); err != nil {
+	if _, err := svc.Playback.SetPlayed(ctx, uc, book, false, false, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	st := f.playState(t, ctx, book)
@@ -58,7 +58,7 @@ func TestReplayedCrossingsDoNotCountPerCheckpoint(t *testing.T) {
 	recorded := time.Now().Add(-2 * time.Hour)
 	for i := range 4 {
 		at := recorded.Add(time.Duration(i) * time.Minute)
-		if _, err := svc.Checkpoint(ctx, uc, book, past, &at); err != nil {
+		if _, err := svc.Playback.Checkpoint(ctx, uc, book, past, &at); err != nil {
 			t.Fatalf("replayed checkpoint %d: %v", i, err)
 		}
 	}

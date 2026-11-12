@@ -47,7 +47,7 @@ type cueSplit struct {
 
 // runCueSplit splits a shared album rip into one real file per virtual
 // track, from wherever an earlier attempt left it.
-func (l *Library) runCueSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskParams) ([]string, error) {
+func (l *Tools) runCueSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskParams) ([]string, error) {
 	_, seed, ok := parseAPIPID(t.ItemPID)
 	if !ok {
 		return nil, fmt.Errorf("%w: bad item pid %q", errToolPermanent, t.ItemPID)
@@ -101,7 +101,7 @@ func (c *cueSplit) dest(i int) string {
 
 // workspace is where the split cuts its pieces, outside the library.
 func (c *cueSplit) workspace() string {
-	return filepath.Join(c.l.stagingDir, "tools", c.t.ID)
+	return filepath.Join(c.l.Ingest.stagingDir, "tools", c.t.ID)
 }
 
 // piecePath is where the ith piece waits in the workspace.
@@ -134,7 +134,7 @@ func (c *cueSplit) whereLeft(ctx context.Context) string {
 		if pid != "" {
 			made++
 			if folder == "" && c.dest(i) != "" {
-				folder = c.l.scrubStoragePaths(filepath.Dir(c.dest(i)))
+				folder = c.l.Ingest.scrubStoragePaths(filepath.Dir(c.dest(i)))
 			}
 		}
 	}
@@ -161,7 +161,7 @@ func (c *cueSplit) cut(ctx context.Context) error {
 	if err := c.cutPieces(ctx); err != nil {
 		return c.cutFailed(ctx, err)
 	}
-	return c.l.toolCrashPoint("staged")
+	return c.l.crashPoint("staged")
 }
 
 // cutFailed is a cut that failed. The engine away is waited out, and so
@@ -199,7 +199,7 @@ func (c *cueSplit) locate(ctx context.Context) {
 // cutPieces is the cut: the engine's pieces, tagged, in the workspace,
 // and the run recorded resumable.
 func (c *cueSplit) cutPieces(ctx context.Context) error {
-	if err := c.l.toolEngineUp(); err != nil {
+	if err := c.l.engineUp(); err != nil {
 		return err
 	}
 	seed, err := c.l.lib.Get(ctx, c.seed)
@@ -225,7 +225,7 @@ func (c *cueSplit) cutPieces(ctx context.Context) error {
 		c.l.log.Warn("cue split piece count differs from virtual tracks",
 			"task", c.t.ID, "pieces", outs, "tracks", len(sibs))
 	}
-	ws, err := c.l.toolWorkspace(c.t.ID)
+	ws, err := c.l.workspace(c.t.ID)
 	if err != nil {
 		return err
 	}
@@ -333,7 +333,7 @@ func (c *cueSplit) importPieces(ctx context.Context) error {
 	if err := c.mark(ctx, cueStepImported); err != nil {
 		return c.wait(ctx, err)
 	}
-	return c.l.toolCrashPoint("imported")
+	return c.l.crashPoint("imported")
 }
 
 // recordTracks records the tracks the pieces became, those known.
@@ -370,14 +370,14 @@ func (c *cueSplit) importRest(ctx context.Context, rest []int, pids []model.PID)
 				c.p.PieceDests[i], c.p.PieceEssences[i] = a.Dst, a.Essence
 				delete(refused, i)
 			} else if a.Reason != "" {
-				refused[i] = c.l.scrubStoragePaths(a.Reason)
+				refused[i] = c.l.Ingest.scrubStoragePaths(a.Reason)
 			}
 		}
 	}
 	if err := c.mark(ctx, cueStepImporting); err != nil {
 		return nil, false, c.wait(ctx, err)
 	}
-	if err := c.l.toolCrashPoint("importing"); err != nil {
+	if err := c.l.crashPoint("importing"); err != nil {
 		return nil, false, err
 	}
 	report, err := c.l.toolImport(ctx, plan)
@@ -386,7 +386,7 @@ func (c *cueSplit) importRest(ctx context.Context, rest []int, pids []model.PID)
 		// by the rerun, which imports the rest.
 		return nil, false, c.wait(ctx, classifyMutation(err))
 	}
-	if err := c.l.toolCrashPoint("import"); err != nil {
+	if err := c.l.crashPoint("import"); err != nil {
 		return nil, false, err
 	}
 	failed := map[string]string{}
@@ -464,14 +464,14 @@ func (c *cueSplit) landed(ctx context.Context, i int) (model.PID, error) {
 			}
 		}
 		req := waxbin.ScanRequest{SubPath: dest}
-		if lib, err := c.l.libraryForPath(ctx, dest); err == nil && lib != "" {
+		if lib, err := c.l.Grants.libraryForPath(ctx, dest); err == nil && lib != "" {
 			req.LibraryPID = model.PID(lib)
 		}
-		if err := c.l.toolScan(ctx, req); err != nil {
+		if err := c.l.scan(ctx, req); err != nil {
 			return "", classifyMutation(err)
 		}
 	}
-	return "", fmt.Errorf("%s is in the library, but the catalog has no track of it", c.l.scrubStoragePaths(dest))
+	return "", fmt.Errorf("%s is in the library, but the catalog has no track of it", c.l.Ingest.scrubStoragePaths(dest))
 }
 
 // retire carries each account's place in the rip's tracks onto the
@@ -497,7 +497,7 @@ func (c *cueSplit) retire(ctx context.Context) error {
 		if err := c.mark(ctx, toolStepTrashing); err != nil {
 			return c.wait(ctx, err)
 		}
-		if err := c.l.toolCrashPoint("trashing"); err != nil {
+		if err := c.l.crashPoint("trashing"); err != nil {
 			return err
 		}
 		rip := model.PID(c.p.SrcFilePID)
@@ -524,7 +524,7 @@ func (c *cueSplit) retire(ctx context.Context) error {
 				return c.wait(ctx, classify(err))
 			}
 		}
-		if err := c.l.toolCrashPoint("trashed"); err != nil {
+		if err := c.l.crashPoint("trashed"); err != nil {
 			return err
 		}
 	}
@@ -580,7 +580,7 @@ func (c *cueSplit) complete(ctx context.Context) ([]string, error) {
 	}
 	c.l.auditToolOnce(ctx, c.t, "item.split-cue", AuditTarget{Kind: "item", PID: c.t.ItemPID, Name: c.t.ItemTitle},
 		map[string]any{"result": results, "pieces": len(results), "keepOriginals": c.p.KeepOriginals, "library": c.l.libraryNameOf(c.p.SrcPath)})
-	if err := c.l.toolCrashPoint("audited"); err != nil {
+	if err := c.l.crashPoint("audited"); err != nil {
 		return nil, err
 	}
 	os.RemoveAll(c.workspace())
@@ -589,7 +589,7 @@ func (c *cueSplit) complete(ctx context.Context) ([]string, error) {
 
 // toolImport is a tool's import apply, or what a test's mutateHook
 // answers in its place.
-func (l *Library) toolImport(ctx context.Context, plan *inbox.Plan) (*inbox.Report, error) {
+func (l *Tools) toolImport(ctx context.Context, plan *inbox.Plan) (*inbox.Report, error) {
 	if l.mutateHook != nil {
 		if err := l.mutateHook("import"); err != nil {
 			return nil, err

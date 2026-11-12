@@ -55,6 +55,9 @@ type fakeSyncSource struct {
 	// probes counts snapshot reads of the playlist, which is the
 	// network round trip a settings-only re-save must not spend.
 	probes int
+	// whileListing, when set, runs once inside the next snapshot read:
+	// what changes while a run is listing its source.
+	whileListing func()
 }
 
 func syncWatchURL(id string) string { return "https://tube.example/watch?v=" + id }
@@ -136,6 +139,13 @@ func (f *fakeSyncSource) Fetch(_ context.Context, req source.FetchRequest, w io.
 func (f *fakeSyncSource) PlaylistSnapshot(_ context.Context, url string, opts syncsource.SnapshotOptions) (*syncsource.PlaylistSnapshot, error) {
 	if url != f.playlistURL {
 		return nil, errors.New("not a playlist")
+	}
+	f.mu.Lock()
+	during := f.whileListing
+	f.whileListing = nil
+	f.mu.Unlock()
+	if during != nil {
+		during()
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -1256,35 +1266,20 @@ func TestPlaylistSyncRechecksTheDeleteRight(t *testing.T) {
 	h := syncHarness(t, src)
 
 	// A plain owner holding upload and delete, minted by the admin.
-	resp := h.postJSON(t, "/api/v1/users", map[string]any{
-		"username": "trash-holder", "password": testPassword, "uploadEnabled": true,
+	owner, created := boundOwner(t, h, src, map[string]any{
+		"username": "trash-holder", "uploadEnabled": true,
 		"permissions": map[string]any{
 			"download": true, "delete": true, "explicitContent": true,
 			"sharedOutputs": true, "managePodcasts": false,
 		},
-	})
-	wantStatus(t, resp, 201, "mint the owner")
-	owner := loginAs(t, h.ts, "trash-holder", testPassword)
-	resp = reqAs(t, h, "PUT", "/api/v1/users/me/prefs", owner.Token, map[string]any{"identifyOptOut": true})
+	}, "mirror-trash")
+	resp := reqAs(t, h, "PUT", "/api/v1/users/me/prefs", owner.Token, map[string]any{"identifyOptOut": true})
 	wantStatus(t, resp, 200, "owner declines identify")
 
-	created := decodeStatus[Playlist](t, reqAs(t, h, "POST", "/api/v1/playlists", owner.Token,
-		map[string]any{"name": "Revocable", "kind": "static"}), 201, "owner playlist")
-	resp = reqAs(t, h, "PUT", "/api/v1/playlists/"+created.Pid+"/source", owner.Token, map[string]any{
-		"url": src.playlistURL, "mode": "mirror-trash", "intervalHours": 6,
-	})
-	wantStatus(t, resp, 200, "bind mirror-trash with the right")
-
-	syncAs := func(what string) ToolTask {
-		t.Helper()
-		task := decodeStatus[ToolTask](t, reqAs(t, h, "POST", "/api/v1/playlists/"+created.Pid+"/source/sync", owner.Token, nil), 202, what)
-		drainTools(t, h)
-		return decode[ToolTask](t, reqAs(t, h, "GET", "/api/v1/tools/tasks/"+task.Id, owner.Token, nil))
-	}
-	if task := syncAs("download sync"); task.State != "done" {
+	if task := syncAs(t, h, owner, created.Pid, "download sync"); task.State != "done" {
 		t.Fatalf("download sync = %+v", task)
 	}
-	if task := syncAs("attach sync"); task.State != "done" {
+	if task := syncAs(t, h, owner, created.Pid, "attach sync"); task.State != "done" {
 		t.Fatalf("attach sync = %+v", task)
 	}
 	if got := playlistItems(t, h, owner.Token, created.Pid); len(got) != 2 {
@@ -1292,8 +1287,7 @@ func TestPlaylistSyncRechecksTheDeleteRight(t *testing.T) {
 	}
 
 	// The admin revokes Delete; the standing binding must stop trashing.
-	ownerID := decodeStatus[SessionInfo](t, reqAs(t, h, "GET", "/api/v1/auth/session", owner.Token, nil), 200, "owner session").User.Id
-	resp = reqAs(t, h, "PATCH", "/api/v1/users/"+ownerID, h.token, map[string]any{
+	resp = reqAs(t, h, "PATCH", "/api/v1/users/"+owner.User.Id, h.token, map[string]any{
 		"permissions": map[string]any{
 			"download": true, "delete": false, "explicitContent": true,
 			"sharedOutputs": true, "managePodcasts": false,
@@ -1302,7 +1296,7 @@ func TestPlaylistSyncRechecksTheDeleteRight(t *testing.T) {
 	wantStatus(t, resp, 200, "revoke delete")
 
 	src.setEntries(entries[0])
-	task := syncAs("revoked sync")
+	task := syncAs(t, h, owner, created.Pid, "revoked sync")
 	if task.State != "failed" {
 		t.Fatalf("revoked-right sync = %+v", task)
 	}
@@ -1315,6 +1309,65 @@ func TestPlaylistSyncRechecksTheDeleteRight(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("a revoked delete right still trashed a file")
+	}
+}
+
+// boundOwner mints a plain account from the given fields, signs it in,
+// and binds a playlist of its own to the source in the given mode.
+func boundOwner(t *testing.T, h *harness, src *fakeSyncSource, account map[string]any, mode string) (LoginResponse, Playlist) {
+	t.Helper()
+	name := account["username"].(string)
+	account["password"] = testPassword
+	wantStatus(t, h.postJSON(t, "/api/v1/users", account), 201, "mint the owner")
+	owner := loginAs(t, h.ts, name, testPassword)
+	created := decodeStatus[Playlist](t, reqAs(t, h, "POST", "/api/v1/playlists", owner.Token,
+		map[string]any{"name": "Revocable", "kind": "static"}), 201, "owner playlist")
+	resp := reqAs(t, h, "PUT", "/api/v1/playlists/"+created.Pid+"/source", owner.Token, map[string]any{
+		"url": src.playlistURL, "mode": mode, "intervalHours": 6,
+	})
+	wantStatus(t, resp, 200, "bind "+mode+" with the right")
+	return owner, created
+}
+
+// syncAs queues a run as the owner and drains the tool worker through it.
+func syncAs(t *testing.T, h *harness, owner LoginResponse, pid, what string) ToolTask {
+	t.Helper()
+	task := decodeStatus[ToolTask](t, reqAs(t, h, "POST", "/api/v1/playlists/"+pid+"/source/sync", owner.Token, nil), 202, what)
+	drainTools(t, h)
+	return decode[ToolTask](t, reqAs(t, h, "GET", "/api/v1/tools/tasks/"+task.Id, owner.Token, nil))
+}
+
+// A binding made with the upload right stops downloading once the right
+// is revoked, before a run or while one is still listing its source:
+// either way the run fails before a byte is fetched.
+func TestPlaylistSyncRechecksTheUploadRight(t *testing.T) {
+	t.Parallel()
+	for _, when := range []string{"before the run", "while the source is listed"} {
+		t.Run(when, func(t *testing.T) {
+			t.Parallel()
+			src := &fakeSyncSource{playlistURL: "https://tube.example/playlist?list=PLsync", title: "Sync Tapes"}
+			src.setEntries(syncFixtureEntries(t, t.TempDir(), 1)...)
+			h := syncHarness(t, src)
+			owner, created := boundOwner(t, h, src, map[string]any{"username": "uploader", "uploadEnabled": true}, "append")
+			revoke := func() {
+				resp := reqAs(t, h, "PATCH", "/api/v1/users/"+owner.User.Id, h.token, map[string]any{"uploadEnabled": false})
+				wantStatus(t, resp, 200, "revoke upload")
+			}
+			if when == "before the run" {
+				revoke()
+			} else {
+				src.mu.Lock()
+				src.whileListing = revoke
+				src.mu.Unlock()
+			}
+
+			if task := syncAs(t, h, owner, created.Pid, "revoked sync"); task.State != "failed" {
+				t.Fatalf("revoked-right sync = %+v", task)
+			}
+			if n := src.fetchCount(); n != 0 {
+				t.Fatalf("a revoked upload right still fetched %d files", n)
+			}
+		})
 	}
 }
 

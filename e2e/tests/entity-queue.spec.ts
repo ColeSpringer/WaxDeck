@@ -225,8 +225,7 @@ test('a set of up-next rows can be picked, moved, and dropped', async ({
 /// resume point would have the player seek into the held stream.
 async function playAlbumHoldingAlpha(app: App, traffic: MediaTraffic): Promise<string> {
   const { pid } = await app.seed.item('Alpha Song');
-  await app.seed.setPosition(pid, 0);
-  const held = await traffic.holdContinuation(pid);
+  const held = await traffic.holdFromTop(app.seed, pid);
   await app.music.playAlbumOf(pid);
   await expect
     .poll(() => held() !== undefined, { message: 'Alpha should load and wait on its stream' })

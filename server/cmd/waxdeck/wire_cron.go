@@ -33,7 +33,7 @@ func startCron(ctx context.Context, group *supervise.Group, svc *service.Library
 		// A kind that was due and deferred simply never calls ran, so it
 		// is asked again on the next tick, 30 seconds later.
 		due := func(kind string, now time.Time) bool {
-			if svc.DueSchedule(ctx, kind, lastCheck[kind], now) {
+			if svc.Integrations.DueSchedule(ctx, kind, lastCheck[kind], now) {
 				return true
 			}
 			lastCheck[kind] = now
@@ -57,12 +57,12 @@ func startCron(ctx context.Context, group *supervise.Group, svc *service.Library
 				// measures from the last run, not from the tick that
 				// should have fired.
 				if due("prune", now) {
-					svc.MarkScheduleRun(ctx, "prune", svc.RunPrune(ctx))
+					svc.Integrations.MarkScheduleRun(ctx, "prune", svc.Integrations.RunPrune(ctx))
 					ran("prune", now)
 				}
 				if due("scan", now) {
 					_, err := svc.Rescan(ctx, false)
-					svc.MarkScheduleRun(ctx, "scan", err)
+					svc.Integrations.MarkScheduleRun(ctx, "scan", err)
 					ran("scan", now)
 				}
 				if due("analyze", now) {
@@ -75,7 +75,7 @@ func startCron(ctx context.Context, group *supervise.Group, svc *service.Library
 					if service.KindOf(err) == service.KindConflict {
 						log.Info("scheduled analyze waiting on a running analyze pass")
 					} else {
-						svc.MarkScheduleRun(ctx, "analyze", err)
+						svc.Integrations.MarkScheduleRun(ctx, "analyze", err)
 						ran("analyze", now)
 					}
 				}
@@ -83,7 +83,7 @@ func startCron(ctx context.Context, group *supervise.Group, svc *service.Library
 					// A pass an administrator started by hand holds the
 					// lease; same reasoning as analyze above, and the
 					// nightly cadence makes the retry cheap.
-					err := svc.RunScheduledEnrichment(ctx)
+					err := svc.Enrichment.RunScheduledEnrichment(ctx)
 					switch {
 					case service.KindOf(err) == service.KindConflict:
 						log.Info("scheduled enrichment waiting on a running pass")
@@ -93,10 +93,10 @@ func startCron(ctx context.Context, group *supervise.Group, svc *service.Library
 						// ordinary state rather than a fault; marking
 						// the run keeps the log quiet until something
 						// is wired.
-						svc.MarkScheduleRun(ctx, "enrich", nil)
+						svc.Integrations.MarkScheduleRun(ctx, "enrich", nil)
 						ran("enrich", now)
 					default:
-						svc.MarkScheduleRun(ctx, "enrich", err)
+						svc.Integrations.MarkScheduleRun(ctx, "enrich", err)
 						ran("enrich", now)
 					}
 				}
@@ -110,7 +110,7 @@ func startCron(ctx context.Context, group *supervise.Group, svc *service.Library
 						if err == nil {
 							err = backups.Run(ctx, row.ID)
 						}
-						svc.MarkScheduleRun(ctx, "backup", err)
+						svc.Integrations.MarkScheduleRun(ctx, "backup", err)
 						ran("backup", now)
 					}
 				}

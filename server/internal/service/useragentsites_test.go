@@ -34,18 +34,20 @@ func TestOutboundRequestsCarryTheAgent(t *testing.T) {
 	t.Cleanup(plain.Close)
 	secure := httptest.NewTLSServer(record)
 	t.Cleanup(secure.Close)
-	l := &Library{version: "9.9.9", allowPrivateRadioHosts: true, log: slog.New(slog.DiscardHandler)}
-	l.transcriptHTTPOnce.Do(func() { l.transcriptHTTP = secure.Client() })
+	l := bareLibrary(&core{log: slog.New(slog.DiscardHandler)})
+	l.version = "9.9.9"
+	l.Radio.allowPrivateRadioHosts = true
+	l.Podcasts.transcriptHTTPOnce.Do(func() { l.Podcasts.transcriptHTTP = secure.Client() })
 
 	ctx := context.Background()
-	l.fetchRadioDirectory(ctx, plain.URL, "jazz", 5)
-	l.fetchRadioLogo(ctx, plain.URL+"/logo.png")
+	l.Radio.fetchRadioDirectory(ctx, plain.URL, "jazz", 5)
+	l.Radio.fetchRadioLogo(ctx, plain.URL+"/logo.png")
 	page, err := url.Parse(plain.URL + "/station")
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.declaredIcons(ctx, page)
-	l.fetchSyncedCoverImage(ctx, secure.URL+"/cover.png")
+	l.Radio.declaredIcons(ctx, page)
+	l.Playlists.fetchSyncedCoverImage(ctx, secure.URL+"/cover.png")
 
 	want := l.UserAgent()
 	for path, what := range map[string]string{

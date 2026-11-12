@@ -14,7 +14,7 @@ import (
 // tracks.
 
 func (h *Handler) getMusicFolders(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
-	folders, err := h.svc.MusicFolders(r.Context(), uc)
+	folders, err := h.svc.Playback.MusicFolders(r.Context(), uc)
 	if err != nil {
 		h.failFromService(w, r, err, "listing music folders failed")
 		return
@@ -44,7 +44,7 @@ func (h *Handler) scopedIndex(w http.ResponseWriter, r *http.Request, uc *servic
 		h.fail(w, r, 70, "no such music folder")
 		return nil, false
 	}
-	lib, err := h.svc.MusicFolderLibrary(r.Context(), uc, id)
+	lib, err := h.svc.Playback.MusicFolderLibrary(r.Context(), uc, id)
 	if err != nil {
 		h.failFromService(w, r, err, "no such music folder")
 		return nil, false

@@ -14,13 +14,13 @@ func TestAnUploadIntoAnUnwritableLibraryIsSaidSo(t *testing.T) {
 	ctx, svc, uc := managedUploadFixture(t)
 	up, id := pendingUploadEntry(t, ctx, svc, uc)
 	var root string
-	for _, r := range svc.libraryRoots() {
+	for _, r := range svc.Roots.libraryRoots() {
 		if r.Name == "lib" {
 			root = r.Path
 		}
 	}
 	lockFolder(t, root)
-	_, _, err := svc.DecideReviewEntry(ctx, uc, id, "as-is", "")
+	_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "")
 	if KindOf(err) != KindStorageUnwritable {
 		t.Fatalf("decision = %v (%s), want storage-unwritable", err, KindOf(err))
 	}

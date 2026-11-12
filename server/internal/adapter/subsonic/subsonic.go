@@ -37,7 +37,6 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	"github.com/colespringer/waxdeck/server/internal/connect"
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/httpcache"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -186,7 +185,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// Media URLs a verb mints die with the app password that asked.
 	r = r.WithContext(context.WithValue(r.Context(), credKey{}, "ap:"+appPasswordID))
-	uc, err := h.svc.UserCtx(r.Context(), u)
+	uc, err := h.svc.Grants.UserCtxFor(r.Context(), u)
 	if err != nil {
 		h.fail(w, r, 0, "resolving user failed")
 		return
@@ -311,7 +310,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // app passwords only. The login password never works here, and failures
 // answer identically so the surface confirms no account's existence.
 // authenticate answers the account and the app password it presented.
-func (h *Handler) authenticate(r *http.Request) (*wdb.User, string, int, string) {
+func (h *Handler) authenticate(r *http.Request) (*service.User, string, int, string) {
 	username := r.Form.Get("u")
 	token := r.Form.Get("t")
 	salt := r.Form.Get("s")
@@ -320,7 +319,7 @@ func (h *Handler) authenticate(r *http.Request) (*wdb.User, string, int, string)
 		if username != "" || token != "" || salt != "" || password != "" {
 			return nil, "", 43, "an API key cannot be combined with other credentials"
 		}
-		u, id, err := h.svc.VerifyAppPasswordKey(r.Context(), key)
+		u, id, err := h.svc.Identity.VerifyAppPasswordKey(r.Context(), key)
 		if err != nil || u == nil {
 			return nil, "", 44, "invalid API key"
 		}
@@ -335,7 +334,7 @@ func (h *Handler) authenticate(r *http.Request) (*wdb.User, string, int, string)
 	if username == "" || token == "" || salt == "" {
 		return nil, "", 10, "missing authentication parameters"
 	}
-	u, id, err := h.svc.VerifyAppPasswordToken(r.Context(), username, token, salt)
+	u, id, err := h.svc.Identity.VerifyAppPasswordToken(r.Context(), username, token, salt)
 	if err != nil || u == nil {
 		return nil, "", 40, "wrong username or password"
 	}
@@ -360,8 +359,8 @@ func credOf(r *http.Request) string {
 // unless the caller is an administrator, which is the protocol's rule
 // and also keeps the surface from confirming that some other account
 // exists.
-func (h *Handler) getUser(w http.ResponseWriter, r *http.Request, u *wdb.User, uc *service.UserCtx) {
-	target, tc := u, uc
+func (h *Handler) getUser(w http.ResponseWriter, r *http.Request, u *service.User, uc *service.UserCtx) {
+	name, tc := u.Username, uc
 	if asked := r.Form.Get("username"); asked != "" && !strings.EqualFold(asked, u.Username) {
 		if !uc.Admin {
 			h.fail(w, r, 50, "you are not authorized to read that user")
@@ -370,20 +369,20 @@ func (h *Handler) getUser(w http.ResponseWriter, r *http.Request, u *wdb.User, u
 		// Resolved for real, not echoed: answering the admin's own row
 		// under somebody else's name would hand a management tool the
 		// wrong account's roles.
-		other, err := h.svc.UserByName(r.Context(), asked)
+		other, err := h.svc.Grants.UserByName(r.Context(), asked)
 		if err != nil {
 			h.failFromService(w, r, err, "no such user")
 			return
 		}
-		oc, err := h.svc.UserCtx(r.Context(), other)
+		oc, err := h.svc.Grants.UserCtxFor(r.Context(), other)
 		if err != nil {
 			h.fail(w, r, 0, "resolving user failed")
 			return
 		}
-		target, tc = other, oc
+		name, tc = other.Username, oc
 	}
 	h.ok(w, r, envelope{User: &subsonicUser{
-		Username:          target.Username,
+		Username:          name,
 		ScrobblingEnabled: true,
 		AdminRole:         tc.Admin,
 		SettingsRole:      tc.Admin,
@@ -502,7 +501,7 @@ func (h *Handler) getSong(w http.ResponseWriter, r *http.Request, uc *service.Us
 	// An episode's streamId is its own pid, so a client resolving one
 	// asks for it here.
 	if strings.HasPrefix(id, service.PrefixEpisode+"-") {
-		ep, showExplicit, err := h.svc.EpisodeSummaryFor(r.Context(), uc, id)
+		ep, showExplicit, err := h.svc.Podcasts.EpisodeSummaryFor(r.Context(), uc, id)
 		if err != nil {
 			h.failFromService(w, r, err, "no such song")
 			return
@@ -523,7 +522,7 @@ func (h *Handler) getSong(w http.ResponseWriter, r *http.Request, uc *service.Us
 	}
 	// A book is a song entry wherever the surface hands one out (starred
 	// lists, playlists, bookmarks), so it resolves here too.
-	items, err := h.svc.SubsonicItems(r.Context(), uc, []string{id})
+	items, err := h.svc.Playback.SubsonicItems(r.Context(), uc, []string{id})
 	if err != nil {
 		h.failFromService(w, r, err, "no such song")
 		return
@@ -560,7 +559,7 @@ func (h *Handler) getNowPlaying(w http.ResponseWriter, r *http.Request, uc *serv
 			h.fail(w, r, 0, "reading the library failed")
 			return
 		}
-		items, err := h.svc.SubsonicItems(r.Context(), uc, pids)
+		items, err := h.svc.Playback.SubsonicItems(r.Context(), uc, pids)
 		if err != nil {
 			h.failFromService(w, r, err, "reading what is playing failed")
 			return
@@ -753,7 +752,7 @@ func (h *Handler) getCoverArt(w http.ResponseWriter, r *http.Request, uc *servic
 		size = maxCoverArtSize
 	}
 	// Subsonic has no artwork-slot concept; it always serves the front cover.
-	blob, err := h.svc.Art(r.Context(), uc, pid, "", size)
+	blob, err := h.svc.Reads.Art(r.Context(), uc, pid, "", size)
 	if err != nil {
 		// A cover that is not there is a 404 an image element can see;
 		// a read that failed for another reason says so as the protocol
@@ -793,7 +792,7 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 	}
 	// Only a book can lay out in parts, and the visibility read says
 	// whether this is one, so nothing else is read for its layout.
-	book, err := h.svc.VisibleBook(r.Context(), uc, id)
+	book, err := h.svc.Grants.VisibleBook(r.Context(), uc, id)
 	if err != nil {
 		h.fail(w, r, 70, "no such song")
 		return
@@ -805,7 +804,7 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 	format := strings.ToLower(strings.TrimSpace(r.Form.Get("format")))
 	// A book in parts is one song here, so it streams as one.
 	if book {
-		parts, err := h.svc.BookParts(r.Context(), id)
+		parts, err := h.svc.Playback.BookParts(r.Context(), id)
 		if err != nil {
 			h.fail(w, r, 0, "resolving stream failed")
 			return
@@ -896,7 +895,7 @@ func (h *Handler) streamDirect(w http.ResponseWriter, r *http.Request, uc *servi
 	var parts []flow.Part
 	if book {
 		var err error
-		if parts, err = h.svc.StreamParts(r.Context(), id); err != nil {
+		if parts, err = h.svc.Playback.StreamParts(r.Context(), id); err != nil {
 			h.failFromService(w, r, err, "no such song")
 			return
 		}
@@ -913,7 +912,7 @@ func (h *Handler) streamDirect(w http.ResponseWriter, r *http.Request, uc *servi
 	if len(parts) > 1 {
 		part = parts[0].FilePID
 	}
-	res, err := h.svc.DirectPlayInfo(r.Context(), uc, id, part)
+	res, err := h.svc.Playback.DirectPlayInfo(r.Context(), uc, id, part)
 	if err != nil {
 		if h.redirectToEnclosure(w, r, uc.ID, id, err) {
 			return
@@ -994,7 +993,7 @@ func (h *Handler) redirectToEnclosure(w http.ResponseWriter, r *http.Request, us
 	if h.media == nil || !errors.Is(cause, service.ErrEpisodeNotFetched) {
 		return false
 	}
-	if _, ok := h.svc.PassthroughEpisode(r.Context(), userID, id); !ok {
+	if _, ok := h.svc.Podcasts.PassthroughEpisode(r.Context(), userID, id); !ok {
 		return false
 	}
 	token, _ := h.media.MintFor(auth.MediaClaims{
@@ -1023,7 +1022,7 @@ func (h *Handler) download(w http.ResponseWriter, r *http.Request, uc *service.U
 		h.fail(w, r, 0, "downloads are not configured on this server")
 		return
 	}
-	res, err := h.svc.DownloadInfo(r.Context(), uc, id)
+	res, err := h.svc.Playback.DownloadInfo(r.Context(), uc, id)
 	if err != nil {
 		// An episode whose audio was never fetched has its original at
 		// the feed, which the relay serves untouched, as stream does.
@@ -1218,13 +1217,13 @@ func contentRuleScope(uc *service.UserCtx) string {
 // while letting a client that pages hard read one build instead of one
 // per page.
 func (h *Handler) index(ctx context.Context, uc *service.UserCtx) (*index, error) {
-	tail := h.svc.CatalogContentSeq(ctx)
+	tail := h.svc.Reads.CatalogContentSeq(ctx)
 	scope := indexScope(uc)
 	if idx := h.cachedIndex(tail, scope); idx != nil {
 		return idx, nil
 	}
 	build, fell := h.watchReads(ctx)
-	rows, err := h.svc.TrackFacts(build, uc)
+	rows, err := h.svc.Reads.TrackFacts(build, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -1242,7 +1241,7 @@ func (h *Handler) index(ctx context.Context, uc *service.UserCtx) (*index, error
 	// every entry built since. A build a read fell back under (a content
 	// rule compiled to match-nothing, the advisory flags lost) is this
 	// request's alone.
-	if !fell() && h.svc.CatalogContentSeq(ctx) == tail {
+	if !fell() && h.svc.Reads.CatalogContentSeq(ctx) == tail {
 		h.cacheIndex(tail, scope, idx)
 	}
 	return idx, nil
@@ -1316,7 +1315,7 @@ func (h *Handler) entityFacts(ctx context.Context, rows []track) (map[string]ser
 	if len(pids) == 0 {
 		return nil, nil
 	}
-	return h.svc.EntityFacts(ctx, pids)
+	return h.svc.Reads.EntityFacts(ctx, pids)
 }
 
 func buildIndex(rows []track, facts map[string]service.EntityFacts) *index {

@@ -27,7 +27,7 @@ func TestAYouTubeAddressThatNamesNoChannelIsRefused(t *testing.T) {
 		cfg.PodcastRootName = "podcasts"
 		cfg.SourceProviders = []source.Provider{provider}
 	})
-	_, _, err = svc.Subscribe(ctx, admin, SubscribeRequest{URL: "https://feeds.example/not-a-channel", SourceType: "youtube"})
+	_, _, err = svc.Podcasts.Subscribe(ctx, admin, SubscribeRequest{URL: "https://feeds.example/not-a-channel", SourceType: "youtube"})
 	if KindOf(err) != KindInvalid || FeedFailureReason(err) != reasonNotAFeed {
 		t.Errorf("subscribing to an address that names no channel = %v (kind %s, reason %q), want an invalid request, not-a-feed",
 			err, KindOf(err), FeedFailureReason(err))

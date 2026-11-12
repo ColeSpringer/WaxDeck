@@ -37,9 +37,9 @@ type EnrichCachePruneDTO struct {
 	FreedBytes int64
 }
 
-// EnrichmentCacheStats censuses the enrichment response cache.
+// CacheStats censuses the enrichment response cache.
 // Administrators only.
-func (l *Library) EnrichmentCacheStats(ctx context.Context, uc *UserCtx) (EnrichCacheDTO, error) {
+func (l *Enrichment) CacheStats(ctx context.Context, uc *UserCtx) (EnrichCacheDTO, error) {
 	if !uc.Admin {
 		return EnrichCacheDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -64,7 +64,7 @@ func enrichCacheFrom(rep *model.EnrichmentCacheReport) EnrichCacheDTO {
 
 // PruneEnrichmentCache drops cached answers to fit the policy, with the
 // thumbnail prune's bounds. Administrators only.
-func (l *Library) PruneEnrichmentCache(ctx context.Context, uc *UserCtx, olderThanSeconds, maxBytes *int64) (EnrichCachePruneDTO, error) {
+func (l *Enrichment) PruneEnrichmentCache(ctx context.Context, uc *UserCtx, olderThanSeconds, maxBytes *int64) (EnrichCachePruneDTO, error) {
 	if !uc.Admin {
 		return EnrichCachePruneDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -76,7 +76,7 @@ func (l *Library) PruneEnrichmentCache(ctx context.Context, uc *UserCtx, olderTh
 	if err != nil {
 		return EnrichCachePruneDTO{}, classify(err)
 	}
-	l.Audit(ctx, uc, "enrichment-cache.prune", AuditTarget{Kind: "enrichment-cache"},
+	l.Audit.Record(ctx, uc, "enrichment-cache.prune", AuditTarget{Kind: "enrichment-cache"},
 		pruneAuditDetail(removed, freed, olderThanSeconds, maxBytes))
 	return EnrichCachePruneDTO{Removed: removed, FreedBytes: freed}, nil
 }

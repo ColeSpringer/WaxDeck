@@ -37,7 +37,7 @@ func TestWritingLyricsBackLeavesASidecarAnotherFileReads(t *testing.T) {
 	if err := os.WriteFile(sidecar, []byte(theirs), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	out, err := svc.SetItemLyrics(ctx, uc, pid, "[00:00.50]Mine\n", "", MetadataEditParams{WriteBack: true})
+	out, err := svc.Editor.SetItemLyrics(ctx, uc, pid, "[00:00.50]Mine\n", "", MetadataEditParams{WriteBack: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestClearingLyricsKeepsASidecarItCannotCheck(t *testing.T) {
 		t.Skip("a folder cannot be made unlistable here")
 	}
 	ctx, svc, uc, path, pid := managedTrackFixture(t)
-	if out, err := svc.SetItemLyrics(ctx, uc, pid, "[00:00.50]Mine\n", "", MetadataEditParams{WriteBack: true}); err != nil || len(out.Failures) != 0 {
+	if out, err := svc.Editor.SetItemLyrics(ctx, uc, pid, "[00:00.50]Mine\n", "", MetadataEditParams{WriteBack: true}); err != nil || len(out.Failures) != 0 {
 		t.Fatalf("set = %+v (%v), want the sidecar written", out.Failures, err)
 	}
 	dir := filepath.Dir(path)
@@ -65,7 +65,7 @@ func TestClearingLyricsKeepsASidecarItCannotCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
-	out, err := svc.ClearItemLyrics(ctx, uc, pid, MetadataEditParams{WriteBack: true})
+	out, err := svc.Editor.ClearItemLyrics(ctx, uc, pid, MetadataEditParams{WriteBack: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestClearingACarvedTracksLyricsWritingBackRefusesNothing(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCueFixture(t)
 	one, _, _ := carvedTracks(t, ctx, svc, uc)
-	it, err := svc.getVisibleItem(ctx, uc, one)
+	it, err := svc.Grants.getVisibleItem(ctx, uc, one)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,10 +92,10 @@ func TestClearingACarvedTracksLyricsWritingBackRefusesNothing(t *testing.T) {
 	if err := os.WriteFile(ripSidecar, []byte("[00:00.50]The rip's\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SetItemLyrics(ctx, uc, one, "[00:00.50]Carved\n", "", MetadataEditParams{}); err != nil {
+	if _, err := svc.Editor.SetItemLyrics(ctx, uc, one, "[00:00.50]Carved\n", "", MetadataEditParams{}); err != nil {
 		t.Fatal(err)
 	}
-	out, err := svc.ClearItemLyrics(ctx, uc, one, MetadataEditParams{WriteBack: true})
+	out, err := svc.Editor.ClearItemLyrics(ctx, uc, one, MetadataEditParams{WriteBack: true})
 	if err != nil || len(out.Failures) != 0 {
 		t.Fatalf("clear = %+v (%v), want a clean clear", out.Failures, err)
 	}

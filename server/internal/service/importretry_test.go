@@ -13,7 +13,7 @@ import (
 // busyCatalog makes every import meet a lease another job holds while
 // busy is set.
 func busyCatalog(svc *Library, busy *atomic.Bool) {
-	svc.applyImportHook = func(ctx context.Context, plan *inbox.Plan) (*inbox.Report, error) {
+	svc.Ingest.applyImportHook = func(ctx context.Context, plan *inbox.Plan) (*inbox.Report, error) {
 		if busy.Load() {
 			return nil, waxerr.New(waxerr.CodeConflict, "jobs.Run", "another job holds scope fs-mutate")
 		}
@@ -87,12 +87,12 @@ func TestADeclinedImportAnotherChangeHeldOffGoesWhenItLetsGo(t *testing.T) {
 	busy.Store(true)
 	busyCatalog(svc, &busy)
 	id := declinedEntry(t, ctx, svc, uc, "claimed")
-	release, ok := svc.claimEntry(id)
+	release, ok := svc.Ingest.claimEntry(id)
 	if !ok {
 		t.Fatal("the entry is already claimed")
 	}
 	busy.Store(false)
-	svc.importDeclinedEntry(ctx, id)
+	svc.Ingest.importDeclinedEntry(ctx, id)
 	if e, err := svc.db.ReviewEntryByID(ctx, id); err != nil || e.Status != reviewPending {
 		t.Fatalf("entry = %+v, %v; want it still waiting while held", e, err)
 	}

@@ -2,8 +2,6 @@ package service
 
 import (
 	"testing"
-
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // An administrator may delete any shared playlist, which is what clears
@@ -20,18 +18,18 @@ func TestAnAdministratorMayDeleteAnySharedPlaylist(t *testing.T) {
 	kept := playlistAs(t, ctx, svc, samCtx, "Kept", "shared", pids)
 	private := playlistAs(t, ctx, svc, samCtx, "Guilty pleasures", "private", pids)
 
-	if err := svc.DeletePlaylist(ctx, patCtx, shared); KindOf(err) != KindForbidden {
+	if err := svc.Playlists.DeletePlaylist(ctx, patCtx, shared); KindOf(err) != KindForbidden {
 		t.Fatalf("another member deleting a shared playlist = %v, want forbidden", err)
 	}
-	if err := svc.DeletePlaylist(ctx, admin, private); KindOf(err) != KindNotFound {
+	if err := svc.Playlists.DeletePlaylist(ctx, admin, private); KindOf(err) != KindNotFound {
 		t.Fatalf("an administrator deleting a private playlist = %v, want not found", err)
 	}
 	rename := "Mine now"
-	if _, err := svc.UpdatePlaylist(ctx, admin, kept, PlaylistUpdate{Name: &rename}); KindOf(err) != KindForbidden {
+	if _, err := svc.Playlists.UpdatePlaylist(ctx, admin, kept, PlaylistUpdate{Name: &rename}); KindOf(err) != KindForbidden {
 		t.Fatalf("an administrator editing a member's playlist = %v, want forbidden", err)
 	}
 
-	if err := svc.DeletePlaylist(ctx, admin, shared); err != nil {
+	if err := svc.Playlists.DeletePlaylist(ctx, admin, shared); err != nil {
 		t.Fatalf("an administrator deleting a shared playlist: %v", err)
 	}
 	if catalogHas(ctx, svc, shared) {
@@ -43,7 +41,7 @@ func TestAnAdministratorMayDeleteAnySharedPlaylist(t *testing.T) {
 		}
 	}
 
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "playlist.delete"}, "", 10)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: "playlist.delete"}, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +62,7 @@ func TestAnAdministratorsDeleteDismissesTheOwnersStarter(t *testing.T) {
 	ctx, svc, admin := newCatalogFixture(t)
 	sam, samCtx := playlistMember(t, ctx, svc, "sam")
 	var starter string
-	page, err := svc.Playlists(ctx, samCtx, "", "", 50)
+	page, err := svc.Playlists.List(ctx, samCtx, "", "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,16 +75,16 @@ func TestAnAdministratorsDeleteDismissesTheOwnersStarter(t *testing.T) {
 		t.Fatalf("a new account has no starter playlist: %+v", page.Playlists)
 	}
 	shared := "shared"
-	if _, err := svc.UpdatePlaylist(ctx, samCtx, starter, PlaylistUpdate{Visibility: &shared}); err != nil {
+	if _, err := svc.Playlists.UpdatePlaylist(ctx, samCtx, starter, PlaylistUpdate{Visibility: &shared}); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := svc.DeletePlaylist(ctx, admin, starter); err != nil {
+	if err := svc.Playlists.DeletePlaylist(ctx, admin, starter); err != nil {
 		t.Fatal(err)
 	}
-	svc.seedStartersFor(ctx, sam.User)
+	svc.Playlists.seedStartersFor(ctx, sam.User.row)
 
-	page, err = svc.Playlists(ctx, samCtx, "", "", 50)
+	page, err = svc.Playlists.List(ctx, samCtx, "", "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}

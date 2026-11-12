@@ -103,21 +103,21 @@ func openSourcesFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 func TestEnrichProvidersWithFollowTheOperatorsOrder(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := openSourcesFixture(t)
-	if got := providerNames(svc.enrichProvidersWith(enrich.CapLyrics, enrich.TargetRecording)); !slices.Equal(got, []string{"a", "b"}) {
+	if got := providerNames(svc.Enrichment.enrichProvidersWith(enrich.CapLyrics, enrich.TargetRecording)); !slices.Equal(got, []string{"a", "b"}) {
 		t.Fatalf("boot order = %v", got)
 	}
 
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"b", true}, {"a", true}, {"fanart", true}}); err != nil {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"b", true}, {"a", true}, {"fanart", true}}); err != nil {
 		t.Fatal(err)
 	}
-	if got := providerNames(svc.enrichProvidersWith(enrich.CapLyrics, enrich.TargetRecording)); !slices.Equal(got, []string{"b", "a"}) {
+	if got := providerNames(svc.Enrichment.enrichProvidersWith(enrich.CapLyrics, enrich.TargetRecording)); !slices.Equal(got, []string{"b", "a"}) {
 		t.Fatalf("after a reorder = %v, want b first", got)
 	}
 
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"b", false}, {"a", true}, {"fanart", true}}); err != nil {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"b", false}, {"a", true}, {"fanart", true}}); err != nil {
 		t.Fatal(err)
 	}
-	if got := providerNames(svc.enrichProvidersWith(enrich.CapLyrics, enrich.TargetRecording)); !slices.Equal(got, []string{"a"}) {
+	if got := providerNames(svc.Enrichment.enrichProvidersWith(enrich.CapLyrics, enrich.TargetRecording)); !slices.Equal(got, []string{"a"}) {
 		t.Fatalf("with b off = %v, want a alone", got)
 	}
 }
@@ -129,12 +129,12 @@ func TestPutEnrichmentSourcesRefusesWhatItCannotOrder(t *testing.T) {
 		"unknown":   {{"nobody", true}, {"a", true}, {"b", true}, {"fanart", true}},
 		"duplicate": {{"a", true}, {"a", false}},
 	} {
-		if _, err := svc.PutEnrichmentSources(ctx, uc, list); KindOf(err) != KindInvalid {
+		if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, list); KindOf(err) != KindInvalid {
 			t.Errorf("%s: err = %v, want invalid-request", name, err)
 		}
 	}
 	listener := &UserCtx{ID: "us-listener"}
-	if _, err := svc.PutEnrichmentSources(ctx, listener, nil); KindOf(err) != KindForbidden {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, listener, nil); KindOf(err) != KindForbidden {
 		t.Errorf("non-admin: err = %v, want forbidden", err)
 	}
 }
@@ -144,17 +144,17 @@ func TestPutEnrichmentSourcesRefusesWhatItCannotOrder(t *testing.T) {
 func TestPutEnrichmentSourcesTakesTheBuiltins(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := openSourcesFixture(t)
-	st, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"lrclib", false}, {"a", true}, {"b", true}, {"fanart", true}})
+	st, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"lrclib", false}, {"a", true}, {"b", true}, {"fanart", true}})
 	if err != nil {
 		t.Fatalf("a save naming a built-in: %v", err)
 	}
 	if first := st.Providers[0]; first.Name != "lrclib" || first.Enabled || !first.Builtin || first.Configured {
 		t.Fatalf("first source = %+v, want lrclib, off, built in, unregistered without a contact", first)
 	}
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", true}, {"b", true}, {"fanart", true}}); err != nil {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", true}, {"b", true}, {"fanart", true}}); err != nil {
 		t.Fatalf("a save leaving the built-ins out: %v", err)
 	}
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"bogus", true}, {"a", true}, {"b", true}, {"fanart", true}}); KindOf(err) != KindInvalid {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"bogus", true}, {"a", true}, {"b", true}, {"fanart", true}}); KindOf(err) != KindInvalid {
 		t.Fatalf("a save naming no source = %v, want invalid-request", err)
 	}
 }
@@ -167,7 +167,7 @@ func TestASavedOrderWithoutBuiltinsKeepsThemOn(t *testing.T) {
 		c.EnrichmentContact = "waxdeck@example.test"
 		c.EnrichmentProviders = []enrich.Provider{answeringProvider{"fanart", enrich.CapAuxArt}}
 	})
-	st, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"fanart", true}})
+	st, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"fanart", true}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestASavedOrderWithoutBuiltinsKeepsThemOn(t *testing.T) {
 	if !slices.Contains(st.Phases, "lyrics") {
 		t.Fatalf("phases = %v, want lyrics from lrclib", st.Phases)
 	}
-	st, err = svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"fanart", true}, {"lrclib", false}})
+	st, err = svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"fanart", true}, {"lrclib", false}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +198,7 @@ func TestASavedOrderWithoutBuiltinsKeepsThemOn(t *testing.T) {
 func TestDisablingAPhasesOnlyProviderTakesThePhase(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := openSourcesFixture(t)
-	st, err := svc.EnrichmentStatusFor(ctx, uc)
+	st, err := svc.Enrichment.StatusFor(ctx, uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestDisablingAPhasesOnlyProviderTakesThePhase(t *testing.T) {
 		t.Fatalf("phases = %v, want group-art from fanart", st.Phases)
 	}
 
-	st, err = svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"fanart", false}, {"a", true}, {"b", true}})
+	st, err = svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"fanart", false}, {"a", true}, {"b", true}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,13 +234,13 @@ func TestAProposalFromADisabledProviderIsRefused(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := openSourcesFixture(t)
 	proposal := EnrichProposalDTO{Fields: []EnrichFieldProposalDTO{{Name: "publisher", Proposed: "x", Provider: "a"}}}
-	if err := svc.validateEnrichProposal([]string{enrichWantBook}, proposal); err != nil {
+	if err := svc.Enrichment.validateEnrichProposal([]string{enrichWantBook}, proposal); err != nil {
 		t.Fatalf("an enabled provider's proposal was refused: %v", err)
 	}
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", false}, {"b", true}, {"fanart", true}}); err != nil {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", false}, {"b", true}, {"fanart", true}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.validateEnrichProposal([]string{enrichWantBook}, proposal); KindOf(err) != KindInvalid {
+	if err := svc.Enrichment.validateEnrichProposal([]string{enrichWantBook}, proposal); KindOf(err) != KindInvalid {
 		t.Fatalf("a disabled provider's proposal = %v, want invalid-request", err)
 	}
 }
@@ -249,10 +249,10 @@ func TestARunWithEverySourceOffSaysSo(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := openSourcesFixture(t)
 	off := []EnrichmentSource{{"a", false}, {"b", false}, {"fanart", false}}
-	if _, err := svc.PutEnrichmentSources(ctx, uc, off); err != nil {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, off); err != nil {
 		t.Fatal(err)
 	}
-	_, err := svc.RunEnrichment(ctx, uc, false, nil, nil)
+	_, err := svc.Enrichment.RunEnrichment(ctx, uc, false, nil, nil)
 	if KindOf(err) != KindUnsupported {
 		t.Fatalf("err = %v, want unsupported", err)
 	}
@@ -268,10 +268,10 @@ func TestAPutWhoseStatusCannotBeReadSavesNothing(t *testing.T) {
 	if err := svc.lib.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"b", true}, {"a", true}, {"fanart", true}}); err == nil {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"b", true}, {"a", true}, {"fanart", true}}); err == nil {
 		t.Fatal("a put with no status to answer succeeded")
 	}
-	if got := providerNames(svc.sources.live()); !slices.Equal(got, []string{"a", "b", "fanart"}) {
+	if got := providerNames(svc.Enrichment.sources.live()); !slices.Equal(got, []string{"a", "b", "fanart"}) {
 		t.Fatalf("a refused put left the order %v", got)
 	}
 }
@@ -349,10 +349,10 @@ func TestAPassOutlastsTheJobWindow(t *testing.T) {
 		}
 	}
 
-	if st, err := svc.EnrichmentStatusFor(ctx, uc); err != nil || !st.Running || st.RunningJob != apiPID(PrefixJob, pid) {
+	if st, err := svc.Enrichment.StatusFor(ctx, uc); err != nil || !st.Running || st.RunningJob != apiPID(PrefixJob, pid) {
 		t.Errorf("status = running %v, job %q (%v); want the pass", st.Running, st.RunningJob, err)
 	}
-	if running, err := svc.catalogJobRunning(ctx); err != nil || !running {
+	if running, err := svc.Jobs.catalogJobRunning(ctx); err != nil || !running {
 		t.Errorf("catalogJobRunning = %v (%v); want the pass", running, err)
 	}
 }
@@ -370,7 +370,7 @@ func TestASaveDuringAPassAppliesToTheNextOne(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-a.asked
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"b", true}, {"a", true}}); err != nil {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"b", true}, {"a", true}}); err != nil {
 		t.Fatalf("a save during a pass: %v", err)
 	}
 	a.open()
@@ -379,7 +379,7 @@ func TestASaveDuringAPassAppliesToTheNextOne(t *testing.T) {
 		t.Fatalf("lyrics = %+v (%v), want a's", ly, err)
 	}
 
-	if _, err := fixtures.Generate(svc.roots[0].Path, fixtures.Spec{
+	if _, err := fixtures.Generate(svc.Roots.roots[0].Path, fixtures.Spec{
 		Name: "cedar", Codec: fixtures.CodecFLAC, Duration: 3 * time.Second,
 		Tags: map[string]string{"TITLE": "Cedar Lines", "ARTIST": "Test Ensemble", "ALBUM": "Signal Garden"},
 	}); err != nil {
@@ -402,10 +402,10 @@ func TestASaveDuringAPassAppliesToTheNextOne(t *testing.T) {
 func TestAPassAfterAReorderCreditsTheNewFirstSource(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, track := openLyricsFixture(t, &lyricist{name: "a"}, &lyricist{name: "b"})
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"b", true}, {"a", true}}); err != nil {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"b", true}, {"a", true}}); err != nil {
 		t.Fatal(err)
 	}
-	api, err := svc.RunEnrichment(ctx, uc, false, nil, nil)
+	api, err := svc.Enrichment.RunEnrichment(ctx, uc, false, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -423,20 +423,20 @@ func TestAForcedRunDuringAPassIsAConflict(t *testing.T) {
 	a := gatedLyricist("a")
 	defer a.open()
 	ctx, svc, uc, _ := openLyricsFixture(t, a, answeringProvider{"fanart", enrich.CapAuxArt})
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", true}, {"fanart", false}}); err != nil {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", true}, {"fanart", false}}); err != nil {
 		t.Fatal(err)
 	}
-	api, err := svc.RunEnrichment(ctx, uc, false, nil, nil)
+	api, err := svc.Enrichment.RunEnrichment(ctx, uc, false, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, pid, _ := parseAPIPID(api)
 	<-a.asked
 	defer func() { a.open(); waitForJob(t, ctx, svc, pid) }()
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", true}, {"fanart", true}}); err != nil {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", true}, {"fanart", true}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.RunEnrichment(ctx, uc, false, []string{"group-art"}, nil); KindOf(err) != KindConflict {
+	if _, err := svc.Enrichment.RunEnrichment(ctx, uc, false, []string{"group-art"}, nil); KindOf(err) != KindConflict {
 		t.Fatalf("a forced run during a pass = %v, want conflict", err)
 	}
 }
@@ -450,7 +450,7 @@ func TestAPutMustNameEverySource(t *testing.T) {
 		"empty":   nil,
 		"partial": {{"a", true}},
 	} {
-		if _, err := svc.PutEnrichmentSources(ctx, uc, list); KindOf(err) != KindInvalid {
+		if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, list); KindOf(err) != KindInvalid {
 			t.Errorf("%s: err = %v, want invalid-request", name, err)
 		}
 	}
@@ -464,8 +464,8 @@ func TestASourceNotWiredKeepsItsSwitch(t *testing.T) {
 	if err := svc.db.SettingSet(ctx, settingEnrichmentSources, `[{"name":"gone","enabled":false}]`, 1); err != nil {
 		t.Fatal(err)
 	}
-	svc.loadEnrichSources(ctx)
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"b", true}, {"a", true}, {"fanart", true}}); err != nil {
+	svc.Enrichment.loadEnrichSources(ctx)
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"b", true}, {"a", true}, {"fanart", true}}); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := svc.db.SettingGet(ctx, settingEnrichmentSources)
@@ -478,14 +478,14 @@ func TestASourceNotWiredKeepsItsSwitch(t *testing.T) {
 func TestASwitchedOffSourceIsCalledThat(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := openSourcesFixture(t)
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", false}, {"b", true}, {"fanart", false}}); err != nil {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", false}, {"b", true}, {"fanart", false}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.RunEnrichment(ctx, uc, false, []string{"group-art"}, nil); err == nil || !strings.Contains(err.Error(), "switched off") {
+	if _, err := svc.Enrichment.RunEnrichment(ctx, uc, false, []string{"group-art"}, nil); err == nil || !strings.Contains(err.Error(), "switched off") {
 		t.Fatalf("forcing a switched-off source's phase = %v, want it called switched off", err)
 	}
 	proposal := EnrichProposalDTO{Fields: []EnrichFieldProposalDTO{{Name: "publisher", Proposed: "x", Provider: "a"}}}
-	if err := svc.validateEnrichProposal([]string{enrichWantBook}, proposal); err == nil || !strings.Contains(err.Error(), "switched off") {
+	if err := svc.Enrichment.validateEnrichProposal([]string{enrichWantBook}, proposal); err == nil || !strings.Contains(err.Error(), "switched off") {
 		t.Fatalf("a switched-off source's proposal = %v, want it called switched off", err)
 	}
 }
@@ -497,13 +497,13 @@ func TestTheStatusNamesTheRunningPass(t *testing.T) {
 	a := gatedLyricist("a")
 	defer a.open()
 	ctx, svc, uc, _ := openLyricsFixture(t, a)
-	api, err := svc.RunEnrichment(ctx, uc, false, nil, nil)
+	api, err := svc.Enrichment.RunEnrichment(ctx, uc, false, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, pid, _ := parseAPIPID(api)
 	<-a.asked
-	st, err := svc.EnrichmentStatusFor(ctx, uc)
+	st, err := svc.Enrichment.StatusFor(ctx, uc)
 	a.open()
 	waitForJob(t, ctx, svc, pid)
 	if err != nil || !st.Running || st.RunningJob != api {
@@ -533,7 +533,7 @@ func TestEnrichItemAsksAtTheDeclaredRungsOnly(t *testing.T) {
 	t.Parallel()
 	p := &rungProvider{}
 	ctx, svc, _, track := openLyricsFixture(t, p)
-	_, skipped, err := svc.EnrichItemNow(ctx, track, []string{enrichWantFields})
+	_, skipped, err := svc.Enrichment.EnrichItemNow(ctx, track, []string{enrichWantFields})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -565,7 +565,7 @@ func TestAnItemFetchRunsTheCatalogPassOnlyForALiveBuiltin(t *testing.T) {
 	fetch := func() int32 {
 		t.Helper()
 		p.asked.Store(0)
-		if _, _, err := svc.EnrichItemFor(ctx, uc, apiPID, []string{enrichWantLyrics}, nil); err != nil {
+		if _, _, err := svc.Enrichment.EnrichItemFor(ctx, uc, apiPID, []string{enrichWantLyrics}, nil); err != nil {
 			t.Fatal(err)
 		}
 		return p.asked.Load()
@@ -574,14 +574,14 @@ func TestAnItemFetchRunsTheCatalogPassOnlyForALiveBuiltin(t *testing.T) {
 		t.Errorf("no contact, so no lrclib: asked %d times, want once", n)
 	}
 	// Standing in for the registration a contact brings.
-	svc.sources.builtins = []enrich.Provider{&lyricist{name: enrich.ProviderLRCLIB}}
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"quiet", true}, {"lrclib", false}}); err != nil {
+	svc.Enrichment.sources.builtins = []enrich.Provider{&lyricist{name: enrich.ProviderLRCLIB}}
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"quiet", true}, {"lrclib", false}}); err != nil {
 		t.Fatal(err)
 	}
 	if n := fetch(); n != 1 {
 		t.Errorf("lrclib switched off: asked %d times, want once", n)
 	}
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"quiet", true}, {"lrclib", true}}); err != nil {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"quiet", true}, {"lrclib", true}}); err != nil {
 		t.Fatal(err)
 	}
 	if n := fetch(); n != 2 {
@@ -597,15 +597,15 @@ func TestAnItemFetchKeepsTheSourceOrder(t *testing.T) {
 	p := &quietLyricist{}
 	ctx, svc, uc, _ := openLyricsFixture(t, p)
 	apiPID, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
-	svc.sources.builtins = []enrich.Provider{&lyricist{name: enrich.ProviderLRCLIB}}
+	svc.Enrichment.sources.builtins = []enrich.Provider{&lyricist{name: enrich.ProviderLRCLIB}}
 	order := func(list ...EnrichmentSource) {
 		t.Helper()
-		if _, err := svc.PutEnrichmentSources(ctx, uc, list); err != nil {
+		if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, list); err != nil {
 			t.Fatal(err)
 		}
 	}
 	ask := func(catalogAfter bool) ([]string, bool) {
-		got, viaCatalog := svc.itemProviders(enrichItemState{catalogAfter: catalogAfter},
+		got, viaCatalog := svc.Enrichment.itemProviders(enrichItemState{catalogAfter: catalogAfter},
 			enrichWantLyrics, enrich.CapLyrics, enrich.TargetRecording)
 		return providerNames(got), viaCatalog
 	}
@@ -617,7 +617,7 @@ func TestAnItemFetchKeepsTheSourceOrder(t *testing.T) {
 	if got, via := ask(false); !slices.Equal(got, []string{"quiet"}) || via {
 		t.Errorf("the health fixer asks %v (via catalog %v), want quiet", got, via)
 	}
-	pre, err := svc.EnrichPreviewFor(ctx, uc, apiPID, []string{enrichWantLyrics})
+	pre, err := svc.Enrichment.EnrichPreviewFor(ctx, uc, apiPID, []string{enrichWantLyrics})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -655,8 +655,8 @@ func TestAnItemPassCreditsWhoFilledIt(t *testing.T) {
 	ctx, svc, uc, _ := openLyricsFixture(t, forcedLyricist{})
 	apiPID, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
 	// Standing in for the registration a contact brings.
-	svc.sources.builtins = []enrich.Provider{&lyricist{name: enrich.ProviderLRCLIB}}
-	applied, _, err := svc.EnrichItemFor(ctx, uc, apiPID, []string{enrichWantLyrics}, nil)
+	svc.Enrichment.sources.builtins = []enrich.Provider{&lyricist{name: enrich.ProviderLRCLIB}}
+	applied, _, err := svc.Enrichment.EnrichItemFor(ctx, uc, apiPID, []string{enrichWantLyrics}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -680,10 +680,10 @@ func TestASaveKeepsTheSwitchOfWhatIsNotWired(t *testing.T) {
 		t.Fatal("lrclib is not listed")
 		return false
 	}
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"lrclib", false}, {"a", true}, {"b", true}, {"fanart", true}}); err != nil {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"lrclib", false}, {"a", true}, {"b", true}, {"fanart", true}}); err != nil {
 		t.Fatal(err)
 	}
-	st, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", true}, {"b", true}, {"fanart", true}})
+	st, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", true}, {"b", true}, {"fanart", true}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -691,8 +691,8 @@ func TestASaveKeepsTheSwitchOfWhatIsNotWired(t *testing.T) {
 		t.Error("an unregistered lrclib left out of a save came back switched on")
 	}
 	// Standing in for the registration a contact brings.
-	svc.sources.builtins = []enrich.Provider{&lyricist{name: enrich.ProviderLRCLIB}}
-	st, err = svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", true}, {"b", true}, {"fanart", true}})
+	svc.Enrichment.sources.builtins = []enrich.Provider{&lyricist{name: enrich.ProviderLRCLIB}}
+	st, err = svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", true}, {"b", true}, {"fanart", true}})
 	if err != nil {
 		t.Fatal(err)
 	}

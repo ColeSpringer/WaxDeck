@@ -15,7 +15,6 @@ import (
 	"github.com/colespringer/waxbin/model"
 
 	"github.com/colespringer/waxdeck/fixtures"
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // downThenUp is a feed host that answers 503 to its first failures
@@ -42,25 +41,25 @@ func downThenUp(t *testing.T, failures int32) (string, *atomic.Int32) {
 // and landed for it.
 func TestADisabledAccountsParkedFeedsAreDropped(t *testing.T) {
 	ctx, svc, _, _ := openPodcastFixture(t)
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "bob", Password: "correct-horse-2"})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "bob", Password: "correct-horse-2"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	bob, err := svc.UserCtx(ctx, acct.User)
+	bob, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
 	feed, hits := downThenUp(t, 1)
-	outcomes, err := svc.GpodderApplyChanges(ctx, bob, "phone", []string{feed}, nil)
+	outcomes, err := svc.Podcasts.GpodderApplyChanges(ctx, bob, "phone", []string{feed}, nil)
 	if err != nil || outcomes[feed] != GpodderParked {
 		t.Fatalf("outcomes = %v (%v), want the feed parked", outcomes, err)
 	}
 	off := true
-	if _, err := svc.UpdateAccount(ctx, bob.ID, AccountUpdate{Disabled: &off}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, bob.ID, AccountUpdate{Disabled: &off}); err != nil {
 		t.Fatal(err)
 	}
 
-	svc.RetryPendingGpodderAt(ctx, time.Now().Add(6*time.Minute))
+	svc.Podcasts.RetryPendingGpodderAt(ctx, time.Now().Add(6*time.Minute))
 	if got := hits.Load(); got != 1 {
 		t.Errorf("the host saw %d requests, want none after the park", got)
 	}
@@ -80,16 +79,16 @@ func TestAnActionCommittedAfterAPollIsInTheNext(t *testing.T) {
 	arrived, release := stallAt(t, "record")
 	recorded := make(chan error, 1)
 	go func() {
-		recorded <- svc.GpodderRecordActions(ctx, uc, []wdb.GpodderAction{{
+		recorded <- svc.Podcasts.GpodderRecordActions(ctx, uc, []GpodderAction{{
 			PodcastURL: "https://feeds.example/a.xml", EpisodeURL: "https://feeds.example/1.mp3",
-			DeviceID: "phone", Action: "download", UploadedSec: stamp,
+			DeviceID: "phone", Action: "download",
 		}})
 	}()
 	<-arrived
 	// The poll lands in a later second than the stamp, which is where a
 	// cursor of "now, less a second" took the stamp's second for read.
 	time.Sleep(time.Until(time.Unix(stamp+1, 0).Add(20 * time.Millisecond)))
-	_, cursor, err := svc.GpodderActionsSince(ctx, uc, "", 0, "", "")
+	_, cursor, err := svc.Podcasts.GpodderActionsSince(ctx, uc, "", 0, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +96,7 @@ func TestAnActionCommittedAfterAPollIsInTheNext(t *testing.T) {
 	if err := <-recorded; err != nil {
 		t.Fatal(err)
 	}
-	rows, _, err := svc.GpodderActionsSince(ctx, uc, "", cursor, "", "")
+	rows, _, err := svc.Podcasts.GpodderActionsSince(ctx, uc, "", cursor, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,19 +140,19 @@ func TestAnAccountRefusalIsSaidOnce(t *testing.T) {
 	feed, hits := downThenUp(t, 0)
 	// A show the catalog already holds, one of its episodes fetched so the
 	// podcast library exists and the refusal is the missing grant.
-	known, _, err := svc.Subscribe(ctx, admin, SubscribeRequest{URL: feed})
+	known, _, err := svc.Podcasts.Subscribe(ctx, admin, SubscribeRequest{URL: feed})
 	if err != nil {
 		t.Fatal(err)
 	}
 	fetchOneEpisode(t, ctx, svc, admin, known.Show.PID)
-	if pid, _ := svc.podcastLibrary(ctx); pid == "" {
+	if pid, _ := svc.Grants.podcastLibrary(ctx); pid == "" {
 		t.Fatal("no podcast library after a fetch")
 	}
 	uc := grantedListener(t, ctx, svc, "carol", "configured")
 
 	asked := []string{feed, "https://feeds.example/s3cr3t-token/one.xml", "https://other.example/s3cr3t-token/two.xml"}
 	for range 3 {
-		outcomes, err := svc.GpodderApplyChanges(ctx, uc, "phone", asked, nil)
+		outcomes, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", asked, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -163,10 +162,10 @@ func TestAnAccountRefusalIsSaidOnce(t *testing.T) {
 			}
 		}
 	}
-	if _, err := svc.GpodderReplaceDeviceList(ctx, uc, "phone", asked); err != nil {
+	if _, err := svc.Podcasts.GpodderReplaceDeviceList(ctx, uc, "phone", asked); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.ImportOPML(ctx, uc, []byte(`<opml version="2.0"><body><outline text="x" xmlUrl="https://feeds.example/s3cr3t-token/three.xml"/></body></opml>`)); err != nil {
+	if _, err := svc.Podcasts.ImportOPML(ctx, uc, []byte(`<opml version="2.0"><body><outline text="x" xmlUrl="https://feeds.example/s3cr3t-token/three.xml"/></body></opml>`)); err != nil {
 		t.Fatal(err)
 	}
 	if parks, _ := svc.db.GpodderParks(ctx, uc.ID); len(parks) != 0 {
@@ -178,7 +177,7 @@ func TestAnAccountRefusalIsSaidOnce(t *testing.T) {
 	if got := hits.Load(); got != 1 {
 		t.Errorf("the feed host saw %d requests, want only the administrator's subscribe", got)
 	}
-	page, err := svc.Notifications(ctx, uc, "", 50)
+	page, err := svc.Integrations.Notifications(ctx, uc, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +200,7 @@ func TestAnAccountRefusalIsSaidOnce(t *testing.T) {
 // which is what makes the catalog create its podcast library.
 func fetchOneEpisode(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, showPID string) {
 	t.Helper()
-	eps, _, err := svc.Episodes(ctx, uc, showPID, "", 1)
+	eps, _, err := svc.Podcasts.Episodes(ctx, uc, showPID, "", 1)
 	if err != nil || len(eps) == 0 {
 		t.Fatalf("the show's episodes = %+v, %v", eps, err)
 	}
@@ -221,7 +220,7 @@ func fetchOneEpisode(t *testing.T, ctx context.Context, svc *Library, uc *UserCt
 func grantedListener(t *testing.T, ctx context.Context, svc *Library, name, lib string) *UserCtx {
 	t.Helper()
 	var pid string
-	for _, r := range svc.libraryRoots() {
+	for _, r := range svc.Roots.libraryRoots() {
 		if r.Name == lib {
 			pid = r.PID
 		}
@@ -229,14 +228,14 @@ func grantedListener(t *testing.T, ctx context.Context, svc *Library, name, lib 
 	if pid == "" {
 		t.Fatalf("no library named %q", lib)
 	}
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: name, Password: "correct-horse", AccessMode: "granted",
 		LibraryPIDs: []string{apiPID(PrefixLibrary, model.PID(pid))},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}

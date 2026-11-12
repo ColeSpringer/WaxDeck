@@ -82,7 +82,7 @@ func (s *Server) OidcCallback(ctx context.Context, req OidcCallbackRequestObject
 		// string nobody can grep for.
 		return oidcErrorPage(loc, loc.OidcCouldNotComplete+": "+ownWords(err)), nil
 	}
-	acct, err := s.svc.ResolveOidcAccount(ctx, service.OidcIdentity{
+	acct, err := s.svc.Identity.ResolveOidcAccount(ctx, service.OidcIdentity{
 		Provider: done.Identity.Provider,
 		Subject:  done.Identity.Subject,
 		Email:    done.Identity.Email,
@@ -156,7 +156,7 @@ func (s *Server) ExchangeOidcCode(ctx context.Context, req ExchangeOidcCodeReque
 		return nil, refuse(http.StatusUnauthorized, "unauthenticated", "invalid code")
 	}
 	s.limiter.Success(key)
-	acct, err := s.svc.Account(ctx, userID)
+	acct, err := s.svc.Identity.Account(ctx, userID)
 	if err != nil {
 		return nil, err
 	}

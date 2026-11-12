@@ -50,7 +50,7 @@ func TestAMetadataMixDrawsFromTheCallersOwnLibraries(t *testing.T) {
 		}
 	}})
 	dir := t.TempDir()
-	vinyl, err := svc.AddLibrary(ctx, admin, AddLibraryInput{Name: "vinyl", Path: dir, Media: "music"})
+	vinyl, err := svc.Roots.AddLibrary(ctx, admin, AddLibraryInput{Name: "vinyl", Path: dir, Media: "music"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestAMetadataMixDrawsFromTheCallersOwnLibraries(t *testing.T) {
 		Libraries: map[string]bool{strings.TrimPrefix(vinyl.PID, PrefixLibrary+"-"): true}}
 	seed, _ := fixtureTrackPID(t, ctx, svc, granted, "Zside 0900")
 	for _, who := range []*UserCtx{admin, granted} {
-		res, err := svc.SimilarTracksFor(ctx, who, seed, 19)
+		res, err := svc.Similarity.SimilarTracksFor(ctx, who, seed, 19)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +96,7 @@ func TestAMetadataMixKeepsTheCallersContentRules(t *testing.T) {
 	kid := &UserCtx{ID: uc.ID, CatalogPID: uc.CatalogPID, AllLibraries: true, Explicit: true,
 		TagDeny: []TagRule{{Key: advisoryTagKey, Value: "1"}}}
 	seed, _ := fixtureTrackPID(t, ctx, svc, uc, "Unsaid")
-	res, err := svc.SimilarTracksFor(ctx, kid, seed, 10)
+	res, err := svc.Similarity.SimilarTracksFor(ctx, kid, seed, 10)
 	if err != nil {
 		t.Fatal(err)
 	}

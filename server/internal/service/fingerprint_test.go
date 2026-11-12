@@ -25,8 +25,8 @@ func TestFingerprintKeepsACoveringPartialRead(t *testing.T) {
 		{"an unknown length", testfpcalc.Write(t, testfpcalc.Compressed(300.4, 948), testfpcalc.DecodeNote, 3), 0, false},
 		{"a clean run", testfpcalc.Write(t, testfpcalc.Compressed(300.4, 948), "", 0), 0, true},
 	} {
-		svc.fpcalcPath = c.stub
-		fp, secs := svc.fingerprintFile(ctx, "/music/song.flac", c.expected)
+		svc.Ingest.fpcalcPath = c.stub
+		fp, secs := svc.Ingest.fingerprintFile(ctx, "/music/song.flac", c.expected)
 		if got := fp != ""; got != c.keep {
 			t.Errorf("%s: fingerprint kept = %v (%q), want %v", c.name, got, fp, c.keep)
 		}
@@ -42,8 +42,8 @@ func TestFingerprintKeepsACoveringPartialRead(t *testing.T) {
 func TestMatchTracksKeepsAPartialFingerprint(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
-	svc.fpcalcPath = testfpcalc.Write(t, testfpcalc.Compressed(300.4, 948), testfpcalc.DecodeNote, 3)
-	tracks := svc.matchTracks(ctx, []reviewTrackDoc{{Path: filepath.Join(t.TempDir(), "song.flac"), DurationMS: 300000}})
+	svc.Ingest.fpcalcPath = testfpcalc.Write(t, testfpcalc.Compressed(300.4, 948), testfpcalc.DecodeNote, 3)
+	tracks := svc.Ingest.matchTracks(ctx, []reviewTrackDoc{{Path: filepath.Join(t.TempDir(), "song.flac"), DurationMS: 300000}})
 	if len(tracks) != 1 || tracks[0].Fingerprint == "" {
 		t.Fatalf("tracks = %+v, want the partial read's fingerprint", tracks)
 	}

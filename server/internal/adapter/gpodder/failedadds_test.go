@@ -62,7 +62,7 @@ func deadAddress(t *testing.T) string {
 // failedAdds is the account's inbox rows for adds that did not land.
 func (e *env) failedAdds() []service.InboxNotification {
 	e.t.Helper()
-	page, err := e.svc.Notifications(e.ctx, e.uc, "", 100)
+	page, err := e.svc.Integrations.Notifications(e.ctx, e.uc, "", 100)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestAFeedThatIsDownIsParkedUntilItLands(t *testing.T) {
 		{10 * time.Minute, 2}, // a quarter hour after that try, not yet
 		{22 * time.Minute, 3}, // due, and back
 	} {
-		e.svc.RetryPendingGpodderAt(e.ctx, start.Add(step.after))
+		e.svc.Podcasts.RetryPendingGpodderAt(e.ctx, start.Add(step.after))
 		if got := hits.Load(); got != step.hits {
 			t.Fatalf("after a retry at +%v the host saw %d requests, want %d", step.after, got, step.hits)
 		}
@@ -126,7 +126,7 @@ func TestAParkedFeedTheDeviceDropsIsForgotten(t *testing.T) {
 	e.change("phone", []string{first, second}, nil)
 	e.change("phone", nil, []string{first})
 	e.put("phone", "json", `[]`)
-	e.svc.RetryPendingGpodderAt(e.ctx, time.Now().Add(6*time.Minute))
+	e.svc.Podcasts.RetryPendingGpodderAt(e.ctx, time.Now().Add(6*time.Minute))
 	if firstHits.Load() != 1 || secondHits.Load() != 1 {
 		t.Fatalf("hosts saw %d and %d requests, want neither tried again", firstHits.Load(), secondHits.Load())
 	}
@@ -231,7 +231,7 @@ func TestAnAccountThatMayNotManagePodcastsChangesNothing(t *testing.T) {
 	e.subscribeFirstParty(a)
 	perms := service.DefaultPermissions()
 	perms.ManagePodcasts = false
-	if _, err := e.svc.UpdateAccount(e.ctx, e.uc.ID, service.AccountUpdate{Permissions: &perms}); err != nil {
+	if _, err := e.svc.Identity.UpdateAccount(e.ctx, e.uc.ID, service.AccountUpdate{Permissions: &perms}); err != nil {
 		t.Fatal(err)
 	}
 	ack := e.change("phone", []string{b}, []string{a})
@@ -271,13 +271,13 @@ func TestAParkedFeedIsGivenUpAfterAWeek(t *testing.T) {
 	e := newEnv(t)
 	dead := deadAddress(t) + "/feed.xml"
 	e.change("phone", []string{dead}, nil)
-	e.svc.RetryPendingGpodderAt(e.ctx, time.Now().Add(8*24*time.Hour))
+	e.svc.Podcasts.RetryPendingGpodderAt(e.ctx, time.Now().Add(8*24*time.Hour))
 	rows := e.failedAdds()
 	if len(rows) != 1 || !strings.Contains(rows[0].Body, "a week later") ||
 		!strings.Contains(rows[0].Body, "The feed's host could not be reached.") {
 		t.Fatalf("inbox = %+v, want the give-up said once", rows)
 	}
-	e.svc.RetryPendingGpodderAt(e.ctx, time.Now().Add(9*24*time.Hour))
+	e.svc.Podcasts.RetryPendingGpodderAt(e.ctx, time.Now().Add(9*24*time.Hour))
 	if again := e.failedAdds(); len(again) != 1 {
 		t.Fatalf("inbox after another pass = %d rows, want the feed gone after the first", len(again))
 	}

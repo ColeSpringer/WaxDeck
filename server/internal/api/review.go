@@ -62,7 +62,7 @@ func (s *Server) ListReviewQueue(ctx context.Context, req ListReviewQueueRequest
 	if err != nil {
 		return nil, err
 	}
-	entries, next, err := s.svc.ListReviewQueue(ctx, uc, deref(req.Params.Status), deref(req.Params.Cursor), limit)
+	entries, next, err := s.svc.Ingest.ListReviewQueue(ctx, uc, deref(req.Params.Status), deref(req.Params.Cursor), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (s *Server) ListReviewQueue(ctx context.Context, req ListReviewQueueRequest
 
 func (s *Server) GetReviewEntry(ctx context.Context, req GetReviewEntryRequestObject) (GetReviewEntryResponseObject, error) {
 	uc := userCtx(ctx)
-	detail, err := s.svc.GetReviewEntry(ctx, uc, string(req.EntryId))
+	detail, err := s.svc.Ingest.GetReviewEntry(ctx, uc, string(req.EntryId))
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +212,7 @@ func (s *Server) DecideReviewEntry(ctx context.Context, req DecideReviewEntryReq
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	entry, warnings, err := s.svc.DecideReviewEntry(ctx, uc, string(req.EntryId),
+	entry, warnings, err := s.svc.Ingest.DecideReviewEntry(ctx, uc, string(req.EntryId),
 		string(req.Body.Action), deref(req.Body.CandidateMbid))
 	if err != nil {
 		return nil, err
@@ -226,7 +226,7 @@ func (s *Server) DecideReviewEntry(ctx context.Context, req DecideReviewEntryReq
 
 func (s *Server) RevertReviewEntry(ctx context.Context, req RevertReviewEntryRequestObject) (RevertReviewEntryResponseObject, error) {
 	uc := userCtx(ctx)
-	entry, err := s.svc.RevertReviewEntry(ctx, uc, string(req.EntryId))
+	entry, err := s.svc.Ingest.RevertReviewEntry(ctx, uc, string(req.EntryId))
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +245,7 @@ func (s *Server) ReidentifyReviewEntry(ctx context.Context, req ReidentifyReview
 			Title:  deref(req.Body.Title),
 		}
 	}
-	entry, err := s.svc.ReidentifyEntry(ctx, uc, string(req.EntryId), override)
+	entry, err := s.svc.Ingest.ReidentifyEntry(ctx, uc, string(req.EntryId), override)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +263,7 @@ func (s *Server) DecideReviewBulk(ctx context.Context, req DecideReviewBulkReque
 	if len(req.Body.EntryIds) > 200 {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", "at most 200 entries per bulk decision")
 	}
-	outcomes := s.svc.DecideReviewBulk(ctx, uc, req.Body.EntryIds, string(req.Body.Action))
+	outcomes := s.svc.Ingest.DecideReviewBulk(ctx, uc, req.Body.EntryIds, string(req.Body.Action))
 	result := ReviewBulkResult{Results: make([]ReviewBulkOutcome, 0, len(outcomes))}
 	for _, o := range outcomes {
 		ro := ReviewBulkOutcome{EntryId: o.EntryID, Ok: o.OK}
@@ -280,7 +280,7 @@ func (s *Server) DecideReviewBulk(ctx context.Context, req DecideReviewBulkReque
 
 func (s *Server) GetReviewStats(ctx context.Context, _ GetReviewStatsRequestObject) (GetReviewStatsResponseObject, error) {
 	uc := userCtx(ctx)
-	stats, err := s.svc.ReviewStatsFor(ctx, uc)
+	stats, err := s.svc.Ingest.ReviewStatsFor(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +309,7 @@ func (s *Server) GetReviewStats(ctx context.Context, _ GetReviewStatsRequestObje
 
 func (s *Server) GetLibraryMatching(ctx context.Context, req GetLibraryMatchingRequestObject) (GetLibraryMatchingResponseObject, error) {
 	uc := userCtx(ctx)
-	matching, err := s.svc.LibraryMatchingFor(ctx, uc, string(req.Pid))
+	matching, err := s.svc.Ingest.LibraryMatchingFor(ctx, uc, string(req.Pid))
 	if err != nil {
 		return nil, err
 	}
@@ -328,7 +328,7 @@ func (s *Server) SetLibraryMatching(ctx context.Context, req SetLibraryMatchingR
 		Mode:             string(req.Body.Mode),
 		SinglesAutoApply: req.Body.SinglesAutoApply,
 	}
-	if err := s.svc.SetLibraryMatching(ctx, uc, string(req.Pid), matching); err != nil {
+	if err := s.svc.Ingest.SetLibraryMatching(ctx, uc, string(req.Pid), matching); err != nil {
 		return nil, err
 	}
 	return SetLibraryMatching200JSONResponse(LibraryMatching{

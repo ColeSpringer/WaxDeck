@@ -75,8 +75,22 @@ type ReviewDetailDTO struct {
 	Suggested *ReviewOverrideDTO
 }
 
-// ReviewStatsDTO mirrors the calibration surface.
-type ReviewStatsDTO = wdb.ReviewStats
+// ReviewStatsDTO mirrors the calibration surface: entry counts by status
+// plus the auto-apply calibration counters.
+type ReviewStatsDTO struct {
+	Pending             int
+	Identifying         int
+	Applied             int
+	AutoApplied         int
+	AsIs                int
+	Unofficial          int
+	Skipped             int
+	Reverted            int
+	RevertedAutoApplied int
+	// Decided is every status but pending: the size of the "decided"
+	// listing.
+	Decided int
+}
 
 func reviewDTO(e wdb.ReviewEntry) ReviewEntryDTO {
 	dto := ReviewEntryDTO{
@@ -109,7 +123,7 @@ func reviewDTO(e wdb.ReviewEntry) ReviewEntryDTO {
 
 // ListReviewQueue pages entries: administrators see everything, other
 // callers their own uploads' entries.
-func (l *Library) ListReviewQueue(ctx context.Context, uc *UserCtx, status, cursor string, limit int) ([]ReviewEntryDTO, string, error) {
+func (l *Ingest) ListReviewQueue(ctx context.Context, uc *UserCtx, status, cursor string, limit int) ([]ReviewEntryDTO, string, error) {
 	uploader := reviewScope(uc)
 	beforeNS, beforeID, err := decodeTimeCursor(cursor)
 	if err != nil {
@@ -142,7 +156,7 @@ func (l *Library) ListReviewQueue(ctx context.Context, uc *UserCtx, status, curs
 }
 
 // reviewEntryForCaller loads an entry the caller may see.
-func (l *Library) reviewEntryForCaller(ctx context.Context, uc *UserCtx, id string) (wdb.ReviewEntry, error) {
+func (l *Ingest) reviewEntryForCaller(ctx context.Context, uc *UserCtx, id string) (wdb.ReviewEntry, error) {
 	e, err := l.db.ReviewEntryByID(ctx, id)
 	if errors.Is(err, wdb.ErrNotFound) {
 		return wdb.ReviewEntry{}, errNotFound("no such review entry")
@@ -157,7 +171,7 @@ func (l *Library) reviewEntryForCaller(ctx context.Context, uc *UserCtx, id stri
 }
 
 // GetReviewEntry reads one entry with its evidence.
-func (l *Library) GetReviewEntry(ctx context.Context, uc *UserCtx, id string) (ReviewDetailDTO, error) {
+func (l *Ingest) GetReviewEntry(ctx context.Context, uc *UserCtx, id string) (ReviewDetailDTO, error) {
 	e, err := l.reviewEntryForCaller(ctx, uc, id)
 	if err != nil {
 		return ReviewDetailDTO{}, err
@@ -242,7 +256,7 @@ func (l *Library) GetReviewEntry(ctx context.Context, uc *UserCtx, id string) (R
 // revert, a new search, a discard - so a second does not read the
 // first's half-done state as its own; ok is false while another holds it.
 // A declined import the claim held off goes once it is released.
-func (l *Library) claimEntry(id string) (release func(), ok bool) {
+func (l *Ingest) claimEntry(id string) (release func(), ok bool) {
 	if _, busy := l.deciding.LoadOrStore(id, struct{}{}); busy {
 		return nil, false
 	}
@@ -263,7 +277,7 @@ func errEntryBusy() error {
 // starts it finishes, whether or not the client is still there for the
 // answer: stopping between moving the files and recording them would
 // leave them landed under an entry that says they never did.
-func (l *Library) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action, candidateMBID string) (ReviewEntryDTO, []string, error) {
+func (l *Ingest) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action, candidateMBID string) (ReviewEntryDTO, []string, error) {
 	release, ok := l.claimEntry(id)
 	if !ok {
 		return ReviewEntryDTO{}, nil, errEntryBusy()
@@ -290,7 +304,7 @@ func (l *Library) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action
 		if prefix, pid, ok := parseAPIPID(e.LibraryPID); ok && prefix == PrefixLibrary {
 			bareLib = string(pid)
 		}
-		if err := l.CheckWritable(ctx, bareLib); err != nil {
+		if err := l.Settings.CheckWritable(ctx, bareLib); err != nil {
 			return ReviewEntryDTO{}, nil, err
 		}
 	}
@@ -389,13 +403,13 @@ func (l *Library) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action
 
 // markUnofficial sets the locked release-status tag, in the files too
 // with writeBack, answering reader the files that could not take it.
-func (l *Library) markUnofficial(ctx context.Context, reader *UserCtx, pid model.PID, writeBack bool) ([]string, error) {
+func (l *Ingest) markUnofficial(ctx context.Context, reader *UserCtx, pid model.PID, writeBack bool) ([]string, error) {
 	return l.tagWriteBackWarnings(ctx, reader, l.setReleaseStatus(ctx, pid, true, writeBack))
 }
 
 // setReleaseStatus marks an item unofficial, the release-status tag
 // locked, or clears the mark, in the files too with writeBack.
-func (l *Library) setReleaseStatus(ctx context.Context, pid model.PID, unofficial, writeBack bool) error {
+func (l *Ingest) setReleaseStatus(ctx context.Context, pid model.PID, unofficial, writeBack bool) error {
 	var values []string
 	if unofficial {
 		values = []string{releaseStatusUnofficial}
@@ -407,7 +421,7 @@ func (l *Library) setReleaseStatus(ctx context.Context, pid model.PID, unofficia
 // tagWriteBackWarnings splits a tag edit's error: files the write could
 // not reach are warnings beside a standing edit, those reader may see,
 // and anything else fails it.
-func (l *Library) tagWriteBackWarnings(ctx context.Context, reader *UserCtx, err error) ([]string, error) {
+func (l *Ingest) tagWriteBackWarnings(ctx context.Context, reader *UserCtx, err error) ([]string, error) {
 	if err == nil {
 		return nil, nil
 	}
@@ -427,14 +441,14 @@ func (l *Library) tagWriteBackWarnings(ctx context.Context, reader *UserCtx, err
 // mayReadFailure reports whether reader may read of a file a write could
 // not reach: an administrator, or no reader at all, any; anyone else one
 // in a library they are granted.
-func (l *Library) mayReadFailure(ctx context.Context, reader *UserCtx, f waxbin.WriteBackFailure) bool {
-	return reader == nil || reader.Admin || f.FilePID == "" || l.fileGranted(ctx, reader, f.FilePID)
+func (l *Ingest) mayReadFailure(ctx context.Context, reader *UserCtx, f waxbin.WriteBackFailure) bool {
+	return reader == nil || reader.Admin || f.FilePID == "" || l.Editor.fileGranted(ctx, reader, f.FilePID)
 }
 
 // writeBackWarning words one file a write could not reach, by name
 // rather than by path: the reader may not be an administrator. A failure
 // that names no file says so without a name.
-func (l *Library) writeBackWarning(f waxbin.WriteBackFailure) string {
+func (l *Ingest) writeBackWarning(f waxbin.WriteBackFailure) string {
 	msg := "tags not written: " + l.failureWords(f.Reason)
 	if f.Path == "" {
 		return msg
@@ -446,7 +460,7 @@ func (l *Library) writeBackWarning(f waxbin.WriteBackFailure) string {
 // the backing uploads discarded. An upload it cannot mark fails the
 // discard, which leaves the entry undecided: a retry finds the row still
 // staged, its files already gone, and marks it.
-func (l *Library) discardEntryFiles(ctx context.Context, e *wdb.ReviewEntry) error {
+func (l *Ingest) discardEntryFiles(ctx context.Context, e *wdb.ReviewEntry) error {
 	if e.Origin != reviewOriginUpload && e.Origin != reviewOriginAcquire {
 		return errInvalid("only upload and acquisition entries hold discardable files")
 	}
@@ -472,7 +486,7 @@ func (l *Library) discardEntryFiles(ctx context.Context, e *wdb.ReviewEntry) err
 
 // RevertReviewEntry restores an applied entry's snapshot, finishing as
 // a decision does once it starts.
-func (l *Library) RevertReviewEntry(ctx context.Context, uc *UserCtx, id string) (ReviewEntryDTO, error) {
+func (l *Ingest) RevertReviewEntry(ctx context.Context, uc *UserCtx, id string) (ReviewEntryDTO, error) {
 	release, ok := l.claimEntry(id)
 	if !ok {
 		return ReviewEntryDTO{}, errEntryBusy()
@@ -511,7 +525,7 @@ const maxOverrideField = 300
 // The sibling of openReviewEntry's update path: the same fields move,
 // minus the insert. The override replaces whatever was there, so an
 // empty request is how a reviewer goes back to the plain derivation.
-func (l *Library) ReidentifyEntry(ctx context.Context, uc *UserCtx, id string, o ReviewOverrideDTO) (ReviewEntryDTO, error) {
+func (l *Ingest) ReidentifyEntry(ctx context.Context, uc *UserCtx, id string, o ReviewOverrideDTO) (ReviewEntryDTO, error) {
 	release, ok := l.claimEntry(id)
 	if !ok {
 		return ReviewEntryDTO{}, errEntryBusy()
@@ -581,7 +595,7 @@ type BulkOutcome struct {
 // reporting each as the single decide would: a refusal by its code, a
 // decision that stood with its warnings, and a refusal with none, since
 // what landed before it is no part of a decision.
-func (l *Library) DecideReviewBulk(ctx context.Context, uc *UserCtx, entryIDs []string, action string) []BulkOutcome {
+func (l *Ingest) DecideReviewBulk(ctx context.Context, uc *UserCtx, entryIDs []string, action string) []BulkOutcome {
 	out := make([]BulkOutcome, 0, len(entryIDs))
 	for _, id := range entryIDs {
 		_, warnings, err := l.DecideReviewEntry(ctx, uc, id, action, "")
@@ -615,10 +629,10 @@ func reviewScope(uc *UserCtx) string {
 
 // ReviewStatsFor computes the calibration statistics over the entries
 // the caller's queue lists.
-func (l *Library) ReviewStatsFor(ctx context.Context, uc *UserCtx) (ReviewStatsDTO, error) {
+func (l *Ingest) ReviewStatsFor(ctx context.Context, uc *UserCtx) (ReviewStatsDTO, error) {
 	s, err := l.db.ReviewStatsNow(ctx, reviewScope(uc))
 	if err != nil {
 		return ReviewStatsDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
-	return s, nil
+	return ReviewStatsDTO(s), nil
 }

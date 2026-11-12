@@ -9,7 +9,6 @@ import (
 	"github.com/colespringer/waxbin/organize"
 
 	"github.com/colespringer/waxdeck/fixtures"
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // podcastLibraryWithAnEpisode brings the podcast library into being the
@@ -27,7 +26,7 @@ func podcastLibraryWithAnEpisode(t *testing.T, f stubFeedFixture) (libPID string
 	if _, err := f.svc.lib.Podcasts().ImportEpisodeFile(f.ctx, episode, paths[0], false); err != nil {
 		t.Fatal(err)
 	}
-	libPID, _ = f.svc.podcastLibrary(f.ctx)
+	libPID, _ = f.svc.Grants.podcastLibrary(f.ctx)
 	if libPID == "" {
 		t.Fatal("no podcast library after a fetch")
 	}
@@ -36,7 +35,7 @@ func podcastLibraryWithAnEpisode(t *testing.T, f stubFeedFixture) (libPID string
 
 func auditedLibraryNames(t *testing.T, f stubFeedFixture, action string) []string {
 	t.Helper()
-	page, err := f.svc.AuditEvents(f.ctx, wdb.AuditFilter{Action: action}, "", 50)
+	page, err := f.svc.Audit.Events(f.ctx, AuditFilter{Action: action}, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +55,7 @@ func TestALibrarySwitchNamesThePodcastLibrary(t *testing.T) {
 	t.Parallel()
 	f := openStubFeeds(t, &stubFeed{kind: model.SourceRSS, n: 1, prefix: "Episode"})
 	podcasts, _ := podcastLibraryWithAnEpisode(t, f)
-	roots := f.svc.libraryRoots()
+	roots := f.svc.Roots.libraryRoots()
 	if len(roots) != 1 {
 		t.Fatalf("roots = %+v, want the one library", roots)
 	}
@@ -66,7 +65,7 @@ func TestALibrarySwitchNamesThePodcastLibrary(t *testing.T) {
 		{roots[0].Name, roots[0].PID},
 	} {
 		api := apiPID(PrefixLibrary, model.PID(c.pid))
-		if err := f.svc.LibraryFolderFallbackSet(f.ctx, f.uc, api, false); err != nil {
+		if err := f.svc.Settings.LibraryFolderFallbackSet(f.ctx, f.uc, api, false); err != nil {
 			t.Fatalf("switching %s: %v", c.name, err)
 		}
 	}
@@ -85,13 +84,13 @@ func TestThePodcastLibraryRefusesTheOtherSwitches(t *testing.T) {
 	podcasts, _ := podcastLibraryWithAnEpisode(t, f)
 	api := apiPID(PrefixLibrary, model.PID(podcasts))
 
-	if err := f.svc.LibraryReadOnlySet(f.ctx, f.uc, api, true); KindOf(err) != KindInvalid {
+	if err := f.svc.Settings.LibraryReadOnlySet(f.ctx, f.uc, api, true); KindOf(err) != KindInvalid {
 		t.Errorf("flagging it read-only = %v, want invalid", err)
 	}
-	if err := f.svc.LibraryFolderFallbackSet(f.ctx, f.uc, api, true); KindOf(err) != KindInvalid {
+	if err := f.svc.Settings.LibraryFolderFallbackSet(f.ctx, f.uc, api, true); KindOf(err) != KindInvalid {
 		t.Errorf("turning its folder fallback on = %v, want invalid", err)
 	}
-	if err := f.svc.SetLibraryMatching(f.ctx, f.uc, api, LibraryMatching{Mode: "review"}); KindOf(err) != KindInvalid {
+	if err := f.svc.Ingest.SetLibraryMatching(f.ctx, f.uc, api, LibraryMatching{Mode: "review"}); KindOf(err) != KindInvalid {
 		t.Errorf("setting its matching = %v, want invalid", err)
 	}
 	for _, action := range []string{"library.read-only", "library.matching"} {
@@ -106,12 +105,12 @@ func TestThePodcastLibraryRefusesTheOtherSwitches(t *testing.T) {
 func TestAProfileChoiceNamesTheLibrary(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := managedAt(t, t.TempDir())
-	root := svc.libraryRoots()[0]
+	root := svc.Roots.libraryRoots()[0]
 	apiLib := apiPID(PrefixLibrary, model.PID(root.PID))
-	if _, err := svc.SetLibraryProfile(ctx, uc, apiLib, organize.DefaultProfileName); err != nil {
+	if _, err := svc.Health.SetLibraryProfile(ctx, uc, apiLib, organize.DefaultProfileName); err != nil {
 		t.Fatal(err)
 	}
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "library.profile", TargetPID: apiLib}, "", 10)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: "library.profile", TargetPID: apiLib}, "", 10)
 	if err != nil || len(page.Events) == 0 {
 		t.Fatalf("library.profile audit = %+v (%v), want the choice recorded", page.Events, err)
 	}

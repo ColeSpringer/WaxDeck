@@ -16,7 +16,7 @@ func waitForAnnouncedArt(t *testing.T, svc *Library, artURL, announced string) r
 	key := announcedArtKey(artURL, announced)
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		if entry, ok := svc.cachedRadioArt(key); ok {
+		if entry, ok := svc.Radio.cachedRadioArt(key); ok {
 			return entry
 		}
 		if time.Now().After(deadline) {
@@ -45,7 +45,7 @@ func artHost(t *testing.T, hits *atomic.Int64, mime string, body []byte) *httpte
 func TestAnnouncedArtIsServedWithTheExternalRungOff(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
-	svc.allowPrivateRadioHosts = true
+	svc.Radio.allowPrivateRadioHosts = true
 	var hits atomic.Int64
 	host := artHost(t, &hits, "image/png", coverPNG(t, 60))
 
@@ -56,7 +56,7 @@ func TestAnnouncedArtIsServedWithTheExternalRungOff(t *testing.T) {
 
 	// The first poll starts the fetch and holds the rung below: the
 	// station's own answer is seconds away and is the better one.
-	key, tryExternal := svc.EnsureRadioAnnouncedArt(testStationPID, host.URL+"/cover.png", "Fixture - Song")
+	key, tryExternal := svc.Radio.EnsureRadioAnnouncedArt(testStationPID, host.URL+"/cover.png", "Fixture - Song")
 	if key != "" || tryExternal {
 		t.Fatalf("first poll = (%q, %v), want the fetch started and the rung held", key, tryExternal)
 	}
@@ -67,7 +67,7 @@ func TestAnnouncedArtIsServedWithTheExternalRungOff(t *testing.T) {
 
 	// Ten more polls, as a household on one station makes: one fetch.
 	for range 10 {
-		key, tryExternal = svc.EnsureRadioAnnouncedArt(testStationPID, host.URL+"/cover.png", "Fixture - Song")
+		key, tryExternal = svc.Radio.EnsureRadioAnnouncedArt(testStationPID, host.URL+"/cover.png", "Fixture - Song")
 		if key == "" || tryExternal {
 			t.Fatalf("later poll = (%q, %v), want the cached key", key, tryExternal)
 		}
@@ -78,7 +78,7 @@ func TestAnnouncedArtIsServedWithTheExternalRungOff(t *testing.T) {
 
 	// And the endpoint serves it with the toggle off, which is the
 	// difference between this rung and the one below.
-	art, err := svc.RadioNowPlayingArt(key)
+	art, err := svc.Radio.NowPlayingArt(key)
 	if err != nil || len(art.Bytes) == 0 {
 		t.Fatalf("serving announced art = %v (%d bytes)", err, len(art.Bytes))
 	}
@@ -89,8 +89,8 @@ func TestAnnouncedArtIsServedWithTheExternalRungOff(t *testing.T) {
 	// An operator switching the external rung off drops what was fetched
 	// from a third party and keeps what the station announced: the
 	// decision was about talking to musicbrainz.org.
-	svc.forgetRadioArt()
-	if _, err := svc.RadioNowPlayingArt(key); err != nil {
+	svc.Radio.forgetRadioArt()
+	if _, err := svc.Radio.NowPlayingArt(key); err != nil {
 		t.Fatalf("announced art should survive the forget: %v", err)
 	}
 }
@@ -102,11 +102,11 @@ func TestAnnouncedArtIsServedWithTheExternalRungOff(t *testing.T) {
 func TestAnnouncedArtFailureYieldsToTheExternalRung(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
-	svc.allowPrivateRadioHosts = true
+	svc.Radio.allowPrivateRadioHosts = true
 	var hits atomic.Int64
 	host := artHost(t, &hits, "text/html", []byte("<html><body>Station of the year</body></html>"))
 
-	if key, tryExternal := svc.EnsureRadioAnnouncedArt(testStationPID, host.URL, "Fixture - Song"); key != "" || tryExternal {
+	if key, tryExternal := svc.Radio.EnsureRadioAnnouncedArt(testStationPID, host.URL, "Fixture - Song"); key != "" || tryExternal {
 		t.Fatalf("first poll = (%q, %v), want the fetch started and the rung held", key, tryExternal)
 	}
 	entry := waitForAnnouncedArt(t, svc, host.URL, "Fixture - Song")
@@ -122,7 +122,7 @@ func TestAnnouncedArtFailureYieldsToTheExternalRung(t *testing.T) {
 	// Every later poll answers at once and lets the external rung have
 	// its turn, without asking the station host again.
 	for range 10 {
-		key, tryExternal := svc.EnsureRadioAnnouncedArt(testStationPID, host.URL, "Fixture - Song")
+		key, tryExternal := svc.Radio.EnsureRadioAnnouncedArt(testStationPID, host.URL, "Fixture - Song")
 		if key != "" || !tryExternal {
 			t.Fatalf("cached failure = (%q, %v), want the external rung offered", key, tryExternal)
 		}
@@ -140,11 +140,11 @@ func TestAnnouncedArtIgnoresWhatIsNotAURL(t *testing.T) {
 	for _, announced := range []string{
 		"", "-", "no", "ftp://example.invalid/cover.png", "javascript:alert(1)", "http://",
 	} {
-		key, tryExternal := svc.EnsureRadioAnnouncedArt(testStationPID, announced, "Fixture - Song")
+		key, tryExternal := svc.Radio.EnsureRadioAnnouncedArt(testStationPID, announced, "Fixture - Song")
 		if key != "" || !tryExternal {
 			t.Fatalf("announced %q = (%q, %v), want it skipped and the rung offered", announced, key, tryExternal)
 		}
-		if _, cached := svc.cachedRadioArt(announcedArtKey(announced, "Fixture - Song")); cached {
+		if _, cached := svc.Radio.cachedRadioArt(announcedArtKey(announced, "Fixture - Song")); cached {
 			t.Fatalf("announced %q cached a failure it never fetched", announced)
 		}
 	}
@@ -157,14 +157,14 @@ func TestAnnouncedArtDoesNotStickToTheNextSong(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
 
-	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "https://art.example/orn.png")
-	title, artURL := svc.RadioNowPlayingMeta("rs-1")
+	svc.Radio.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "https://art.example/orn.png")
+	title, artURL := nowPlaying(svc, "rs-1")
 	if title != "Charlie Parker - Ornithology" || artURL != "https://art.example/orn.png" {
 		t.Fatalf("first announcement = (%q, %q)", title, artURL)
 	}
 
-	svc.NoteRadioMeta("rs-1", "Station ident", "")
-	title, artURL = svc.RadioNowPlayingMeta("rs-1")
+	svc.Radio.NoteRadioMeta("rs-1", "Station ident", "")
+	title, artURL = nowPlaying(svc, "rs-1")
 	if title != "Station ident" || artURL != "" {
 		t.Fatalf("artless announcement = (%q, %q), want the picture cleared with it", title, artURL)
 	}
@@ -176,19 +176,19 @@ func TestAnnouncedArtDoesNotStickToTheNextSong(t *testing.T) {
 func TestRadioLogoHintIsTriedBeforeDiscovery(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	svc.allowPrivateRadioHosts = true
+	svc.Radio.allowPrivateRadioHosts = true
 	var hits atomic.Int64
 	host := artHost(t, &hits, "image/png", coverPNG(t, 90))
 
-	station, err := svc.CreateRadioStation(ctx, uc, RadioStationEdit{
+	station, err := svc.Radio.CreateRadioStation(ctx, uc, RadioStationEdit{
 		Name: "Hint FM", StreamURL: "http://198.51.100.9/stream",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.NoteRadioLogoHint(station.PID, host.URL+"/logo.png")
+	svc.Radio.NoteRadioLogoHint(station.PID, host.URL+"/logo.png")
 
-	logo, err := svc.RadioStationLogo(ctx, station.PID)
+	logo, err := svc.Radio.StationLogo(ctx, station.PID)
 	if err != nil || len(logo.Bytes) == 0 {
 		t.Fatalf("hinted logo = %v (%d bytes)", err, len(logo.Bytes))
 	}
@@ -204,11 +204,11 @@ func TestRadioLogoHintIsTriedBeforeDiscovery(t *testing.T) {
 func TestRadioLogoHintClearsACachedMiss(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	svc.allowPrivateRadioHosts = true
+	svc.Radio.allowPrivateRadioHosts = true
 	var hits atomic.Int64
 	host := artHost(t, &hits, "image/png", coverPNG(t, 70))
 
-	station, err := svc.CreateRadioStation(ctx, uc, RadioStationEdit{
+	station, err := svc.Radio.CreateRadioStation(ctx, uc, RadioStationEdit{
 		Name: "Late Hint FM", StreamURL: "http://198.51.100.11/stream",
 	})
 	if err != nil {
@@ -216,7 +216,7 @@ func TestRadioLogoHintClearsACachedMiss(t *testing.T) {
 	}
 
 	// The dial paints first and finds nothing, which is remembered.
-	if _, err := svc.RadioStationLogo(ctx, station.PID); err == nil {
+	if _, err := svc.Radio.StationLogo(ctx, station.PID); err == nil {
 		t.Fatal("a station with no logo anywhere should answer not-found")
 	}
 	if _, cached := cachedLogo(svc, station.PID); !cached {
@@ -224,18 +224,18 @@ func TestRadioLogoHintClearsACachedMiss(t *testing.T) {
 	}
 
 	// Then somebody plays it and the station names its mark.
-	svc.NoteRadioLogoHint(station.PID, host.URL+"/mark.png")
-	logo, err := svc.RadioStationLogo(ctx, station.PID)
+	svc.Radio.NoteRadioLogoHint(station.PID, host.URL+"/mark.png")
+	logo, err := svc.Radio.StationLogo(ctx, station.PID)
 	if err != nil || len(logo.Bytes) == 0 {
 		t.Fatalf("hinted logo after a cached miss = %v (%d bytes)", err, len(logo.Bytes))
 	}
 
 	// Deleting the station takes the hint with it, so the map cannot
 	// grow with every station ever streamed.
-	if err := svc.DeleteRadioStation(ctx, station.PID); err != nil {
+	if err := svc.Radio.DeleteRadioStation(ctx, station.PID); err != nil {
 		t.Fatal(err)
 	}
-	if got := svc.radioLogoHint(station.PID); got != "" {
+	if got := svc.Radio.logoHint(station.PID); got != "" {
 		t.Fatalf("hint survived the delete: %q", got)
 	}
 }
@@ -245,21 +245,21 @@ func TestRadioLogoHintClearsACachedMiss(t *testing.T) {
 // poll, and without a count bound that is a map with no ceiling at all.
 func TestRadioArtCacheBoundsEntryCount(t *testing.T) {
 	t.Parallel()
-	l := &Library{}
+	l := bareLibrary(&core{})
 	for i := range radioArtCacheEntries + 500 {
-		l.storeRadioArt(fmt.Sprintf("key-%d", i), radioArtEntry{
+		l.Radio.storeRadioArt(fmt.Sprintf("key-%d", i), radioArtEntry{
 			fetched: time.Now(), fresh: radioArtMissFreshFor, announced: true,
 		})
 	}
-	l.radioArtCache.mu.Lock()
-	entries, order := len(l.radioArtCache.entries), len(l.radioArtCache.order)
-	l.radioArtCache.mu.Unlock()
+	l.Radio.radioArtCache.mu.Lock()
+	entries, order := len(l.Radio.radioArtCache.entries), len(l.Radio.radioArtCache.order)
+	l.Radio.radioArtCache.mu.Unlock()
 	if entries > radioArtCacheEntries || order > radioArtCacheEntries {
 		t.Fatalf("cache holds %d entries / %d order, want at most %d",
 			entries, order, radioArtCacheEntries)
 	}
 	// The newest survive: eviction is oldest-first.
-	if _, ok := l.cachedRadioArt(fmt.Sprintf("key-%d", radioArtCacheEntries+499)); !ok {
+	if _, ok := l.Radio.cachedRadioArt(fmt.Sprintf("key-%d", radioArtCacheEntries+499)); !ok {
 		t.Fatal("the most recent entry was evicted")
 	}
 }
@@ -275,33 +275,33 @@ func TestRepeatedAnnouncedPictureBecomesTheStationLogo(t *testing.T) {
 
 	// One song with a picture: nothing yet says it is fixed, and nothing
 	// yet says it is the song's either.
-	svc.NoteRadioMeta("rs-1", "Tetris - Green Hair", logo)
-	if a := svc.RadioNowPlayingAnnouncement("rs-1"); a.ArtURL != logo || a.ArtProven {
+	svc.Radio.NoteRadioMeta("rs-1", "Tetris - Green Hair", logo)
+	if a := svc.Radio.NowPlayingAnnouncement("rs-1"); a.ArtURL != logo || a.ArtProven {
 		t.Fatalf("first announcement = %+v, want the picture offered unproven", a)
 	}
 
 	// The same picture against a different song is a mark.
-	svc.NoteRadioMeta("rs-1", "Fascinating Earthbound Objects - Charm", logo)
-	if _, art := svc.RadioNowPlayingMeta("rs-1"); art != "" {
+	svc.Radio.NoteRadioMeta("rs-1", "Fascinating Earthbound Objects - Charm", logo)
+	if _, art := nowPlaying(svc, "rs-1"); art != "" {
 		t.Fatalf("repeated picture still offered as cover art: %q", art)
 	}
-	if got := svc.radioLogoHint("rs-1"); got != logo {
+	if got := svc.Radio.logoHint("rs-1"); got != logo {
 		t.Fatalf("logo hint = %q, want the station's own mark", got)
 	}
 
 	// A station whose picture moves with the title keeps its covers, and
 	// the second song is what proves them.
-	svc.NoteRadioMeta("rs-2", "Savoy Brown - I'm Tired", "https://rp.example/9696.jpg")
-	svc.NoteRadioMeta("rs-2", "Jay Farrar - Vitamins", "https://rp.example/14411.jpg")
-	if a := svc.RadioNowPlayingAnnouncement("rs-2"); a.ArtURL != "https://rp.example/14411.jpg" || !a.ArtProven {
+	svc.Radio.NoteRadioMeta("rs-2", "Savoy Brown - I'm Tired", "https://rp.example/9696.jpg")
+	svc.Radio.NoteRadioMeta("rs-2", "Jay Farrar - Vitamins", "https://rp.example/14411.jpg")
+	if a := svc.Radio.NowPlayingAnnouncement("rs-2"); a.ArtURL != "https://rp.example/14411.jpg" || !a.ArtProven {
 		t.Fatalf("per-track art = %+v, want the current song's cover, proven", a)
 	}
 	// Proven stays proven through the song being announced again, and
 	// through a song announced with no picture at all.
-	svc.NoteRadioMeta("rs-2", "Jay Farrar - Vitamins", "https://rp.example/14411.jpg")
-	svc.NoteRadioMeta("rs-2", "Station ident", "")
-	svc.NoteRadioMeta("rs-2", "Uncle Tupelo - Chickamauga", "https://rp.example/2002.jpg")
-	if a := svc.RadioNowPlayingAnnouncement("rs-2"); !a.ArtProven {
+	svc.Radio.NoteRadioMeta("rs-2", "Jay Farrar - Vitamins", "https://rp.example/14411.jpg")
+	svc.Radio.NoteRadioMeta("rs-2", "Station ident", "")
+	svc.Radio.NoteRadioMeta("rs-2", "Uncle Tupelo - Chickamauga", "https://rp.example/2002.jpg")
+	if a := svc.Radio.NowPlayingAnnouncement("rs-2"); !a.ArtProven {
 		t.Fatalf("after a bumper = %+v, want the station still proven", a)
 	}
 }
@@ -312,18 +312,18 @@ func TestPicturesAreComparedAcrossIdentsWithNone(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
 
-	svc.NoteRadioMeta("rs-1", "Savoy Brown - I'm Tired", "https://rp.example/9696.jpg")
-	svc.NoteRadioMeta("rs-1", "Station ident", "")
-	svc.NoteRadioMeta("rs-1", "Jay Farrar - Vitamins", "https://rp.example/14411.jpg")
-	if a := svc.RadioNowPlayingAnnouncement("rs-1"); !a.ArtProven || a.ArtURL != "https://rp.example/14411.jpg" {
+	svc.Radio.NoteRadioMeta("rs-1", "Savoy Brown - I'm Tired", "https://rp.example/9696.jpg")
+	svc.Radio.NoteRadioMeta("rs-1", "Station ident", "")
+	svc.Radio.NoteRadioMeta("rs-1", "Jay Farrar - Vitamins", "https://rp.example/14411.jpg")
+	if a := svc.Radio.NowPlayingAnnouncement("rs-1"); !a.ArtProven || a.ArtURL != "https://rp.example/14411.jpg" {
 		t.Fatalf("across an ident = %+v, want the second song's picture proven", a)
 	}
 
 	const logo = "https://somafm.example/logos/groovesalad.jpg"
-	svc.NoteRadioMeta("rs-2", "Tetris - Green Hair", logo)
-	svc.NoteRadioMeta("rs-2", "Station ident", "")
-	svc.NoteRadioMeta("rs-2", "Fascinating Earthbound Objects - Charm", logo)
-	if a := svc.RadioNowPlayingAnnouncement("rs-2"); a.ArtURL != "" {
+	svc.Radio.NoteRadioMeta("rs-2", "Tetris - Green Hair", logo)
+	svc.Radio.NoteRadioMeta("rs-2", "Station ident", "")
+	svc.Radio.NoteRadioMeta("rs-2", "Fascinating Earthbound Objects - Charm", logo)
+	if a := svc.Radio.NowPlayingAnnouncement("rs-2"); a.ArtURL != "" {
 		t.Fatalf("a mark repeated across an ident = %+v, want it recognised", a)
 	}
 }
@@ -334,7 +334,7 @@ func TestAPictureAtTheStationsOwnLogoIsFixedAtOnce(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	const dirLogo = "https://directory.example/favicons/coastal.png"
-	station, err := svc.CreateRadioStation(ctx, uc, RadioStationEdit{
+	station, err := svc.Radio.CreateRadioStation(ctx, uc, RadioStationEdit{
 		Name: "Coastal FM", StreamURL: "https://stream.example/coastal", LogoURL: dirLogo,
 	})
 	if err != nil {
@@ -342,26 +342,26 @@ func TestAPictureAtTheStationsOwnLogoIsFixedAtOnce(t *testing.T) {
 	}
 	// The proxy reads the source as it opens the stream, which is where
 	// the station's own logo is learned.
-	if _, err := svc.RadioStreamSource(ctx, station.PID); err != nil {
+	if _, err := svc.Radio.StreamSource(ctx, station.PID); err != nil {
 		t.Fatal(err)
 	}
-	svc.NoteRadioMeta(station.PID, "Charlie Parker - Ornithology", dirLogo)
-	if a := svc.RadioNowPlayingAnnouncement(station.PID); a.ArtURL != "" {
+	svc.Radio.NoteRadioMeta(station.PID, "Charlie Parker - Ornithology", dirLogo)
+	if a := svc.Radio.NowPlayingAnnouncement(station.PID); a.ArtURL != "" {
 		t.Fatalf("directory logo offered as the first song's cover: %+v", a)
 	}
 
 	const hinted = "https://stream.example/icy-logo.png"
-	svc.NoteRadioLogoHint("rs-2", hinted)
-	svc.NoteRadioMeta("rs-2", "Pink Floyd - Echoes", hinted)
-	if a := svc.RadioNowPlayingAnnouncement("rs-2"); a.ArtURL != "" {
+	svc.Radio.NoteRadioLogoHint("rs-2", hinted)
+	svc.Radio.NoteRadioMeta("rs-2", "Pink Floyd - Echoes", hinted)
+	if a := svc.Radio.NowPlayingAnnouncement("rs-2"); a.ArtURL != "" {
 		t.Fatalf("icy-logo offered as the first song's cover: %+v", a)
 	}
 
 	// A station naming both keeps both: the directory logo matching the
 	// picture says nothing against the one its connect headers named.
-	svc.NoteRadioLogoHint(station.PID, hinted)
-	svc.NoteRadioMeta(station.PID, "Pink Floyd - Echoes", dirLogo)
-	if got := svc.radioLogoHint(station.PID); got != hinted {
+	svc.Radio.NoteRadioLogoHint(station.PID, hinted)
+	svc.Radio.NoteRadioMeta(station.PID, "Pink Floyd - Echoes", dirLogo)
+	if got := svc.Radio.logoHint(station.PID); got != hinted {
 		t.Fatalf("hint = %q, want the station's own %q kept", got, hinted)
 	}
 }
@@ -374,34 +374,34 @@ func TestAWithheldPictureDoesNotWithholdTheNextOneForTheSameSong(t *testing.T) {
 	_, svc, _ := newCatalogFixture(t)
 	const logo = "https://stream.example/icy-logo.png"
 	const cover = "https://station.example/ornithology.jpg"
-	svc.NoteRadioLogoHint("rs-1", logo)
-	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", logo)
-	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", cover)
-	if a := svc.RadioNowPlayingAnnouncement("rs-1"); a.ArtURL != cover {
+	svc.Radio.NoteRadioLogoHint("rs-1", logo)
+	svc.Radio.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", logo)
+	svc.Radio.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", cover)
+	if a := svc.Radio.NowPlayingAnnouncement("rs-1"); a.ArtURL != cover {
 		t.Fatalf("after the logo = %+v, want the song's cover offered", a)
 	}
-	if got := svc.radioLogoHint("rs-1"); got != logo {
+	if got := svc.Radio.logoHint("rs-1"); got != logo {
 		t.Fatalf("hint = %q, want the station's own %q", got, logo)
 	}
-	svc.NoteRadioMeta("rs-1", "Pink Floyd - Echoes", logo)
-	if a := svc.RadioNowPlayingAnnouncement("rs-1"); a.ArtURL != "" {
+	svc.Radio.NoteRadioMeta("rs-1", "Pink Floyd - Echoes", logo)
+	if a := svc.Radio.NowPlayingAnnouncement("rs-1"); a.ArtURL != "" {
 		t.Fatalf("the logo offered as the next song's cover: %+v", a)
 	}
 	const echoes = "https://station.example/echoes.jpg"
-	svc.NoteRadioMeta("rs-1", "Pink Floyd - Echoes", echoes)
-	if a := svc.RadioNowPlayingAnnouncement("rs-1"); a.ArtURL != echoes || !a.ArtProven {
+	svc.Radio.NoteRadioMeta("rs-1", "Pink Floyd - Echoes", echoes)
+	if a := svc.Radio.NowPlayingAnnouncement("rs-1"); a.ArtURL != echoes || !a.ArtProven {
 		t.Fatalf("second cover = %+v, want it offered and proven", a)
 	}
 
 	// The same for a mark only a repeat revealed.
 	const mark = "https://station.example/mark.jpg"
-	svc.NoteRadioMeta("rs-2", "Tetris - Green Hair", mark)
-	svc.NoteRadioMeta("rs-2", "Fascinating Earthbound Objects - Charm", mark)
-	svc.NoteRadioMeta("rs-2", "Fascinating Earthbound Objects - Charm", cover)
-	if a := svc.RadioNowPlayingAnnouncement("rs-2"); a.ArtURL != cover {
+	svc.Radio.NoteRadioMeta("rs-2", "Tetris - Green Hair", mark)
+	svc.Radio.NoteRadioMeta("rs-2", "Fascinating Earthbound Objects - Charm", mark)
+	svc.Radio.NoteRadioMeta("rs-2", "Fascinating Earthbound Objects - Charm", cover)
+	if a := svc.Radio.NowPlayingAnnouncement("rs-2"); a.ArtURL != cover {
 		t.Fatalf("after a repeated mark = %+v, want the song's cover offered", a)
 	}
-	if got := svc.radioLogoHint("rs-2"); got != mark {
+	if got := svc.Radio.logoHint("rs-2"); got != mark {
 		t.Fatalf("hint = %q, want the repeated %q kept", got, mark)
 	}
 }
@@ -412,11 +412,11 @@ func TestARepeatIsNotTheStationsLogoForLaterSongs(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
 	const album = "https://station.example/discovery.jpg"
-	svc.NoteRadioMeta("rs-1", "Daft Punk - One More Time", album)
-	svc.NoteRadioMeta("rs-1", "Daft Punk - Aerodynamic", album)
-	svc.NoteRadioMeta("rs-1", "Air - La Femme d'Argent", "https://station.example/moon-safari.jpg")
-	svc.NoteRadioMeta("rs-1", "Daft Punk - Digital Love", album)
-	if a := svc.RadioNowPlayingAnnouncement("rs-1"); a.ArtURL != album {
+	svc.Radio.NoteRadioMeta("rs-1", "Daft Punk - One More Time", album)
+	svc.Radio.NoteRadioMeta("rs-1", "Daft Punk - Aerodynamic", album)
+	svc.Radio.NoteRadioMeta("rs-1", "Air - La Femme d'Argent", "https://station.example/moon-safari.jpg")
+	svc.Radio.NoteRadioMeta("rs-1", "Daft Punk - Digital Love", album)
+	if a := svc.Radio.NowPlayingAnnouncement("rs-1"); a.ArtURL != album {
 		t.Fatalf("the album's cover after another's = %+v, want it offered", a)
 	}
 }
@@ -427,34 +427,34 @@ func TestARepeatIsNotTheStationsLogoForLaterSongs(t *testing.T) {
 func TestAnUnprovenPictureYieldsToAHeldLookup(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
-	svc.allowPrivateRadioHosts = true
+	svc.Radio.allowPrivateRadioHosts = true
 	enableRadioExternalArt(t, ctx, svc)
-	svc.radioArtResolver = &fakeRadioArt{data: coverPNG(t, 40), mime: "image/png", provider: "deezer"}
+	svc.Radio.radioArtResolver = &fakeRadioArt{data: coverPNG(t, 40), mime: "image/png", provider: "deezer"}
 	var hits atomic.Int64
 	host := artHost(t, &hits, "image/png", coverPNG(t, 80))
 	const first = "Charlie Parker - Ornithology"
 	firstURL := host.URL + "/logo.png"
 
-	svc.NoteRadioMeta(testStationPID, first, firstURL)
-	a := svc.RadioNowPlayingAnnouncement(testStationPID)
-	if got := svc.RadioNowPlayingCover(testStationPID, "Test FM", a); got != "" {
+	svc.Radio.NoteRadioMeta(testStationPID, first, firstURL)
+	a := svc.Radio.NowPlayingAnnouncement(testStationPID)
+	if got := svc.Radio.NowPlayingCover(testStationPID, "Test FM", a); got != "" {
 		t.Fatalf("first poll = %q, want both fetches started and nothing held yet", got)
 	}
 	external := radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology"))
 	waitForRadioArtLookupToSettle(t, svc, external)
 	waitForAnnouncedArt(t, svc, firstURL, first)
-	if got := svc.RadioNowPlayingCover(testStationPID, "Test FM", a); got != external {
+	if got := svc.Radio.NowPlayingCover(testStationPID, "Test FM", a); got != external {
 		t.Fatalf("unproven cover = %q, want the lookup's %q", got, external)
 	}
 
 	// The next song brings a different picture, which proves it.
 	const second = "Pink Floyd - Echoes"
 	secondURL := host.URL + "/echoes.png"
-	svc.NoteRadioMeta(testStationPID, second, secondURL)
-	a = svc.RadioNowPlayingAnnouncement(testStationPID)
-	svc.RadioNowPlayingCover(testStationPID, "Test FM", a)
+	svc.Radio.NoteRadioMeta(testStationPID, second, secondURL)
+	a = svc.Radio.NowPlayingAnnouncement(testStationPID)
+	svc.Radio.NowPlayingCover(testStationPID, "Test FM", a)
 	waitForAnnouncedArt(t, svc, secondURL, second)
-	if got, want := svc.RadioNowPlayingCover(testStationPID, "Test FM", a), announcedArtKey(secondURL, second); got != want {
+	if got, want := svc.Radio.NowPlayingCover(testStationPID, "Test FM", a), announcedArtKey(secondURL, second); got != want {
 		t.Fatalf("proven cover = %q, want the station's own %q", got, want)
 	}
 }
@@ -464,9 +464,9 @@ func TestAnUnprovenPictureYieldsToAHeldLookup(t *testing.T) {
 func TestAHeldCoverIsAnsweredWhileThePictureIsFetched(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
-	svc.allowPrivateRadioHosts = true
+	svc.Radio.allowPrivateRadioHosts = true
 	enableRadioExternalArt(t, ctx, svc)
-	svc.radioArtResolver = &fakeRadioArt{err: errors.New("not asked")}
+	svc.Radio.radioArtResolver = &fakeRadioArt{err: errors.New("not asked")}
 	release := make(chan struct{})
 	host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		<-release
@@ -475,17 +475,17 @@ func TestAHeldCoverIsAnsweredWhileThePictureIsFetched(t *testing.T) {
 	t.Cleanup(host.Close)
 	t.Cleanup(func() { close(release) })
 
-	svc.NoteRadioMeta(testStationPID, "Savoy Brown - I'm Tired", host.URL+"/9696.jpg")
-	svc.NoteRadioMeta(testStationPID, "Charlie Parker - Ornithology", host.URL+"/ornithology.jpg")
-	a := svc.RadioNowPlayingAnnouncement(testStationPID)
+	svc.Radio.NoteRadioMeta(testStationPID, "Savoy Brown - I'm Tired", host.URL+"/9696.jpg")
+	svc.Radio.NoteRadioMeta(testStationPID, "Charlie Parker - Ornithology", host.URL+"/ornithology.jpg")
+	a := svc.Radio.NowPlayingAnnouncement(testStationPID)
 	if !a.ArtProven {
 		t.Fatalf("announcement = %+v, want the station proven", a)
 	}
 	held := radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology"))
-	svc.storeRadioArt(held, radioArtEntry{
+	svc.Radio.storeRadioArt(held, radioArtEntry{
 		art: radioLogoFromBytes(coverPNG(t, 40), "image/png"), fetched: time.Now(), fresh: radioArtFreshFor,
 	})
-	if got := svc.RadioNowPlayingCover(testStationPID, "Test FM", a); got != held {
+	if got := svc.Radio.NowPlayingCover(testStationPID, "Test FM", a); got != held {
 		t.Fatalf("while the picture is fetched = %q, want the held %q", got, held)
 	}
 }

@@ -18,7 +18,7 @@ import (
 // room left on the staging volume.
 //
 // The volume is the one nothing else can reach - a test cannot fill a
-// disk - so [Library.stagingFree] is a field, and these hand it the
+// disk - so [Ingest.stagingFree] is a field, and these hand it the
 // answers a full one would give.
 
 // uploadFixture is a Library with no library roots at all: nothing here
@@ -51,13 +51,13 @@ func uploadFixtureFormats(t *testing.T, formats []string) (context.Context, *Lib
 		svc.Close()
 		store.Close()
 	})
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "uploader", Password: "correct-horse", Roles: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func uploadFixtureFormats(t *testing.T, formats []string) (context.Context, *Lib
 
 // open declares a session of size bytes.
 func openSession(ctx context.Context, svc *Library, uc *UserCtx, name string, size int64) (UploadDTO, error) {
-	return svc.CreateUpload(ctx, uc, UploadCreateParams{
+	return svc.Ingest.CreateUpload(ctx, uc, UploadCreateParams{
 		FileName: name, SizeBytes: size, MediaType: "music",
 	})
 }
@@ -82,7 +82,7 @@ func TestCreateUploadRefusesPastTheSessionCeiling(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := uploadFixture(t)
 	// Room enough that only the ceiling can be what refuses.
-	svc.stagingFree = func(string) (int64, bool) { return 1 << 62, true }
+	svc.Ingest.stagingFree = func(string) (int64, bool) { return 1 << 62, true }
 
 	err := openSessionErr(ctx, svc, uc, "huge.flac", MaxUploadSize+1)
 	if KindOf(err) != KindInvalid {
@@ -113,7 +113,7 @@ func TestCreateUploadRefusesWhenStagingHasNoRoom(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := uploadFixture(t)
 	const free = stagingReserve + 8<<20
-	svc.stagingFree = func(string) (int64, bool) { return free, true }
+	svc.Ingest.stagingFree = func(string) (int64, bool) { return free, true }
 
 	// Fits with the reserve left over.
 	first, err := openSession(ctx, svc, uc, "fits.flac", 4<<20)
@@ -132,7 +132,7 @@ func TestCreateUploadRefusesWhenStagingHasNoRoom(t *testing.T) {
 	}
 
 	// Deciding the first frees its promise again.
-	if err := svc.DeleteUpload(ctx, uc, first.ID); err != nil {
+	if err := svc.Ingest.DeleteUpload(ctx, uc, first.ID); err != nil {
 		t.Fatalf("discarding the first session: %v", err)
 	}
 	if _, err := openSession(ctx, svc, uc, "now-it-does.flac", 5<<20); err != nil {
@@ -146,7 +146,7 @@ func TestCreateUploadSkipsTheRoomCheckWhenNobodyCanAnswer(t *testing.T) {
 	// A platform with no probe, or a staging directory that went away
 	// under the server. Refusing every upload on a number nobody could
 	// read is worse than the hole this closes.
-	svc.stagingFree = func(string) (int64, bool) { return 0, false }
+	svc.Ingest.stagingFree = func(string) (int64, bool) { return 0, false }
 
 	if _, err := openSession(ctx, svc, uc, "unknowable.flac", 1<<30); err != nil {
 		t.Fatalf("a session was refused on an answer the platform never gave: %v", err)

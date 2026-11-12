@@ -864,7 +864,7 @@ func TestSubsonicTimeOffsetOnAnOriginalGoesThroughTheGate(t *testing.T) {
 	wantStatus(t, h.putJSON(t, "/api/v1/admin/transcoding", map[string]any{
 		"maxConcurrent": 1, "maxConcurrentPerUser": 0, "defaultMaxBitrateKbps": 0,
 	}), 200, "one transcode server-wide")
-	release, err := h.svc.TranscodeGate().Acquire(context.Background(), "someone-else", flow.TranscodeStream)
+	release, err := h.svc.Playback.TranscodeGate().Acquire(context.Background(), "someone-else", flow.TranscodeStream)
 	if err != nil {
 		t.Fatal(err)
 	}

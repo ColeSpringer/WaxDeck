@@ -23,19 +23,19 @@ func TestTheWatcherLeavesANewLibraryToItsCreatesScan(t *testing.T) {
 	t.Parallel()
 	var logged lockedBuffer
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: t.TempDir()}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "admin", Password: "correct-horse", Roles: []string{"admin"}})
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "admin", Password: "correct-horse", Roles: []string{"admin"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
 	added := t.TempDir()
 	dropTrack(t, added, "Brought Along")
 	decided := make(chan bool, 8)
-	svc.watchScanHook = func(dir string, scanned bool) {
+	svc.Roots.watchScanHook = func(dir string, scanned bool) {
 		if dir == added {
 			decided <- scanned
 		}
@@ -54,12 +54,12 @@ func TestTheWatcherLeavesANewLibraryToItsCreatesScan(t *testing.T) {
 			})
 		}
 	}
-	svc.watchArmHook.Store(&hook)
+	svc.Roots.watchArmHook.Store(&hook)
 	svc.scanStartHook = func() error {
 		awaitClosed(t, armed, "the watcher to arm the new library")
 		return nil
 	}
-	info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "added", Path: added})
+	info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "added", Path: added})
 	created.release()
 	if err != nil {
 		t.Fatal(err)
@@ -122,12 +122,12 @@ func TestTheWatcherCatchesUpALibraryItsCreateCouldNotScan(t *testing.T) {
 	t.Parallel()
 	var logged lockedBuffer
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: t.TempDir()}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "admin", Password: "correct-horse", Roles: []string{"admin"}})
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "admin", Password: "correct-horse", Roles: []string{"admin"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestTheWatcherCatchesUpALibraryItsCreateCouldNotScan(t *testing.T) {
 	added := t.TempDir()
 	dropTrack(t, added, "Caught Up Later")
 	decided := make(chan bool, 8)
-	svc.watchScanHook = func(dir string, scanned bool) {
+	svc.Roots.watchScanHook = func(dir string, scanned bool) {
 		if dir == added {
 			decided <- scanned
 		}
@@ -145,7 +145,7 @@ func TestTheWatcherCatchesUpALibraryItsCreateCouldNotScan(t *testing.T) {
 	svc.scanStartHook = func() error {
 		return &Error{Kind: KindConflict, Msg: "another catalog job is running"}
 	}
-	info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "added", Path: added})
+	info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "added", Path: added})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,25 +171,25 @@ func TestTheWatcherCatchesUpWhatLandsBeforeItArmsANewLibrary(t *testing.T) {
 	t.Parallel()
 	var logged lockedBuffer
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: t.TempDir()}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "admin", Password: "correct-horse", Roles: []string{"admin"}})
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "admin", Password: "correct-horse", Roles: []string{"admin"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
 	added := t.TempDir()
 	decided := make(chan bool, 8)
-	svc.watchScanHook = func(dir string, scanned bool) {
+	svc.Roots.watchScanHook = func(dir string, scanned bool) {
 		if dir == added {
 			decided <- scanned
 		}
 	}
 	// The pass the create nudges waits, unarmed, until the file is in.
 	pass := parkNextArm(t, svc)
-	info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "added", Path: added})
+	info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "added", Path: added})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +198,7 @@ func TestTheWatcherCatchesUpWhatLandsBeforeItArmsANewLibrary(t *testing.T) {
 	}
 	awaitClosed(t, pass.parked, "the watcher to take the new library up")
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
 	dropTrack(t, added, "Landed Before The Watch")
@@ -250,7 +250,7 @@ func parkNextArm(t *testing.T, svc *Library) *armPass {
 			})
 		}
 	}
-	svc.watchArmHook.Store(&hook)
+	svc.Roots.watchArmHook.Store(&hook)
 	return p
 }
 
@@ -267,18 +267,18 @@ func parkNextWalk(t *testing.T, svc *Library, root string) *armPass {
 			})
 		}
 	}
-	svc.watchLookHook.Store(&hook)
+	svc.Roots.watchLookHook.Store(&hook)
 	return p
 }
 
 // watchAdmin is an administrator of a watched service.
 func watchAdmin(t *testing.T, ctx context.Context, svc *Library) *UserCtx {
 	t.Helper()
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "admin", Password: "correct-horse", Roles: []string{"admin"}})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "admin", Password: "correct-horse", Roles: []string{"admin"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,15 +292,15 @@ func TestARootStaysWatchedWhileTheWatcherTakesAnotherUp(t *testing.T) {
 	var logged lockedBuffer
 	lib := t.TempDir()
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: lib}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
 	uc := watchAdmin(t, ctx, svc)
 	pass := parkNextArm(t, svc)
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "added", Path: t.TempDir()}); err != nil {
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "added", Path: t.TempDir()}); err != nil {
 		t.Fatal(err)
 	}
 	awaitClosed(t, pass.parked, "the watcher to take the new library up")
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
 	dropTrack(t, lib, "Landed During A Re-arm")
@@ -316,12 +316,12 @@ func TestAnOwedRootStaysWatchedThroughALaterPass(t *testing.T) {
 	t.Parallel()
 	var logged lockedBuffer
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: t.TempDir()}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
 	uc := watchAdmin(t, ctx, svc)
 	// A window long enough that a's catch-up is still owed at b's pass.
-	svc.watchQueue.mu.Lock()
-	svc.watchQueue.settle = 2 * time.Second
-	svc.watchQueue.mu.Unlock()
+	svc.Roots.watchQueue.mu.Lock()
+	svc.Roots.watchQueue.settle = 2 * time.Second
+	svc.Roots.watchQueue.mu.Unlock()
 	// a's create cannot scan, so its catch-up is owed from its arm.
 	owedRoot := t.TempDir()
 	armedA := make(chan struct{})
@@ -331,18 +331,18 @@ func TestAnOwedRootStaysWatchedThroughALaterPass(t *testing.T) {
 			once.Do(func() { close(armedA) })
 		}
 	}
-	svc.watchArmHook.Store(&hook)
+	svc.Roots.watchArmHook.Store(&hook)
 	svc.scanStartHook = func() error {
 		return &Error{Kind: KindConflict, Msg: "another catalog job is running"}
 	}
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "a", Path: owedRoot}); err != nil {
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "a", Path: owedRoot}); err != nil {
 		t.Fatal(err)
 	}
 	awaitClosed(t, armedA, "the watcher to take a up")
 	// b's create scans every library, a included, while b's pass waits.
 	svc.scanStartHook = nil
 	pass := parkNextArm(t, svc)
-	info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "b", Path: t.TempDir()})
+	info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "b", Path: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,11 +350,11 @@ func TestAnOwedRootStaysWatchedThroughALaterPass(t *testing.T) {
 		t.Fatal("b's create's scan did not start")
 	}
 	awaitClosed(t, pass.parked, "the watcher to take b up")
-	if _, owed := svc.watchQueue.owedSince(owedRoot); !owed {
+	if _, owed := svc.Roots.watchQueue.owedSince(owedRoot); !owed {
 		t.Fatal("a is not owed its catch-up at b's pass")
 	}
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "b's create's scan to end")
 	dropTrack(t, owedRoot, "Landed After The Walk")
@@ -370,7 +370,7 @@ func TestARestartedWatcherCatchesUpWhatLandedWhileItWasDown(t *testing.T) {
 	var logged lockedBuffer
 	lib := t.TempDir()
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: lib}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
 	down := make(chan struct{})
 	back := newGate(t)
 	var calls atomic.Int32
@@ -386,8 +386,8 @@ func TestARestartedWatcherCatchesUpWhatLandedWhileItWasDown(t *testing.T) {
 			back.wait()
 		}
 	}
-	svc.watchArmHook.Store(&hook)
-	svc.nudgeWatcher()
+	svc.Roots.watchArmHook.Store(&hook)
+	svc.Roots.nudgeWatcher()
 	awaitClosed(t, down, "the supervisor to restart the watcher")
 	dropTrack(t, lib, "Landed While The Watcher Was Down")
 	back.release()
@@ -408,7 +408,7 @@ func TestARootWhoseWatchWasLostIsCaughtUpOnceBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: lib}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
 	pass := parkNextArm(t, svc)
 	if err := os.Remove(lib); err != nil {
 		t.Fatal(err)
@@ -439,20 +439,20 @@ func TestTwoRootsOnOneFolderAreNotTakenUpOnEveryRecheck(t *testing.T) {
 	}
 	alias := filepath.Join(base, "link", "music")
 	_, svc := openWatched(t, []Root{{Name: "a", Path: first}, {Name: "b", Path: alias}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
 	var passes, walks atomic.Int32
 	arm := func(armed bool) {
 		if !armed {
 			passes.Add(1)
 		}
 	}
-	svc.watchArmHook.Store(&arm)
+	svc.Roots.watchArmHook.Store(&arm)
 	look := func(stage, _ string) {
 		if stage == "walk" {
 			walks.Add(1)
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	var mu sync.Mutex
 	checked := map[string]int{}
 	rechecked := make(chan struct{})
@@ -465,7 +465,7 @@ func TestTwoRootsOnOneFolderAreNotTakenUpOnEveryRecheck(t *testing.T) {
 			once.Do(func() { close(rechecked) })
 		}
 	}
-	svc.watchCheckHook.Store(&check)
+	svc.Roots.watchCheckHook.Store(&check)
 	awaitClosed(t, rechecked, "five rechecks of both roots")
 	if n := passes.Load(); n != 0 {
 		t.Fatalf("%d passes over five rechecks with nothing changed, want none", n)
@@ -474,7 +474,7 @@ func TestTwoRootsOnOneFolderAreNotTakenUpOnEveryRecheck(t *testing.T) {
 		t.Fatalf("%d walks over five rechecks with nothing changed, want none", n)
 	}
 	for _, root := range []string{first, alias} {
-		if _, owed := svc.watchQueue.owedSince(root); owed {
+		if _, owed := svc.Roots.watchQueue.owedSince(root); owed {
 			t.Errorf("%s is owed a catch-up with nothing changed", root)
 		}
 	}
@@ -499,9 +499,9 @@ func TestARemovedRootsLateWalkLeavesItsAliasWatched(t *testing.T) {
 	alias := filepath.Join(base, "link", "music")
 	roots := []Root{{Name: "a", Path: first}, {Name: "b", Path: alias}}
 	ctx, svc := openWatched(t, roots, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	svc.watchLookWait.Store(int64(50 * time.Millisecond))
-	w := svc.watcher.Load()
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	svc.Roots.watchLookWait.Store(int64(50 * time.Millisecond))
+	w := svc.Roots.watcher.Load()
 	// The kernel lists the folder under the path that took it first.
 	holder, kept := roots[0], roots[1]
 	if slices.Contains(w.WatchList(), alias) {
@@ -509,8 +509,8 @@ func TestARemovedRootsLateWalkLeavesItsAliasWatched(t *testing.T) {
 	}
 	// The removal is the watcher's table alone: a refresh from the catalog
 	// would put the holder back.
-	svc.refreshMu.Lock()
-	t.Cleanup(svc.refreshMu.Unlock)
+	svc.Roots.refreshMu.Lock()
+	t.Cleanup(svc.Roots.refreshMu.Unlock)
 
 	walking := map[string]chan struct{}{holder.Path: make(chan struct{}), kept.Path: make(chan struct{})}
 	walks := map[string]*gate{holder.Path: newGate(t), kept.Path: newGate(t)}
@@ -523,7 +523,7 @@ func TestARemovedRootsLateWalkLeavesItsAliasWatched(t *testing.T) {
 			}
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	// The pass that let go of the holder's watch is held at its end.
 	var removed atomic.Bool
 	parked, park := make(chan struct{}), newGate(t)
@@ -536,7 +536,7 @@ func TestARemovedRootsLateWalkLeavesItsAliasWatched(t *testing.T) {
 			})
 		}
 	}
-	svc.watchArmHook.Store(&arm)
+	svc.Roots.watchArmHook.Store(&arm)
 	var mu sync.Mutex
 	answered := map[string]bool{}
 	both := make(chan struct{})
@@ -551,7 +551,7 @@ func TestARemovedRootsLateWalkLeavesItsAliasWatched(t *testing.T) {
 			bothOnce.Do(func() { close(both) })
 		}
 	}
-	svc.watchCheckHook.Store(&check)
+	svc.Roots.watchCheckHook.Store(&check)
 
 	// An overflow walks both roots again; both walks wait.
 	w.Errors <- fsnotify.ErrEventOverflow
@@ -559,7 +559,7 @@ func TestARemovedRootsLateWalkLeavesItsAliasWatched(t *testing.T) {
 	awaitClosed(t, walking[kept.Path], "the other root's walk")
 	removed.Store(true)
 	setRoots(svc, []Root{kept})
-	svc.nudgeWatcher()
+	svc.Roots.nudgeWatcher()
 	awaitClosed(t, parked, "the pass after the removal")
 	// The holder's walk arms the folder again, then the other root's walk
 	// finds it armed. A folder made in between is the one thing the second
@@ -594,16 +594,16 @@ func TestAnAliasOnItsFirstWalkIsWatchedWhenItsHolderLeaves(t *testing.T) {
 	alias := filepath.Join(base, "link", "music")
 	holder, kept := Root{Name: "a", Path: first}, Root{Name: "b", Path: alias}
 	ctx, svc := openWatched(t, []Root{holder, kept}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	svc.watchLookWait.Store(int64(50 * time.Millisecond))
-	w := svc.watcher.Load()
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	svc.Roots.watchLookWait.Store(int64(50 * time.Millisecond))
+	w := svc.Roots.watcher.Load()
 	if !slices.Contains(w.WatchList(), first) {
 		t.Fatalf("the watch table is %v, want the holder's %s", w.WatchList(), first)
 	}
 	// The removal is the watcher's table alone: a refresh from the catalog
 	// would put the holder back.
-	svc.refreshMu.Lock()
-	t.Cleanup(svc.refreshMu.Unlock)
+	svc.Roots.refreshMu.Lock()
+	t.Cleanup(svc.Roots.refreshMu.Unlock)
 
 	walking := make(chan struct{})
 	walk := newGate(t)
@@ -616,7 +616,7 @@ func TestAnAliasOnItsFirstWalkIsWatchedWhenItsHolderLeaves(t *testing.T) {
 			})
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	// The pass that sends the alias's first walk is let end; the next, after
 	// the removal, is held before it lets go of anything.
 	var removed atomic.Bool
@@ -638,7 +638,7 @@ func TestAnAliasOnItsFirstWalkIsWatchedWhenItsHolderLeaves(t *testing.T) {
 			})
 		}
 	}
-	svc.watchArmHook.Store(&arm)
+	svc.Roots.watchArmHook.Store(&arm)
 
 	// A recheck finds the alias's folder there and takes it up.
 	if err := os.Symlink(filepath.Join(base, "real"), filepath.Join(base, "link")); err != nil {
@@ -648,7 +648,7 @@ func TestAnAliasOnItsFirstWalkIsWatchedWhenItsHolderLeaves(t *testing.T) {
 	waitFor(t, func() bool { return ended.Load() >= 1 }, "the pass to stop waiting for the walk")
 	removed.Store(true)
 	setRoots(svc, []Root{kept})
-	svc.nudgeWatcher()
+	svc.Roots.nudgeWatcher()
 	awaitClosed(t, parked, "the pass after the removal")
 	// The alias's walk finds the folder in the holder's watch. A folder made
 	// first is the one thing it arms under its own path, which says it has
@@ -689,8 +689,8 @@ func TestARootsFolderListedUnderAnotherRootStaysWatchedWhenThatRootLeaves(t *tes
 	outer := filepath.Join(base, "outer")
 	whole, part := Root{Name: "whole", Path: outer}, Root{Name: "part", Path: inner}
 	ctx, svc := openWatched(t, []Root{whole, part}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	w := svc.watcher.Load()
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	w := svc.Roots.watcher.Load()
 	if err := os.Symlink(music, outer); err != nil {
 		t.Fatal(err)
 	}
@@ -701,10 +701,10 @@ func TestARootsFolderListedUnderAnotherRootStaysWatchedWhenThatRootLeaves(t *tes
 	}
 	// The removal is the watcher's table alone: a refresh from the catalog
 	// would put the inner root back.
-	svc.refreshMu.Lock()
-	t.Cleanup(svc.refreshMu.Unlock)
+	svc.Roots.refreshMu.Lock()
+	t.Cleanup(svc.Roots.refreshMu.Unlock)
 	setRoots(svc, []Root{whole})
-	svc.nudgeWatcher()
+	svc.Roots.nudgeWatcher()
 	waitFor(t, func() bool { return slices.Contains(w.WatchList(), shared) }, "the shared folder watched under the outer root")
 	dropTrack(t, shared, "Heard In A Folder Once Shared")
 	waitForTitle(t, ctx, svc, "Heard In A Folder Once Shared")
@@ -722,7 +722,7 @@ func TestARootThatStopsAnsweringLeavesTheOthersWatched(t *testing.T) {
 	}
 	hung := t.TempDir()
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: lib}, {Name: "hung", Path: hung}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
 	asked := make(chan struct{})
 	answers := newGate(t)
 	var once sync.Once
@@ -732,7 +732,7 @@ func TestARootThatStopsAnsweringLeavesTheOthersWatched(t *testing.T) {
 			answers.wait()
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	awaitClosed(t, asked, "the watcher to look at the root that stops answering")
 	dropTrack(t, lib, "Heard Beside A Hung Root")
 	waitForTitle(t, ctx, svc, "Heard Beside A Hung Root")
@@ -762,9 +762,9 @@ func TestADirectoryThatLostItsWatchIsCaughtUpAndWatchedAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: lib}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
 	walk := parkNextWalk(t, svc, lib)
-	if err := svc.watcher.Load().Remove(nas); err != nil {
+	if err := svc.Roots.watcher.Load().Remove(nas); err != nil {
 		t.Fatal(err)
 	}
 	awaitClosed(t, walk.parked, "the watcher to notice the lost watch inside the root")
@@ -779,7 +779,7 @@ func TestADirectoryThatLostItsWatchIsCaughtUpAndWatchedAgain(t *testing.T) {
 // sent as whether it scanned.
 func rootCatchUps(svc *Library, root string) chan bool {
 	decided := make(chan bool, 16)
-	svc.watchScanHook = func(dir string, scanned bool) {
+	svc.Roots.watchScanHook = func(dir string, scanned bool) {
 		if dir == root {
 			decided <- scanned
 		}
@@ -803,9 +803,9 @@ func caughtUp(t *testing.T, decided <-chan bool, what string) {
 // setRoots replaces the root table the watcher reads, as a create or a
 // removal does.
 func setRoots(svc *Library, roots []Root) {
-	svc.rootsMu.Lock()
-	svc.roots = roots
-	svc.rootsMu.Unlock()
+	svc.Roots.rootsMu.Lock()
+	svc.Roots.roots = roots
+	svc.Roots.rootsMu.Unlock()
 }
 
 // The mount table under a root is read on every recheck (Linux): a first
@@ -820,7 +820,7 @@ func TestAMountChangeUnderARootIsCaughtUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, svc := openWatched(t, []Root{{Name: "lib", Path: lib}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
 	decided := rootCatchUps(svc, lib)
 	var mu sync.Mutex
 	table := ""
@@ -829,7 +829,7 @@ func TestAMountChangeUnderARootIsCaughtUp(t *testing.T) {
 		defer mu.Unlock()
 		return table, nil
 	}
-	svc.watchMountsHook.Store(&read)
+	svc.Roots.watchMountsHook.Store(&read)
 	mount := func(id int) string {
 		return fmt.Sprintf("%d 1 0:%d / %s rw,relatime - tmpfs tmpfs rw\n", id, id, strings.ReplaceAll(nas, " ", `\040`))
 	}
@@ -861,8 +861,8 @@ func TestARenamedDirectoryIsWatchedUnderItsNewPathAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: lib}, {Name: "other", Path: other}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	w := svc.watcher.Load()
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	w := svc.Roots.watcher.Load()
 	checked := make(chan struct{}, 256)
 	check := func(root string) {
 		if root == other {
@@ -872,7 +872,7 @@ func TestARenamedDirectoryIsWatchedUnderItsNewPathAlone(t *testing.T) {
 			}
 		}
 	}
-	svc.watchCheckHook.Store(&check)
+	svc.Roots.watchCheckHook.Store(&check)
 	watchedAt := func(from, to string) func() bool {
 		return func() bool {
 			list := w.WatchList()
@@ -926,9 +926,9 @@ func TestADirectoryRecreatedAfterALostWatchSettles(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, svc := openWatched(t, []Root{{Name: "lib", Path: lib}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
 	decided := rootCatchUps(svc, lib)
-	w := svc.watcher.Load()
+	w := svc.Roots.watcher.Load()
 	if err := w.Remove(nas); err != nil {
 		t.Fatal(err)
 	}
@@ -939,14 +939,14 @@ func TestADirectoryRecreatedAfterALostWatchSettles(t *testing.T) {
 			walks.Add(1)
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	checked := make(chan struct{}, 64)
 	check := func(root string) {
 		if root == lib {
 			checked <- struct{}{}
 		}
 	}
-	svc.watchCheckHook.Store(&check)
+	svc.Roots.watchCheckHook.Store(&check)
 	for range 5 {
 		if err := os.Remove(nas); err != nil {
 			t.Fatal(err)
@@ -978,7 +978,7 @@ func TestACreateThatHangsLeavesTheOtherRootsWatched(t *testing.T) {
 	var logged lockedBuffer
 	slow, lib := t.TempDir(), t.TempDir()
 	ctx, svc := openWatched(t, []Root{{Name: "slow", Path: slow}, {Name: "lib", Path: lib}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
 	created := filepath.Join(slow, "new")
 	asked := make(chan struct{})
 	answer := newGate(t)
@@ -989,7 +989,7 @@ func TestACreateThatHangsLeavesTheOtherRootsWatched(t *testing.T) {
 			answer.wait()
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	if err := os.Mkdir(created, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -997,7 +997,7 @@ func TestACreateThatHangsLeavesTheOtherRootsWatched(t *testing.T) {
 	dropTrack(t, lib, "Heard While A Create Hangs")
 	waitForTitle(t, ctx, svc, "Heard While A Create Hangs")
 	answer.release()
-	waitFor(t, func() bool { return slices.Contains(svc.watcher.Load().WatchList(), created) },
+	waitFor(t, func() bool { return slices.Contains(svc.Roots.watcher.Load().WatchList(), created) },
 		"the created directory to be armed once it answered")
 	dropTrack(t, created, "Heard Once The Create Answered")
 	waitForTitle(t, ctx, svc, "Heard Once The Create Answered")
@@ -1010,8 +1010,8 @@ func TestAWalkRacingItsRootsRemovalLeavesNoWatch(t *testing.T) {
 	var logged lockedBuffer
 	lib := t.TempDir()
 	_, svc := openWatched(t, []Root{{Name: "lib", Path: lib}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	svc.watchLookWait.Store(int64(50 * time.Millisecond))
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	svc.Roots.watchLookWait.Store(int64(50 * time.Millisecond))
 	gone := t.TempDir()
 	if err := os.Mkdir(filepath.Join(gone, "sub"), 0o755); err != nil {
 		t.Fatal(err)
@@ -1025,14 +1025,14 @@ func TestAWalkRacingItsRootsRemovalLeavesNoWatch(t *testing.T) {
 			walk.wait()
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	var ended atomic.Int32
 	arm := func(armed bool) {
 		if armed {
 			ended.Add(1)
 		}
 	}
-	svc.watchArmHook.Store(&arm)
+	svc.Roots.watchArmHook.Store(&arm)
 	answered := make(chan struct{})
 	var answeredOnce sync.Once
 	check := func(root string) {
@@ -1040,17 +1040,17 @@ func TestAWalkRacingItsRootsRemovalLeavesNoWatch(t *testing.T) {
 			answeredOnce.Do(func() { close(answered) })
 		}
 	}
-	svc.watchCheckHook.Store(&check)
+	svc.Roots.watchCheckHook.Store(&check)
 	setRoots(svc, []Root{{Name: "lib", Path: lib}, {Name: "gone", Path: gone}})
-	svc.nudgeWatcher()
+	svc.Roots.nudgeWatcher()
 	awaitClosed(t, walking, "the watcher to walk the added root")
 	waitFor(t, func() bool { return ended.Load() >= 1 }, "the pass to stop waiting for the walk")
 	setRoots(svc, []Root{{Name: "lib", Path: lib}})
-	svc.nudgeWatcher()
+	svc.Roots.nudgeWatcher()
 	waitFor(t, func() bool { return ended.Load() >= 2 }, "the pass after the removal")
 	walk.release()
 	awaitClosed(t, answered, "the watcher to take the walk's late answer in")
-	if stray := slices.DeleteFunc(svc.watcher.Load().WatchList(), func(p string) bool { return !underRoot(p, gone) }); len(stray) > 0 {
+	if stray := slices.DeleteFunc(svc.Roots.watcher.Load().WatchList(), func(p string) bool { return !underRoot(p, gone) }); len(stray) > 0 {
 		t.Fatalf("watches %v survived their root's removal", stray)
 	}
 }
@@ -1062,8 +1062,8 @@ func TestOnlyARootWhoseStatHangsIsSaidNotToAnswer(t *testing.T) {
 	var logged lockedBuffer
 	lib := t.TempDir()
 	_, svc := openWatched(t, []Root{{Name: "lib", Path: lib}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	svc.watchLookWait.Store(int64(50 * time.Millisecond))
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	svc.Roots.watchLookWait.Store(int64(50 * time.Millisecond))
 	slow, hung := t.TempDir(), t.TempDir()
 	walking, statting := make(chan struct{}), make(chan struct{})
 	walk, stat := newGate(t), newGate(t)
@@ -1078,16 +1078,16 @@ func TestOnlyARootWhoseStatHangsIsSaidNotToAnswer(t *testing.T) {
 			stat.wait()
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	var ended atomic.Int32
 	arm := func(armed bool) {
 		if armed {
 			ended.Add(1)
 		}
 	}
-	svc.watchArmHook.Store(&arm)
+	svc.Roots.watchArmHook.Store(&arm)
 	setRoots(svc, []Root{{Name: "lib", Path: lib}, {Name: "slow", Path: slow}, {Name: "hung", Path: hung}})
-	svc.nudgeWatcher()
+	svc.Roots.nudgeWatcher()
 	awaitClosed(t, walking, "the watcher to walk the slow root")
 	awaitClosed(t, statting, "the watcher to look at the hung root")
 	waitFor(t, func() bool { return ended.Load() >= 1 }, "the pass to stop waiting")
@@ -1128,8 +1128,8 @@ func TestAnOverflowLetsGoOfPathsRenamedInTheGap(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: lib}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	w := svc.watcher.Load()
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	w := svc.Roots.watcher.Load()
 	// No event reports the rename: only a/x keeps its watch, under the
 	// path it had.
 	for _, p := range []string{a, lib} {
@@ -1164,9 +1164,9 @@ func TestAnOverflowWalksAgainARootWhoseLookWasOut(t *testing.T) {
 	}
 	// No recheck: the look out is a create's, held at its arm.
 	_, svc := openWatchedEvery(t, []Root{{Name: "lib", Path: lib}}, &logged, time.Hour)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	svc.watchLookWait.Store(int64(50 * time.Millisecond))
-	w := svc.watcher.Load()
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	svc.Roots.watchLookWait.Store(int64(50 * time.Millisecond))
+	w := svc.Roots.watcher.Load()
 	created := filepath.Join(lib, "c")
 	arming := make(chan struct{})
 	arm := newGate(t)
@@ -1179,7 +1179,7 @@ func TestAnOverflowWalksAgainARootWhoseLookWasOut(t *testing.T) {
 			})
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	var overflowed atomic.Bool
 	var ended atomic.Int32
 	hook := func(armed bool) {
@@ -1187,7 +1187,7 @@ func TestAnOverflowWalksAgainARootWhoseLookWasOut(t *testing.T) {
 			ended.Add(1)
 		}
 	}
-	svc.watchArmHook.Store(&hook)
+	svc.Roots.watchArmHook.Store(&hook)
 	if err := os.Mkdir(created, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1228,9 +1228,9 @@ func TestAnOverflowsOwedWalkIsPaidWhenItsLookAnswersWithACreateQueued(t *testing
 	}
 	// No recheck: only the look's answer can pay.
 	_, svc := openWatchedEvery(t, []Root{{Name: "lib", Path: lib}}, &logged, time.Hour)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	svc.watchLookWait.Store(int64(50 * time.Millisecond))
-	w := svc.watcher.Load()
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	svc.Roots.watchLookWait.Store(int64(50 * time.Millisecond))
+	w := svc.Roots.watcher.Load()
 	first, second := filepath.Join(lib, "c"), filepath.Join(lib, "d")
 	arming, queued := make(chan struct{}), make(chan struct{})
 	arm := newGate(t)
@@ -1250,21 +1250,21 @@ func TestAnOverflowsOwedWalkIsPaidWhenItsLookAnswersWithACreateQueued(t *testing
 			walks.Add(1)
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	var ended atomic.Int32
 	hook := func(armed bool) {
 		if armed && overflowed.Load() {
 			ended.Add(1)
 		}
 	}
-	svc.watchArmHook.Store(&hook)
+	svc.Roots.watchArmHook.Store(&hook)
 	var checked atomic.Int32
 	check := func(root string) {
 		if root == lib {
 			checked.Add(1)
 		}
 	}
-	svc.watchCheckHook.Store(&check)
+	svc.Roots.watchCheckHook.Store(&check)
 	if err := os.Mkdir(first, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1296,7 +1296,7 @@ func TestAnOverflowsOwedWalkIsPaidWhenItsLookAnswersWithACreateQueued(t *testing
 		t.Fatalf("%d passes after the overflow, want its own alone", n)
 	}
 	// A pass that finds the root idle walks it only if it is still owed.
-	svc.nudgeWatcher()
+	svc.Roots.nudgeWatcher()
 	waitFor(t, func() bool { return checked.Load() >= 3 }, "a pass to look at the root")
 	if n := walks.Load(); n != 1 {
 		t.Fatalf("the root walked %d times after the overflow, want once", n)
@@ -1317,10 +1317,10 @@ func TestAnOverflowsOwedWalkWaitsOnNoOtherRoot(t *testing.T) {
 	}
 	// No recheck: only the look's answer can pay.
 	_, svc := openWatchedEvery(t, []Root{{Name: "lib", Path: lib}, {Name: "slow", Path: slow}}, &logged, time.Hour)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
 	// A pass waits for the slow root longer than the test waits for a create.
-	svc.watchLookWait.Store(int64(time.Minute))
-	w := svc.watcher.Load()
+	svc.Roots.watchLookWait.Store(int64(time.Minute))
+	w := svc.Roots.watcher.Load()
 	first, next := filepath.Join(lib, "c"), filepath.Join(lib, "d")
 	arming, walking, queued := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	arm, stat := newGate(t), newGate(t)
@@ -1343,21 +1343,21 @@ func TestAnOverflowsOwedWalkWaitsOnNoOtherRoot(t *testing.T) {
 			queueOnce.Do(func() { close(queued) })
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	var ended atomic.Int32
 	hook := func(armed bool) {
 		if armed && overflowed.Load() {
 			ended.Add(1)
 		}
 	}
-	svc.watchArmHook.Store(&hook)
+	svc.Roots.watchArmHook.Store(&hook)
 	var checked atomic.Int32
 	check := func(root string) {
 		if root == lib {
 			checked.Add(1)
 		}
 	}
-	svc.watchCheckHook.Store(&check)
+	svc.Roots.watchCheckHook.Store(&check)
 	if err := os.Mkdir(first, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1388,7 +1388,7 @@ func TestAnOverflowsOwedWalkWaitsOnNoOtherRoot(t *testing.T) {
 		list := w.WatchList()
 		return checked.Load() >= 3 && slices.Contains(list, gap) && slices.Contains(list, next)
 	}, "the root walked again and the next create armed")
-	svc.nudgeWatcher()
+	svc.Roots.nudgeWatcher()
 	waitFor(t, func() bool { return checked.Load() >= 4 }, "a pass to look at the root")
 	if n := walks.Load(); n != 1 {
 		t.Fatalf("the root walked %d times after the overflow, want once", n)
@@ -1408,11 +1408,11 @@ func TestAnOverflowsOwedWalkOwesItsCatchUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, svc := openWatchedEvery(t, []Root{{Name: "lib", Path: lib}}, &logged, time.Hour)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	svc.watchLookWait.Store(int64(50 * time.Millisecond))
-	w := svc.watcher.Load()
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	svc.Roots.watchLookWait.Store(int64(50 * time.Millisecond))
+	w := svc.Roots.watcher.Load()
 	scanned := make(chan struct{}, 16)
-	svc.watchScanHook = func(dir string, did bool) {
+	svc.Roots.watchScanHook = func(dir string, did bool) {
 		if dir == lib && did {
 			select {
 			case scanned <- struct{}{}:
@@ -1432,7 +1432,7 @@ func TestAnOverflowsOwedWalkOwesItsCatchUp(t *testing.T) {
 			})
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	var overflowed atomic.Bool
 	var ended atomic.Int32
 	hook := func(armed bool) {
@@ -1440,7 +1440,7 @@ func TestAnOverflowsOwedWalkOwesItsCatchUp(t *testing.T) {
 			ended.Add(1)
 		}
 	}
-	svc.watchArmHook.Store(&hook)
+	svc.Roots.watchArmHook.Store(&hook)
 	if err := os.Mkdir(created, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1479,11 +1479,11 @@ func TestAnOverflowsWalkOutlastingItsCatchUpOwesAnother(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, svc := openWatchedEvery(t, []Root{{Name: "lib", Path: lib}}, &logged, time.Hour)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	svc.watchLookWait.Store(int64(50 * time.Millisecond))
-	w := svc.watcher.Load()
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	svc.Roots.watchLookWait.Store(int64(50 * time.Millisecond))
+	w := svc.Roots.watcher.Load()
 	scanned := make(chan struct{}, 16)
-	svc.watchScanHook = func(dir string, did bool) {
+	svc.Roots.watchScanHook = func(dir string, did bool) {
 		if dir == lib && did {
 			select {
 			case scanned <- struct{}{}:
@@ -1503,7 +1503,7 @@ func TestAnOverflowsWalkOutlastingItsCatchUpOwesAnother(t *testing.T) {
 			})
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	// Born in the gap: p's watch is let go first, so its create raises
 	// nothing; only a walk arms it.
 	if err := w.Remove(p); err != nil {
@@ -1556,8 +1556,8 @@ func TestAMoveOutAndDeleteWithTheLoopBusyDoesNotDeadlock(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, svc := openWatched(t, []Root{{Name: "lib", Path: lib}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	w := svc.watcher.Load()
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	w := svc.Roots.watcher.Load()
 	dropping := make(chan struct{})
 	drop := newGate(t)
 	var once sync.Once
@@ -1567,10 +1567,10 @@ func TestAMoveOutAndDeleteWithTheLoopBusyDoesNotDeadlock(t *testing.T) {
 			drop.wait()
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	// The loop is busy in a pass while the directory leaves and goes.
 	pass := parkNextArm(t, svc)
-	svc.nudgeWatcher()
+	svc.Roots.nudgeWatcher()
 	awaitClosed(t, pass.parked, "the loop to be busy")
 	moved := filepath.Join(outside, "a")
 	if err := os.Rename(a, moved); err != nil {
@@ -1612,8 +1612,8 @@ func TestARootThatIsASymlinkIsWatched(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: link}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	list := svc.watcher.Load().WatchList()
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	list := svc.Roots.watcher.Load().WatchList()
 	if !slices.Contains(list, link) || !slices.Contains(list, filepath.Join(link, "sub")) {
 		t.Fatalf("the watch table is %v, want the library's folder and its sub under %s", list, link)
 	}
@@ -1638,7 +1638,7 @@ func TestARetargetedRootSymlinkIsWalkedAgainAndCaughtUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, svc := openWatched(t, []Root{{Name: "lib", Path: link}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
 	decided := rootCatchUps(svc, link)
 	walk := parkNextWalk(t, svc, link)
 	next := filepath.Join(base, "link.next")
@@ -1651,7 +1651,7 @@ func TestARetargetedRootSymlinkIsWalkedAgainAndCaughtUp(t *testing.T) {
 	awaitClosed(t, walk.parked, "the watcher to notice the link retargeted")
 	walk.release()
 	caughtUp(t, decided, "after the retarget")
-	list := svc.watcher.Load().WatchList()
+	list := svc.Roots.watcher.Load().WatchList()
 	if !slices.Contains(list, filepath.Join(link, "other")) || slices.Contains(list, filepath.Join(link, "sub")) {
 		t.Fatalf("the watch table is %v, want the new folder's other and not the old one's sub", list)
 	}
@@ -1667,15 +1667,15 @@ func TestADirectoryArmedSinceTheLastRecheckLeavesNoWatchWhenMovedOut(t *testing.
 	// No recheck runs in this test: only the pass and the arms say what
 	// the table held.
 	_, svc := openWatchedEvery(t, []Root{{Name: "lib", Path: lib}}, &logged, time.Hour)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	w := svc.watcher.Load()
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	w := svc.Roots.watcher.Load()
 	armed := make(chan struct{}, 16)
 	check := func(root string) {
 		if root == lib {
 			armed <- struct{}{}
 		}
 	}
-	svc.watchCheckHook.Store(&check)
+	svc.Roots.watchCheckHook.Store(&check)
 	n := filepath.Join(lib, "n")
 	if err := os.MkdirAll(filepath.Join(n, "x"), 0o755); err != nil {
 		t.Fatal(err)
@@ -1695,7 +1695,7 @@ func TestADirectoryArmedSinceTheLastRecheckLeavesNoWatchWhenMovedOut(t *testing.
 			drop.wait()
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	if err := os.Rename(n, filepath.Join(outside, "n")); err != nil {
 		t.Fatal(err)
 	}
@@ -1720,9 +1720,9 @@ func TestADirectoryALateWalkArmedLeavesNoWatchWhenMovedOut(t *testing.T) {
 	// No recheck runs in this test: only the passes and the late answer say
 	// what the table held.
 	_, svc := openWatchedEvery(t, []Root{{Name: "lib", Path: lib}, {Name: "later", Path: later}}, &logged, time.Hour)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	svc.watchLookWait.Store(int64(50 * time.Millisecond))
-	w := svc.watcher.Load()
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	svc.Roots.watchLookWait.Store(int64(50 * time.Millisecond))
+	w := svc.Roots.watcher.Load()
 	walking, dropping := make(chan struct{}), make(chan struct{})
 	walk, drop := newGate(t), newGate(t)
 	n := filepath.Join(later, "n")
@@ -1737,7 +1737,7 @@ func TestADirectoryALateWalkArmedLeavesNoWatchWhenMovedOut(t *testing.T) {
 			drop.wait()
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	// Only a pass that ends with the walk held counts.
 	var ended atomic.Int32
 	arm := func(armed bool) {
@@ -1749,7 +1749,7 @@ func TestADirectoryALateWalkArmedLeavesNoWatchWhenMovedOut(t *testing.T) {
 		default:
 		}
 	}
-	svc.watchArmHook.Store(&arm)
+	svc.Roots.watchArmHook.Store(&arm)
 	answered := make(chan struct{})
 	var answeredOnce sync.Once
 	check := func(root string) {
@@ -1757,11 +1757,11 @@ func TestADirectoryALateWalkArmedLeavesNoWatchWhenMovedOut(t *testing.T) {
 			answeredOnce.Do(func() { close(answered) })
 		}
 	}
-	svc.watchCheckHook.Store(&check)
+	svc.Roots.watchCheckHook.Store(&check)
 	if err := os.MkdirAll(filepath.Join(n, "x"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	svc.nudgeWatcher()
+	svc.Roots.nudgeWatcher()
 	awaitClosed(t, walking, "the watcher to walk the root that came back")
 	waitFor(t, func() bool { return ended.Load() >= 1 }, "the pass to stop waiting for the walk")
 	walk.release()
@@ -1792,8 +1792,8 @@ func TestAnOverflowReWalkOfAHungRootStallsOnlyItself(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, svc := openWatched(t, []Root{{Name: "lib", Path: lib}, {Name: "hung", Path: hung}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	svc.watchLookWait.Store(int64(50 * time.Millisecond))
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	svc.Roots.watchLookWait.Store(int64(50 * time.Millisecond))
 	asked := make(chan struct{})
 	answer := newGate(t)
 	var once sync.Once
@@ -1803,14 +1803,14 @@ func TestAnOverflowReWalkOfAHungRootStallsOnlyItself(t *testing.T) {
 			answer.wait()
 		}
 	}
-	svc.watchLookHook.Store(&look)
-	svc.watcher.Load().Errors <- fsnotify.ErrEventOverflow
+	svc.Roots.watchLookHook.Store(&look)
+	svc.Roots.watcher.Load().Errors <- fsnotify.ErrEventOverflow
 	awaitClosed(t, asked, "the re-walk to look at the hung root")
 	created := filepath.Join(lib, "new")
 	if err := os.Mkdir(created, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return slices.Contains(svc.watcher.Load().WatchList(), created) },
+	waitFor(t, func() bool { return slices.Contains(svc.Roots.watcher.Load().WatchList(), created) },
 		"the other root to arm what is created in it")
 	dropTrack(t, created, "Heard Beside A Hung Re-walk")
 	waitForTitle(t, ctx, svc, "Heard Beside A Hung Re-walk")
@@ -1823,8 +1823,8 @@ func TestARootThatHangsWhileArmingIsSaidNotToAnswer(t *testing.T) {
 	var logged lockedBuffer
 	lib, slow := t.TempDir(), t.TempDir()
 	_, svc := openWatched(t, []Root{{Name: "lib", Path: lib}, {Name: "slow", Path: slow}}, &logged)
-	awaitClosed(t, svc.watchReady, "the watcher to arm")
-	svc.watchLookWait.Store(int64(50 * time.Millisecond))
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm")
+	svc.Roots.watchLookWait.Store(int64(50 * time.Millisecond))
 	created := filepath.Join(slow, "new")
 	asked := make(chan struct{})
 	answer := newGate(t)
@@ -1835,13 +1835,13 @@ func TestARootThatHangsWhileArmingIsSaidNotToAnswer(t *testing.T) {
 			answer.wait()
 		}
 	}
-	svc.watchLookHook.Store(&look)
+	svc.Roots.watchLookHook.Store(&look)
 	if err := os.Mkdir(created, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	awaitClosed(t, asked, "the watcher to arm the created directory")
 	waitFor(t, func() bool {
-		svc.nudgeWatcher()
+		svc.Roots.nudgeWatcher()
 		return slices.ContainsFunc(strings.Split(logged.String(), "\n"), func(line string) bool {
 			return strings.Contains(line, "not answer") && strings.Contains(line, "path="+slow)
 		})

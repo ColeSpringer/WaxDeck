@@ -80,11 +80,11 @@ func uploadBatchDTO(b wdb.UploadBatch) UploadBatchDTO {
 // CreateUploadBatch opens a batch for grouped sessions, mirroring
 // CreateUpload's target validation; members join by session-side
 // batchId and must match the batch's media type and library.
-func (l *Library) CreateUploadBatch(ctx context.Context, uc *UserCtx, p UploadBatchCreateParams) (UploadBatchDTO, error) {
+func (l *Ingest) CreateUploadBatch(ctx context.Context, uc *UserCtx, p UploadBatchCreateParams) (UploadBatchDTO, error) {
 	if err := l.requireUploader(uc); err != nil {
 		return UploadBatchDTO{}, err
 	}
-	if err := l.CheckWritable(ctx, ""); err != nil {
+	if err := l.Settings.CheckWritable(ctx, ""); err != nil {
 		return UploadBatchDTO{}, err
 	}
 	switch p.Grouping {
@@ -149,7 +149,7 @@ func cleanBatchPath(p string) (string, error) {
 }
 
 // batchForMember validates a session's batch join at creation time.
-func (l *Library) batchForMember(ctx context.Context, uc *UserCtx, p *UploadCreateParams) error {
+func (l *Ingest) batchForMember(ctx context.Context, uc *UserCtx, p *UploadCreateParams) error {
 	if p.BatchPath != "" && p.BatchID == "" {
 		return errInvalid("batchPath is only meaningful with batchId")
 	}
@@ -194,7 +194,7 @@ func (l *Library) batchForMember(ctx context.Context, uc *UserCtx, p *UploadCrea
 // Idempotent on a finalized batch (also finishing the entry-opening
 // work an interrupted finalize left behind); a batch the janitor
 // already expired answers conflict.
-func (l *Library) CompleteUploadBatch(ctx context.Context, uc *UserCtx, id string) (UploadBatchDTO, error) {
+func (l *Ingest) CompleteUploadBatch(ctx context.Context, uc *UserCtx, id string) (UploadBatchDTO, error) {
 	pre, err := l.db.UploadBatchByID(ctx, id)
 	if errors.Is(err, wdb.ErrNotFound) {
 		return UploadBatchDTO{}, errNotFound("no such upload batch")
@@ -236,7 +236,7 @@ func (l *Library) CompleteUploadBatch(ctx context.Context, uc *UserCtx, id strin
 // that declined identification. Outside the finalize lock: importing
 // needs none of it, and two hundred files would otherwise hold every
 // other account's finalize. On procCtx, as the entry opening is.
-func (l *Library) importDeclinedEntries(entryIDs []string) {
+func (l *Ingest) importDeclinedEntries(entryIDs []string) {
 	for _, id := range entryIDs {
 		l.importDeclinedEntry(l.procCtx, id)
 	}
@@ -250,7 +250,7 @@ func (l *Library) importDeclinedEntries(entryIDs []string) {
 // a batch was fully processed - a round where every batch failed
 // reports false so the caller's drain loop waits for the next tick
 // instead of hot-looping over the same failures.
-func (l *Library) DrainExpiredUploadBatches(ctx context.Context) bool {
+func (l *Ingest) DrainExpiredUploadBatches(ctx context.Context) bool {
 	rows, err := l.db.ExpiredUploadBatches(ctx, time.Now().UnixNano(), 20)
 	if err != nil {
 		l.log.Warn("listing expired upload batches", "err", err)
@@ -270,7 +270,7 @@ func (l *Library) DrainExpiredUploadBatches(ctx context.Context) bool {
 
 // expireBatch finalizes one overdue or half-repaired batch. Only the
 // entry opening takes the finalize lock.
-func (l *Library) expireBatch(ctx context.Context, id string) bool {
+func (l *Ingest) expireBatch(ctx context.Context, id string) bool {
 	declined, ok := func() ([]string, bool) {
 		l.batchFinalizeMu.Lock()
 		defer l.batchFinalizeMu.Unlock()
@@ -301,7 +301,7 @@ func (l *Library) expireBatch(ctx context.Context, id string) bool {
 // are attempted to completion but reported, never swallowed: a
 // success answer with an unlinked member would let retention reap
 // its staged file while the entry still references it.
-func (l *Library) openBatchEntries(ctx context.Context, b wdb.UploadBatch, members []wdb.Upload) (wdb.UploadBatch, []string, error) {
+func (l *Ingest) openBatchEntries(ctx context.Context, b wdb.UploadBatch, members []wdb.Upload) (wdb.UploadBatch, []string, error) {
 	if len(members) == 0 {
 		return b, nil, nil
 	}

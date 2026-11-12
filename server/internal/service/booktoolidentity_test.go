@@ -76,7 +76,7 @@ func TestARestoredPartCountsAsInPlaceWhateverItsFilePID(t *testing.T) {
 			}
 			switch clear {
 			case "dismissed":
-				if err := svc.DeleteToolTaskFor(ctx, uc, id); err != nil {
+				if err := svc.Tools.DeleteToolTaskFor(ctx, uc, id); err != nil {
 					t.Fatal(err)
 				}
 			default:
@@ -91,7 +91,7 @@ func TestARestoredPartCountsAsInPlaceWhateverItsFilePID(t *testing.T) {
 				if err := svc.db.SettingSet(ctx, settingTaskRetention, "1", time.Now().UnixNano()); err != nil {
 					t.Fatal(err)
 				}
-				if err := svc.RunPrune(ctx); err != nil {
+				if err := svc.Integrations.RunPrune(ctx); err != nil {
 					t.Fatal(err)
 				}
 				if _, err := svc.db.ToolTaskByID(ctx, id); !errors.Is(err, wdb.ErrNotFound) {
@@ -122,27 +122,27 @@ func TestAnUndoFindsAPutBackPartThatOrganizeMoved(t *testing.T) {
 	skipWithoutUnwritablePaths(t)
 	t.Parallel()
 	ctx, svc, uc, book, dir, _ := bookToolFixture(t, true)
-	task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	parts := partFiles(t, ctx, svc, book)
-	svc.toolStepHook = stopAt("trashing", func() { trashAs(t, ctx, svc, taskTypeBookMerge, parts[0]) })
+	svc.Tools.toolStepHook = stopAt("trashing", func() { trashAs(t, ctx, svc, taskTypeBookMerge, parts[0]) })
 	if err := attempt(t, ctx, svc, 1); !errors.Is(err, errStopped) {
 		t.Fatalf("first attempt = %v, want it stopped mid-trash", err)
 	}
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	cd2 := filepath.Join(dir, "CD2")
 	if err := os.Chmod(cd2, 0o555); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(cd2, 0o755) })
-	svc.mutateHook = busyOnce("files")
+	svc.Tools.mutateHook = busyOnce("files")
 	var retry *toolRetry
 	if err := attempt(t, ctx, svc, 2); !errors.As(err, &retry) {
 		t.Fatalf("second attempt = %v, want it waiting on the busy catalog after the put-back", err)
 	}
-	svc.mutateHook = nil
+	svc.Tools.mutateHook = nil
 	if p := taskParams(t, ctx, svc, task.ID); p.Step != toolStepUndoing {
 		t.Fatalf("step = %q, want the run undoing", p.Step)
 	}
@@ -185,16 +185,16 @@ func TestAnUndoFindsAPutBackPartThatOrganizeMoved(t *testing.T) {
 // reads: two parts alike in size, time and all.
 func stopMidTrash(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, book model.PID, dir string, discs bool) string {
 	t.Helper()
-	task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	parts := partFiles(t, ctx, svc, book)
-	svc.toolStepHook = stopAt("trashing", func() { trashAs(t, ctx, svc, taskTypeBookMerge, parts[0]) })
+	svc.Tools.toolStepHook = stopAt("trashing", func() { trashAs(t, ctx, svc, taskTypeBookMerge, parts[0]) })
 	if err := attempt(t, ctx, svc, 1); !errors.Is(err, errStopped) {
 		t.Fatalf("first attempt = %v, want it stopped mid-trash", err)
 	}
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	second := filepath.Join(dir, "part 2.m4b")
 	if discs {
 		second = filepath.Join(dir, "CD2", "part 2.m4b")
@@ -249,7 +249,7 @@ func TestAClearDoesNotTakeAnAlikePartForOneInTheTrash(t *testing.T) {
 	if got := toolTask(t, ctx, svc, id); got.State != taskStateParked {
 		t.Fatalf("task = %s (error %q), want it parked", got.State, got.Error)
 	}
-	if err := svc.DeleteToolTaskFor(ctx, uc, id); err != nil {
+	if err := svc.Tools.DeleteToolTaskFor(ctx, uc, id); err != nil {
 		t.Fatal(err)
 	}
 	if names := namesIn(t, dir); !slices.Equal(names, []string{"Tool Book.m4b", "part 2.m4b"}) {
@@ -267,15 +267,15 @@ func TestAClearDoesNotTakeAnAlikePartForOneInTheTrash(t *testing.T) {
 func TestAMergeGoingOnAfterAPartialPutBackTrashesWhatCameBack(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, book, dir, _ := bookToolFixture(t, true)
-	task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.toolStepHook = stopAt("trashed", nil)
+	svc.Tools.toolStepHook = stopAt("trashed", nil)
 	if err := attempt(t, ctx, svc, 1); !errors.Is(err, errStopped) {
 		t.Fatalf("first attempt = %v, want it stopped with both parts in the trash", err)
 	}
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	// A failure that stands sends the run to undo.
 	setParams(t, ctx, svc, task.ID, func(p *toolTaskParams) {
 		p.Step, p.Failure = toolStepUndoing, "a refusal that stands"
@@ -326,15 +326,15 @@ func TestAMergeGoingOnAfterAPartialPutBackTrashesWhatCameBack(t *testing.T) {
 func TestARestageStartsOverFromAPutBackPartThatMoved(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, book, dir, _ := bookToolFixture(t, true)
-	task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.toolStepHook = stopAt("trashed", nil)
+	svc.Tools.toolStepHook = stopAt("trashed", nil)
 	if err := attempt(t, ctx, svc, 1); !errors.Is(err, errStopped) {
 		t.Fatalf("first attempt = %v, want it stopped with both parts in the trash", err)
 	}
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	for _, staged := range hiddenLeft(t, dir) {
 		if err := os.Remove(staged); err != nil {
 			t.Fatal(err)

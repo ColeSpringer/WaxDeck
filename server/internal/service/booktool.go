@@ -84,7 +84,7 @@ type toolSource struct {
 // toolRun is a file tool's run over its task: the params it records as
 // it goes, and how it waits.
 type toolRun struct {
-	l *Library
+	l *Tools
 	t *wdb.ToolTask
 	p *toolTaskParams
 }
@@ -109,7 +109,7 @@ type bookTool struct {
 
 // mergeTool is the merge p orders of book, titled title when queued,
 // whose parts are at paths now.
-func (l *Library) mergeTool(t *wdb.ToolTask, p *toolTaskParams, book model.PID, title string, paths []string) *bookTool {
+func (l *Tools) mergeTool(t *wdb.ToolTask, p *toolTaskParams, book model.PID, title string, paths []string) *bookTool {
 	label := title
 	if p.KeepOriginals {
 		label += mergedMark
@@ -127,7 +127,7 @@ func (l *Library) mergeTool(t *wdb.ToolTask, p *toolTaskParams, book model.PID, 
 
 // splitTool is the split p orders of book, titled title when queued,
 // whose file is at src now.
-func (l *Library) splitTool(t *wdb.ToolTask, p *toolTaskParams, book model.PID, title, src string) *bookTool {
+func (l *Tools) splitTool(t *wdb.ToolTask, p *toolTaskParams, book model.PID, title, src string) *bookTool {
 	label := title
 	if p.KeepOriginals {
 		label += splitMark
@@ -148,7 +148,7 @@ func (l *Library) splitTool(t *wdb.ToolTask, p *toolTaskParams, book model.PID, 
 }
 
 // bookToolFor is the run a book tool's task orders.
-func (l *Library) bookToolFor(ctx context.Context, t *wdb.ToolTask, p *toolTaskParams) (*bookTool, error) {
+func (l *Tools) bookToolFor(ctx context.Context, t *wdb.ToolTask, p *toolTaskParams) (*bookTool, error) {
 	_, book, ok := parseAPIPID(t.ItemPID)
 	if !ok {
 		return nil, fmt.Errorf("%w: bad item pid %q", errToolPermanent, t.ItemPID)
@@ -244,7 +244,7 @@ func (b *bookTool) partPaths(ctx context.Context) []string {
 
 // pathsNow is where the catalog has each of the files pids names now, or
 // where it was queued from (paths) for one it does not have.
-func (l *Library) pathsNow(ctx context.Context, pids, paths []string) []string {
+func (l *Tools) pathsNow(ctx context.Context, pids, paths []string) []string {
 	out := slices.Clone(paths)
 	for i, pid := range pids {
 		if pid == "" || i >= len(out) {
@@ -322,7 +322,7 @@ func (b *bookTool) produceOutputs(ctx context.Context, produce func(context.Cont
 	if err := b.mark(ctx, toolStepStaged); err != nil {
 		return b.wait(ctx, err)
 	}
-	return b.l.toolCrashPoint("staged")
+	return b.l.crashPoint("staged")
 }
 
 // stage has the engine make the outputs and copies each not staged yet
@@ -331,12 +331,12 @@ func (b *bookTool) produceOutputs(ctx context.Context, produce func(context.Cont
 // complete. Each file it makes, and the folder when it makes that, is
 // recorded first, so the run removes only what it made.
 func (b *bookTool) stage(ctx context.Context, produce func(context.Context, string) ([]string, error)) error {
-	ws, err := b.l.toolWorkspace(b.t.ID)
+	ws, err := b.l.workspace(b.t.ID)
 	if err != nil {
 		return b.waitIfStaged(ctx, err)
 	}
 	defer os.RemoveAll(ws)
-	if err := b.l.toolCrashPoint("producing"); err != nil {
+	if err := b.l.crashPoint("producing"); err != nil {
 		return err
 	}
 	outs, err := produce(ctx, ws)
@@ -356,7 +356,7 @@ func (b *bookTool) stage(ctx context.Context, produce func(context.Context, stri
 	}
 	if err == nil {
 		if mkErr := os.MkdirAll(b.dir, 0o755); mkErr != nil {
-			err = b.l.toolWriteErr(mkErr)
+			err = b.l.writeErr(mkErr)
 		}
 	}
 	if err != nil {
@@ -373,11 +373,11 @@ func (b *bookTool) stage(ctx context.Context, produce func(context.Context, stri
 			return b.waitIfStaged(ctx, err)
 		}
 		if err := copyToolFile(out, staged, b.mode); err != nil {
-			return b.refused(ctx, b.l.toolWriteErr(err))
+			return b.refused(ctx, b.l.writeErr(err))
 		}
 		b.remember(staged, staged)
 		if fresh++; fresh == 1 && !b.allStaged() {
-			if err := b.l.toolCrashPoint("staging"); err != nil {
+			if err := b.l.crashPoint("staging"); err != nil {
 				return err
 			}
 		}
@@ -428,10 +428,10 @@ func (b *bookTool) removeOwn(path string) error {
 		// link): nothing of the run's to remove.
 		return nil
 	case known && !sameFile(id, now, own):
-		b.l.log.Warn("a book tool leaves a file it did not write", "task", b.t.ID, "file", b.l.scrubStoragePaths(path))
+		b.l.log.Warn("a book tool leaves a file it did not write", "task", b.t.ID, "file", b.l.Ingest.scrubStoragePaths(path))
 		return nil
 	case !known && !own:
-		b.l.log.Warn("a book tool leaves a file it has no record of", "task", b.t.ID, "file", b.l.scrubStoragePaths(path))
+		b.l.log.Warn("a book tool leaves a file it has no record of", "task", b.t.ID, "file", b.l.Ingest.scrubStoragePaths(path))
 		return nil
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -501,7 +501,7 @@ func (b *bookTool) endWaits(ctx context.Context, cause error) error {
 	why := fmt.Sprintf("gave up waiting after %s (%s)", toolWaitCap, toolFailure(cause).Msg)
 	if b.p.Step == toolStepPlacing && b.allPlaced() {
 		e := &Error{Kind: KindInternal, Err: errToolPermanent, Msg: fmt.Sprintf(
-			"%s; the new files are in %s, and the next scan of the library will catalog them", why, b.l.scrubStoragePaths(b.dir))}
+			"%s; the new files are in %s, and the next scan of the library will catalog them", why, b.l.Ingest.scrubStoragePaths(b.dir))}
 		// The new files have their names and hold what the trash took.
 		b.settleTrashOrLog(ctx)
 		b.auditFailed(ctx, e)
@@ -562,7 +562,7 @@ func (b *bookTool) check(ctx context.Context) error {
 		}
 	}
 	for _, path := range paths {
-		if err := b.l.checkPathWritable(ctx, path); err != nil {
+		if err := b.l.Settings.checkPathWritable(ctx, path); err != nil {
 			if KindOf(err) == KindReadOnly && b.p.Step == "" {
 				return &Error{Kind: KindReadOnly, Err: errToolPermanent, Msg: err.Error()}
 			}
@@ -575,7 +575,7 @@ func (b *bookTool) check(ctx context.Context) error {
 	if b.p.Step == "" || b.p.Step == toolStepStaged {
 		for _, name := range b.names {
 			if b.heldByAnother(ctx, filepath.Join(b.dir, name)) {
-				folder := b.l.scrubStoragePaths(b.dir)
+				folder := b.l.Ingest.scrubStoragePaths(b.dir)
 				e := toolRefusal(refusalNameTaken, fmt.Sprintf(
 					"%s is already in %s; move it away to %s the book", name, folder, b.verb),
 					"name", name, "folder", folder)
@@ -628,7 +628,7 @@ func (b *bookTool) unchanged(ctx context.Context) error {
 		switch {
 		case ours[r.FilePID]:
 		case r.Role == fileRoleAlternate:
-			place, lib := b.l.scrubStoragePaths(r.DisplayPath), b.l.libraryNameOf(r.DisplayPath)
+			place, lib := b.l.Ingest.scrubStoragePaths(r.DisplayPath), b.l.libraryNameOf(r.DisplayPath)
 			where := place
 			if lib != "" {
 				where += " in the " + lib + " library"
@@ -656,7 +656,7 @@ func (b *bookTool) unchanged(ctx context.Context) error {
 // queued.
 func (b *bookTool) changed(what string) error {
 	return &Error{Kind: KindConflict, Err: errToolPermanent,
-		Msg: fmt.Sprintf("the book changed since the %s was queued: %s", b.verb, b.l.scrubStoragePaths(what))}
+		Msg: fmt.Sprintf("the book changed since the %s was queued: %s", b.verb, b.l.Ingest.scrubStoragePaths(what))}
 }
 
 // present are the indexes of the sources the book still holds, each
@@ -733,7 +733,7 @@ func (b *bookTool) makeRoom(ctx context.Context) error {
 		if err := b.l.db.RecordToolTrash(ctx, string(b.book), b.t.ID, froms); err != nil {
 			return b.wait(ctx, &Error{Kind: KindInternal, Err: err})
 		}
-		if err := b.l.toolCrashPoint("trashing"); err != nil {
+		if err := b.l.crashPoint("trashing"); err != nil {
 			return err
 		}
 		if _, err := b.l.trashToolFiles(context.WithoutCancel(ctx), files, b.reason); err != nil {
@@ -745,7 +745,7 @@ func (b *bookTool) makeRoom(ctx context.Context) error {
 			return b.wait(ctx, err)
 		}
 	}
-	if err := b.l.toolCrashPoint("trashed"); err != nil {
+	if err := b.l.crashPoint("trashed"); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
@@ -774,7 +774,7 @@ func (b *bookTool) restage(ctx context.Context) error {
 		}
 		if !back {
 			e := &Error{Kind: KindInternal, Err: errToolPermanent,
-				Msg: fmt.Sprintf("the %s's output went from %s, and a file its trash took is gone from the trash", b.verb, b.l.scrubStoragePaths(b.dir))}
+				Msg: fmt.Sprintf("the %s's output went from %s, and a file its trash took is gone from the trash", b.verb, b.l.Ingest.scrubStoragePaths(b.dir))}
 			if where := b.whereEnded(ctx); where != "" {
 				e.Msg += "; " + where
 			}
@@ -833,7 +833,7 @@ func (b *bookTool) stranded(ctx context.Context, present []int) (int, bool) {
 // outputs, which hold that source's audio, saying where to look.
 func (b *bookTool) strand(ctx context.Context, i int) error {
 	path := b.current(ctx, i)
-	why := fmt.Sprintf("%s is not where the catalog has it", b.l.scrubStoragePaths(path))
+	why := fmt.Sprintf("%s is not where the catalog has it", b.l.Ingest.scrubStoragePaths(path))
 	if b.p.TrashFromNS != 0 {
 		why += fmt.Sprintf("; if the trash moved it without a record, it is in the %s folder of the %s library",
 			model.TrashDirName, cmp.Or(b.l.libraryNameOf(path), "book's"))
@@ -918,7 +918,7 @@ func (b *bookTool) undo(ctx context.Context) error {
 	if err := b.mark(ctx, ""); err != nil {
 		b.l.log.Warn("recording a book tool's undo", "task", b.t.ID, "err", err)
 	}
-	if err := b.l.toolCrashPoint("undone"); err != nil {
+	if err := b.l.crashPoint("undone"); err != nil {
 		return err
 	}
 	return e
@@ -929,7 +929,7 @@ func (b *bookTool) undo(ctx context.Context) error {
 // the catalog moved it since. A catalog that cannot be read is no answer:
 // the error, for the run to wait out.
 func (b *bookTool) backInPlace(ctx context.Context) (bool, error) {
-	refs, err := b.l.toolItemFiles(ctx, b.book)
+	refs, err := b.l.itemFiles(ctx, b.book)
 	if err != nil {
 		return false, classify(err)
 	}
@@ -1209,7 +1209,7 @@ func (b *bookTool) place(ctx context.Context) error {
 		}
 		if !onDisk(staged) {
 			gone := &Error{Kind: KindInternal, Err: errToolPermanent, Msg: fmt.Sprintf(
-				"%s went from %s before it took its name", filepath.Base(staged), b.l.scrubStoragePaths(b.dir))}
+				"%s went from %s before it took its name", filepath.Base(staged), b.l.Ingest.scrubStoragePaths(b.dir))}
 			if b.p.Forward {
 				if where := b.whereEnded(ctx); where != "" {
 					gone.Msg += "; " + where
@@ -1246,13 +1246,13 @@ func (b *bookTool) place(ctx context.Context) error {
 	}
 	backupFsyncDir(b.dir)
 	if stuck > 0 {
-		msg := fmt.Sprintf("%d of %d files could not take their names in %s (%s)", stuck, len(b.names), b.l.scrubStoragePaths(b.dir), cause)
+		msg := fmt.Sprintf("%d of %d files could not take their names in %s (%s)", stuck, len(b.names), b.l.Ingest.scrubStoragePaths(b.dir), cause)
 		if where := b.whereLeft(ctx); where != "" {
 			msg += "; " + where
 		}
 		return b.wait(ctx, errors.New(msg))
 	}
-	if err := b.l.toolCrashPoint("placed"); err != nil {
+	if err := b.l.crashPoint("placed"); err != nil {
 		return err
 	}
 	placed := make([]string, len(b.names))
@@ -1275,7 +1275,7 @@ func (b *bookTool) place(ctx context.Context) error {
 	if err := b.mark(ctx, toolStepCataloged); err != nil {
 		return b.wait(ctx, err)
 	}
-	return b.l.toolCrashPoint("cataloged")
+	return b.l.crashPoint("cataloged")
 }
 
 // complete carries every account's place in the book onto the book the
@@ -1313,7 +1313,7 @@ func (b *bookTool) complete(ctx context.Context) ([]string, error) {
 		detail["alsoHolds"] = others
 	}
 	b.l.auditToolOnce(ctx, b.t, b.action(), b.target(), detail)
-	if err := b.l.toolCrashPoint("audited"); err != nil {
+	if err := b.l.crashPoint("audited"); err != nil {
 		return nil, err
 	}
 	os.RemoveAll(b.workspace())
@@ -1330,7 +1330,7 @@ func (b *bookTool) others(ctx context.Context, book model.PID) []string {
 	var out []string
 	for _, r := range refs {
 		if !slices.Contains(b.p.Placed, string(r.Path)) {
-			out = append(out, b.l.scrubStoragePaths(r.DisplayPath))
+			out = append(out, b.l.Ingest.scrubStoragePaths(r.DisplayPath))
 		}
 	}
 	return out
@@ -1351,7 +1351,7 @@ func (r *toolRun) begin(ctx context.Context, whereLeft func(context.Context) str
 		}
 		r.l.log.Warn("a tool task is parked", "task", r.t.ID, "type", r.t.Type, "runs", crashed)
 		// Nothing more comes of its workspace, outside the library.
-		os.RemoveAll(filepath.Join(r.l.stagingDir, "tools", r.t.ID))
+		os.RemoveAll(filepath.Join(r.l.Ingest.stagingDir, "tools", r.t.ID))
 		r.l.notifyToolTask(ctx, r.t.ID)
 		r.t.State, r.t.Error = taskStateParked, why
 		r.l.notifyFileToolEnd(ctx, r.t)
@@ -1381,7 +1381,7 @@ func (r *toolRun) wait(ctx context.Context, err error) error {
 		r.l.log.Warn("recording a tool's wait", "task", r.t.ID, "err", serr)
 	}
 	// A folder that refused the write has the libraries probed again.
-	r.l.storageRefused(err.Error())
+	r.l.Roots.storageRefused(err.Error())
 	return &toolRetry{after: toolBackoff(r.p.Waits), err: err, reason: waitReasonOf(err)}
 }
 
@@ -1453,7 +1453,7 @@ func (b *bookTool) whereLeft(ctx context.Context) string {
 	if ours, err := b.ourTrash(ctx, false); err == nil && len(ours) > 0 {
 		names := make([]string, len(ours))
 		for i, e := range ours {
-			names[i] = b.l.scrubStoragePaths(e.OrigDisplay)
+			names[i] = b.l.Ingest.scrubStoragePaths(e.OrigDisplay)
 		}
 		said = append(said, fmt.Sprintf("the trash holds %d of the book's files under %s: %s",
 			len(ours), b.reason, strings.Join(names, ", ")))
@@ -1463,7 +1463,7 @@ func (b *bookTool) whereLeft(ctx context.Context) string {
 			waiting = append(waiting, filepath.Base(staged))
 		}
 	}
-	where := b.l.scrubStoragePaths(b.dir)
+	where := b.l.Ingest.scrubStoragePaths(b.dir)
 	if len(waiting) > 0 {
 		what := fmt.Sprintf("%d pieces wait", len(waiting))
 		if b.reason == taskTypeBookMerge {
@@ -1520,7 +1520,7 @@ func (b *bookTool) partsInPlace(ctx context.Context) bool {
 	if len(b.sources) == 0 {
 		return true
 	}
-	refs, err := b.l.toolItemFiles(ctx, b.book)
+	refs, err := b.l.itemFiles(ctx, b.book)
 	if err != nil {
 		return false
 	}
@@ -1572,7 +1572,7 @@ func (b *bookTool) settleCleared(ctx context.Context) clearOutcome {
 			out.cause = cmp.Or(out.cause, b.l.failureCause(err.Error()))
 			continue
 		}
-		out.named = append(out.named, b.l.scrubStoragePaths(final))
+		out.named = append(out.named, b.l.Ingest.scrubStoragePaths(final))
 	}
 	backupFsyncDir(b.dir)
 	if len(out.stuck) == 0 {
@@ -1603,7 +1603,7 @@ func (b *bookTool) discard() {
 
 // workspace is where the engine's outputs are made, outside the library.
 func (b *bookTool) workspace() string {
-	return filepath.Join(b.l.stagingDir, "tools", b.t.ID)
+	return filepath.Join(b.l.Ingest.stagingDir, "tools", b.t.ID)
 }
 
 // auditFailed records a run that failed once some of the book had gone
@@ -1622,7 +1622,7 @@ func (b *bookTool) auditFailed(ctx context.Context, cause error) {
 	}
 	b.l.auditToolOnce(ctx, b.t, b.action(), b.target(), map[string]any{
 		"result": "failed", "trashed": len(ours), "restored": restored, "keepOriginals": b.p.KeepOriginals,
-		"library": b.l.libraryNameOf(b.dir), "error": b.l.failureWords(taskFailureText(cause)),
+		"library": b.l.libraryNameOf(b.dir), "error": b.l.Ingest.failureWords(taskFailureText(cause)),
 	})
 }
 
@@ -1643,7 +1643,7 @@ func (b *bookTool) target() AuditTarget {
 // it, with the task in its detail, unless the run is on the record
 // already: a rerun after a crash past the record does not record it
 // twice.
-func (l *Library) auditToolOnce(ctx context.Context, t *wdb.ToolTask, action string, target AuditTarget, detail map[string]any) {
+func (l *Tools) auditToolOnce(ctx context.Context, t *wdb.ToolTask, action string, target AuditTarget, detail map[string]any) {
 	ctx = context.WithoutCancel(ctx)
 	detail["task"] = t.ID
 	rows, err := l.db.ListAudit(ctx, wdb.AuditFilter{Action: action, TargetPID: target.PID}, 0, 50)
@@ -1676,7 +1676,7 @@ func toolFailure(cause error) *Error {
 // put anything into the library that only finishing settles: what it
 // made goes. A run past that is resumable, and the retire pass never
 // takes it.
-func (l *Library) settleRetired(ctx context.Context, t *wdb.ToolTask) {
+func (l *Tools) settleRetired(ctx context.Context, t *wdb.ToolTask) {
 	var p toolTaskParams
 	if err := json.Unmarshal([]byte(t.Params), &p); err != nil || p.Step != "" {
 		return
@@ -1687,12 +1687,12 @@ func (l *Library) settleRetired(ctx context.Context, t *wdb.ToolTask) {
 			b.discard()
 		}
 	case taskTypeCueSplit:
-		os.RemoveAll(filepath.Join(l.stagingDir, "tools", t.ID))
+		os.RemoveAll(filepath.Join(l.Ingest.stagingDir, "tools", t.ID))
 	}
 }
 
 // recordToolTaskDone records a task done with its results.
-func (l *Library) recordToolTaskDone(ctx context.Context, t *wdb.ToolTask, results []string) {
+func (l *Tools) recordToolTaskDone(ctx context.Context, t *wdb.ToolTask, results []string) {
 	t.State = taskStateDone
 	t.ProgressPct = 100
 	t.Error = ""
@@ -1706,7 +1706,7 @@ func (l *Library) recordToolTaskDone(ctx context.Context, t *wdb.ToolTask, resul
 // trashToolFiles moves a book tool's sources to the trash under its
 // reason, every one, or the failure says which stayed and why; it answers
 // how many went.
-func (l *Library) trashToolFiles(ctx context.Context, files []model.PID, reason string) (int, error) {
+func (l *Tools) trashToolFiles(ctx context.Context, files []model.PID, reason string) (int, error) {
 	plan, err := l.lib.PlanDeleteFiles(ctx, files, model.DeleteTrash, waxbin.DeleteReason(reason))
 	if err != nil {
 		return 0, classify(err)

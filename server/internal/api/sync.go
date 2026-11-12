@@ -183,7 +183,7 @@ func (s *Server) GetDownloadInfo(ctx context.Context, req GetDownloadInfoRequest
 	if s.media == nil {
 		return nil, errStreamingUnavailable
 	}
-	res, err := s.svc.DownloadInfo(ctx, uc, req.Pid)
+	res, err := s.svc.Playback.DownloadInfo(ctx, uc, req.Pid)
 	if err != nil {
 		if errors.Is(err, service.ErrEpisodeNotFetched) {
 			return nil, refuse(http.StatusNotFound, "not-found", "the episode's audio is not on this server; fetch it before downloading")
@@ -226,7 +226,7 @@ func (s *Server) GetDownloadInfo(ctx context.Context, req GetDownloadInfoRequest
 
 func (s *Server) ListAppPasswords(ctx context.Context, _ ListAppPasswordsRequestObject) (ListAppPasswordsResponseObject, error) {
 	uc := userCtx(ctx)
-	rows, err := s.svc.AppPasswords(ctx, uc)
+	rows, err := s.svc.Identity.AppPasswords(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +242,7 @@ func (s *Server) CreateAppPassword(ctx context.Context, req CreateAppPasswordReq
 		return nil, errNoBody()
 	}
 	uc := userCtx(ctx)
-	created, err := s.svc.CreateAppPassword(ctx, uc, req.Body.Label)
+	created, err := s.svc.Identity.CreateAppPassword(ctx, uc, req.Body.Label)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func (s *Server) CreateAppPassword(ctx context.Context, req CreateAppPasswordReq
 
 func (s *Server) RevokeAppPassword(ctx context.Context, req RevokeAppPasswordRequestObject) (RevokeAppPasswordResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.RevokeAppPassword(ctx, uc, req.AppPasswordId); err != nil {
+	if err := s.svc.Identity.RevokeAppPassword(ctx, uc, req.AppPasswordId); err != nil {
 		return nil, err
 	}
 	return RevokeAppPassword204Response{}, nil

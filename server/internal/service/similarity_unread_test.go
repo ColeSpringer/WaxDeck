@@ -34,11 +34,11 @@ func TestAFailedReadSpendsNoSonicAttempt(t *testing.T) {
 		read  func(ctx context.Context, svc *Library) error
 	}{
 		{"embedded", embeddedAnalysisBatch, func(ctx context.Context, svc *Library) error {
-			_, err := svc.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{})
+			_, err := svc.Similarity.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{})
 			return err
 		}},
 		{"leased", 50, func(ctx context.Context, svc *Library) error {
-			_, err := svc.LeaseSimilarityWork(ctx, 50, true)
+			_, err := svc.Similarity.LeaseSimilarityWork(ctx, 50, true)
 			return err
 		}},
 	} {
@@ -83,7 +83,7 @@ func TestAnInterruptedSonicBatchSpendsNoAttempt(t *testing.T) {
 	}{
 		{"embedded, a hand-off at a read", func(ctx context.Context, svc *Library) {
 			svc.catalogItem = func(context.Context, model.PID) (*model.ItemView, error) { return nil, closed }
-			svc.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{})
+			svc.Similarity.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{})
 		}},
 		{"embedded, a hand-off at the report", func(ctx context.Context, svc *Library) {
 			read, reads := svc.catalogItem, map[model.PID]int{}
@@ -94,12 +94,12 @@ func TestAnInterruptedSonicBatchSpendsNoAttempt(t *testing.T) {
 				}
 				return read(ctx, pid)
 			}
-			svc.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{})
+			svc.Similarity.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{})
 		}},
 		{"embedded, a shutdown mid-decode", func(ctx context.Context, svc *Library) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
-			svc.DrainEmbeddedAnalysis(ctx, &cancellingAnalyzer{cancel: cancel})
+			svc.Similarity.DrainEmbeddedAnalysis(ctx, &cancellingAnalyzer{cancel: cancel})
 		}},
 		{"embedded, a shutdown at a read", func(ctx context.Context, svc *Library) {
 			ctx, cancel := context.WithCancel(ctx)
@@ -108,11 +108,11 @@ func TestAnInterruptedSonicBatchSpendsNoAttempt(t *testing.T) {
 				cancel()
 				return nil, ctx.Err()
 			}
-			svc.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{})
+			svc.Similarity.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{})
 		}},
 		{"leased, a hand-off at a read", func(ctx context.Context, svc *Library) {
 			svc.catalogItem = func(context.Context, model.PID) (*model.ItemView, error) { return nil, closed }
-			svc.LeaseSimilarityWork(ctx, 50, true)
+			svc.Similarity.LeaseSimilarityWork(ctx, 50, true)
 		}},
 		{"leased, a request ending after a row was ready", func(ctx context.Context, svc *Library) {
 			ctx, cancel := context.WithCancel(ctx)
@@ -125,7 +125,7 @@ func TestAnInterruptedSonicBatchSpendsNoAttempt(t *testing.T) {
 				}
 				return read(rctx, pid)
 			}
-			svc.LeaseSimilarityWork(ctx, 50, true)
+			svc.Similarity.LeaseSimilarityWork(ctx, 50, true)
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -170,7 +170,7 @@ func TestAnUnreadableTrackInAReportSettlesOnlyItsVector(t *testing.T) {
 		return read(ctx, pid)
 	}
 
-	res, err := svc.IngestEmbeddings(ctx, "test", 8, uploads)
+	res, err := svc.Similarity.IngestEmbeddings(ctx, "test", 8, uploads)
 	if err != nil {
 		t.Fatalf("report with one unreadable track: %v, want the rest filed", err)
 	}
@@ -204,7 +204,7 @@ func TestAReportMeetingAHandOffEndsWithItsWorkQueued(t *testing.T) {
 		return nil, errors.New("database is closed")
 	}
 
-	if _, err := svc.IngestEmbeddings(ctx, "test", 8, uploads); KindOf(err) != KindMaintenance {
+	if _, err := svc.Similarity.IngestEmbeddings(ctx, "test", 8, uploads); KindOf(err) != KindMaintenance {
 		t.Errorf("report during a hand-off: %v, want a catalog-maintenance failure", err)
 	}
 	if got := embeddingCount(t, ctx, svc); got != 0 {
@@ -234,7 +234,7 @@ func TestAnUnreadableTrackAfterItsDecodeLeavesTheBatchServed(t *testing.T) {
 		return read(ctx, pid)
 	}
 
-	if worked, err := svc.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{}); !worked || err != nil {
+	if worked, err := svc.Similarity.DrainEmbeddedAnalysis(ctx, &windowAnalyzer{}); !worked || err != nil {
 		t.Fatalf("drain = %v, %v; want the batch served", worked, err)
 	}
 	if bad == "" {
@@ -270,13 +270,13 @@ func TestAShutdownMidDecodeRestsNothing(t *testing.T) {
 	logs := &syncBuffer{}
 	ctx, svc, uc := newCatalogFixtureWith(t, catalogFixtureOptions{logs: logs})
 	enableSonicAnalysis(t, ctx, svc, uc)
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	drainCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	if _, err := svc.DrainEmbeddedAnalysis(drainCtx, &cancellingAnalyzer{cancel: cancel}); err != nil {
+	if _, err := svc.Similarity.DrainEmbeddedAnalysis(drainCtx, &cancellingAnalyzer{cancel: cancel}); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(logs.String(), "it rests until its audio changes") {
@@ -300,13 +300,13 @@ func TestAShutdownBeforeTheLeaseIsNoFailure(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixtureWith(t, catalogFixtureOptions{logs: &syncBuffer{}})
 	enableSonicAnalysis(t, ctx, svc, uc)
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	drainCtx, cancel := context.WithCancel(ctx)
 	cancel()
 
-	worked, err := svc.DrainEmbeddedAnalysis(drainCtx, &cancellingAnalyzer{cancel: cancel})
+	worked, err := svc.Similarity.DrainEmbeddedAnalysis(drainCtx, &cancellingAnalyzer{cancel: cancel})
 	if err != nil || worked {
 		t.Errorf("a drain stopped before its lease = %v, %v; want no work and no error", worked, err)
 	}

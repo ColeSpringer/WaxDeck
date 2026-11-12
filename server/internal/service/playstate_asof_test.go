@@ -22,7 +22,7 @@ import (
 // writes below address.
 func fixtureTrackPID(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, title string) (string, model.PID) {
 	t.Helper()
-	page, err := svc.Items(ctx, uc, ItemFilter{MediaType: "music"}, "", 50)
+	page, err := svc.Reads.Items(ctx, uc, ItemFilter{MediaType: "music"}, "", 50)
 	if err != nil {
 		t.Fatalf("listing items: %v", err)
 	}
@@ -49,7 +49,7 @@ func fixtureTrackPID(t *testing.T, ctx context.Context, svc *Library, uc *UserCt
 func TestTrackFactsCarryEntityPIDs(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	rows, err := svc.TrackFacts(ctx, uc)
+	rows, err := svc.Reads.TrackFacts(ctx, uc)
 	if err != nil {
 		t.Fatalf("TrackFacts: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestReplayedStarLosesToLaterOutOfBandChange(t *testing.T) {
 
 	// An offline star recorded two hours ago replays first and applies.
 	old := time.Now().Add(-2 * time.Hour)
-	if st, err := svc.SetStar(ctx, uc, pid, true, &old); err != nil || !st.Starred {
+	if st, err := svc.Playback.SetStar(ctx, uc, pid, true, &old); err != nil || !st.Starred {
 		t.Fatalf("first replay: %+v (%v), want starred", st, err)
 	}
 
@@ -97,7 +97,7 @@ func TestReplayedStarLosesToLaterOutOfBandChange(t *testing.T) {
 	// A queue flushed afterwards, still carrying an hour-old star, must
 	// not resurrect it.
 	stale := time.Now().Add(-time.Hour)
-	st, err := svc.SetStar(ctx, uc, pid, true, &stale)
+	st, err := svc.Playback.SetStar(ctx, uc, pid, true, &stale)
 	if err != nil {
 		t.Fatalf("stale replay: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestReplayedStarLosesToLaterOutOfBandChange(t *testing.T) {
 	}
 
 	// A live toggle carries no recorded time and always wins.
-	if st, err := svc.SetStar(ctx, uc, pid, true, nil); err != nil || !st.Starred {
+	if st, err := svc.Playback.SetStar(ctx, uc, pid, true, nil); err != nil || !st.Starred {
 		t.Fatalf("live star: %+v (%v), want starred", st, err)
 	}
 }
@@ -118,7 +118,7 @@ func TestReplayedRatingLosesToLaterOutOfBandChange(t *testing.T) {
 
 	old := time.Now().Add(-2 * time.Hour)
 	forty := 40
-	if st, err := svc.SetRating(ctx, uc, pid, &forty, &old); err != nil || st.Rating == nil || *st.Rating != 40 {
+	if st, err := svc.Playback.SetRating(ctx, uc, pid, &forty, &old); err != nil || st.Rating == nil || *st.Rating != 40 {
 		t.Fatalf("first replay: %+v (%v), want rating 40", st, err)
 	}
 
@@ -129,7 +129,7 @@ func TestReplayedRatingLosesToLaterOutOfBandChange(t *testing.T) {
 
 	stale := time.Now().Add(-time.Hour)
 	sixty := 60
-	st, err := svc.SetRating(ctx, uc, pid, &sixty, &stale)
+	st, err := svc.Playback.SetRating(ctx, uc, pid, &sixty, &stale)
 	if err != nil {
 		t.Fatalf("stale replay: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestStarLandsInRecordedTime(t *testing.T) {
 	pid, catalogPID := fixtureTrackPID(t, ctx, svc, uc, "Cobalt Sky")
 
 	when := time.Date(2024, 3, 4, 5, 6, 7, 0, time.UTC)
-	if _, err := svc.SetStar(ctx, uc, pid, true, &when); err != nil {
+	if _, err := svc.Playback.SetStar(ctx, uc, pid, true, &when); err != nil {
 		t.Fatalf("SetStar: %v", err)
 	}
 	st, err := svc.lib.Playback().State(ctx, model.PID(uc.CatalogPID), catalogPID)
@@ -172,7 +172,7 @@ func TestFutureRecordedStarClamps(t *testing.T) {
 
 	future := time.Now().Add(72 * time.Hour)
 	before := time.Now()
-	if _, err := svc.SetStar(ctx, uc, pid, true, &future); err != nil {
+	if _, err := svc.Playback.SetStar(ctx, uc, pid, true, &future); err != nil {
 		t.Fatalf("SetStar: %v", err)
 	}
 	st, err := svc.lib.Playback().State(ctx, model.PID(uc.CatalogPID), catalogPID)
@@ -185,7 +185,7 @@ func TestFutureRecordedStarClamps(t *testing.T) {
 	}
 
 	// Clamped, so an ordinary live unstar right after still wins.
-	if st, err := svc.SetStar(ctx, uc, pid, false, nil); err != nil || st.Starred {
+	if st, err := svc.Playback.SetStar(ctx, uc, pid, false, nil); err != nil || st.Starred {
 		t.Fatalf("live unstar: %+v (%v), want unstarred", st, err)
 	}
 }

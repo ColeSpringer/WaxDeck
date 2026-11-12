@@ -111,7 +111,7 @@ func (s *Server) userContextMiddleware(f StrictHandlerFunc, operationID string) 
 		if s.svc == nil {
 			return f(ctx, w, r, request)
 		}
-		uc, err := s.svc.UserCtx(ctx, p.User)
+		uc, err := s.svc.Grants.UserCtx(ctx, p.User)
 		if err != nil {
 			return nil, err
 		}

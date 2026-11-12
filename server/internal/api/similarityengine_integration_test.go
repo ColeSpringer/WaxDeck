@@ -28,7 +28,7 @@ func pullWork(t *testing.T, h *harness) SimilarityWorkPage {
 func queueLibrary(t *testing.T, h *harness) {
 	t.Helper()
 	wantStatus(t, h.putJSON(t, "/api/v1/admin/settings", map[string]any{"sonicAnalysis": true}), 200, "turning analysis on")
-	if _, err := h.svc.SimilaritySweep(context.Background()); err != nil {
+	if _, err := h.svc.Similarity.Sweep(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -57,7 +57,7 @@ func (s *Server) editResultJSON(ctx context.Context, uc *service.UserCtx, o serv
 // writeBackFailuresJSON renders a write-back's failures as the caller
 // may read them: only an administrator reads every file, by its path.
 func (s *Server) writeBackFailuresJSON(ctx context.Context, uc *service.UserCtx, failures []service.WriteBackFailureDTO) []WriteBackFailure {
-	return narrowedWriteBackFailuresJSON(s.svc.WriteBackFailuresFor(ctx, uc, failures))
+	return narrowedWriteBackFailuresJSON(s.svc.Editor.WriteBackFailuresFor(ctx, uc, failures))
 }
 
 // narrowedWriteBackFailuresJSON renders failures the service already
@@ -184,7 +184,7 @@ func itemMetadataJSON(d service.ItemMetadataDTO) ItemMetadata {
 // --- vocabulary and reads ---------------------------------------------------------
 
 func (s *Server) GetMetadataFields(ctx context.Context, _ GetMetadataFieldsRequestObject) (GetMetadataFieldsResponseObject, error) {
-	vocab := s.svc.MetadataFieldVocabulary()
+	vocab := s.svc.Editor.MetadataFieldVocabulary()
 	out := MetadataFields{
 		Kinds:       make([]KindFields, 0, len(vocab.Kinds)),
 		EntityTypes: make([]EntityTypeFields, 0, len(vocab.EntityTypes)),
@@ -211,7 +211,7 @@ func (s *Server) GetMetadataFields(ctx context.Context, _ GetMetadataFieldsReque
 
 func (s *Server) GetItemPermissions(ctx context.Context, req GetItemPermissionsRequestObject) (GetItemPermissionsResponseObject, error) {
 	uc := userCtx(ctx)
-	may, err := s.svc.MayCurateItem(ctx, uc, string(req.Pid))
+	may, err := s.svc.Ingest.MayCurateItem(ctx, uc, string(req.Pid))
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +220,7 @@ func (s *Server) GetItemPermissions(ctx context.Context, req GetItemPermissionsR
 
 func (s *Server) GetItemMetadata(ctx context.Context, req GetItemMetadataRequestObject) (GetItemMetadataResponseObject, error) {
 	uc := userCtx(ctx)
-	d, err := s.svc.ItemMetadataFor(ctx, uc, req.Pid)
+	d, err := s.svc.Editor.ItemMetadataFor(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ func (s *Server) GetItemMetadata(ctx context.Context, req GetItemMetadataRequest
 
 func (s *Server) EditItemMetadata(ctx context.Context, req EditItemMetadataRequestObject) (EditItemMetadataResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if req.Body == nil {
@@ -240,7 +240,7 @@ func (s *Server) EditItemMetadata(ctx context.Context, req EditItemMetadataReque
 	if len(req.Body.Fields) == 0 {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", "a fields body is required")
 	}
-	out, err := s.svc.EditItemMetadata(ctx, uc, req.Pid, req.Body.Fields,
+	out, err := s.svc.Editor.EditItemMetadata(ctx, uc, req.Pid, req.Body.Fields,
 		editParams(req.Body.WriteBack, req.Body.Lock, req.Body.Force))
 	if err != nil {
 		return nil, err
@@ -261,13 +261,13 @@ func (s *Server) EditItemMetadata(ctx context.Context, req EditItemMetadataReque
 // The refusals below are for a request that commits nothing at all.
 func (s *Server) CommitItemMetadata(ctx context.Context, req CommitItemMetadataRequestObject) (CommitItemMetadataResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	out, err := s.svc.CommitItemMetadata(ctx, uc, req.Pid, metadataCommitDTO(*req.Body))
+	out, err := s.svc.Editor.CommitItemMetadata(ctx, uc, req.Pid, metadataCommitDTO(*req.Body))
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +377,7 @@ func (s *Server) BulkEditMetadata(ctx context.Context, req BulkEditMetadataReque
 	if len(req.Body.ItemPids) == 0 || len(req.Body.Fields) == 0 {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", "itemPids and fields are required")
 	}
-	out, err := s.svc.BulkEditMetadata(ctx, uc, req.Body.ItemPids, req.Body.Fields,
+	out, err := s.svc.Editor.BulkEditMetadata(ctx, uc, req.Body.ItemPids, req.Body.Fields,
 		derefBool(req.Body.WriteBack), derefBool(req.Body.SkipLocked), derefBool(req.Body.Force))
 	if err != nil {
 		return nil, err
@@ -396,7 +396,7 @@ func (s *Server) BulkEditMetadata(ctx context.Context, req BulkEditMetadataReque
 
 func (s *Server) SetItemCredits(ctx context.Context, req SetItemCreditsRequestObject) (SetItemCreditsResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if req.Body == nil {
@@ -405,7 +405,7 @@ func (s *Server) SetItemCredits(ctx context.Context, req SetItemCreditsRequestOb
 	if req.Body.Role == "" {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", "a role body is required")
 	}
-	out, err := s.svc.SetItemCredits(ctx, uc, req.Pid, req.Body.Role, req.Body.Names,
+	out, err := s.svc.Editor.SetItemCredits(ctx, uc, req.Pid, req.Body.Role, req.Body.Names,
 		editParams(req.Body.WriteBack, req.Body.Lock, req.Body.Force))
 	if err != nil {
 		return nil, err
@@ -417,13 +417,13 @@ func (s *Server) SetItemCredits(ctx context.Context, req SetItemCreditsRequestOb
 
 func (s *Server) SetItemLyrics(ctx context.Context, req SetItemLyricsRequestObject) (SetItemLyricsResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	out, err := s.svc.SetItemLyrics(ctx, uc, req.Pid, deref(req.Body.Lrc), deref(req.Body.Plain),
+	out, err := s.svc.Editor.SetItemLyrics(ctx, uc, req.Pid, deref(req.Body.Lrc), deref(req.Body.Plain),
 		editParams(req.Body.WriteBack, req.Body.Lock, req.Body.Force))
 	if err != nil {
 		return nil, err
@@ -433,10 +433,10 @@ func (s *Server) SetItemLyrics(ctx context.Context, req SetItemLyricsRequestObje
 
 func (s *Server) ClearItemLyrics(ctx context.Context, req ClearItemLyricsRequestObject) (ClearItemLyricsResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
-	out, err := s.svc.ClearItemLyrics(ctx, uc, req.Pid,
+	out, err := s.svc.Editor.ClearItemLyrics(ctx, uc, req.Pid,
 		service.MetadataEditParams{WriteBack: derefBool(req.Params.WriteBack)})
 	if err != nil {
 		return nil, err
@@ -452,7 +452,7 @@ func (s *Server) ClearItemLyrics(ctx context.Context, req ClearItemLyricsRequest
 
 func (s *Server) SetBookChapters(ctx context.Context, req SetBookChaptersRequestObject) (SetBookChaptersResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if req.Body == nil {
@@ -462,7 +462,7 @@ func (s *Server) SetBookChapters(ctx context.Context, req SetBookChaptersRequest
 	for _, ch := range req.Body.Chapters {
 		chapters = append(chapters, chapterMarkDTO(ch))
 	}
-	out, err := s.svc.SetBookChapters(ctx, uc, req.Pid, chapters,
+	out, err := s.svc.Editor.SetBookChapters(ctx, uc, req.Pid, chapters,
 		boolOr(req.Body.Lock, true), derefBool(req.Body.Force))
 	if err != nil {
 		return nil, err
@@ -483,7 +483,7 @@ func readArtworkBody(body io.Reader) ([]byte, error) {
 
 func (s *Server) SetItemArtwork(ctx context.Context, req SetItemArtworkRequestObject) (SetItemArtworkResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	// Reject a bad role before buffering up to 16 MiB of image body.
@@ -494,7 +494,7 @@ func (s *Server) SetItemArtwork(ctx context.Context, req SetItemArtworkRequestOb
 	if err != nil {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", "reading the image body failed")
 	}
-	out, err := s.svc.SetItemArtwork(ctx, uc, req.Pid, enumStr(req.Params.Role), raw,
+	out, err := s.svc.Editor.SetItemArtwork(ctx, uc, req.Pid, enumStr(req.Params.Role), raw,
 		derefBool(req.Params.WriteBack), boolOr(req.Params.Lock, true))
 	if err != nil {
 		return nil, err
@@ -504,10 +504,10 @@ func (s *Server) SetItemArtwork(ctx context.Context, req SetItemArtworkRequestOb
 
 func (s *Server) ClearItemArtwork(ctx context.Context, req ClearItemArtworkRequestObject) (ClearItemArtworkResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
-	if err := s.svc.ClearItemArtwork(ctx, uc, req.Pid, enumStr(req.Params.Role)); err != nil {
+	if err := s.svc.Editor.ClearItemArtwork(ctx, uc, req.Pid, enumStr(req.Params.Role)); err != nil {
 		return nil, err
 	}
 	return ClearItemArtwork204Response{}, nil
@@ -557,7 +557,7 @@ func (s *Server) SetEntityArtwork(ctx context.Context, req SetEntityArtworkReque
 	if err != nil {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", "reading the image body failed")
 	}
-	out, err := s.svc.SetEntityArtwork(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role), raw,
+	out, err := s.svc.Editor.SetEntityArtwork(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role), raw,
 		derefBool(req.Params.WriteBack))
 	if err != nil {
 		return nil, err
@@ -573,7 +573,7 @@ func (s *Server) ClearEntityArtwork(ctx context.Context, req ClearEntityArtworkR
 	if req.Params.Role != nil && !req.Params.Role.Valid() {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", "unknown art role")
 	}
-	if err := s.svc.ClearEntityArtwork(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role)); err != nil {
+	if err := s.svc.Editor.ClearEntityArtwork(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role)); err != nil {
 		return nil, err
 	}
 	return ClearEntityArtwork204Response{}, nil
@@ -589,7 +589,7 @@ func (s *Server) GetEntityArtworkLock(ctx context.Context, req GetEntityArtworkL
 	if !entityArtworkPermitted(uc, string(req.EntityType)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", entityArtworkRefusal(string(req.EntityType)))
 	}
-	locked, err := s.svc.EntityArtworkLock(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role))
+	locked, err := s.svc.Editor.EntityArtworkLock(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role))
 	if err != nil {
 		return nil, err
 	}
@@ -607,7 +607,7 @@ func (s *Server) SetEntityArtworkLock(ctx context.Context, req SetEntityArtworkL
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	locked, err := s.svc.SetEntityArtworkLock(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role), req.Body.Locked)
+	locked, err := s.svc.Editor.SetEntityArtworkLock(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role), req.Body.Locked)
 	if err != nil {
 		return nil, err
 	}
@@ -621,13 +621,13 @@ func (s *Server) SetEntityArtworkLock(ctx context.Context, req SetEntityArtworkL
 
 func (s *Server) SetItemTag(ctx context.Context, req SetItemTagRequestObject) (SetItemTagResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	out, err := s.svc.SetItemTag(ctx, uc, req.Pid, req.Key, req.Body.Values,
+	out, err := s.svc.Editor.SetItemTag(ctx, uc, req.Pid, req.Key, req.Body.Values,
 		editParams(req.Body.WriteBack, req.Body.Lock, req.Body.Force))
 	if err != nil {
 		return nil, err
@@ -641,10 +641,10 @@ func (s *Server) SetItemTag(ctx context.Context, req SetItemTagRequestObject) (S
 
 func (s *Server) ClearItemTag(ctx context.Context, req ClearItemTagRequestObject) (ClearItemTagResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
-	out, err := s.svc.ClearItemTag(ctx, uc, req.Pid, req.Key,
+	out, err := s.svc.Editor.ClearItemTag(ctx, uc, req.Pid, req.Key,
 		service.MetadataEditParams{WriteBack: derefBool(req.Params.WriteBack)})
 	if err != nil {
 		return nil, err
@@ -668,7 +668,7 @@ func (s *Server) ClearItemTag(ctx context.Context, req ClearItemTagRequestObject
 
 func (s *Server) SetItemAcquisition(ctx context.Context, req SetItemAcquisitionRequestObject) (SetItemAcquisitionResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if req.Body == nil {
@@ -683,7 +683,7 @@ func (s *Server) SetItemAcquisition(ctx context.Context, req SetItemAcquisitionR
 	if req.Body.AcquiredAt != nil {
 		edit.AcquiredAt = *req.Body.AcquiredAt
 	}
-	out, err := s.svc.SetItemAcquisition(ctx, uc, req.Pid, edit, service.MetadataEditParams{
+	out, err := s.svc.Editor.SetItemAcquisition(ctx, uc, req.Pid, edit, service.MetadataEditParams{
 		WriteBack: derefBool(req.Body.WriteBack),
 		Lock:      boolOr(req.Body.Lock, true),
 		Force:     derefBool(req.Body.Force),
@@ -696,10 +696,10 @@ func (s *Server) SetItemAcquisition(ctx context.Context, req SetItemAcquisitionR
 
 func (s *Server) ClearItemAcquisition(ctx context.Context, req ClearItemAcquisitionRequestObject) (ClearItemAcquisitionResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
-	err := s.svc.ClearItemAcquisition(ctx, uc, req.Pid, service.MetadataEditParams{
+	err := s.svc.Editor.ClearItemAcquisition(ctx, uc, req.Pid, service.MetadataEditParams{
 		WriteBack: derefBool(req.Params.WriteBack),
 		Lock:      boolOr(req.Params.Lock, true),
 		Force:     derefBool(req.Params.Force),
@@ -714,7 +714,7 @@ func (s *Server) ClearItemAcquisition(ctx context.Context, req ClearItemAcquisit
 
 func (s *Server) SetItemLocks(ctx context.Context, req SetItemLocksRequestObject) (SetItemLocksResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if req.Body == nil {
@@ -723,7 +723,7 @@ func (s *Server) SetItemLocks(ctx context.Context, req SetItemLocksRequestObject
 	if len(req.Body.Fields) == 0 {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", "a fields body is required")
 	}
-	locked, err := s.svc.SetItemLocks(ctx, uc, req.Pid, req.Body.Fields, req.Body.Locked)
+	locked, err := s.svc.Editor.SetItemLocks(ctx, uc, req.Pid, req.Body.Fields, req.Body.Locked)
 	if err != nil {
 		return nil, err
 	}
@@ -743,7 +743,7 @@ func (s *Server) EditEntity(ctx context.Context, req EditEntityRequestObject) (E
 	if len(req.Body.Edits) == 0 {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", "an edits body is required")
 	}
-	out, err := s.svc.EditEntity(ctx, string(req.EntityType), req.EntityPid, req.Body.Edits,
+	out, err := s.svc.Editor.EditEntity(ctx, string(req.EntityType), req.EntityPid, req.Body.Edits,
 		editParams(req.Body.WriteBack, req.Body.Lock, req.Body.Force))
 	if err != nil {
 		return nil, err
@@ -768,7 +768,7 @@ func (s *Server) RenameEntity(ctx context.Context, req RenameEntityRequestObject
 	if len(req.Body.Fields) == 0 {
 		return nil, refuse(http.StatusBadRequest, "invalid-request", "a fields body is required")
 	}
-	out, err := s.svc.RenameEntity(ctx, string(req.EntityType), req.EntityPid, req.Body.Fields,
+	out, err := s.svc.Editor.RenameEntity(ctx, string(req.EntityType), req.EntityPid, req.Body.Fields,
 		editParams(req.Body.WriteBack, req.Body.Lock, req.Body.Force))
 	if err != nil {
 		return nil, err
@@ -794,7 +794,7 @@ func (s *Server) RenameEntity(ctx context.Context, req RenameEntityRequestObject
 
 func (s *Server) GetEntityCuration(ctx context.Context, req GetEntityCurationRequestObject) (GetEntityCurationResponseObject, error) {
 	uc := userCtx(ctx)
-	rows, err := s.svc.EntityCurationFor(ctx, uc, string(req.EntityType), req.EntityPid)
+	rows, err := s.svc.Editor.EntityCurationFor(ctx, uc, string(req.EntityType), req.EntityPid)
 	if err != nil {
 		return nil, err
 	}
@@ -820,7 +820,7 @@ func (s *Server) SetItemKind(ctx context.Context, req SetItemKindRequestObject) 
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	job, err := s.svc.SetItemsKind(ctx, uc, req.Body.Pids, string(req.Body.MediaType), derefBool(req.Body.WriteBack))
+	job, err := s.svc.Reads.SetItemsKind(ctx, uc, req.Body.Pids, string(req.Body.MediaType), derefBool(req.Body.WriteBack))
 	if err != nil {
 		return nil, err
 	}
@@ -833,14 +833,14 @@ func (s *Server) SetItemKind(ctx context.Context, req SetItemKindRequestObject) 
 // album's last member).
 func (s *Server) DetachItem(ctx context.Context, req DetachItemRequestObject) (DetachItemResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	writeBack := false
 	if req.Body != nil {
 		writeBack = boolOr(req.Body.WriteBack, false)
 	}
-	out, err := s.svc.DetachItem(ctx, uc, req.Pid, writeBack)
+	out, err := s.svc.Editor.DetachItem(ctx, uc, req.Pid, writeBack)
 	if err != nil {
 		return nil, err
 	}
@@ -861,13 +861,13 @@ func (s *Server) DetachItem(ctx context.Context, req DetachItemRequestObject) (D
 
 func (s *Server) SetReleaseStatus(ctx context.Context, req SetReleaseStatusRequestObject) (SetReleaseStatusResponseObject, error) {
 	uc := userCtx(ctx)
-	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
+	if !s.svc.Ingest.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return nil, refuse(http.StatusForbidden, "forbidden", "administrators, or the user whose upload brought the item in")
 	}
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	out, err := s.svc.SetReleaseStatus(ctx, uc, req.Pid, req.Body.Unofficial,
+	out, err := s.svc.Editor.SetReleaseStatus(ctx, uc, req.Pid, req.Body.Unofficial,
 		service.MetadataEditParams{WriteBack: derefBool(req.Body.WriteBack)})
 	if err != nil {
 		return nil, err

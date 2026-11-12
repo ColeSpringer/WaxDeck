@@ -204,7 +204,7 @@ func (p *watchPending) restore(dirs []string, now time.Time) {
 // watchLibraries runs the live watcher until ctx ends. Spawned by Open
 // under the supervised group; an error return restarts it with backoff,
 // a nil return - no event facility at all - degrades to the scan
-// schedule for good. Pending directories live on the Library and so
+// schedule for good. Pending directories live on Roots and so
 // survive a re-arm: a runtime library create cannot drop changes the
 // other roots had already noticed.
 //
@@ -215,7 +215,7 @@ func (p *watchPending) restore(dirs []string, now time.Time) {
 // read is a look at one root on a worker of its own, one at a time per
 // root, so a root whose folder stops answering, as a hard network mount
 // whose server is gone does, holds only its own look.
-func (l *Library) watchLibraries(ctx context.Context) error {
+func (l *Roots) watchLibraries(ctx context.Context) error {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		// No event facility here at all: permanent, so degrade for good
@@ -324,7 +324,7 @@ func (l *Library) watchLibraries(ctx context.Context) error {
 const watchLookWait = 5 * time.Second
 
 // lookWait is watchLookWait, or a test's.
-func (l *Library) lookWait() time.Duration {
+func (l *Roots) lookWait() time.Duration {
 	return cmp.Or(time.Duration(l.watchLookWait.Load()), watchLookWait)
 }
 
@@ -452,7 +452,7 @@ type rootLook struct {
 
 // look sends a look at a root out on a worker, which answers the loop.
 // Every look takes the root's queued creates with it.
-func (l *Library) look(arms *watchArms, look rootLook) bool {
+func (l *Roots) look(arms *watchArms, look rootLook) bool {
 	answers := arms.checks
 	if look.kind == lookPass {
 		answers = arms.takes
@@ -478,7 +478,7 @@ func (l *Library) look(arms *watchArms, look rootLook) bool {
 }
 
 // lookAtRoot is a look at a root, on its worker.
-func (l *Library) lookAtRoot(w *fsnotify.Watcher, look rootLook) rootLook {
+func (l *Roots) lookAtRoot(w *fsnotify.Watcher, look rootLook) rootLook {
 	answered := func() { look.out.statted.Store(true) }
 	if look.kind != lookArm {
 		l.lookHook("stat", look.root)
@@ -541,7 +541,7 @@ func (l *Library) lookAtRoot(w *fsnotify.Watcher, look rootLook) rootLook {
 }
 
 // lookHook runs a test's hook at a stage of a look.
-func (l *Library) lookHook(stage, path string) {
+func (l *Roots) lookHook(stage, path string) {
 	if hook := l.watchLookHook.Load(); hook != nil {
 		(*hook)(stage, path)
 	}
@@ -552,7 +552,7 @@ func (l *Library) lookHook(stage, path string) {
 // from Linux's mount table. Other platforms have none to read and answer
 // nil: a mount there that raises no event (a first mount on a directory,
 // a remount) waits for the scheduled scan.
-func (l *Library) mountsUnder(root, resolved string) map[string]string {
+func (l *Roots) mountsUnder(root, resolved string) map[string]string {
 	folder := cmp.Or(resolved, root)
 	read := readMountTable
 	if hook := l.watchMountsHook.Load(); hook != nil {
@@ -681,7 +681,7 @@ func (a *watchArms) beingArmed(root, path string) bool {
 
 // queueCreated hands a path created under a root to the root's next
 // look, sending one out when none is.
-func (l *Library) queueCreated(arms *watchArms, path string) {
+func (l *Roots) queueCreated(arms *watchArms, path string) {
 	root := rootHolding(path, l.libraryRoots())
 	if root == "" {
 		l.watchQueue.note(filepath.Dir(path), time.Now())
@@ -693,7 +693,7 @@ func (l *Library) queueCreated(arms *watchArms, path string) {
 }
 
 // sendCreated sends a root's queued creates out when no look is.
-func (l *Library) sendCreated(arms *watchArms, root string) {
+func (l *Roots) sendCreated(arms *watchArms, root string) {
 	if arms.looking[root] == nil && len(arms.created[root]) > 0 {
 		l.look(arms, rootLook{kind: lookArm, root: root})
 	}
@@ -703,7 +703,7 @@ func (l *Library) sendCreated(arms *watchArms, root string) {
 // its folder is there, whether the directories that left the watch table
 // since the last recheck are still there, which a deletion never leaves
 // and an unmount does, and the mounts under it.
-func (l *Library) recheckRoots(arms *watchArms) {
+func (l *Roots) recheckRoots(arms *watchArms) {
 	roots := l.libraryRoots()
 	live := arms.live()
 	lost := map[string][]string{}
@@ -747,7 +747,7 @@ func rootHolding(dir string, roots []Root) string {
 }
 
 // inTable reports whether root is in the root table.
-func (l *Library) inTable(root string) bool {
+func (l *Roots) inTable(root string) bool {
 	return slices.ContainsFunc(l.libraryRoots(), func(r Root) bool { return r.Path == root })
 }
 
@@ -755,7 +755,7 @@ func (l *Library) inTable(root string) bool {
 // longer out, and its creates are armed. A root that left the table
 // meanwhile lets go of whatever its look added that no root still
 // covers; it answers false for that.
-func (l *Library) answered(arms *watchArms, look rootLook) bool {
+func (l *Roots) answered(arms *watchArms, look rootLook) bool {
 	delete(arms.looking, look.root)
 	for _, p := range look.created {
 		delete(arms.arming, p)
@@ -792,7 +792,7 @@ func (l *Library) answered(arms *watchArms, look rootLook) bool {
 
 // rewalkSharers owes every root that may share a watch that went a walk,
 // after the look it has out if it has one.
-func (l *Library) rewalkSharers(arms *watchArms) {
+func (l *Roots) rewalkSharers(arms *watchArms) {
 	for _, root := range l.libraryRoots() {
 		if !arms.mayShare(root.Path) {
 			continue
@@ -820,7 +820,7 @@ func (a *watchArms) mayShare(root string) bool {
 // up, owed a walk, is sent it before the creates queued behind the look
 // go out (an arm's look does not stat: its root was there at its last
 // look).
-func (l *Library) rechecked(arms *watchArms, look rootLook) error {
+func (l *Roots) rechecked(arms *watchArms, look rootLook) error {
 	var err error
 	if l.answered(arms, look) {
 		pass := false
@@ -849,7 +849,7 @@ func (l *Library) rechecked(arms *watchArms, look rootLook) error {
 // which takes its queued creates along and which the loop does not wait
 // on; a stale look's root not taken up is left to a pass, which takes it
 // up once it is there.
-func (l *Library) payOwed(arms *watchArms, look rootLook) {
+func (l *Roots) payOwed(arms *watchArms, look rootLook) {
 	p := look.root
 	if arms.taken[p] && (arms.relost[p] || arms.rewalks[p]) {
 		roots := l.libraryRoots()
@@ -864,7 +864,7 @@ func (l *Library) payOwed(arms *watchArms, look rootLook) {
 }
 
 // lookDone sends a root's queued creates out once its look is in.
-func (l *Library) lookDone(arms *watchArms, root string) {
+func (l *Roots) lookDone(arms *watchArms, root string) {
 	l.sendCreated(arms, root)
 	if hook := l.watchCheckHook.Load(); hook != nil {
 		(*hook)(root)
@@ -874,7 +874,7 @@ func (l *Library) lookDone(arms *watchArms, root string) {
 // stillLost reports whether one of the directories a look found there
 // is still out of the watch table with no arm on the way: a lost watch,
 // not a folder recreated whose create is being armed.
-func (l *Library) stillLost(arms *watchArms, root string, stayed []string) bool {
+func (l *Roots) stillLost(arms *watchArms, root string, stayed []string) bool {
 	if len(stayed) == 0 {
 		return false
 	}
@@ -892,7 +892,7 @@ func (l *Library) stillLost(arms *watchArms, root string, stayed []string) bool 
 // It waits for its looks a while; one that answers later is taken in
 // then. It errs when nothing could be armed, for the supervisor
 // to retry with backoff.
-func (l *Library) armWatches(arms *watchArms, rewalk bool) error {
+func (l *Roots) armWatches(arms *watchArms, rewalk bool) error {
 	if hook := l.watchArmHook.Load(); hook != nil {
 		(*hook)(false)
 	}
@@ -1006,7 +1006,7 @@ func (a *watchArms) passLook(root Root, owed, rewalk bool) rootLook {
 // warnUnanswered says once that a root has not answered its look, when
 // its stat has been out the whole wait; a slow walk is no silence. It
 // answers whether the root has not answered.
-func (l *Library) warnUnanswered(out *lookOut, root Root, wait time.Duration) bool {
+func (l *Roots) warnUnanswered(out *lookOut, root Root, wait time.Duration) bool {
 	if out.statted.Load() || time.Since(out.since) < wait {
 		return false
 	}
@@ -1019,7 +1019,7 @@ func (l *Library) warnUnanswered(out *lookOut, root Root, wait time.Duration) bo
 
 // tookUp takes a pass's look in, answering how many directories its walk
 // could not watch.
-func (l *Library) tookUp(arms *watchArms, look rootLook) int {
+func (l *Roots) tookUp(arms *watchArms, look rootLook) int {
 	defer l.lookDone(arms, look.root)
 	if !l.answered(arms, look) {
 		return 0
@@ -1080,7 +1080,7 @@ func (l *Library) tookUp(arms *watchArms, look rootLook) int {
 
 // sayArmed logs what is watched after a pass or a late look, and errs
 // when nothing could be armed and no look is still out.
-func (l *Library) sayArmed(arms *watchArms, failed int) error {
+func (l *Roots) sayArmed(arms *watchArms, failed int) error {
 	total := len(arms.w.WatchList())
 	switch {
 	case total == 0 && failed == 0:
@@ -1122,7 +1122,7 @@ func underRoot(path, root string) bool {
 
 // scannedSince reports whether a scan the catalog keeps, started at or
 // after since, walked the folder of the library pid.
-func (l *Library) scannedSince(ctx context.Context, pid string, since int64) bool {
+func (l *Roots) scannedSince(ctx context.Context, pid string, since int64) bool {
 	jobs, err := l.lib.Jobs(ctx, reachSeedWindow)
 	if err != nil {
 		return false
@@ -1149,7 +1149,7 @@ func (l *Library) scannedSince(ctx context.Context, pid string, since int64) boo
 // is what keeps the kernel's event queue drained meanwhile - the reason
 // the worker exists at all. A busy worker leaves the batch settled for
 // the next sweep.
-func (l *Library) dispatchWatchScans() {
+func (l *Roots) dispatchWatchScans() {
 	now := time.Now()
 	due := l.watchQueue.due(now)
 	if len(due) == 0 {
@@ -1164,7 +1164,7 @@ func (l *Library) dispatchWatchScans() {
 
 // watchScanWorker runs the scans the watcher schedules, off the event
 // loop. Spawned by Open beside watchLibraries.
-func (l *Library) watchScanWorker(ctx context.Context) error {
+func (l *Roots) watchScanWorker(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -1178,14 +1178,14 @@ func (l *Library) watchScanWorker(ctx context.Context) error {
 // runWatchScans scans one settled batch. It defers whole while a
 // catalog job runs, the way SweepDiscoveries does: a scan mid-import
 // would only lose the shared filesystem lease.
-func (l *Library) runWatchScans(ctx context.Context, due []string) {
+func (l *Roots) runWatchScans(ctx context.Context, due []string) {
 	// Deferred work is re-noted at the moment the competing job was
 	// seen, so it waits a whole settle window out before retrying
 	// rather than hammering the lease at sweep cadence.
 	requeue := func(dirs []string) {
 		l.watchQueue.renote(dirs, time.Now())
 	}
-	if running, err := l.catalogJobRunning(ctx); err != nil || running {
+	if running, err := l.Jobs.catalogJobRunning(ctx); err != nil || running {
 		requeue(due)
 		return
 	}
@@ -1193,7 +1193,7 @@ func (l *Library) runWatchScans(ctx context.Context, due []string) {
 	// owed is what each root's catch-up in the batch was owed since.
 	owed := map[string]int64{}
 	for _, dir := range due {
-		pid, err := l.libraryForPath(ctx, dir)
+		pid, err := l.Grants.libraryForPath(ctx, dir)
 		if err != nil {
 			requeue([]string{dir})
 			continue
@@ -1376,6 +1376,6 @@ func walkWatch(w *fsnotify.Watcher, root string, each func(dir string)) (armed, 
 
 // noteWatchArmed closes the ready channel once, so a test can drop its
 // file only after the watches exist.
-func (l *Library) noteWatchArmed() {
+func (l *Roots) noteWatchArmed() {
 	l.watchReadyOnce.Do(func() { close(l.watchReady) })
 }

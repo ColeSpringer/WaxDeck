@@ -69,7 +69,7 @@ func spotifyPlays(t *testing.T, plays ...[3]string) []byte {
 // runSpotify stages an export and imports its history.
 func (f *migrateFixture) runSpotify(t *testing.T, ctx context.Context, archive []byte) migrationSummary {
 	t.Helper()
-	staged, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
+	staged, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -195,7 +195,7 @@ func (h *Handler) stateOrder(ctx context.Context, uc *service.UserCtx, idx *inde
 				pids = append(pids, al.pid)
 			}
 		}
-		ratings, err := h.svc.EntityRatings(ctx, uc, pids)
+		ratings, err := h.svc.Reads.EntityRatings(ctx, uc, pids)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -208,7 +208,7 @@ func (h *Handler) stateOrder(ctx context.Context, uc *service.UserCtx, idx *inde
 // order they were starred, with their marks: the list's one star read,
 // which the annotate pass takes rather than reading again.
 func (h *Handler) starredAlbums(ctx context.Context, uc *service.UserCtx, idx *index) ([]*album, map[string]service.EntityMark, error) {
-	order, marks, err := h.svc.StarredAlbumMarks(ctx, uc)
+	order, marks, err := h.svc.Reads.StarredAlbumMarks(ctx, uc)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -278,7 +278,7 @@ func (h *Handler) playedAlbums(ctx context.Context, uc *service.UserCtx, idx *in
 	}
 	src := h.listSource(uc, list, idx.folder)
 	folds := &playedFolds{}
-	if plays, ok := h.svc.CatalogPlaysSeq(ctx); ok {
+	if plays, ok := h.svc.Reads.CatalogPlaysSeq(ctx); ok {
 		folds = idx.playedFor(uc.ID, plays, time.Now())
 	}
 	folds.mu.Lock()
@@ -291,7 +291,7 @@ func (h *Handler) playedAlbums(ctx context.Context, uc *service.UserCtx, idx *in
 	}
 	if !folds.ranked {
 		ranked, err := frequentAlbums(ctx, idx, src, func(ctx context.Context, pids []string) (map[string]service.ItemMark, error) {
-			return h.svc.ItemMarks(ctx, uc, pids)
+			return h.svc.Reads.ItemMarks(ctx, uc, pids)
 		})
 		if err != nil {
 			return nil, err
@@ -341,7 +341,7 @@ func (h *Handler) readList(uc *service.UserCtx, list, folder string) pageSource 
 func (h *Handler) browseSource(uc *service.UserCtx, list, folder string) pageSource {
 	filter := service.ItemFilter{MediaType: "music", Library: folder}
 	return func(ctx context.Context, cursor string) ([]string, string, error) {
-		page, err := h.svc.Browse(ctx, uc, list, filter, 0, cursor, browseFoldPage)
+		page, err := h.svc.Reads.Browse(ctx, uc, list, filter, 0, cursor, browseFoldPage)
 		if err != nil {
 			return nil, "", err
 		}

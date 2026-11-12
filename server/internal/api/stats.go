@@ -21,7 +21,7 @@ func (s *Server) GetListeningStats(ctx context.Context, req GetListeningStatsReq
 	if req.Params.Bucket != nil {
 		bucket = string(*req.Params.Bucket)
 	}
-	res, err := s.svc.ListeningStats(ctx, uc, rng, bucket)
+	res, err := s.svc.Reads.ListeningStats(ctx, uc, rng, bucket)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func (s *Server) GetListeningHeatmap(ctx context.Context, req GetListeningHeatma
 	if req.Params.Year != nil {
 		year = *req.Params.Year
 	}
-	res, err := s.svc.ListeningHeatmap(ctx, uc, year)
+	res, err := s.svc.Reads.ListeningHeatmap(ctx, uc, year)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (s *Server) GetTopList(ctx context.Context, req GetTopListRequestObject) (G
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.svc.TopListFor(ctx, uc, string(req.Params.Kind), rng, limit)
+	res, err := s.svc.Reads.TopListFor(ctx, uc, string(req.Params.Kind), rng, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +127,7 @@ func (s *Server) ListListenLog(ctx context.Context, req ListListenLogRequestObje
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.svc.ListenLog(ctx, uc, deref(req.Params.Client), deref(req.Params.Cursor), limit)
+	res, err := s.svc.Reads.ListenLog(ctx, uc, deref(req.Params.Client), deref(req.Params.Cursor), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (s *Server) GetYearInReview(ctx context.Context, req GetYearInReviewRequest
 	if req.Params.Year != nil {
 		year = *req.Params.Year
 	}
-	res, err := s.svc.UserYearInReview(ctx, uc, year)
+	res, err := s.svc.Reads.UserYearInReview(ctx, uc, year)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func (s *Server) GetServerYearInReview(ctx context.Context, req GetServerYearInR
 	if req.Params.Year != nil {
 		year = *req.Params.Year
 	}
-	res, err := s.svc.ServerWideYearInReview(ctx, uc, year)
+	res, err := s.svc.Reads.ServerWideYearInReview(ctx, uc, year)
 	if err != nil {
 		return nil, err
 	}

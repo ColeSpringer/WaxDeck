@@ -84,7 +84,7 @@ func TestPlayInfoPartOffsetForABoostedBook(t *testing.T) {
 	// Boost derives its gain from the part's measured loudness, which the
 	// skip-map analysis stores: ask for part two's map and run the worker.
 	get(t, h.ts, "/api/v1/items/"+books[0].Pid+"/skip-map?partIndex=1", h.token).Body.Close()
-	for h.svc.DrainAnalysisQueue(context.Background()) {
+	for h.svc.Tools.DrainAnalysisQueue(context.Background()) {
 	}
 
 	// Parts of 4, 5 and 6 s: 6.5 s into the book is 2.5 s into part two.

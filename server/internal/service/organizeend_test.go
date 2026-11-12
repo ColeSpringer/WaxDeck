@@ -117,7 +117,7 @@ func startedRun(t *testing.T, ctx context.Context, svc *Library, kind string) mo
 func waitForAudit(t *testing.T, ctx context.Context, svc *Library, action string) map[string]any {
 	t.Helper()
 	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(20 * time.Millisecond) {
-		page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: action}, "", 10)
+		page, err := svc.Audit.Events(ctx, AuditFilter{Action: action}, "", 10)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -150,7 +150,7 @@ func waitLong(t *testing.T, cond func() bool, what string) {
 func TestAnApplyItsRequestLeftIsStillAuditedAndRechecked(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := fillerLibrary(t)
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if counts, err := svc.db.HealthRuleCounts(ctx); err != nil || counts[rulePathMismatch] < 100 {
@@ -159,7 +159,7 @@ func TestAnApplyItsRequestLeftIsStillAuditedAndRechecked(t *testing.T) {
 	reqCtx, cancel := context.WithCancel(ctx)
 	answered := make(chan error, 1)
 	go func() {
-		_, err := svc.ApplyOrganize(reqCtx, uc, "", nil)
+		_, err := svc.Health.ApplyOrganize(reqCtx, uc, "", nil)
 		answered <- err
 	}()
 	job := startedRun(t, ctx, svc, "organize")
@@ -168,7 +168,7 @@ func TestAnApplyItsRequestLeftIsStillAuditedAndRechecked(t *testing.T) {
 		t.Fatalf("apply = %v, want its request canceled under the run", err)
 	}
 	waitForEnd(t, ctx, svc, job)
-	ran, err := svc.JobStatus(ctx, apiPID(PrefixJob, job))
+	ran, err := svc.Jobs.Status(ctx, apiPID(PrefixJob, job))
 	if err != nil || ran.Organize == nil || ran.Organize.Moved == 0 {
 		t.Fatalf("run = %+v (%v), want what it moved", ran, err)
 	}
@@ -190,17 +190,17 @@ func TestAnApplyItsRequestLeftIsStillAuditedAndRechecked(t *testing.T) {
 func TestAnUndoItsRequestLeftIsStillAuditedAndAsksForASweep(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := fillerLibrary(t)
-	rep, err := svc.ApplyOrganize(ctx, uc, "", nil)
+	rep, err := svc.Health.ApplyOrganize(ctx, uc, "", nil)
 	if err != nil || rep.Moved < 100 {
 		t.Fatalf("apply = %+v (%v), want the misplaced files moved", rep, err)
 	}
-	if svc.SweepRequested(ctx) {
+	if svc.Health.SweepRequested(ctx) {
 		t.Fatal("a sweep was asked for before the undo")
 	}
 	reqCtx, cancel := context.WithCancel(ctx)
 	answered := make(chan error, 1)
 	go func() {
-		_, err := svc.UndoOrganize(reqCtx, uc, rep.JobPID)
+		_, err := svc.Health.UndoOrganize(reqCtx, uc, rep.JobPID)
 		answered <- err
 	}()
 	job := startedRun(t, ctx, svc, "organize-undo")
@@ -213,7 +213,7 @@ func TestAnUndoItsRequestLeftIsStillAuditedAndAsksForASweep(t *testing.T) {
 		d["undoneJob"] != rep.JobPID || d["moved"] != float64(rep.Moved) {
 		t.Fatalf("audit = %v, want the undo, the run it undid and what it moved back", d)
 	}
-	waitLong(t, func() bool { return svc.SweepRequested(ctx) }, "a sweep asked for")
+	waitLong(t, func() bool { return svc.Health.SweepRequested(ctx) }, "a sweep asked for")
 }
 
 // A path fix that meets another job holding the file-mutation scope says
@@ -222,7 +222,7 @@ func TestAPathFixMeetingABusyCatalogSaysSo(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, stray := fillerLibrary(t)
 	scan := startForcedRescan(t, ctx, svc)
-	start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, []string{stray})
+	start, err := svc.Health.StartHealthFix(ctx, uc, rulePathMismatch, []string{stray})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,11 +279,11 @@ func TestAPathFixLetsGoOfASilentRun(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, pid := managedTrackFixture(t)
 	var bound time.Duration
-	svc.awaitJobHook = func(_ context.Context, job model.PID, silence time.Duration, _ func(context.Context)) (*model.Job, error) {
+	svc.Health.awaitJobHook = func(_ context.Context, job model.PID, silence time.Duration, _ func(context.Context)) (*model.Job, error) {
 		bound = silence
 		return &model.Job{PID: job, Kind: "organize", State: model.JobRunning}, errJobSilent
 	}
-	start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,13 +322,13 @@ func startedJob(t *testing.T, ctx context.Context, svc *Library, kind string) mo
 func TestARunWhoseStarterCouldNotBeRecordedIsStillSettled(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := fillerLibrary(t)
-	svc.jobOriginInsertHook = func(context.Context, wdb.JobOrigin) error {
+	svc.Health.jobOriginInsertHook = func(context.Context, wdb.JobOrigin) error {
 		return errors.New("the database is locked")
 	}
 	reqCtx, cancel := context.WithCancel(ctx)
 	answered := make(chan error, 1)
 	go func() {
-		_, err := svc.ApplyOrganize(reqCtx, uc, "", nil)
+		_, err := svc.Health.ApplyOrganize(reqCtx, uc, "", nil)
 		answered <- err
 	}()
 	job := startedJob(t, ctx, svc, "organize")
@@ -351,7 +351,7 @@ func TestARunWhoseStarterCouldNotBeRecordedIsStillSettled(t *testing.T) {
 func TestAnUnrecordedRunKeepsTryingItsRecordWhileItRuns(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, _ := managedTrackFixture(t)
-	_, sc, err := svc.organizePlanFor(ctx, "", nil)
+	_, sc, err := svc.Health.organizePlanFor(ctx, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -361,7 +361,7 @@ func TestAnUnrecordedRunKeepsTryingItsRecordWhileItRuns(t *testing.T) {
 	}
 	waitForEnd(t, ctx, svc, pid)
 	var tries atomic.Int32
-	svc.jobOriginInsertHook = func(ctx context.Context, o wdb.JobOrigin) error {
+	svc.Health.jobOriginInsertHook = func(ctx context.Context, o wdb.JobOrigin) error {
 		if tries.Add(1) <= 2 {
 			return errors.New("the database is locked")
 		}
@@ -371,7 +371,7 @@ func TestAnUnrecordedRunKeepsTryingItsRecordWhileItRuns(t *testing.T) {
 	// stops then.
 	waiting, stop := context.WithCancel(ctx)
 	defer stop()
-	svc.awaitJobHook = func(ctx context.Context, job model.PID, _ time.Duration, tick func(context.Context)) (*model.Job, error) {
+	svc.Health.awaitJobHook = func(ctx context.Context, job model.PID, _ time.Duration, tick func(context.Context)) (*model.Job, error) {
 		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
 			if tick != nil {
 				tick(ctx)
@@ -383,11 +383,11 @@ func TestAnUnrecordedRunKeepsTryingItsRecordWhileItRuns(t *testing.T) {
 		}
 		return nil, errors.New("the record never landed")
 	}
-	svc.settleUnrecorded(waiting, wdb.JobOrigin{PID: string(pid), UserID: uc.ID, CreatedAtNS: time.Now().UnixNano()})
+	svc.Health.settleUnrecorded(waiting, wdb.JobOrigin{PID: string(pid), UserID: uc.ID, CreatedAtNS: time.Now().UnixNano()})
 	if n := tries.Load(); n != 3 {
 		t.Fatalf("the record was tried %d times, want until it landed, on the third", n)
 	}
-	svc.settleOrigins(ctx)
+	svc.Jobs.settleOrigins(ctx)
 	if d := waitForAudit(t, ctx, svc, "organize.apply"); d["jobPid"] != apiPID(PrefixJob, pid) {
 		t.Fatalf("audit = %v, want the run", d)
 	}
@@ -402,7 +402,7 @@ func TestAnUnrecordedRunKeepsTryingItsRecordWhileItRuns(t *testing.T) {
 func TestARunThatEndedBeforeItsStarterWasRecordedIsSettled(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, _ := managedTrackFixture(t)
-	_, sc, err := svc.organizePlanFor(ctx, "", nil)
+	_, sc, err := svc.Health.organizePlanFor(ctx, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,9 +411,9 @@ func TestARunThatEndedBeforeItsStarterWasRecordedIsSettled(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForEnd(t, ctx, svc, pid)
-	svc.followJob(pid)
-	waitFor(t, func() bool { return !svc.jobs.pending() }, "the follower should read the run's end")
-	svc.recordStarter(ctx, uc, pid, nil)
+	svc.Jobs.followJob(pid)
+	waitFor(t, func() bool { return !svc.Jobs.jobs.pending() }, "the follower should read the run's end")
+	svc.Health.recordStarter(ctx, uc, pid, nil)
 	if d := waitForAudit(t, ctx, svc, "organize.apply"); d["jobPid"] != apiPID(PrefixJob, pid) {
 		t.Fatalf("audit = %v, want the run", d)
 	}
@@ -427,12 +427,12 @@ func TestARunThatEndedBeforeItsStarterWasRecordedIsSettled(t *testing.T) {
 func TestARunKilledOutrightIsAuditedWithWhatItsJournalCommitted(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, _ := managedTrackFixture(t)
-	rep, err := svc.ApplyOrganize(ctx, uc, "", nil)
+	rep, err := svc.Health.ApplyOrganize(ctx, uc, "", nil)
 	if err != nil || rep.Moved != 1 {
 		t.Fatalf("apply = %+v (%v)", rep, err)
 	}
 	_, bare, _ := parseAPIPID(rep.JobPID)
-	e := svc.finishOrganizeJob(ctx, wdb.JobOrigin{UserID: uc.ID}, &model.Job{PID: bare, Kind: "organize", State: model.JobCrashed})
+	e := svc.Health.finishOrganizeJob(ctx, wdb.JobOrigin{UserID: uc.ID}, &model.Job{PID: bare, Kind: "organize", State: model.JobCrashed})
 	if e == nil || e.Action != "organize.apply" || !strings.Contains(e.Detail, `"moved":1`) ||
 		!strings.Contains(e.Detail, `"state":"crashed"`) {
 		t.Fatalf("audit = %+v, want the crashed run with the move its journal holds", e)
@@ -457,11 +457,11 @@ func TestAnApplyReportNamesItsHolds(t *testing.T) {
 	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := svc.PreviewOrganize(ctx, uc, "", nil)
+	plan, err := svc.Health.PreviewOrganize(ctx, uc, "", nil)
 	if err != nil || len(plan.Holds) != 1 {
 		t.Fatalf("preview holds = %+v (%v), want the second twin", plan.Holds, err)
 	}
-	rep, err := svc.ApplyOrganize(ctx, uc, "", nil)
+	rep, err := svc.Health.ApplyOrganize(ctx, uc, "", nil)
 	if err != nil || rep.Moved != 1 || rep.Held != 1 || len(rep.Holds) != 1 {
 		t.Fatalf("apply = %+v (%v), want one twin moved and one held", rep, err)
 	}
@@ -471,7 +471,7 @@ func TestAnApplyReportNamesItsHolds(t *testing.T) {
 		h.To != plan.Holds[0].To || h.Reason == "" {
 		t.Fatalf("hold = %+v, want the preview's hold %+v", h, plan.Holds[0])
 	}
-	job, err := svc.JobStatus(ctx, rep.JobPID)
+	job, err := svc.Jobs.Status(ctx, rep.JobPID)
 	if err != nil || job.Organize == nil || job.Organize.Held != 1 || job.Organize.Moved != 1 {
 		t.Fatalf("job = %+v (%v), want its tally to count the hold", job, err)
 	}
@@ -483,29 +483,29 @@ func TestThePruneLetsTheJournalGoPastTheTaskWindow(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 	var asked []time.Duration
-	svc.journalPruneHook = func(_ context.Context, age time.Duration) (int, error) {
+	svc.Integrations.journalPruneHook = func(_ context.Context, age time.Duration) (int, error) {
 		asked = append(asked, age)
 		return 0, nil
 	}
-	st, err := svc.AdminSettingsGet(ctx)
+	st, err := svc.Settings.AdminSettingsGet(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	st.TaskRetentionDays = 0
-	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(st)); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, admin, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.RunPrune(ctx); err != nil {
+	if err := svc.Integrations.RunPrune(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if len(asked) != 0 {
 		t.Fatalf("pruned the journal past %v with retention off", asked)
 	}
 	st.TaskRetentionDays = 7
-	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(st)); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, admin, everySetting(st)); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.RunPrune(ctx); err != nil {
+	if err := svc.Integrations.RunPrune(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if len(asked) != 1 || asked[0] != 7*24*time.Hour {

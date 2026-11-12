@@ -58,7 +58,7 @@ func libraryGranted(uc *UserCtx, lib model.PID) bool {
 // visibleItemFiles reads the files behind an item that sit in libraries
 // the caller may see, with their rows: the primary or a book's parts,
 // then the copies, which can sit in another library than the item's.
-func (l *Library) visibleItemFiles(ctx context.Context, uc *UserCtx, pid model.PID) ([]itemFile, error) {
+func (l *Reads) visibleItemFiles(ctx context.Context, uc *UserCtx, pid model.PID) ([]itemFile, error) {
 	refs, err := l.lib.ItemFiles(ctx, pid)
 	if err != nil {
 		return nil, classify(err)
@@ -79,7 +79,7 @@ func (l *Library) visibleItemFiles(ctx context.Context, uc *UserCtx, pid model.P
 }
 
 // readFile reads one file's row.
-func (l *Library) readFile(ctx context.Context, pid model.PID) (*model.File, error) {
+func (l *Reads) readFile(ctx context.Context, pid model.PID) (*model.File, error) {
 	if l.fileReadHook != nil {
 		return l.fileReadHook(ctx, pid)
 	}
@@ -90,11 +90,11 @@ func (l *Library) readFile(ctx context.Context, pid model.PID) (*model.File, err
 // copies, leaving out a copy in a library the caller cannot see. It
 // takes the right download-info takes, which already names the files;
 // paths are administrators' only.
-func (l *Library) ItemFiles(ctx context.Context, uc *UserCtx, apiItemPID string) ([]ItemFileDTO, error) {
+func (l *Reads) ItemFiles(ctx context.Context, uc *UserCtx, apiItemPID string) ([]ItemFileDTO, error) {
 	if !uc.Admin && !uc.Download {
 		return nil, &Error{Kind: KindForbidden, Msg: "this account cannot read an item's files"}
 	}
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return nil, err
 	}

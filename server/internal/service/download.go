@@ -43,11 +43,11 @@ type DownloadResolution struct {
 // DownloadInfo resolves the caller-visible item's original files for
 // offline download: one per backing file in playback order, plus the
 // playback window for items carved out of a larger file.
-func (l *Library) DownloadInfo(ctx context.Context, uc *UserCtx, apiItemPID string) (DownloadResolution, error) {
+func (l *Playback) DownloadInfo(ctx context.Context, uc *UserCtx, apiItemPID string) (DownloadResolution, error) {
 	if !uc.Admin && !uc.Download {
 		return DownloadResolution{}, &Error{Kind: KindForbidden, Msg: "this account cannot download originals"}
 	}
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return DownloadResolution{}, err
 	}
@@ -67,7 +67,7 @@ func (l *Library) DownloadInfo(ctx context.Context, uc *UserCtx, apiItemPID stri
 // token's check (AuthorizeMedia), visibility included, before this reads
 // the item. filePID selects a part of a multi-file item; empty means the
 // single backing file.
-func (l *Library) DownloadSource(ctx context.Context, apiItemPID, filePID string) (DownloadFile, error) {
+func (l *Playback) DownloadSource(ctx context.Context, apiItemPID, filePID string) (DownloadFile, error) {
 	it, err := l.getItem(ctx, apiItemPID)
 	if err != nil {
 		return DownloadFile{}, err
@@ -90,7 +90,7 @@ func (l *Library) DownloadSource(ctx context.Context, apiItemPID, filePID string
 	return DownloadFile{}, errNotFound("no such file for item " + apiItemPID)
 }
 
-func (l *Library) downloadResolution(ctx context.Context, it *model.ItemView) (DownloadResolution, error) {
+func (l *Playback) downloadResolution(ctx context.Context, it *model.ItemView) (DownloadResolution, error) {
 	var out DownloadResolution
 	if it.Kind == model.KindBook {
 		bd, err := l.lib.Book(ctx, it.PID)
@@ -137,7 +137,7 @@ func spanWindow(it *model.ItemView) (startMS, endMS int64) {
 	return it.StartMS, endMS
 }
 
-func (l *Library) downloadFile(ctx context.Context, filePID model.PID) (DownloadFile, error) {
+func (l *Playback) downloadFile(ctx context.Context, filePID model.PID) (DownloadFile, error) {
 	f, err := l.lib.File(ctx, filePID)
 	if err != nil {
 		return DownloadFile{}, classify(err)

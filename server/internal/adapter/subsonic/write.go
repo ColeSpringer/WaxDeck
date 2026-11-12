@@ -43,7 +43,7 @@ func (h *Handler) allPlaylists(ctx context.Context, uc *service.UserCtx) ([]serv
 	var out []service.Playlist
 	cursor := ""
 	for {
-		page, err := h.svc.Playlists(ctx, uc, "", cursor, 500)
+		page, err := h.svc.Playlists.List(ctx, uc, "", cursor, 500)
 		if err != nil {
 			return nil, err
 		}
@@ -60,7 +60,7 @@ func (h *Handler) playlistEntries(ctx context.Context, uc *service.UserCtx, id s
 	var out []service.PlaylistEntry
 	cursor := ""
 	for {
-		page, err := h.svc.PlaylistItems(ctx, uc, id, cursor, 500)
+		page, err := h.svc.Playlists.Items(ctx, uc, id, cursor, 500)
 		if err != nil {
 			return nil, err
 		}
@@ -162,7 +162,7 @@ func (h *Handler) getPlaylist(w http.ResponseWriter, r *http.Request, uc *servic
 		h.fail(w, r, 10, "missing id")
 		return
 	}
-	pl, err := h.svc.PlaylistByPID(r.Context(), uc, id)
+	pl, err := h.svc.Playlists.ByPID(r.Context(), uc, id)
 	if err != nil {
 		h.failFromService(w, r, err, "no such playlist")
 		return
@@ -227,7 +227,7 @@ func (h *Handler) createPlaylist(w http.ResponseWriter, r *http.Request, uc *ser
 	if existing := r.Form.Get("playlistId"); existing != "" {
 		// The protocol's replace form: the playlist keeps its identity,
 		// the member list becomes exactly the given songs.
-		if err := h.svc.ReplacePlaylistItems(r.Context(), uc, existing, songIDs, nil); err != nil {
+		if err := h.svc.Playlists.ReplacePlaylistItems(r.Context(), uc, existing, songIDs, nil); err != nil {
 			h.failFromService(w, r, err, "no such playlist")
 			return
 		}
@@ -239,7 +239,7 @@ func (h *Handler) createPlaylist(w http.ResponseWriter, r *http.Request, uc *ser
 		h.fail(w, r, 10, "missing name")
 		return
 	}
-	pl, err := h.svc.CreatePlaylist(r.Context(), uc, service.PlaylistCreate{
+	pl, err := h.svc.Playlists.CreatePlaylist(r.Context(), uc, service.PlaylistCreate{
 		Name:     name,
 		Kind:     "static",
 		ItemPIDs: songIDs,
@@ -252,7 +252,7 @@ func (h *Handler) createPlaylist(w http.ResponseWriter, r *http.Request, uc *ser
 }
 
 func (h *Handler) respondWithPlaylist(w http.ResponseWriter, r *http.Request, uc *service.UserCtx, id string) {
-	pl, err := h.svc.PlaylistByPID(r.Context(), uc, id)
+	pl, err := h.svc.Playlists.ByPID(r.Context(), uc, id)
 	if err != nil {
 		h.failFromService(w, r, err, "no such playlist")
 		return
@@ -283,7 +283,7 @@ func (h *Handler) updatePlaylist(w http.ResponseWriter, r *http.Request, uc *ser
 		upd.Visibility = &vis
 	}
 	if upd.Name != nil || upd.Visibility != nil {
-		if _, err := h.svc.UpdatePlaylist(r.Context(), uc, id, upd); err != nil {
+		if _, err := h.svc.Playlists.UpdatePlaylist(r.Context(), uc, id, upd); err != nil {
 			h.failFromService(w, r, err, "no such playlist")
 			return
 		}
@@ -319,7 +319,7 @@ func (h *Handler) updatePlaylist(w http.ResponseWriter, r *http.Request, uc *ser
 				// Positions go only to the owner of a static list, the one
 				// caller that can remove by them. Refuse rather than guess,
 				// as not authorized where the list is somebody else's.
-				if pl, err := h.svc.PlaylistByPID(r.Context(), uc, id); err == nil && !pl.IsOwner {
+				if pl, err := h.svc.Playlists.ByPID(r.Context(), uc, id); err == nil && !pl.IsOwner {
 					h.fail(w, r, 50, "not authorized for this operation")
 					return
 				}
@@ -331,13 +331,13 @@ func (h *Handler) updatePlaylist(w http.ResponseWriter, r *http.Request, uc *ser
 		}
 		// One write, every position naming the listing read above; the
 		// items it showed guard the window between that read and this.
-		if err := h.svc.RemovePlaylistItemsAt(r.Context(), uc, id, positions, expects); err != nil {
+		if err := h.svc.Playlists.RemovePlaylistItemsAt(r.Context(), uc, id, positions, expects); err != nil {
 			h.failFromService(w, r, err, "no such playlist")
 			return
 		}
 	}
 	if adds := r.Form["songIdToAdd"]; len(adds) > 0 {
-		if err := h.svc.AddPlaylistItems(r.Context(), uc, id, adds); err != nil {
+		if err := h.svc.Playlists.AddPlaylistItems(r.Context(), uc, id, adds); err != nil {
 			h.failFromService(w, r, err, "no such playlist")
 			return
 		}
@@ -350,7 +350,7 @@ func (h *Handler) deletePlaylist(w http.ResponseWriter, r *http.Request, uc *ser
 		h.fail(w, r, 10, "missing id")
 		return
 	}
-	if err := h.svc.DeletePlaylist(r.Context(), uc, r.Form.Get("id")); err != nil {
+	if err := h.svc.Playlists.DeletePlaylist(r.Context(), uc, r.Form.Get("id")); err != nil {
 		h.failFromService(w, r, err, "no such playlist")
 		return
 	}
@@ -447,13 +447,13 @@ func (h *Handler) setStar(w http.ResponseWriter, r *http.Request, uc *service.Us
 		}
 	}
 	for _, id := range itemIDs {
-		if _, err := h.svc.SetStar(r.Context(), uc, id, starred, nil); err != nil {
+		if _, err := h.svc.Playback.SetStar(r.Context(), uc, id, starred, nil); err != nil {
 			h.failFromService(w, r, err, "no such song")
 			return
 		}
 	}
 	for _, pid := range pids {
-		if _, err := h.svc.SetEntityStar(r.Context(), uc, pid, starred, nil); err != nil {
+		if _, err := h.svc.Identity.SetEntityStar(r.Context(), uc, pid, starred, nil); err != nil {
 			h.failFromService(w, r, err, "no such entity")
 			return
 		}
@@ -493,14 +493,14 @@ func (h *Handler) setRating(w http.ResponseWriter, r *http.Request, uc *service.
 			h.fail(w, r, 70, reason)
 			return
 		}
-		if _, err := h.svc.SetEntityRating(r.Context(), uc, pid, rating, nil); err != nil {
+		if _, err := h.svc.Identity.SetEntityRating(r.Context(), uc, pid, rating, nil); err != nil {
 			h.failFromService(w, r, err, "no such entity")
 			return
 		}
 		h.ok(w, r, envelope{})
 		return
 	}
-	if _, err := h.svc.SetRating(r.Context(), uc, id, rating, nil); err != nil {
+	if _, err := h.svc.Playback.SetRating(r.Context(), uc, id, rating, nil); err != nil {
 		h.failFromService(w, r, err, "no such song")
 		return
 	}
@@ -515,7 +515,7 @@ func (h *Handler) starredSongs(r *http.Request, uc *service.UserCtx, idx *index)
 	var out []child
 	cursor := ""
 	for {
-		page, err := h.svc.Browse(r.Context(), uc, "starred", service.ItemFilter{}, 0, cursor, 500)
+		page, err := h.svc.Reads.Browse(r.Context(), uc, "starred", service.ItemFilter{}, 0, cursor, 500)
 		if err != nil {
 			return nil, err
 		}
@@ -545,7 +545,7 @@ func (h *Handler) starredSongs(r *http.Request, uc *service.UserCtx, idx *index)
 // the compatibility surface cannot list is an artist it does not
 // model.
 func (h *Handler) starredGroups(ctx context.Context, uc *service.UserCtx, idx *index) ([]*artist, []*album, error) {
-	res, err := h.svc.StarredEntities(ctx, uc)
+	res, err := h.svc.Identity.StarredEntities(ctx, uc)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -601,7 +601,7 @@ func (h *Handler) scrobble(w http.ResponseWriter, r *http.Request, uc *service.U
 	if !submission {
 		// A now-playing update: ephemeral, best effort, first id only
 		// (the protocol sends one).
-		if err := h.svc.NowPlayingScrobble(r.Context(), uc, ids[0]); err != nil {
+		if err := h.svc.Integrations.NowPlayingScrobble(r.Context(), uc, ids[0]); err != nil {
 			h.failFromService(w, r, err, "no such song")
 			return
 		}
@@ -616,7 +616,7 @@ func (h *Handler) scrobble(w http.ResponseWriter, r *http.Request, uc *service.U
 		// The duration alone: a detail read would resolve and discard a
 		// full-size cover per submitted id, and an offline queue
 		// flushes them in bulk.
-		durationMS, err := h.svc.ItemDuration(r.Context(), uc, id)
+		durationMS, err := h.svc.Reads.ItemDuration(r.Context(), uc, id)
 		if err != nil {
 			h.failFromService(w, r, err, "no such song")
 			return
@@ -649,7 +649,7 @@ func (h *Handler) scrobble(w http.ResponseWriter, r *http.Request, uc *service.U
 		}
 		sessions = append(sessions, s)
 	}
-	res, err := h.svc.IngestListens(r.Context(), uc, sessions)
+	res, err := h.svc.Playback.IngestListens(r.Context(), uc, sessions)
 	if err != nil {
 		h.failFromService(w, r, err, "no such song")
 		return
@@ -735,7 +735,7 @@ func (h *Handler) getBookmarks(w http.ResponseWriter, r *http.Request, uc *servi
 		h.fail(w, r, 0, "reading the library failed")
 		return
 	}
-	saved, err := h.svc.SubsonicBookmarks(r.Context(), uc)
+	saved, err := h.svc.Playback.SubsonicBookmarks(r.Context(), uc)
 	if err != nil {
 		h.failFromService(w, r, err, "listing bookmarks failed")
 		return
@@ -761,7 +761,7 @@ func (h *Handler) createBookmark(w http.ResponseWriter, r *http.Request, uc *ser
 		h.fail(w, r, 10, "missing or malformed id or position")
 		return
 	}
-	if err := h.svc.SaveSubsonicBookmark(r.Context(), uc, id, pos, r.Form.Get("comment")); err != nil {
+	if err := h.svc.Playback.SaveSubsonicBookmark(r.Context(), uc, id, pos, r.Form.Get("comment")); err != nil {
 		h.failFromService(w, r, err, "no such item")
 		return
 	}
@@ -774,7 +774,7 @@ func (h *Handler) deleteBookmark(w http.ResponseWriter, r *http.Request, uc *ser
 		h.fail(w, r, 10, "missing id")
 		return
 	}
-	if err := h.svc.DeleteSubsonicBookmark(r.Context(), uc, id); err != nil {
+	if err := h.svc.Playback.DeleteSubsonicBookmark(r.Context(), uc, id); err != nil {
 		h.failFromService(w, r, err, "no such item")
 		return
 	}
@@ -784,7 +784,7 @@ func (h *Handler) deleteBookmark(w http.ResponseWriter, r *http.Request, uc *ser
 // --- internet radio ----------------------------------------------------------
 
 func (h *Handler) getInternetRadioStations(w http.ResponseWriter, r *http.Request) {
-	stations, err := h.svc.RadioStations(r.Context())
+	stations, err := h.svc.Radio.Stations(r.Context())
 	if err != nil {
 		h.fail(w, r, 0, "listing stations failed")
 		return
@@ -802,7 +802,7 @@ func (h *Handler) getInternetRadioStations(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *Handler) createInternetRadioStation(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
-	if _, err := h.svc.CreateRadioStation(r.Context(), uc, service.RadioStationEdit{
+	if _, err := h.svc.Radio.CreateRadioStation(r.Context(), uc, service.RadioStationEdit{
 		Name:        r.Form.Get("name"),
 		StreamURL:   r.Form.Get("streamUrl"),
 		HomepageURL: r.Form.Get("homepageUrl"),
@@ -818,7 +818,7 @@ func (h *Handler) updateInternetRadioStation(w http.ResponseWriter, r *http.Requ
 		h.fail(w, r, 10, "missing id")
 		return
 	}
-	_, err := h.svc.UpdateRadioStation(r.Context(), r.Form.Get("id"), service.RadioStationEdit{
+	_, err := h.svc.Radio.UpdateRadioStation(r.Context(), r.Form.Get("id"), service.RadioStationEdit{
 		Name:        r.Form.Get("name"),
 		StreamURL:   r.Form.Get("streamUrl"),
 		HomepageURL: r.Form.Get("homepageUrl"),
@@ -835,7 +835,7 @@ func (h *Handler) deleteInternetRadioStation(w http.ResponseWriter, r *http.Requ
 		h.fail(w, r, 10, "missing id")
 		return
 	}
-	if err := h.svc.DeleteRadioStation(r.Context(), r.Form.Get("id")); err != nil {
+	if err := h.svc.Radio.DeleteRadioStation(r.Context(), r.Form.Get("id")); err != nil {
 		h.failFromService(w, r, err, "no such station")
 		return
 	}

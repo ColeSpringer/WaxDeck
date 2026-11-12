@@ -50,7 +50,7 @@ func TestTheServicesOwnLogKeepsHostsOnly(t *testing.T) {
 		cfg.Logger = slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	})
 	cause := errors.New(`podcast.Sync: netsafe.Do: fetching https://host.example/feed?auth=SECRET returned HTTP 403`)
-	svc.syncWithoutVerdict(ctx, "show-1", syncOwn, cause)
+	svc.Podcasts.syncWithoutVerdict(ctx, "show-1", syncOwn, cause)
 	svc.log.Debug("podping: sync failed", "show", "show-1", "err", cause)
 	out := logged.String()
 	if strings.Contains(out, "SECRET") || !strings.Contains(out, "https://host.example") {

@@ -172,13 +172,13 @@ func TestTrashRetentionAndPurge(t *testing.T) {
 
 	// The 30-day policy purges nothing: both entries were just trashed, well
 	// inside the window, so the age filter keeps them.
-	if rep, err := h.svc.SweepTrashRetention(ctx); err != nil || rep.Purged != 0 {
+	if rep, err := h.svc.Tools.SweepTrashRetention(ctx); err != nil || rep.Purged != 0 {
 		t.Fatalf("30-day sweep = %+v, %v; want no purge of recent entries", rep, err)
 	}
 
 	// The safety guard: a zero-age purge is a no-op rather than an
 	// empty-everything, so a disabled policy can never wipe the journal.
-	if rep, err := h.svc.PurgeTrashOlderThan(ctx, 0); err != nil || rep.Purged != 0 {
+	if rep, err := h.svc.Tools.PurgeTrashOlderThan(ctx, 0); err != nil || rep.Purged != 0 {
 		t.Fatalf("zero-age purge = %+v, %v; want no-op", rep, err)
 	}
 	if n := len(decode[TrashList](t, get(t, h.ts, "/api/v1/admin/trash", h.token)).Entries); n != 2 {
@@ -201,7 +201,7 @@ func TestTrashRetentionAndPurge(t *testing.T) {
 	// The age-scoped sweep does purge when the window catches an entry: the
 	// remaining entry was trashed in the past, so a one-nanosecond window
 	// (older than now) reclaims it.
-	if rep, err := h.svc.PurgeTrashOlderThan(ctx, time.Nanosecond); err != nil || rep.Purged != 1 {
+	if rep, err := h.svc.Tools.PurgeTrashOlderThan(ctx, time.Nanosecond); err != nil || rep.Purged != 1 {
 		t.Fatalf("nanosecond-age purge = %+v, %v; want 1 purged", rep, err)
 	}
 	if n := len(decode[TrashList](t, get(t, h.ts, "/api/v1/admin/trash", h.token)).Entries); n != 0 {

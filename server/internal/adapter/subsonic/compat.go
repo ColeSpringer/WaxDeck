@@ -336,7 +336,7 @@ func (h *Handler) getTopSongs(w http.ResponseWriter, r *http.Request, uc *servic
 			pids = append(pids, tr.PID)
 		}
 	}
-	counts, err := h.svc.ItemMarks(r.Context(), uc, pids)
+	counts, err := h.svc.Reads.ItemMarks(r.Context(), uc, pids)
 	if err != nil {
 		h.failFromService(w, r, err, "reading play counts failed")
 		return
@@ -454,7 +454,7 @@ func (h *Handler) followedShows(ctx context.Context, uc *service.UserCtx, only s
 	if only == "" {
 		return h.allSubscriptions(ctx, uc)
 	}
-	d, err := h.svc.PodcastDetailFor(ctx, uc, only)
+	d, err := h.svc.Podcasts.DetailFor(ctx, uc, only)
 	if k := service.KindOf(err); k == service.KindNotFound || k == service.KindInvalid {
 		return nil, nil
 	}
@@ -469,7 +469,7 @@ func (h *Handler) allSubscriptions(ctx context.Context, uc *service.UserCtx) ([]
 	var out []service.Subscription
 	cursor := ""
 	for {
-		page, next, err := h.svc.Subscriptions(ctx, uc, cursor, 200, false)
+		page, next, err := h.svc.Podcasts.Subscriptions(ctx, uc, cursor, 200, false)
 		if err != nil {
 			return nil, err
 		}
@@ -491,7 +491,7 @@ func (h *Handler) channelEpisodes(ctx context.Context, uc *service.UserCtx, show
 	eps := []service.EpisodeSummary{}
 	cursor := ""
 	for len(eps) < cap {
-		page, next, err := h.svc.Episodes(ctx, uc, showPID, cursor, min(cap, 100))
+		page, next, err := h.svc.Podcasts.Episodes(ctx, uc, showPID, cursor, min(cap, 100))
 		if err != nil {
 			return nil, err
 		}

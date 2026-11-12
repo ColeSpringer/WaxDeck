@@ -31,7 +31,7 @@ func (s *Server) ImportPlaylist(ctx context.Context, req ImportPlaylistRequestOb
 			in.Refs = append(in.Refs, refDTOFromWire(r))
 		}
 	}
-	res, err := s.svc.ImportStreamingPlaylist(ctx, uc, in)
+	res, err := s.svc.Playlists.ImportStreamingPlaylist(ctx, uc, in)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func (s *Server) ImportPlaylist(ctx context.Context, req ImportPlaylistRequestOb
 
 func (s *Server) ExportPlaylistPortable(ctx context.Context, req ExportPlaylistPortableRequestObject) (ExportPlaylistPortableResponseObject, error) {
 	uc := userCtx(ctx)
-	name, refs, err := s.svc.ExportPlaylistPortable(ctx, uc, req.Pid)
+	name, refs, err := s.svc.Playlists.ExportPlaylistPortable(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}

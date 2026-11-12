@@ -25,7 +25,7 @@ func (s *Server) ListSubscriptions(ctx context.Context, req ListSubscriptionsReq
 	if req.Params.Cursor != nil {
 		cursor = *req.Params.Cursor
 	}
-	subs, next, err := s.svc.Subscriptions(ctx, uc, cursor, limit, true)
+	subs, next, err := s.svc.Podcasts.Subscriptions(ctx, uc, cursor, limit, true)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func (s *Server) SubscribePodcast(ctx context.Context, req SubscribePodcastReque
 	if req.Body.Folder != nil {
 		sr.Folder = *req.Body.Folder
 	}
-	sub, created, err := s.svc.Subscribe(ctx, uc, sr)
+	sub, created, err := s.svc.Podcasts.Subscribe(ctx, uc, sr)
 	if err != nil {
 		kind := service.KindOf(err)
 		if kind == service.KindInvalid {
@@ -85,7 +85,7 @@ func (s *Server) SearchPodcastDirectory(ctx context.Context, req SearchPodcastDi
 	if err != nil {
 		return nil, err
 	}
-	entries, err := s.svc.SearchPodcastDirectory(ctx, req.Params.Query, limit)
+	entries, err := s.svc.Podcasts.SearchPodcastDirectory(ctx, req.Params.Query, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (s *Server) SearchPodcastDirectory(ctx context.Context, req SearchPodcastDi
 
 func (s *Server) GetPodcast(ctx context.Context, req GetPodcastRequestObject) (GetPodcastResponseObject, error) {
 	uc := userCtx(ctx)
-	det, err := s.svc.PodcastDetailFor(ctx, uc, req.Pid)
+	det, err := s.svc.Podcasts.DetailFor(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (s *Server) GetPodcast(ctx context.Context, req GetPodcastRequestObject) (G
 func (s *Server) UnsubscribePodcast(ctx context.Context, req UnsubscribePodcastRequestObject) (UnsubscribePodcastResponseObject, error) {
 	uc := userCtx(ctx)
 	removeDownloads := req.Params.RemoveDownloads != nil && *req.Params.RemoveDownloads
-	if err := s.svc.Unsubscribe(ctx, uc, req.Pid, removeDownloads); err != nil {
+	if err := s.svc.Podcasts.Unsubscribe(ctx, uc, req.Pid, removeDownloads); err != nil {
 		return nil, err
 	}
 	return UnsubscribePodcast204Response{}, nil
@@ -131,7 +131,7 @@ func (s *Server) PutSubscriptionSettings(ctx context.Context, req PutSubscriptio
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	sub, err := s.svc.PutSubscriptionSettings(ctx, uc, req.Pid, settingsFromJSON(*req.Body))
+	sub, err := s.svc.Podcasts.PutSubscriptionSettings(ctx, uc, req.Pid, settingsFromJSON(*req.Body))
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (s *Server) ListSubscribedEpisodes(ctx context.Context, req ListSubscribedE
 	if req.Params.Filter != nil {
 		filter = service.SubscribedEpisodeFilter(*req.Params.Filter)
 	}
-	eps, next, err := s.svc.SubscribedEpisodes(ctx, uc, filter, deref(req.Params.Cursor), limit)
+	eps, next, err := s.svc.Podcasts.SubscribedEpisodes(ctx, uc, filter, deref(req.Params.Cursor), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +172,7 @@ func (s *Server) ListEpisodes(ctx context.Context, req ListEpisodesRequestObject
 	if req.Params.Cursor != nil {
 		cursor = *req.Params.Cursor
 	}
-	eps, next, err := s.svc.Episodes(ctx, uc, req.Pid, cursor, limit)
+	eps, next, err := s.svc.Podcasts.Episodes(ctx, uc, req.Pid, cursor, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +188,7 @@ func (s *Server) ListEpisodes(ctx context.Context, req ListEpisodesRequestObject
 
 func (s *Server) GetEpisode(ctx context.Context, req GetEpisodeRequestObject) (GetEpisodeResponseObject, error) {
 	uc := userCtx(ctx)
-	det, err := s.svc.EpisodeDetailFor(ctx, uc, req.Pid)
+	det, err := s.svc.Podcasts.EpisodeDetailFor(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func (s *Server) GetEpisode(ctx context.Context, req GetEpisodeRequestObject) (G
 
 func (s *Server) GetEpisodeTranscript(ctx context.Context, req GetEpisodeTranscriptRequestObject) (GetEpisodeTranscriptResponseObject, error) {
 	uc := userCtx(ctx)
-	tx, err := s.svc.Transcript(ctx, uc, req.Pid)
+	tx, err := s.svc.Podcasts.Transcript(ctx, uc, req.Pid)
 	if err != nil {
 		if service.KindOf(err) == service.KindUpstream {
 			return nil, refuseParams(http.StatusBadGateway, "feed-unreachable", serviceMessage(err), feedParams(err))
@@ -263,7 +263,7 @@ func (s *Server) GetEpisodeTranscript(ctx context.Context, req GetEpisodeTranscr
 
 func (s *Server) CaptureEpisodeTranscript(ctx context.Context, req CaptureEpisodeTranscriptRequestObject) (CaptureEpisodeTranscriptResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.CaptureEpisodeTranscript(ctx, uc, req.Pid); err != nil {
+	if err := s.svc.Podcasts.CaptureEpisodeTranscript(ctx, uc, req.Pid); err != nil {
 		if service.KindOf(err) == service.KindUpstream {
 			return nil, refuseParams(http.StatusBadGateway, "feed-unreachable", serviceMessage(err), feedParams(err))
 		}
@@ -274,7 +274,7 @@ func (s *Server) CaptureEpisodeTranscript(ctx context.Context, req CaptureEpisod
 
 func (s *Server) RefreshPodcast(ctx context.Context, req RefreshPodcastRequestObject) (RefreshPodcastResponseObject, error) {
 	uc := userCtx(ctx)
-	added, err := s.svc.RefreshPodcast(ctx, uc, req.Pid)
+	added, err := s.svc.Podcasts.RefreshPodcast(ctx, uc, req.Pid)
 	if err != nil {
 		kind := service.KindOf(err)
 		if kind == service.KindUpstream {
@@ -287,7 +287,7 @@ func (s *Server) RefreshPodcast(ctx context.Context, req RefreshPodcastRequestOb
 
 func (s *Server) FetchEpisode(ctx context.Context, req FetchEpisodeRequestObject) (FetchEpisodeResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.QueueEpisodeFetch(ctx, uc, req.Pid); err != nil {
+	if err := s.svc.Podcasts.QueueEpisodeFetch(ctx, uc, req.Pid); err != nil {
 		return nil, err
 	}
 	return FetchEpisode202Response{}, nil
@@ -295,7 +295,7 @@ func (s *Server) FetchEpisode(ctx context.Context, req FetchEpisodeRequestObject
 
 func (s *Server) RemoveEpisodeDownload(ctx context.Context, req RemoveEpisodeDownloadRequestObject) (RemoveEpisodeDownloadResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.RemoveEpisodeDownload(ctx, uc, req.Pid); err != nil {
+	if err := s.svc.Podcasts.RemoveEpisodeDownload(ctx, uc, req.Pid); err != nil {
 		return nil, err
 	}
 	return RemoveEpisodeDownload204Response{}, nil
@@ -303,7 +303,7 @@ func (s *Server) RemoveEpisodeDownload(ctx context.Context, req RemoveEpisodeDow
 
 func (s *Server) ExportOpml(ctx context.Context, req ExportOpmlRequestObject) (ExportOpmlResponseObject, error) {
 	uc := userCtx(ctx)
-	doc, err := s.svc.ExportOPML(ctx, uc)
+	doc, err := s.svc.Podcasts.ExportOPML(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +318,7 @@ func (s *Server) ImportOpml(ctx context.Context, req ImportOpmlRequestObject) (I
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	results, err := s.svc.ImportOPML(ctx, uc, []byte(req.Body.Opml))
+	results, err := s.svc.Podcasts.ImportOPML(ctx, uc, []byte(req.Body.Opml))
 	if err != nil {
 		if service.KindOf(err) == service.KindFeature {
 			return nil, featureRefusal(err)
@@ -370,7 +370,7 @@ func feedParams(err error) map[string]string {
 
 func (s *Server) GetBook(ctx context.Context, req GetBookRequestObject) (GetBookResponseObject, error) {
 	uc := userCtx(ctx)
-	bd, err := s.svc.BookDetailFor(ctx, uc, req.Pid)
+	bd, err := s.svc.Reads.BookDetailFor(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -425,7 +425,7 @@ func (s *Server) ListBookSeries(ctx context.Context, req ListBookSeriesRequestOb
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.svc.ListBookSeries(ctx, uc, deref(req.Params.Cursor), limit)
+	page, err := s.svc.Reads.ListBookSeries(ctx, uc, deref(req.Params.Cursor), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -449,7 +449,7 @@ func (s *Server) ListBookSeries(ctx context.Context, req ListBookSeriesRequestOb
 // GetBookSeries reads one series and the books in it.
 func (s *Server) GetBookSeries(ctx context.Context, req GetBookSeriesRequestObject) (GetBookSeriesResponseObject, error) {
 	uc := userCtx(ctx)
-	detail, err := s.svc.BookSeriesDetailFor(ctx, uc, req.Pid)
+	detail, err := s.svc.Reads.BookSeriesDetailFor(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -476,7 +476,7 @@ func (s *Server) GetBookSeries(ctx context.Context, req GetBookSeriesRequestObje
 
 func (s *Server) GetBookResume(ctx context.Context, req GetBookResumeRequestObject) (GetBookResumeResponseObject, error) {
 	uc := userCtx(ctx)
-	rp, err := s.svc.BookResumeFor(ctx, uc, req.Pid)
+	rp, err := s.svc.Reads.BookResumeFor(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -497,7 +497,7 @@ func (s *Server) PutBookSettings(ctx context.Context, req PutBookSettingsRequest
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	stored, err := s.svc.PutBookSettings(ctx, uc, req.Pid, service.BookSettings{
+	stored, err := s.svc.Reads.PutBookSettings(ctx, uc, req.Pid, service.BookSettings{
 		Speed:       req.Body.Speed,
 		VoiceBoost:  req.Body.VoiceBoost,
 		TrimSilence: req.Body.TrimSilence,
@@ -510,7 +510,7 @@ func (s *Server) PutBookSettings(ctx context.Context, req PutBookSettingsRequest
 
 func (s *Server) ListBookmarks(ctx context.Context, req ListBookmarksRequestObject) (ListBookmarksResponseObject, error) {
 	uc := userCtx(ctx)
-	marks, err := s.svc.BookmarksFor(ctx, uc, req.Pid)
+	marks, err := s.svc.Reads.BookmarksFor(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -526,7 +526,7 @@ func (s *Server) CreateBookmark(ctx context.Context, req CreateBookmarkRequestOb
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	mark, err := s.svc.CreateBookmark(ctx, uc, req.Pid, deref(req.Body.Id), req.Body.PositionMs, deref(req.Body.Note))
+	mark, err := s.svc.Reads.CreateBookmark(ctx, uc, req.Pid, deref(req.Body.Id), req.Body.PositionMs, deref(req.Body.Note))
 	if err != nil {
 		kind := service.KindOf(err)
 		if kind == service.KindConflict {
@@ -543,7 +543,7 @@ func (s *Server) CreateBookmark(ctx context.Context, req CreateBookmarkRequestOb
 
 func (s *Server) DeleteBookmark(ctx context.Context, req DeleteBookmarkRequestObject) (DeleteBookmarkResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.DeleteBookmark(ctx, uc, req.Pid, req.BookmarkId); err != nil {
+	if err := s.svc.Reads.DeleteBookmark(ctx, uc, req.Pid, req.BookmarkId); err != nil {
 		// The service's not-found names which is missing, book or bookmark.
 		return nil, err
 	}
@@ -566,7 +566,7 @@ func (s *Server) GetSkipMap(ctx context.Context, req GetSkipMapRequestObject) (G
 	if req.Params.PartIndex != nil {
 		partIndex = *req.Params.PartIndex
 	}
-	m, err := s.svc.SkipMapFor(ctx, uc, req.Pid, partIndex)
+	m, err := s.svc.Tools.SkipMapFor(ctx, uc, req.Pid, partIndex)
 	if err != nil {
 		kind := service.KindOf(err)
 		if kind == service.KindInvalid {
@@ -629,9 +629,9 @@ func (s *Server) GetWaveform(ctx context.Context, req GetWaveformRequestObject) 
 		err error
 	)
 	if wholeItem {
-		wf, err = s.svc.WaveformForItem(ctx, uc, req.Pid)
+		wf, err = s.svc.Playback.WaveformForItem(ctx, uc, req.Pid)
 	} else {
-		wf, err = s.svc.WaveformFor(ctx, uc, req.Pid, partIndex)
+		wf, err = s.svc.Playback.WaveformFor(ctx, uc, req.Pid, partIndex)
 	}
 	if err != nil {
 		kind := service.KindOf(err)

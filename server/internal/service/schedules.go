@@ -63,7 +63,7 @@ func validScheduleKind(kind string) bool {
 	return false
 }
 
-func (l *Library) scheduleState(ctx context.Context, kind string) scheduleState {
+func (l *Integrations) scheduleState(ctx context.Context, kind string) scheduleState {
 	st := scheduleDefaults[kind]
 	if raw, err := l.db.SettingGet(ctx, scheduleKey(kind)); err == nil {
 		var loaded scheduleState
@@ -74,7 +74,7 @@ func (l *Library) scheduleState(ctx context.Context, kind string) scheduleState 
 	return st
 }
 
-func (l *Library) writeScheduleState(ctx context.Context, kind string, st scheduleState) error {
+func (l *Integrations) writeScheduleState(ctx context.Context, kind string, st scheduleState) error {
 	raw, err := json.Marshal(st)
 	if err != nil {
 		return &Error{Kind: KindInternal, Err: err}
@@ -105,7 +105,7 @@ func scheduleDTO(kind string, st scheduleState) ScheduleDTO {
 }
 
 // Schedules lists every schedule kind with its state.
-func (l *Library) Schedules(ctx context.Context) []ScheduleDTO {
+func (l *Integrations) Schedules(ctx context.Context) []ScheduleDTO {
 	out := make([]ScheduleDTO, 0, len(scheduleKinds))
 	for _, kind := range scheduleKinds {
 		out = append(out, scheduleDTO(kind, l.scheduleState(ctx, kind)))
@@ -115,7 +115,7 @@ func (l *Library) Schedules(ctx context.Context) []ScheduleDTO {
 
 // PutSchedule replaces one schedule's cron and enabled state, keeping
 // its run history.
-func (l *Library) PutSchedule(ctx context.Context, actor *UserCtx, kind, cronSpec string, enabled bool) (ScheduleDTO, error) {
+func (l *Integrations) PutSchedule(ctx context.Context, actor *UserCtx, kind, cronSpec string, enabled bool) (ScheduleDTO, error) {
 	if !validScheduleKind(kind) {
 		return ScheduleDTO{}, errInvalid("unknown schedule kind " + kind)
 	}
@@ -127,7 +127,7 @@ func (l *Library) PutSchedule(ctx context.Context, actor *UserCtx, kind, cronSpe
 	if err := l.writeScheduleState(ctx, kind, st); err != nil {
 		return ScheduleDTO{}, err
 	}
-	l.Audit(ctx, actor, "schedule.update", AuditTarget{Kind: "schedule", Name: kind},
+	l.Audit.Record(ctx, actor, "schedule.update", AuditTarget{Kind: "schedule", Name: kind},
 		map[string]any{"cron": cronSpec, "enabled": enabled})
 	return scheduleDTO(kind, st), nil
 }
@@ -136,7 +136,7 @@ func (l *Library) PutSchedule(ctx context.Context, actor *UserCtx, kind, cronSpe
 // cron has a firing time after the last run (or the last check) and at
 // or before now. lastCheck bounds the window for schedules that were
 // never run, so enabling one does not fire it retroactively.
-func (l *Library) DueSchedule(ctx context.Context, kind string, lastCheck, now time.Time) bool {
+func (l *Integrations) DueSchedule(ctx context.Context, kind string, lastCheck, now time.Time) bool {
 	st := l.scheduleState(ctx, kind)
 	if !st.Enabled {
 		return false
@@ -156,7 +156,7 @@ func (l *Library) DueSchedule(ctx context.Context, kind string, lastCheck, now t
 }
 
 // MarkScheduleRun records a run's outcome.
-func (l *Library) MarkScheduleRun(ctx context.Context, kind string, runErr error) {
+func (l *Integrations) MarkScheduleRun(ctx context.Context, kind string, runErr error) {
 	st := l.scheduleState(ctx, kind)
 	st.LastRunNS = time.Now().UnixNano()
 	if runErr != nil {
@@ -178,7 +178,7 @@ func (l *Library) MarkScheduleRun(ctx context.Context, kind string, runErr error
 // Horizons are deliberately server-owned constants; sync consumers whose
 // cursor falls below the surviving event floor get a clean resync by
 // design.
-func (l *Library) RunPrune(ctx context.Context) error {
+func (l *Integrations) RunPrune(ctx context.Context) error {
 	const (
 		keepEvents     = 100_000
 		keepAudit      = 50_000
@@ -205,7 +205,7 @@ func (l *Library) RunPrune(ctx context.Context) error {
 			}
 		}
 	}
-	n, err := l.PruneServerEvents(ctx, keepEvents)
+	n, err := l.library.PruneServerEvents(ctx, keepEvents)
 	record("event log", err)
 	if n > 0 {
 		l.log.Info("pruned event log", "rows", n)
@@ -249,7 +249,7 @@ func (l *Library) RunPrune(ctx context.Context) error {
 	// The one horizon here that is not a server-owned constant: how long
 	// a receipt is worth keeping is an operator's policy. Re-read every
 	// pass, so a change needs no restart; 0 is an explicit "keep them".
-	if days := l.TaskRetentionDays(ctx); days > 0 {
+	if days := l.Settings.TaskRetentionDays(ctx); days > 0 {
 		before := time.Now().Add(-time.Duration(days) * 24 * time.Hour).UnixNano()
 		// What a finished merge or split left hidden is settled before
 		// its row goes, as a clear by hand settles it.
@@ -259,7 +259,7 @@ func (l *Library) RunPrune(ctx context.Context) error {
 		for _, t := range old {
 			// One whose hidden files could not take their names stays,
 			// saying so, for the next pass.
-			if l.settleClearedTask(ctx, nil, t) == nil {
+			if l.Tools.settleClearedTask(ctx, nil, t) == nil {
 				ids = append(ids, t.ID)
 			}
 		}
@@ -277,7 +277,7 @@ func (l *Library) RunPrune(ctx context.Context) error {
 		on, err := prune(ctx, time.Duration(days)*24*time.Hour)
 		record("organize journal", err)
 		if on > 0 {
-			l.forgetOrganizeHistory()
+			l.Health.forgetOrganizeHistory()
 			l.log.Info("pruned organize journal", "rows", on, "retentionDays", days)
 		}
 	}
@@ -291,7 +291,7 @@ func (l *Library) RunPrune(ctx context.Context) error {
 	record("exhausted sonic analysis", err)
 	if xn > 0 {
 		l.log.Info("pruned exhausted sonic analysis", "rows", xn)
-		l.sweepOwed(xn)
+		l.Similarity.sweepOwed(xn)
 	}
 	return firstErr
 }

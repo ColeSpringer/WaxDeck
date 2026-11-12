@@ -50,14 +50,14 @@ func moveRip(t *testing.T, ctx context.Context, svc *Library, from, to string) {
 func TestOrganizeLeavesACueRipWhereItIs(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, ripDir, _ := cueSplitFixture(t)
-	plan, err := svc.PreviewOrganize(ctx, uc, "", nil)
+	plan, err := svc.Health.PreviewOrganize(ctx, uc, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.ContainsFunc(plan.Holds, func(h OrganizeHoldDTO) bool { return h.Code == string(organize.HoldVirtual) }) {
 		t.Fatalf("holds = %+v, want the rip held", plan.Holds)
 	}
-	if _, err := svc.ApplyOrganize(ctx, uc, "", nil); err != nil {
+	if _, err := svc.Health.ApplyOrganize(ctx, uc, "", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(ripDir, "Rip Album.flac")); err != nil {
@@ -71,8 +71,8 @@ func TestACueSplitCutsItsRipWhereItIsNow(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, one, ripDir, engine := cueSplitFixture(t)
 	reading := &readingEngine{fakeBookEngine: engine}
-	svc.SetFlowJobs(reading)
-	task, err := svc.StartCueSplit(ctx, uc, one, false)
+	svc.Tools.SetFlowJobs(reading)
+	task, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,15 +96,15 @@ func TestACueSplitCutsItsRipWhereItIsNow(t *testing.T) {
 func TestACueSplitRetiresItsRipWhereItIsNow(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, one, ripDir, _ := cueSplitFixture(t)
-	task, err := svc.StartCueSplit(ctx, uc, one, false)
+	task, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.toolStepHook = stopAt("staged", nil)
+	svc.Tools.toolStepHook = stopAt("staged", nil)
 	if err := attempt(t, ctx, svc, 1); err == nil {
 		t.Fatal("the first attempt ran on past the cut")
 	}
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	moved := filepath.Join(filepath.Dir(ripDir), "Moved Album")
 	moveRip(t, ctx, svc, ripDir, moved)
 	// Another rip's sheet takes the old place.
@@ -141,15 +141,15 @@ func TestACueSplitRetiresItsRipWhereItIsNow(t *testing.T) {
 func TestACueSplitTakesNoSheetButItsRipsOwn(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, one, ripDir, _ := cueSplitFixture(t)
-	task, err := svc.StartCueSplit(ctx, uc, one, false)
+	task, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.toolStepHook = stopAt("imported", nil)
+	svc.Tools.toolStepHook = stopAt("imported", nil)
 	if err := attempt(t, ctx, svc, 1); err == nil {
 		t.Fatal("the first attempt ran on past the import")
 	}
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	other := filepath.Join(filepath.Dir(ripDir), "Other Album")
 	if _, err := fixtures.Generate(other, fixtures.Spec{
 		Name: "Other Album", Codec: fixtures.CodecFLAC, Duration: 6 * time.Second, SampleRate: 44100,
@@ -203,7 +203,7 @@ func TestACueSplitLeavesASheetAnotherEncodingUses(t *testing.T) {
 		t.Fatal(err)
 	}
 	carved := len(tracksTitled(t, ctx, svc, "Rip One", true))
-	task, err := svc.StartCueSplit(ctx, uc, one, false)
+	task, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,11 +238,11 @@ func TestACueSplitOfARipWithoutItsOwnSheetIsRefused(t *testing.T) {
 	if err := os.Rename(filepath.Join(ripDir, "Rip Album.cue"), filepath.Join(ripDir, "Other Album.cue")); err != nil {
 		t.Fatal(err)
 	}
-	_, err := svc.StartCueSplit(ctx, uc, one, false)
+	_, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 	if p := RefusalParams(err); KindOf(err) != KindConflict || p["reason"] != refusalNoSheet {
 		t.Fatalf("a split of a rip without its own sheet = %v (params %v), want conflict, reason %s", err, p, refusalNoSheet)
 	}
-	if tasks, _, err := svc.ListToolTasksFor(ctx, uc, "", 10); err != nil || len(tasks) != 0 {
+	if tasks, _, err := svc.Tools.ListToolTasksFor(ctx, uc, "", 10); err != nil || len(tasks) != 0 {
 		t.Fatalf("tasks = %+v (%v), want none queued", tasks, err)
 	}
 }

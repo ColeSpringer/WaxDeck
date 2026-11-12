@@ -35,7 +35,7 @@ type KindTallyDTO struct {
 // nothing starts; a kind someone pinned before is replaced, since the
 // caller may edit the item. With writeBack the kind is also written into
 // the files, which every item's library must then allow.
-func (l *Library) SetItemsKind(ctx context.Context, uc *UserCtx, apiPIDs []string, mediaType string, writeBack bool) (Job, error) {
+func (l *Reads) SetItemsKind(ctx context.Context, uc *UserCtx, apiPIDs []string, mediaType string, writeBack bool) (Job, error) {
 	if len(apiPIDs) == 0 || len(apiPIDs) > maxKindItems {
 		return Job{}, errInvalid(fmt.Sprintf("name between 1 and %d items", maxKindItems))
 	}
@@ -51,14 +51,14 @@ func (l *Library) SetItemsKind(ctx context.Context, uc *UserCtx, apiPIDs []strin
 	pids := make([]model.PID, 0, len(apiPIDs))
 	var target string
 	for _, apiPID := range apiPIDs {
-		it, err := l.getVisibleItem(ctx, uc, apiPID)
+		it, err := l.Grants.getVisibleItem(ctx, uc, apiPID)
 		if err != nil {
 			return Job{}, err
 		}
 		if it.Kind == model.KindEpisode {
 			return Job{}, errInvalid("a podcast episode is what its feed says it is")
 		}
-		may, err := l.MayCurateItem(ctx, uc, apiPID)
+		may, err := l.Ingest.MayCurateItem(ctx, uc, apiPID)
 		if err != nil {
 			return Job{}, &Error{Kind: KindInternal, Err: err}
 		}
@@ -67,7 +67,7 @@ func (l *Library) SetItemsKind(ctx context.Context, uc *UserCtx, apiPIDs []strin
 				Msg: "administrators, or the user whose upload brought every one of these items in"}
 		}
 		if writeBack {
-			if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+			if err := l.Settings.checkPathWritable(ctx, string(it.Path)); err != nil {
 				return Job{}, err
 			}
 		}
@@ -82,18 +82,18 @@ func (l *Library) SetItemsKind(ctx context.Context, uc *UserCtx, apiPIDs []strin
 	}
 	// Audited before its starter is recorded: the follow-up that record
 	// settles then finds the entry to give the item's new prefix.
-	l.Audit(ctx, uc, "item.kind", AuditTarget{Kind: "item", PID: target}, map[string]any{
+	l.Audit.Record(ctx, uc, "item.kind", AuditTarget{Kind: "item", PID: target}, map[string]any{
 		"pids": apiPIDs, "mediaType": mediaType, "writeBack": writeBack, "job": apiPID(PrefixJob, jobPID),
 	})
-	l.followStarted(ctx, jobPID, uc.ID)
+	l.Jobs.followStarted(ctx, jobPID, uc.ID)
 	// The job is the caller's whether or not the record of who started it
-	// landed, so its answer reads it directly, narrowed as JobStatusFor
+	// landed, so its answer reads it directly, narrowed as Jobs.StatusFor
 	// narrows it for a starter who is not an administrator.
-	job, err := l.JobStatus(ctx, apiPID(PrefixJob, jobPID))
+	job, err := l.Jobs.Status(ctx, apiPID(PrefixJob, jobPID))
 	if err != nil || uc.Admin {
 		return job, err
 	}
-	l.narrowJob(ctx, uc, &job)
+	l.Jobs.narrowJob(ctx, uc, &job)
 	return job, nil
 }
 
@@ -101,7 +101,7 @@ func (l *Library) SetItemsKind(ctx context.Context, uc *UserCtx, apiPIDs []strin
 // paths and bare pids, which are not every caller's to read, so each is
 // logged and answered in WaxDeck's words; its two conflicts, a lease
 // another job holds and a part not on disk, are told apart by the message.
-func (l *Library) kindRefusal(err error) error {
+func (l *Reads) kindRefusal(err error) error {
 	msg := err.Error()
 	switch waxerr.CodeOf(err) {
 	case waxerr.CodeConflict:
@@ -207,7 +207,7 @@ func shapeKindTally(t *KindTallyDTO, items map[model.PID]*model.ItemView) {
 // readItems reads the items pids name, each once, keyed by pid: from the
 // catalog in one batch, which a long list spreads over a few statements.
 // One the catalog no longer has is absent.
-func (l *Library) readItems(ctx context.Context, pids []model.PID) (map[model.PID]*model.ItemView, error) {
+func (l *Reads) readItems(ctx context.Context, pids []model.PID) (map[model.PID]*model.ItemView, error) {
 	out := make(map[model.PID]*model.ItemView, len(pids))
 	uniq := make([]model.PID, 0, len(pids))
 	seen := make(map[model.PID]bool, len(pids))
@@ -249,7 +249,7 @@ func (l *Library) readItems(ctx context.Context, pids []model.PID) (map[model.PI
 // the book. Run again it finds nothing left to move, so a restart
 // repeating it is harmless; a failure is answered, for the caller to
 // keep the job's origin and try again at the next start.
-func (l *Library) followKindChange(ctx context.Context, j *model.Job) error {
+func (l *Reads) followKindChange(ctx context.Context, j *model.Job) error {
 	if j.Result == "" {
 		return nil
 	}
@@ -313,7 +313,7 @@ func (l *Library) followKindChange(ctx context.Context, j *model.Job) error {
 	// are not an administrator: they could edit every item they named,
 	// so whichever it came from, they may edit the part too.
 	if unplaced := len(r.Created) - len(moves.Created); unplaced > 0 {
-		starter, err := l.jobStarter(ctx, j.PID)
+		starter, err := l.Jobs.starter(ctx, j.PID)
 		if err != nil {
 			readErr = cmp.Or(readErr, err)
 		} else if starter != "" && !l.userIsAdmin(ctx, starter) {
@@ -344,7 +344,7 @@ func (l *Library) followKindChange(ctx context.Context, j *model.Job) error {
 
 // userIsAdmin reports whether an account holds the administrator role; one
 // that cannot be read does not.
-func (l *Library) userIsAdmin(ctx context.Context, userID string) bool {
+func (l *Reads) userIsAdmin(ctx context.Context, userID string) bool {
 	u, err := l.db.UserByID(ctx, userID)
 	return err == nil && hasRole(u.Roles, "admin")
 }

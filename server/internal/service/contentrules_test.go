@@ -33,7 +33,7 @@ func (f genreFixture) restricted(allow, deny []TagRule) *UserCtx {
 func (f genreFixture) tag(t *testing.T, title, key string, values ...string) {
 	t.Helper()
 	it := f.itemNamed(t, title)
-	if _, err := f.svc.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), key, values, MetadataEditParams{Lock: false, Force: false}); err != nil {
+	if _, err := f.svc.Editor.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), key, values, MetadataEditParams{Lock: false, Force: false}); err != nil {
 		t.Fatalf("tagging %s: %v", title, err)
 	}
 }
@@ -59,7 +59,7 @@ func TestRestrictedFacetsDrillToTheirCount(t *testing.T) {
 	uc := f.restricted(nil, []TagRule{{Key: "MOOD", Value: "loud"}})
 	for _, dimension := range []string{"genre", "album", "kind", "tag.MOOD"} {
 		t.Run(dimension, func(t *testing.T) {
-			page, err := f.svc.Facets(f.ctx, uc, FacetQuery{Dimension: dimension, Limit: 500})
+			page, err := f.svc.Reads.Facets(f.ctx, uc, FacetQuery{Dimension: dimension, Limit: 500})
 			if err != nil {
 				t.Fatalf("enumerating %s: %v", dimension, err)
 			}
@@ -67,7 +67,7 @@ func TestRestrictedFacetsDrillToTheirCount(t *testing.T) {
 				t.Fatalf("%s enumerated no buckets for a restricted caller", dimension)
 			}
 			for _, b := range page.Buckets {
-				items, err := f.svc.Items(f.ctx, uc,
+				items, err := f.svc.Reads.Items(f.ctx, uc,
 					ItemFilter{Facet: dimension, FacetKey: b.Key}, "", 500)
 				if err != nil {
 					t.Fatalf("drilling %s bucket %q: %v", dimension, b.Label, err)
@@ -93,14 +93,14 @@ func TestScopedFacetCarriesContentRules(t *testing.T) {
 
 	uc := f.restricted(nil, []TagRule{{Key: "MOOD", Value: "loud"}})
 	for _, b := range facetBucketsFor(t, f, uc, "artist") {
-		page, err := f.svc.Facets(f.ctx, uc, FacetQuery{
+		page, err := f.svc.Reads.Facets(f.ctx, uc, FacetQuery{
 			Dimension: "album", Facet: "artist", FacetKey: b.Key, Limit: 500,
 		})
 		if err != nil {
 			t.Fatalf("scoped enumeration under %q: %v", b.Label, err)
 		}
 		for _, album := range page.Buckets {
-			items, err := f.svc.Items(f.ctx, uc,
+			items, err := f.svc.Reads.Items(f.ctx, uc,
 				ItemFilter{Facet: "album", FacetKey: album.Key}, "", 500)
 			if err != nil {
 				t.Fatalf("drilling scoped album %q: %v", album.Label, err)
@@ -125,7 +125,7 @@ func TestContentRuleSpellingsFold(t *testing.T) {
 
 	for _, spelling := range []string{"Calm", "calm", "CALM", "cAlM"} {
 		uc := f.restricted([]TagRule{{Key: "MOOD", Value: spelling}}, nil)
-		page, err := f.svc.Items(f.ctx, uc, ItemFilter{}, "", 100)
+		page, err := f.svc.Reads.Items(f.ctx, uc, ItemFilter{}, "", 100)
 		if err != nil {
 			t.Fatalf("listing under allow %q: %v", spelling, err)
 		}
@@ -138,7 +138,7 @@ func TestContentRuleSpellingsFold(t *testing.T) {
 	// A value nothing carries resolves to an empty set, and an allow rule
 	// over an empty set admits nothing rather than everything.
 	uc := f.restricted([]TagRule{{Key: "MOOD", Value: "nonesuch"}}, nil)
-	page, err := f.svc.Items(f.ctx, uc, ItemFilter{}, "", 100)
+	page, err := f.svc.Reads.Items(f.ctx, uc, ItemFilter{}, "", 100)
 	if err != nil {
 		t.Fatalf("listing under an unmatchable allow: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestSetValuedDenyExcludesTheWholeItem(t *testing.T) {
 
 	uc := f.restricted(nil, []TagRule{{Key: "MOOD", Value: "Jazz"}})
 	denied := f.itemNamed(t, "Canonical")
-	page, err := f.svc.Items(f.ctx, uc, ItemFilter{}, "", 100)
+	page, err := f.svc.Reads.Items(f.ctx, uc, ItemFilter{}, "", 100)
 	if err != nil {
 		t.Fatalf("listing under a deny: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestSetValuedDenyExcludesTheWholeItem(t *testing.T) {
 	// The Rock bucket is where a plain negation would have leaked it: the
 	// item does carry Rock.
 	for _, b := range facetBucketsFor(t, f, uc, "tag.MOOD") {
-		items, err := f.svc.Items(f.ctx, uc,
+		items, err := f.svc.Reads.Items(f.ctx, uc,
 			ItemFilter{Facet: "tag.MOOD", FacetKey: b.Key}, "", 100)
 		if err != nil {
 			t.Fatalf("drilling MOOD bucket %q: %v", b.Label, err)
@@ -203,7 +203,7 @@ func TestRestrictedListingPagesFull(t *testing.T) {
 	// Five tracks, one denied, asked for two at a time: the first page
 	// has to hold two, which the per-item filter could not promise.
 	uc := f.restricted(nil, []TagRule{{Key: "MOOD", Value: "loud"}})
-	page, err := f.svc.Items(f.ctx, uc, ItemFilter{}, "", 2)
+	page, err := f.svc.Reads.Items(f.ctx, uc, ItemFilter{}, "", 2)
 	if err != nil {
 		t.Fatalf("listing: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestRestrictedListingPagesFull(t *testing.T) {
 	seen := 0
 	cursor := ""
 	for {
-		p, err := f.svc.Items(f.ctx, uc, ItemFilter{}, cursor, 2)
+		p, err := f.svc.Reads.Items(f.ctx, uc, ItemFilter{}, cursor, 2)
 		if err != nil {
 			t.Fatalf("paging: %v", err)
 		}
@@ -239,7 +239,7 @@ func TestContentRulesLeaveTheFacetCacheAlone(t *testing.T) {
 	settleCatalogFeed(t, f.svc)
 
 	uc := f.restricted(nil, []TagRule{{Key: "MOOD", Value: "loud"}})
-	if _, err := f.svc.Facets(f.ctx, uc, FacetQuery{Dimension: "genre", Limit: 500}); err != nil {
+	if _, err := f.svc.Reads.Facets(f.ctx, uc, FacetQuery{Dimension: "genre", Limit: 500}); err != nil {
 		t.Fatalf("restricted enumeration: %v", err)
 	}
 	if servesFromCache(f.svc, "genre") {
@@ -259,7 +259,7 @@ func TestContentRulesLeaveTheFacetCacheAlone(t *testing.T) {
 // facetBucketsFor enumerates a dimension as one particular caller.
 func facetBucketsFor(t *testing.T, f genreFixture, uc *UserCtx, dimension string) []FacetBucket {
 	t.Helper()
-	page, err := f.svc.Facets(f.ctx, uc, FacetQuery{Dimension: dimension, Limit: 500})
+	page, err := f.svc.Reads.Facets(f.ctx, uc, FacetQuery{Dimension: dimension, Limit: 500})
 	if err != nil {
 		t.Fatalf("enumerating %s: %v", dimension, err)
 	}
@@ -278,7 +278,7 @@ func TestUnaddressableAllowKeyKeepsEpisodesAside(t *testing.T) {
 	f := newGenreFixture(t)
 	uc := f.restricted([]TagRule{{Key: "GENRE"}}, nil)
 
-	page, err := f.svc.Items(f.ctx, uc, ItemFilter{}, "", 100)
+	page, err := f.svc.Reads.Items(f.ctx, uc, ItemFilter{}, "", 100)
 	if err != nil {
 		t.Fatalf("listing under a reserved allow key: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestUnaddressableAllowKeyKeepsEpisodesAside(t *testing.T) {
 	// The node itself carries the episode arm even on this fail-closed
 	// path; the fixture has no episodes to list, so the shape is the
 	// assertion.
-	node, ok := f.svc.contentRuleNode(f.ctx, uc).(query.Or)
+	node, ok := f.svc.Grants.contentRuleNode(f.ctx, uc).(query.Or)
 	if !ok || len(node.Nodes) != 2 {
 		t.Fatalf("fail-closed node = %#v, want Or(episode arm, match-nothing)", node)
 	}
@@ -328,7 +328,7 @@ func TestRestrictedSearchOmitsAnEntityWhoseTracksAreAllDenied(t *testing.T) {
 	kid := f.calmDenied()
 
 	f.tag(t, "Canonical", "MOOD", "calm")
-	res, err := f.svc.Search(f.ctx, kid, "Folded", 10)
+	res, err := f.svc.Reads.Search(f.ctx, kid, "Folded", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,19 +337,19 @@ func TestRestrictedSearchOmitsAnEntityWhoseTracksAreAllDenied(t *testing.T) {
 	}
 
 	f.tagAllCalm(t)
-	if res, err = f.svc.Search(f.ctx, kid, "Folded", 10); err != nil {
+	if res, err = f.svc.Reads.Search(f.ctx, kid, "Folded", 10); err != nil {
 		t.Fatal(err)
 	}
 	if len(res.Albums) != 0 {
 		t.Errorf("a fully denied album is still a hit: %+v", res.Albums)
 	}
-	if res, err = f.svc.Search(f.ctx, kid, "Vocabulary Test", 10); err != nil {
+	if res, err = f.svc.Reads.Search(f.ctx, kid, "Vocabulary Test", 10); err != nil {
 		t.Fatal(err)
 	}
 	if len(res.Artists) != 0 {
 		t.Errorf("a fully denied artist is still a hit: %+v", res.Artists)
 	}
-	if res, err = f.svc.Search(f.ctx, f.uc, "Folded", 10); err != nil || len(res.Albums) != 1 {
+	if res, err = f.svc.Reads.Search(f.ctx, f.uc, "Folded", 10); err != nil || len(res.Albums) != 1 {
 		t.Errorf("the unrestricted caller's search = %+v (%v), want the album", res.Albums, err)
 	}
 }
@@ -361,11 +361,11 @@ func TestAlbumDetailForADeniedAlbumIsNotFound(t *testing.T) {
 	album := apiPID(PrefixAlbum, f.itemNamed(t, "Canonical").AlbumPID)
 
 	f.tag(t, "Canonical", "MOOD", "calm")
-	if _, err := f.svc.Album(f.ctx, kid, album); err != nil {
+	if _, err := f.svc.Reads.Album(f.ctx, kid, album); err != nil {
 		t.Fatalf("a partly denied album: %v, want it readable", err)
 	}
 	f.tagAllCalm(t)
-	if _, err := f.svc.Album(f.ctx, kid, album); KindOf(err) != KindNotFound {
+	if _, err := f.svc.Reads.Album(f.ctx, kid, album); KindOf(err) != KindNotFound {
 		t.Errorf("a fully denied album = %v, want not-found", err)
 	}
 }
@@ -379,14 +379,14 @@ func TestAlbumCountIsWithheldFromAContentRestrictedCaller(t *testing.T) {
 	album := apiPID(PrefixAlbum, f.itemNamed(t, "Canonical").AlbumPID)
 	f.tag(t, "Canonical", "MOOD", "calm")
 
-	theirs, err := f.svc.Album(f.ctx, kid, album)
+	theirs, err := f.svc.Reads.Album(f.ctx, kid, album)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if theirs.ItemCount != 0 || theirs.TotalDurationMS != 0 {
 		t.Errorf("restricted album detail counts %d tracks, %d ms; want them withheld", theirs.ItemCount, theirs.TotalDurationMS)
 	}
-	mine, err := f.svc.Album(f.ctx, f.uc, album)
+	mine, err := f.svc.Reads.Album(f.ctx, f.uc, album)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +394,7 @@ func TestAlbumCountIsWithheldFromAContentRestrictedCaller(t *testing.T) {
 		t.Errorf("unrestricted album detail counts %d tracks, want 5", mine.ItemCount)
 	}
 
-	cards, _, err := f.svc.EntityCards(f.ctx, kid, []string{album})
+	cards, _, err := f.svc.Reads.EntityCards(f.ctx, kid, []string{album})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -410,7 +410,7 @@ func TestEntityCardsDropAFullyDeniedAlbum(t *testing.T) {
 	album := apiPID(PrefixAlbum, f.itemNamed(t, "Canonical").AlbumPID)
 	f.tagAllCalm(t)
 
-	cards, departed, err := f.svc.EntityCards(f.ctx, kid, []string{album})
+	cards, departed, err := f.svc.Reads.EntityCards(f.ctx, kid, []string{album})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -420,7 +420,7 @@ func TestEntityCardsDropAFullyDeniedAlbum(t *testing.T) {
 	if len(departed) != 0 {
 		t.Errorf("departed = %v, want none: the album exists, the caller just cannot see it", departed)
 	}
-	if cards, _, err := f.svc.EntityCards(f.ctx, f.uc, []string{album}); err != nil || len(cards) != 1 {
+	if cards, _, err := f.svc.Reads.EntityCards(f.ctx, f.uc, []string{album}); err != nil || len(cards) != 1 {
 		t.Errorf("unrestricted cards = %+v (%v), want the album", cards, err)
 	}
 }
@@ -434,11 +434,11 @@ func TestAlbumShareRefusedWhenEveryTrackIsDenied(t *testing.T) {
 	album := apiPID(PrefixAlbum, f.itemNamed(t, "Canonical").AlbumPID)
 
 	f.tag(t, "Canonical", "MOOD", "calm")
-	if _, err := f.svc.CreateShare(f.ctx, kid, album, 0, false, 0); err != nil {
+	if _, err := f.svc.Reads.CreateShare(f.ctx, kid, album, 0, false, 0); err != nil {
 		t.Fatalf("sharing a partly denied album: %v, want it allowed", err)
 	}
 	f.tagAllCalm(t)
-	if _, err := f.svc.CreateShare(f.ctx, kid, album, 0, false, 0); KindOf(err) != KindNotFound {
+	if _, err := f.svc.Reads.CreateShare(f.ctx, kid, album, 0, false, 0); KindOf(err) != KindNotFound {
 		t.Errorf("sharing a fully denied album = %v, want not-found", err)
 	}
 }
@@ -464,7 +464,7 @@ func TestServerYearInReviewRanksOnlyWhatTheCallerCanSee(t *testing.T) {
 	}
 	titles := func(uc *UserCtx) []string {
 		t.Helper()
-		recap, err := f.svc.ServerWideYearInReview(f.ctx, uc, started.Year())
+		recap, err := f.svc.Reads.ServerWideYearInReview(f.ctx, uc, started.Year())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -502,12 +502,12 @@ func TestServerYearInReviewHidesOnlyWhatTheReaderCannotSee(t *testing.T) {
 	if _, err := f.svc.db.InsertListens(f.ctx, rows); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.svc.DeleteItems(f.ctx, f.uc, []string{itemAPIPID(trashed)}, "trash", false); err != nil {
+	if _, err := f.svc.Tools.DeleteItems(f.ctx, f.uc, []string{itemAPIPID(trashed)}, "trash", false); err != nil {
 		t.Fatal(err)
 	}
 	ranked := func(uc *UserCtx) []TopEntry {
 		t.Helper()
-		recap, err := f.svc.ServerWideYearInReview(f.ctx, uc, started.Year())
+		recap, err := f.svc.Reads.ServerWideYearInReview(f.ctx, uc, started.Year())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -525,7 +525,7 @@ func TestServerYearInReviewHidesOnlyWhatTheReaderCannotSee(t *testing.T) {
 func TestExplicitToggleLeavesAlbumCountsAlone(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
-	page, err := svc.Items(ctx, admin, ItemFilter{}, "", 10)
+	page, err := svc.Reads.Items(ctx, admin, ItemFilter{}, "", 10)
 	if err != nil || len(page.Items) == 0 {
 		t.Fatalf("items = %v, %v", page.Items, err)
 	}
@@ -533,7 +533,7 @@ func TestExplicitToggleLeavesAlbumCountsAlone(t *testing.T) {
 	read := func(explicit bool) AlbumDetail {
 		t.Helper()
 		uc := &UserCtx{ID: admin.ID, CatalogPID: admin.CatalogPID, AllLibraries: true, Explicit: explicit}
-		out, err := svc.Album(ctx, uc, album)
+		out, err := svc.Reads.Album(ctx, uc, album)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -552,7 +552,7 @@ func TestExplicitToggleLeavesAlbumCountsAlone(t *testing.T) {
 func TestEntityGatesTakeMoreThanFiveHundredGrants(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
-	libs, err := svc.Libraries(ctx)
+	libs, err := svc.Roots.Libraries(ctx)
 	if err != nil || len(libs) == 0 {
 		t.Fatalf("libraries = %v, %v", libs, err)
 	}
@@ -561,12 +561,12 @@ func TestEntityGatesTakeMoreThanFiveHundredGrants(t *testing.T) {
 		grants[fmt.Sprintf("01NOSUCHLIBRARY%011d", i)] = true
 	}
 	wide := &UserCtx{ID: admin.ID, CatalogPID: admin.CatalogPID, Libraries: grants}
-	page, err := svc.Items(ctx, admin, ItemFilter{}, "", 10)
+	page, err := svc.Reads.Items(ctx, admin, ItemFilter{}, "", 10)
 	if err != nil || len(page.Items) == 0 {
 		t.Fatalf("items = %v, %v", page.Items, err)
 	}
 	album := page.Items[0].AlbumPID
-	if _, err := svc.Album(ctx, wide, album); err != nil {
+	if _, err := svc.Reads.Album(ctx, wide, album); err != nil {
 		t.Errorf("album detail for a caller with 501 grants: %v", err)
 	}
 }
@@ -579,10 +579,10 @@ func TestVisibleEntitiesRefusesAnUnknownKind(t *testing.T) {
 	t.Parallel()
 	f := newGenreFixture(t)
 	kid := f.calmDenied()
-	if vis, err := f.svc.visibleEntities(f.ctx, kid, "zz", []model.PID{"x"}); err == nil {
+	if vis, err := f.svc.Reads.visibleEntities(f.ctx, kid, "zz", []model.PID{"x"}); err == nil {
 		t.Errorf("an unknown entity kind = %v, nil; want an error", vis)
 	}
-	if vis, err := f.svc.visibleEntities(f.ctx, kid, PrefixAlbum, nil); err != nil || vis == nil {
+	if vis, err := f.svc.Reads.visibleEntities(f.ctx, kid, PrefixAlbum, nil); err != nil || vis == nil {
 		t.Errorf("an empty batch = %v, %v; want an empty set", vis, err)
 	}
 }

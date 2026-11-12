@@ -46,13 +46,13 @@ func receivedUploadAsking(t *testing.T, ctx context.Context, svc *Library, uc *U
 	if err != nil {
 		t.Fatal(err)
 	}
-	up, err := svc.CreateUpload(ctx, uc, UploadCreateParams{
+	up, err := svc.Ingest.CreateUpload(ctx, uc, UploadCreateParams{
 		FileName: "kept.flac", SizeBytes: int64(len(data)), MediaType: "music", Identify: &identify,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.AppendUploadData(ctx, uc, up.ID, 0, bytes.NewReader(data)); err != nil {
+	if _, err := svc.Ingest.AppendUploadData(ctx, uc, up.ID, 0, bytes.NewReader(data)); err != nil {
 		t.Fatal(err)
 	}
 	return up
@@ -69,11 +69,11 @@ func TestARetriedCompleteCarriesOnFromThePromotedFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	final := svc.uploadFinalPath(row)
-	if err := os.Rename(svc.uploadPartPath(row), final); err != nil {
+	final := svc.Ingest.uploadFinalPath(row)
+	if err := os.Rename(svc.Ingest.uploadPartPath(row), final); err != nil {
 		t.Fatal(err)
 	}
-	got, err := svc.CompleteUpload(ctx, uc, up.ID)
+	got, err := svc.Ingest.CompleteUpload(ctx, uc, up.ID)
 	if err != nil {
 		t.Fatalf("retried complete: %v", err)
 	}
@@ -100,19 +100,19 @@ func TestAWriteToAFullSessionLeavesItsFilesAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Rename(svc.uploadPartPath(row), svc.uploadFinalPath(row)); err != nil {
+	if err := os.Rename(svc.Ingest.uploadPartPath(row), svc.Ingest.uploadFinalPath(row)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.AppendUploadData(ctx, uc, up.ID, row.SizeBytes, bytes.NewReader(nil)); err != nil {
+	if _, err := svc.Ingest.AppendUploadData(ctx, uc, up.ID, row.SizeBytes, bytes.NewReader(nil)); err != nil {
 		t.Fatalf("an empty write at the end = %v, want it answered as is", err)
 	}
-	if _, err := svc.AppendUploadData(ctx, uc, up.ID, row.SizeBytes, bytes.NewReader([]byte{1})); KindOf(err) != KindInvalid {
+	if _, err := svc.Ingest.AppendUploadData(ctx, uc, up.ID, row.SizeBytes, bytes.NewReader([]byte{1})); KindOf(err) != KindInvalid {
 		t.Fatalf("a byte past the end = %v, want it refused", err)
 	}
-	if _, err := os.Stat(svc.uploadPartPath(row)); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(svc.Ingest.uploadPartPath(row)); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("a part file is back: %v", err)
 	}
-	got, err := svc.CompleteUpload(ctx, uc, up.ID)
+	got, err := svc.Ingest.CompleteUpload(ctx, uc, up.ID)
 	if err != nil || (got.State != uploadStaged && got.State != uploadImported) {
 		t.Fatalf("the complete after = %+v, %v; want it settled from the promoted file", got, err)
 	}
@@ -127,22 +127,22 @@ func TestADeadSessionsBytesThatWouldNotGoAreLeftToTheJanitor(t *testing.T) {
 	}
 	ctx, svc, uc := uploadFixture(t)
 	data := []byte("bytes that a declared checksum does not describe")
-	up, err := svc.CreateUpload(ctx, uc, UploadCreateParams{
+	up, err := svc.Ingest.CreateUpload(ctx, uc, UploadCreateParams{
 		FileName: "dead.flac", SizeBytes: int64(len(data)), MediaType: "music",
 		SHA256: strings.Repeat("0", 64),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.AppendUploadData(ctx, uc, up.ID, 0, bytes.NewReader(data)); err != nil {
+	if _, err := svc.Ingest.AppendUploadData(ctx, uc, up.ID, 0, bytes.NewReader(data)); err != nil {
 		t.Fatal(err)
 	}
-	dir := filepath.Join(svc.stagingDir, up.ID)
+	dir := filepath.Join(svc.Ingest.stagingDir, up.ID)
 	if err := os.Chmod(dir, 0o500); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
-	if _, err := svc.CompleteUpload(ctx, uc, up.ID); !errors.Is(err, ErrChecksumMismatch) {
+	if _, err := svc.Ingest.CompleteUpload(ctx, uc, up.ID); !errors.Is(err, ErrChecksumMismatch) {
 		t.Fatalf("complete = %v, want the checksum refused", err)
 	}
 	row, err := svc.db.UploadByID(ctx, up.ID)
@@ -155,7 +155,7 @@ func TestADeadSessionsBytesThatWouldNotGoAreLeftToTheJanitor(t *testing.T) {
 	if err := os.Chmod(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	svc.DrainExpiredUploads(ctx)
+	svc.Ingest.DrainExpiredUploads(ctx)
 	if _, err := os.Stat(dir); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("the janitor left the bytes: %v", err)
 	}
@@ -166,15 +166,15 @@ func TestADeadSessionsBytesThatWouldNotGoAreLeftToTheJanitor(t *testing.T) {
 func TestAnOverlappingCompleteIsToldToWait(t *testing.T) {
 	ctx, svc, uc := uploadFixture(t)
 	up := receivedUpload(t, ctx, svc, uc)
-	svc.completing.Store(up.ID, struct{}{})
-	if _, err := svc.CompleteUpload(ctx, uc, up.ID); KindOf(err) != KindConflict {
+	svc.Ingest.completing.Store(up.ID, struct{}{})
+	if _, err := svc.Ingest.CompleteUpload(ctx, uc, up.ID); KindOf(err) != KindConflict {
 		t.Fatalf("overlapping complete = %v, want a conflict", err)
 	}
 	row, err := svc.db.UploadByID(ctx, up.ID)
 	if err != nil {
 		t.Fatalf("the session is gone: %v", err)
 	}
-	if _, err := os.Stat(svc.uploadPartPath(row)); err != nil {
+	if _, err := os.Stat(svc.Ingest.uploadPartPath(row)); err != nil {
 		t.Fatalf("the received bytes are gone: %v", err)
 	}
 }
@@ -192,7 +192,7 @@ func TestASessionIsNotIdleWhileItsSealRuns(t *testing.T) {
 	}
 	idle := func() time.Duration {
 		t.Helper()
-		got, err := svc.GetUpload(ctx, uc, up.ID)
+		got, err := svc.Ingest.GetUpload(ctx, uc, up.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -205,7 +205,7 @@ func TestASessionIsNotIdleWhileItsSealRuns(t *testing.T) {
 	letGo := sync.OnceFunc(func() { close(release) })
 	t.Cleanup(letGo)
 	var once sync.Once
-	svc.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
+	svc.Ingest.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
 		once.Do(func() {
 			close(reached)
 			<-release
@@ -214,7 +214,7 @@ func TestASessionIsNotIdleWhileItsSealRuns(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, err := svc.CompleteUpload(ctx, uc, up.ID)
+		_, err := svc.Ingest.CompleteUpload(ctx, uc, up.ID)
 		done <- err
 	}()
 	select {
@@ -231,7 +231,7 @@ func TestASessionIsNotIdleWhileItsSealRuns(t *testing.T) {
 	// A seal takes no turn: an append to the complete session is answered.
 	turn, stop := context.WithTimeout(ctx, 5*time.Second)
 	defer stop()
-	if _, err := svc.AppendUploadData(turn, uc, up.ID, up.SizeBytes, bytes.NewReader(nil)); err != nil {
+	if _, err := svc.Ingest.AppendUploadData(turn, uc, up.ID, up.SizeBytes, bytes.NewReader(nil)); err != nil {
 		t.Errorf("an append during the seal = %v, want it answered", err)
 	}
 
@@ -242,10 +242,10 @@ func TestASessionIsNotIdleWhileItsSealRuns(t *testing.T) {
 	if got := idle(); got < 10*time.Minute {
 		t.Errorf("idle %v after the seal ended, want the ten minutes since the last bytes", got)
 	}
-	if svc.appendLocks.live(up.ID) {
+	if svc.Ingest.appendLocks.live(up.ID) {
 		t.Error("the session still reads as live after its seal ended")
 	}
-	if n := len(svc.appendLocks.entries); n != 0 {
+	if n := len(svc.Ingest.appendLocks.entries); n != 0 {
 		t.Errorf("%d lock entries left behind", n)
 	}
 }
@@ -255,15 +255,15 @@ func TestASessionIsNotIdleWhileItsSealRuns(t *testing.T) {
 func TestASessionStillCompletingIsNotDiscarded(t *testing.T) {
 	ctx, svc, uc := uploadFixture(t)
 	up := receivedUpload(t, ctx, svc, uc)
-	svc.completing.Store(up.ID, struct{}{})
-	if err := svc.DeleteUpload(ctx, uc, up.ID); KindOf(err) != KindConflict {
+	svc.Ingest.completing.Store(up.ID, struct{}{})
+	if err := svc.Ingest.DeleteUpload(ctx, uc, up.ID); KindOf(err) != KindConflict {
 		t.Fatalf("discard during a complete = %v, want a conflict", err)
 	}
 	row, err := svc.db.UploadByID(ctx, up.ID)
 	if err != nil {
 		t.Fatalf("the session is gone: %v", err)
 	}
-	if _, err := os.Stat(svc.uploadPartPath(row)); err != nil {
+	if _, err := os.Stat(svc.Ingest.uploadPartPath(row)); err != nil {
 		t.Fatalf("the received bytes are gone: %v", err)
 	}
 }
@@ -277,15 +277,15 @@ func TestADiscardReadsWhatAJustFinishedCompleteLeft(t *testing.T) {
 			ctx, svc, uc := managedUploadFixture(t)
 			up := receivedUploadAsking(t, ctx, svc, uc, identify)
 			var entryID string
-			svc.discardReadHook = func() {
-				svc.discardReadHook = nil
-				done, err := svc.CompleteUpload(ctx, uc, up.ID)
+			svc.Ingest.discardReadHook = func() {
+				svc.Ingest.discardReadHook = nil
+				done, err := svc.Ingest.CompleteUpload(ctx, uc, up.ID)
 				if err != nil {
 					t.Error(err)
 				}
 				entryID = done.ReviewEntryID
 			}
-			err := svc.DeleteUpload(ctx, uc, up.ID)
+			err := svc.Ingest.DeleteUpload(ctx, uc, up.ID)
 			row, rerr := svc.db.UploadByID(ctx, up.ID)
 			if !identify {
 				if KindOf(err) != KindConflict || rerr != nil || row.ItemPID == "" {
@@ -313,16 +313,16 @@ func TestTheJanitorLeavesAnEntryADecisionHolds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	done, err := svc.CompleteUpload(ctx, uc, up.ID)
+	done, err := svc.Ingest.CompleteUpload(ctx, uc, up.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	release, ok := svc.claimEntry(done.ReviewEntryID)
+	release, ok := svc.Ingest.claimEntry(done.ReviewEntryID)
 	if !ok {
 		t.Fatal("the entry is already claimed")
 	}
 	defer release()
-	if svc.drainExpiredUpload(ctx, listed) {
+	if svc.Ingest.drainExpiredUpload(ctx, listed) {
 		t.Fatal("the janitor reclaimed a session whose entry a decision holds")
 	}
 	e, err := svc.db.ReviewEntryByID(ctx, done.ReviewEntryID)
@@ -363,9 +363,9 @@ func TestOnlyUnreadableBytesEndASession(t *testing.T) {
 func TestACompleteReadsBothFingerprintFormsAtOnce(t *testing.T) {
 	ctx, svc, uc := uploadFixture(t)
 	bin, calls := testfpcalc.WriteOverlapping(t, testfpcalc.Compressed(2, 30))
-	svc.fpcalcPath = bin
+	svc.Ingest.fpcalcPath = bin
 	up := receivedUpload(t, ctx, svc, uc)
-	if _, err := svc.CompleteUpload(ctx, uc, up.ID); err != nil {
+	if _, err := svc.Ingest.CompleteUpload(ctx, uc, up.ID); err != nil {
 		t.Fatal(err)
 	}
 	log, err := os.ReadFile(calls)
@@ -382,11 +382,11 @@ func TestACompleteReadsBothFingerprintFormsAtOnce(t *testing.T) {
 // it, for good.
 func TestAHungFpcalcDoesNotHoldACompleteForever(t *testing.T) {
 	ctx, svc, uc := uploadFixture(t)
-	svc.fpcalcPath = testfpcalc.WriteHanging(t)
-	svc.fpcalcTimeout = 200 * time.Millisecond
+	svc.Ingest.fpcalcPath = testfpcalc.WriteHanging(t)
+	svc.Ingest.fpcalcTimeout = 200 * time.Millisecond
 	up := receivedUpload(t, ctx, svc, uc)
 	start := time.Now()
-	if _, err := svc.CompleteUpload(ctx, uc, up.ID); err != nil {
+	if _, err := svc.Ingest.CompleteUpload(ctx, uc, up.ID); err != nil {
 		t.Fatal(err)
 	}
 	if took := time.Since(start); took > 20*time.Second {
@@ -399,7 +399,8 @@ func TestAHungFpcalcDoesNotHoldACompleteForever(t *testing.T) {
 func TestUntilShutdownOutlivesTheCallerButNotTheServer(t *testing.T) {
 	server, stop := context.WithCancel(context.Background())
 	defer stop()
-	l := &Library{procCtx: server}
+	l := bareLibrary(&core{})
+	l.procCtx = server
 	caller, hangUp := context.WithCancel(context.Background())
 	ctx, cancel := l.untilShutdown(caller)
 	defer cancel()
@@ -421,7 +422,7 @@ func TestUntilShutdownOutlivesTheCallerButNotTheServer(t *testing.T) {
 func TestAOneFileImportPlansItsFileOnce(t *testing.T) {
 	ctx, svc, uc := managedUploadFixture(t)
 	plans := 0
-	svc.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
+	svc.Ingest.planHook = func(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
 		// The import's plans move the file; the completion's duplicate
 		// check copies, and is not the import's.
 		if !meta.Copy {
@@ -430,7 +431,7 @@ func TestAOneFileImportPlansItsFileOnce(t *testing.T) {
 		return svc.lib.ImportAcquired(ctx, f, kind, meta)
 	}
 	up := receivedUpload(t, ctx, svc, uc)
-	got, err := svc.CompleteUpload(ctx, uc, up.ID)
+	got, err := svc.Ingest.CompleteUpload(ctx, uc, up.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -465,11 +466,11 @@ func managedUploadFixture(t *testing.T, others ...Root) (context.Context, *Libra
 		svc.Close()
 		store.Close()
 	})
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "admin", Password: "correct-horse", Roles: []string{"admin"}})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "admin", Password: "correct-horse", Roles: []string{"admin"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -481,7 +482,7 @@ func managedUploadFixture(t *testing.T, others ...Root) (context.Context, *Libra
 func pendingUploadEntry(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) (UploadDTO, string) {
 	t.Helper()
 	up := receivedUploadAsking(t, ctx, svc, uc, true)
-	if _, err := svc.CompleteUpload(ctx, uc, up.ID); err != nil {
+	if _, err := svc.Ingest.CompleteUpload(ctx, uc, up.ID); err != nil {
 		t.Fatal(err)
 	}
 	row, err := svc.db.UploadByID(ctx, up.ID)

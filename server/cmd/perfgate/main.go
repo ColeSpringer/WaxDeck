@@ -85,11 +85,11 @@ func run(library string, runs int) error {
 		svc.Close()
 	}()
 
-	admin, err := svc.Bootstrap(ctx, "gate", "gate-password", "")
+	admin, err := svc.Identity.Bootstrap(ctx, "gate", "gate-password", "")
 	if err != nil {
 		return err
 	}
-	uc, err := svc.UserCtx(ctx, admin.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, admin.User)
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func run(library string, runs int) error {
 		return err
 	}
 	for {
-		j, err := svc.JobStatus(ctx, job.PID)
+		j, err := svc.Jobs.Status(ctx, job.PID)
 		if err != nil {
 			return err
 		}
@@ -113,7 +113,7 @@ func run(library string, runs int) error {
 	}
 	fmt.Printf("perfgate: scan finished in %s\n", time.Since(scanStart).Round(time.Second))
 
-	first, err := svc.Items(ctx, uc, service.ItemFilter{}, "", 100)
+	first, err := svc.Reads.Items(ctx, uc, service.ItemFilter{}, "", 100)
 	if err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func run(library string, runs int) error {
 	// seed user state so the A9 joins have rows to find.
 	deepCursor := first.Next
 	for i := 0; i < 200 && deepCursor != ""; i++ {
-		page, err := svc.Items(ctx, uc, service.ItemFilter{}, deepCursor, 100)
+		page, err := svc.Reads.Items(ctx, uc, service.ItemFilter{}, deepCursor, 100)
 		if err != nil {
 			return err
 		}
@@ -137,10 +137,10 @@ func run(library string, runs int) error {
 	}
 	starredPIDs := make([]string, 0, 200)
 	for i, it := range first.Items {
-		if _, err := svc.SetStar(ctx, uc, it.PID, true, nil); err != nil {
+		if _, err := svc.Playback.SetStar(ctx, uc, it.PID, true, nil); err != nil {
 			return err
 		}
-		if _, err := svc.Checkpoint(ctx, uc, it.PID, int64(1000+i), nil); err != nil {
+		if _, err := svc.Playback.Checkpoint(ctx, uc, it.PID, int64(1000+i), nil); err != nil {
 			return err
 		}
 		starredPIDs = append(starredPIDs, it.PID)
@@ -156,7 +156,7 @@ func run(library string, runs int) error {
 	}
 	// Touch items so the delta probe has changes to serve.
 	for _, pid := range starredPIDs[:50] {
-		if _, err := svc.SetStar(ctx, uc, pid, true, nil); err != nil {
+		if _, err := svc.Playback.SetStar(ctx, uc, pid, true, nil); err != nil {
 			return err
 		}
 	}
@@ -166,27 +166,27 @@ func run(library string, runs int) error {
 		fn   func() error
 	}{
 		{"page-first", func() error {
-			_, err := svc.Items(ctx, uc, service.ItemFilter{}, "", 100)
+			_, err := svc.Reads.Items(ctx, uc, service.ItemFilter{}, "", 100)
 			return err
 		}},
 		{"page-deep", func() error {
-			_, err := svc.Items(ctx, uc, service.ItemFilter{}, deepCursor, 100)
+			_, err := svc.Reads.Items(ctx, uc, service.ItemFilter{}, deepCursor, 100)
 			return err
 		}},
 		{"browse-starred", func() error {
-			_, err := svc.Browse(ctx, uc, "starred", service.ItemFilter{}, 0, "", 100)
+			_, err := svc.Reads.Browse(ctx, uc, "starred", service.ItemFilter{}, 0, "", 100)
 			return err
 		}},
 		{"browse-mostplayed", func() error {
-			_, err := svc.Browse(ctx, uc, "most-played", service.ItemFilter{}, 0, "", 100)
+			_, err := svc.Reads.Browse(ctx, uc, "most-played", service.ItemFilter{}, 0, "", 100)
 			return err
 		}},
 		{"search-common", func() error {
-			_, err := svc.Search(ctx, uc, "Corpus", 20)
+			_, err := svc.Reads.Search(ctx, uc, "Corpus", 20)
 			return err
 		}},
 		{"search-rare", func() error {
-			_, err := svc.Search(ctx, uc, "00042-007", 20)
+			_, err := svc.Reads.Search(ctx, uc, "00042-007", 20)
 			return err
 		}},
 		{"sync-snapshot", func() error {

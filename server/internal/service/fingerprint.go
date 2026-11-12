@@ -20,7 +20,7 @@ const defaultFpcalcTimeout = 2 * time.Minute
 // a damaged frame even past the span it needed, and such a read is kept
 // when its fingerprint covers that span; with no length known, any
 // failure is refused.
-func (l *Library) fingerprintFile(ctx context.Context, path string, expected time.Duration) (string, int) {
+func (l *Ingest) fingerprintFile(ctx context.Context, path string, expected time.Duration) (string, int) {
 	if l.fpcalcPath == "" {
 		return "", 0
 	}
@@ -41,7 +41,7 @@ func (l *Library) fingerprintFile(ctx context.Context, path string, expected tim
 // rawFingerprint is a file's Chromaprint sub-fingerprint, the form the
 // catalog compares recordings by, under fingerprintFile's rule for a
 // read that ended in an error.
-func (l *Library) rawFingerprint(ctx context.Context, path string, expected time.Duration) []uint32 {
+func (l *Ingest) rawFingerprint(ctx context.Context, path string, expected time.Duration) []uint32 {
 	if l.fpcalcPath == "" {
 		return nil
 	}

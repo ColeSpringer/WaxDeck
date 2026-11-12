@@ -36,7 +36,7 @@ func coverageFixture(t *testing.T) (context.Context, *Library, *UserCtx, string)
 // pidsTitled maps each title the caller can list to its tracks' pids.
 func pidsTitled(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) map[string][]string {
 	t.Helper()
-	page, err := svc.Items(ctx, uc, ItemFilter{}, "", 100)
+	page, err := svc.Reads.Items(ctx, uc, ItemFilter{}, "", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func pidsTitled(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) ma
 
 func statusOf(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) SimilarityStatus {
 	t.Helper()
-	st, err := svc.SimilarityStatusFor(ctx, uc)
+	st, err := svc.Similarity.StatusFor(ctx, uc)
 	if err != nil {
 		t.Fatalf("reading the similarity status: %v", err)
 	}
@@ -66,7 +66,7 @@ func wantCoverage(t *testing.T, what string, st SimilarityStatus, total, embedde
 
 func sweep(t *testing.T, ctx context.Context, svc *Library) {
 	t.Helper()
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
 }
@@ -119,7 +119,7 @@ func TestAVectorKeptForATrashedTrackCountsNowhere(t *testing.T) {
 		}
 	}
 	wantCoverage(t, "analyzed", statusOf(t, ctx, svc, uc), 4, 4, 0)
-	if _, err := svc.DeleteItems(ctx, uc, fixtureItemPIDs(t, ctx, svc, uc)[:1], "trash", false); err != nil {
+	if _, err := svc.Tools.DeleteItems(ctx, uc, fixtureItemPIDs(t, ctx, svc, uc)[:1], "trash", false); err != nil {
 		t.Fatalf("trashing: %v", err)
 	}
 	sweep(t, ctx, svc)
@@ -164,7 +164,7 @@ func TestATagRestrictedReaderCountsWhatItsRulesLeave(t *testing.T) {
 	if len(loud) != 1 {
 		t.Fatalf("Delta Groove pids = %v, want one", loud)
 	}
-	if _, err := svc.SetItemTag(ctx, uc, loud[0], "MOOD", []string{"loud"}, MetadataEditParams{}); err != nil {
+	if _, err := svc.Editor.SetItemTag(ctx, uc, loud[0], "MOOD", []string{"loud"}, MetadataEditParams{}); err != nil {
 		t.Fatalf("tagging: %v", err)
 	}
 	sweep(t, ctx, svc)
@@ -190,7 +190,7 @@ func TestTheStatusFollowsALibraryNoSweepWalks(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantCoverage(t, "straight after the scan", statusOf(t, ctx, svc, uc), 5, 0, 0)
-	svc.simIndexChecked.Store(0) // as if the walk were statusIndexReuse old
+	svc.Similarity.simIndexChecked.Store(0) // as if the walk were statusIndexReuse old
 	waitFor(t, func() bool { return statusOf(t, ctx, svc, uc).TotalTracks == 6 }, "the late track walked in")
 }
 
@@ -203,10 +203,10 @@ func TestTheStatusFollowsTheLibraryWhileAnalysisRuns(t *testing.T) {
 	enableSonicAnalysis(t, ctx, svc, uc)
 	sweep(t, ctx, svc)
 	wantCoverage(t, "swept", statusOf(t, ctx, svc, uc), 4, 0, 4)
-	if _, err := svc.DeleteItems(ctx, uc, fixtureItemPIDs(t, ctx, svc, uc)[:1], "trash", false); err != nil {
+	if _, err := svc.Tools.DeleteItems(ctx, uc, fixtureItemPIDs(t, ctx, svc, uc)[:1], "trash", false); err != nil {
 		t.Fatalf("trashing: %v", err)
 	}
-	svc.simIndexChecked.Store(0) // as if the walk were statusIndexReuse old
+	svc.Similarity.simIndexChecked.Store(0) // as if the walk were statusIndexReuse old
 	waitFor(t, func() bool { return statusOf(t, ctx, svc, uc).TotalTracks == 3 }, "the trashed track out of the total with no sweep")
 	wantCoverage(t, "with no sweep since", statusOf(t, ctx, svc, uc), 3, 0, 3)
 }
@@ -247,10 +247,10 @@ func TestAWalkIsReusedOnlyForItsOwnVersion(t *testing.T) {
 	ctx, svc, uc := newCatalogFixture(t)
 	enableSonicAnalysis(t, ctx, svc, uc)
 	sweep(t, ctx, svc)
-	other := *svc.simIndex.Load()
+	other := *svc.Similarity.simIndex.Load()
 	other.version += 1000
-	svc.simIndex.Store(&other)
-	svc.simSweepVersion.Store(0)
+	svc.Similarity.simIndex.Store(&other)
+	svc.Similarity.simSweepVersion.Store(0)
 	reads := countFileReads(svc)
 	sweep(t, ctx, svc)
 	if reads.Load() == 0 {
@@ -266,10 +266,10 @@ func TestTheFirstStatusWalkOutlivesItsRequest(t *testing.T) {
 	reads := countFileReads(svc)
 	gone, cancel := context.WithCancel(ctx)
 	cancel()
-	if _, err := svc.SimilarityStatusFor(gone, uc); err == nil {
+	if _, err := svc.Similarity.StatusFor(gone, uc); err == nil {
 		t.Fatal("a request already given up read a status")
 	}
-	waitFor(t, func() bool { return svc.simIndex.Load() != nil }, "the walk that request started")
+	waitFor(t, func() bool { return svc.Similarity.simIndex.Load() != nil }, "the walk that request started")
 	walked := reads.Load()
 	wantCoverage(t, "the next status", statusOf(t, ctx, svc, uc), 4, 0, 0)
 	if walked == 0 || reads.Load() != walked {
@@ -324,7 +324,7 @@ func TestAGrantCountsATrackThroughItsPrimaryFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Adding the library scans it.
-	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "copies", Path: copies, Media: "music"})
+	lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "copies", Path: copies, Media: "music"})
 	if err != nil {
 		t.Fatalf("adding the library of copies: %v", err)
 	}
@@ -335,11 +335,11 @@ func TestAGrantCountsATrackThroughItsPrimaryFile(t *testing.T) {
 		files, err := svc.lib.ItemFiles(ctx, bare)
 		return err == nil && slices.ContainsFunc(files, func(f model.ItemFileRef) bool { return string(f.LibraryPID) == held })
 	}, "the copy scanned in as an alternate of Amber Waves")
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "reader", Password: "correct-horse"})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "reader", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader, err := svc.UserCtx(ctx, acct.User)
+	reader, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,7 +348,7 @@ func TestAGrantCountsATrackThroughItsPrimaryFile(t *testing.T) {
 	if listed := pidsTitled(t, ctx, svc, reader); len(listed) != 0 {
 		t.Fatalf("the reader lists %v, want nothing: a copy grants no track", listed)
 	}
-	if _, err := svc.getVisibleItem(ctx, reader, track); err == nil {
+	if _, err := svc.Grants.getVisibleItem(ctx, reader, track); err == nil {
 		t.Fatal("the reader opened Amber Waves through its copy")
 	}
 	sweep(t, ctx, svc)

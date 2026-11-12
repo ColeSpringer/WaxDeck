@@ -62,7 +62,7 @@ func spellingWalk(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, 
 	var out []ItemSummary
 	cursor := ""
 	for {
-		page, err := svc.Items(ctx, uc, ItemFilter{}, cursor, limit)
+		page, err := svc.Reads.Items(ctx, uc, ItemFilter{}, cursor, limit)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -112,7 +112,7 @@ func TestAListingCarriesTheKeysItsOrderIsMadeOf(t *testing.T) {
 			}
 		}
 	}
-	d, err := svc.Item(ctx, admin, spellingWalk(t, ctx, svc, admin, 50)[4].PID)
+	d, err := svc.Reads.Item(ctx, admin, spellingWalk(t, ctx, svc, admin, 50)[4].PID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestAnEpisodeCarriesTheKeyItsTitleIsFiledUnder(t *testing.T) {
 	t.Parallel()
 	f := openStubFeeds(t, &stubFeed{kind: model.SourceRSS, n: 3, prefix: "The Drift"})
 	sub := f.subscribe(t, "https://feeds.example/drift", "rss")
-	rows, _, err := f.svc.Episodes(f.ctx, f.uc, sub.Show.PID, "", 10)
+	rows, _, err := f.svc.Podcasts.Episodes(f.ctx, f.uc, sub.Show.PID, "", 10)
 	if err != nil || len(rows) != 3 {
 		t.Fatalf("episodes = %d (%v), want 3", len(rows), err)
 	}
@@ -168,7 +168,7 @@ func TestAnOverlongEpisodeTitleIsShownCutAndFiledWhole(t *testing.T) {
 	long := strings.Repeat("a", feedTitleMaxChars)
 	f := openStubFeeds(t, &stubFeed{kind: model.SourceRSS, n: 2, prefix: long})
 	sub := f.subscribe(t, "https://feeds.example/long", "rss")
-	rows, _, err := f.svc.Episodes(f.ctx, f.uc, sub.Show.PID, "", 10)
+	rows, _, err := f.svc.Podcasts.Episodes(f.ctx, f.uc, sub.Show.PID, "", 10)
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("episodes = %d (%v), want 2", len(rows), err)
 	}
@@ -215,7 +215,7 @@ func TestAnItemDetailCarriesItsTotals(t *testing.T) {
 		t.Fatalf("listed %d items, want %d", len(listed), len(want))
 	}
 	for _, it := range listed {
-		d, err := svc.Item(ctx, admin, it.PID)
+		d, err := svc.Reads.Item(ctx, admin, it.PID)
 		if err != nil {
 			t.Fatal(err)
 		}

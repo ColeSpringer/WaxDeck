@@ -130,15 +130,15 @@ func TestTreatAnAlbumAsAnAudiobook(t *testing.T) {
 	// A stream started from the old pid plays the whole book, part by part,
 	// with the listener's settings for the book.
 	ctx := context.Background()
-	if parts, err := h.svc.BookParts(ctx, tracks[0]); err != nil || len(parts) != 2 {
+	if parts, err := h.svc.Playback.BookParts(ctx, tracks[0]); err != nil || len(parts) != 2 {
 		t.Fatalf("parts laid out for the old pid = %v (%v), want the book's two", parts, err)
 	}
 	wantStatus(t, h.putJSON(t, "/api/v1/books/"+book+"/settings", map[string]any{"voiceBoost": true}), 200, "book settings")
-	uc, err := h.svc.UserCtxByID(ctx, adminUserID(t, h))
+	uc, err := h.svc.Grants.UserCtxByID(ctx, adminUserID(t, h))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !h.svc.EffectiveVoiceBoost(ctx, uc, tracks[0]) {
+	if !h.svc.Playback.EffectiveVoiceBoost(ctx, uc, tracks[0]) {
 		t.Fatal("the old track pid plays the book without its stored voice boost")
 	}
 }
@@ -208,15 +208,15 @@ func TestTreatABookAsMusicAnswers404NotInvalid(t *testing.T) {
 	wantStatus(t, get(t, h.ts, "/api/v1/items/"+tracks[0], h.token), 200, "its first part, a track again")
 	// A queue still holding the book's pid streams the track it became.
 	ctx := context.Background()
-	if parts, err := h.svc.BookParts(ctx, book); err != nil || parts != nil {
+	if parts, err := h.svc.Playback.BookParts(ctx, book); err != nil || parts != nil {
 		t.Fatalf("parts laid out for the former book's pid = %v (%v), want the track as itself", parts, err)
 	}
 	// A shelf that pinned the book hears it departed, so the pin goes.
-	uc, err := h.svc.UserCtxByID(ctx, adminUserID(t, h))
+	uc, err := h.svc.Grants.UserCtxByID(ctx, adminUserID(t, h))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cards, gone, err := h.svc.EntityCards(ctx, uc, []string{book}); err != nil || len(cards) != 0 || len(gone) != 1 || gone[0] != book {
+	if cards, gone, err := h.svc.Reads.EntityCards(ctx, uc, []string{book}); err != nil || len(cards) != 0 || len(gone) != 1 || gone[0] != book {
 		t.Fatalf("cards for the pinned former book = %v, departed %v (%v), want it departed", cards, gone, err)
 	}
 }
@@ -306,11 +306,11 @@ func TestAKindChangeOnAnUploadOutOfSightStartsNothing(t *testing.T) {
 		"libraryAccess": map[string]any{"mode": "granted", "libraryPids": []string{}},
 	}), 200, "taking bob's libraries away")
 	ctx := context.Background()
-	uc, err := h.svc.UserCtxByID(ctx, bobID)
+	uc, err := h.svc.Grants.UserCtxByID(ctx, bobID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if may, err := h.svc.MayCurateItem(ctx, uc, pid); err != nil || !may {
+	if may, err := h.svc.Ingest.MayCurateItem(ctx, uc, pid); err != nil || !may {
 		t.Fatalf("bob may edit his upload = %v (%v), want his upload to still say so", may, err)
 	}
 

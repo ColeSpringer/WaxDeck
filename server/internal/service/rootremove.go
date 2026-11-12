@@ -149,7 +149,7 @@ func (r *rootRemovals) settle(job model.PID, removed bool) {
 // the catalog still holds keeps all of it. o is the job's origin, with
 // what the console recorded at the start. An error leaves the rest for a
 // repeat, which every step allows: the audit is written once per library.
-func (l *Library) followRootRemoval(ctx context.Context, j *model.Job, o wdb.JobOrigin) (bool, error) {
+func (l *Roots) followRootRemoval(ctx context.Context, j *model.Job, o wdb.JobOrigin) (bool, error) {
 	if j.Kind != "remove-root" || j.State == model.JobRunning || j.TargetPID == "" {
 		return false, nil
 	}
@@ -208,7 +208,7 @@ func (l *Library) followRootRemoval(ctx context.Context, j *model.Job, o wdb.Job
 		if id := cmp.Or(o.UserID, l.removals.facts(j.TargetPID).userID); id != "" {
 			actor = &UserCtx{ID: id}
 		}
-		l.Audit(ctx, actor, "library.remove", AuditTarget{Kind: "library", PID: apiLib, Name: facts.Name}, detail)
+		l.Audit.Record(ctx, actor, "library.remove", AuditTarget{Kind: "library", PID: apiLib, Name: facts.Name}, detail)
 	}
 	l.removals.named(j.TargetPID, facts.Name, facts.Path)
 	l.removals.settle(j.PID, true)
@@ -220,8 +220,8 @@ func (l *Library) followRootRemoval(ctx context.Context, j *model.Job, o wdb.Job
 // not. One the last stop cut short is left to this start's scan of every
 // library, when it runs one: a scan of the library alone would race it
 // for the catalog, and fail it by winning.
-func (l *Library) keptLibraryWantsScan(j *model.Job) bool {
-	if l.startupScan && j.FinishedAt < l.openedAtNS {
+func (l *Roots) keptLibraryWantsScan(j *model.Job) bool {
+	if l.startupScan && j.FinishedAt < l.Jobs.openedAtNS {
 		return false
 	}
 	var rep model.RemoveRootReport
@@ -233,7 +233,7 @@ func (l *Library) keptLibraryWantsScan(j *model.Job) bool {
 
 // removedLibraryName is the name a removal's audit row gives a library
 // it took out, which outlasts the process that ran it; "" when none does.
-func (l *Library) removedLibraryName(ctx context.Context, apiLib string) string {
+func (l *Roots) removedLibraryName(ctx context.Context, apiLib string) string {
 	rows, err := l.db.ListAudit(ctx, wdb.AuditFilter{Action: "library.remove", TargetPID: apiLib}, 0, 1)
 	if err != nil {
 		l.log.Warn("reading a removed library's name", "library", apiLib, "err", err)
@@ -249,14 +249,14 @@ func (l *Library) removedLibraryName(ctx context.Context, apiLib string) string 
 // batches the job ran before it stopped let go of their files, which a
 // scan takes back. A catalog busy with another job leaves them to the
 // library's next scan.
-func (l *Library) rescanKeptLibrary(lib model.PID) {
+func (l *Roots) rescanKeptLibrary(lib model.PID) {
 	pid, err := l.lib.StartScan(l.procCtx, waxbin.ScanRequest{LibraryPID: lib})
 	if err != nil {
 		l.log.Warn("scanning a library a removal left; its next scan takes back what the removal let go of",
 			"library", apiPID(PrefixLibrary, lib), "err", err)
 		return
 	}
-	l.followJob(pid)
+	l.Jobs.followJob(pid)
 }
 
 // settleUnrecordedRemoval follows up a removal no origin records: the
@@ -266,7 +266,7 @@ func (l *Library) rescanKeptLibrary(lib model.PID) {
 // settles that as the console's are settled: a stop or a failure anywhere
 // in the follow-up leaves the next start the row, and the facts, to
 // repeat it from.
-func (l *Library) settleUnrecordedRemoval(ctx context.Context, j *model.Job) {
+func (l *Roots) settleUnrecordedRemoval(ctx context.Context, j *model.Job) {
 	if l.removals.leftToStarter(j.TargetPID) {
 		return
 	}
@@ -282,13 +282,13 @@ func (l *Library) settleUnrecordedRemoval(ctx context.Context, j *model.Job) {
 		}
 		return
 	}
-	l.settleJobOrigin(ctx, j)
+	l.Jobs.settleJobOrigin(ctx, j)
 }
 
 // removalFactsOf is what is known of a removed library: what its origin
 // recorded, else what this process kept at the start, else its report's
 // root and the name that root went by.
-func (l *Library) removalFactsOf(ctx context.Context, j *model.Job, o wdb.JobOrigin) removalFacts {
+func (l *Roots) removalFactsOf(ctx context.Context, j *model.Job, o wdb.JobOrigin) removalFacts {
 	var f removalFacts
 	if o.Detail != "" && json.Unmarshal([]byte(o.Detail), &f) != nil {
 		l.log.Warn("reading a library removal's record", "job", string(j.PID))
@@ -302,7 +302,7 @@ func (l *Library) removalFactsOf(ctx context.Context, j *model.Job, o wdb.JobOri
 		}
 	}
 	if f.Name == "" && f.Path != "" {
-		f.Name = l.rootNameAt(ctx, f.Path)
+		f.Name = l.nameAt(ctx, f.Path)
 	}
 	return f
 }
@@ -313,7 +313,7 @@ func (l *Library) removalFactsOf(ctx context.Context, j *model.Job, o wdb.JobOri
 // root's now (mountKept), and so stays. It holds the table's lock, as a
 // create storing a name does, so neither lands between the other's read
 // and write.
-func (l *Library) dropRemovedName(ctx context.Context, removed model.PID, f removalFacts) (bool, error) {
+func (l *Roots) dropRemovedName(ctx context.Context, removed model.PID, f removalFacts) (bool, error) {
 	l.rootsMu.Lock()
 	defer l.rootsMu.Unlock()
 	others := slices.DeleteFunc(slices.Clone(l.roots), func(r Root) bool { return r.PID == string(removed) })
@@ -342,9 +342,9 @@ func (l *Library) dropRemovedName(ctx context.Context, removed model.PID, f remo
 	return kept, nil
 }
 
-// rootNameAt is the name the root at path went by: the configuration's,
+// nameAt is the name the root at path went by: the configuration's,
 // else the stored one, else its directory's.
-func (l *Library) rootNameAt(ctx context.Context, path string) string {
+func (l *Roots) nameAt(ctx context.Context, path string) string {
 	for _, r := range l.configRoots {
 		if samePath(rootKey(r.Path), rootKey(path)) {
 			return r.Name
@@ -365,7 +365,7 @@ func (l *Library) rootNameAt(ctx context.Context, path string) string {
 // whose sidecar does not let go, owes it to its next sync; a server with
 // no streaming engine has nothing to take off. The returned string is
 // empty unless the sidecar kept the root, and then says so.
-func (l *Library) unmountFlowRoot(ctx context.Context, name, path string) string {
+func (l *Roots) unmountFlowRoot(ctx context.Context, name, path string) string {
 	l.flowSyncMu.Lock()
 	defer l.flowSyncMu.Unlock()
 	delete(l.flowRefused, name)
@@ -390,7 +390,7 @@ func (l *Library) unmountFlowRoot(ctx context.Context, name, path string) string
 
 // oweUnmount keeps a removed library's root for the bridge's next sync to
 // take off.
-func (l *Library) oweUnmount(ctx context.Context, name, path string) error {
+func (l *Roots) oweUnmount(ctx context.Context, name, path string) error {
 	return l.db.SettingSet(context.WithoutCancel(ctx), flowUnmountKey+name, path, time.Now().UnixNano())
 }
 
@@ -400,7 +400,7 @@ func (l *Library) oweUnmount(ctx context.Context, name, path string) error {
 // going by the name from another folder is taught again by the sync that
 // runs this. With no streaming engine there is nothing to take off. The
 // caller holds flowSyncMu.
-func (l *Library) unmountOwed(ctx context.Context, flow FlowRootSync) {
+func (l *Roots) unmountOwed(ctx context.Context, flow FlowRootSync) {
 	owed, err := l.db.SettingsWithPrefix(ctx, flowUnmountKey)
 	if err != nil {
 		l.log.Warn("reading the removed libraries' roots the streaming bridge has still to let go of", "err", err)
@@ -427,7 +427,7 @@ func (l *Library) unmountOwed(ctx context.Context, flow FlowRootSync) {
 // download dir, which only a restart mounts again. A library going by the
 // name from another folder does not keep it: the entry still names the
 // removed folder, so it comes off and that library is taught anew.
-func (l *Library) mountKept(roots []Root, name, folder string) bool {
+func (l *Roots) mountKept(roots []Root, name, folder string) bool {
 	if name == l.podcastRootName {
 		return true
 	}
@@ -442,7 +442,7 @@ var libraryMatchingKeys = []string{"matching:", "matching-singles:"}
 // dropLibrarySettings drops what WaxDeck keeps under a removed library's
 // pid: the grants naming it, on accounts and invites, and its matching
 // settings.
-func (l *Library) dropLibrarySettings(ctx context.Context, pid model.PID) error {
+func (l *Roots) dropLibrarySettings(ctx context.Context, pid model.PID) error {
 	if err := l.db.PruneLibraryGrants(ctx, string(pid)); err != nil {
 		return err
 	}
@@ -471,7 +471,7 @@ type leftover struct {
 // catalog holds, a newer one at the same folder included, keeps all of it,
 // as does a configured root. Only a removal this server started is
 // audited, when its origin settles.
-func (l *Library) reconcileRemovedLibraries(ctx context.Context) {
+func (l *Roots) reconcileRemovedLibraries(ctx context.Context) {
 	l.rootsMu.Lock()
 	defer l.rootsMu.Unlock()
 	libs, err := l.lib.Libraries(ctx)
@@ -536,7 +536,7 @@ func (l *Library) reconcileRemovedLibraries(ctx context.Context) {
 
 // removedFolders maps each library the catalog's recent removal jobs took
 // out to the folder it held, from the job's report.
-func (l *Library) removedFolders(ctx context.Context, held map[model.PID]bool) map[model.PID]string {
+func (l *Roots) removedFolders(ctx context.Context, held map[model.PID]bool) map[model.PID]string {
 	out := map[model.PID]string{}
 	jobs, err := l.lib.Jobs(ctx, 256)
 	if err != nil {
@@ -556,7 +556,7 @@ func (l *Library) removedFolders(ctx context.Context, held map[model.PID]bool) m
 
 // pidsKeptUnder lists every library pid WaxDeck keeps something under: a
 // grant, on an account or an invite, or a matching setting.
-func (l *Library) pidsKeptUnder(ctx context.Context) ([]model.PID, error) {
+func (l *Roots) pidsKeptUnder(ctx context.Context) ([]model.PID, error) {
 	granted, err := l.db.GrantedLibraryPIDs(ctx)
 	if err != nil {
 		return nil, err
@@ -581,7 +581,7 @@ func (l *Library) pidsKeptUnder(ctx context.Context) ([]model.PID, error) {
 // dropLeftover drops what WaxDeck keeps of one removed library, owing the
 // bridge its mount unless another root holds it now (mountKept). The
 // caller holds rootsMu.
-func (l *Library) dropLeftover(ctx context.Context, g *leftover) error {
+func (l *Roots) dropLeftover(ctx context.Context, g *leftover) error {
 	for _, pid := range g.pids {
 		if err := l.dropLibrarySettings(ctx, pid); err != nil {
 			return err

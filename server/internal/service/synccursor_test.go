@@ -219,7 +219,7 @@ func TestCatalogCursorsAtTheirTail(t *testing.T) {
 	for _, tr := range tracks {
 		pids = append(pids, tr.pid)
 	}
-	if _, err := svc.DeleteItems(ctx, admin, pids, "trash", false); err != nil {
+	if _, err := svc.Tools.DeleteItems(ctx, admin, pids, "trash", false); err != nil {
 		t.Fatal(err)
 	}
 	seen := map[string]bool{}
@@ -260,7 +260,7 @@ func TestCatalogCursorsAtTheirTail(t *testing.T) {
 		t.Fatalf("a cursor at the floor moved to %d, want the head %d", moved.seq, head)
 	}
 
-	epoch, err := svc.grantEpoch(ctx, admin.ID)
+	epoch, err := svc.Grants.grantEpoch(ctx, admin.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

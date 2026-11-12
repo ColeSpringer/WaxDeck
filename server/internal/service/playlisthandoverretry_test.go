@@ -50,14 +50,14 @@ func newHandoverFixtureLogging(t *testing.T, logs io.Writer) handoverFixture {
 	_, reader := playlistMember(t, ctx, svc, "reader")
 	stars := pids[:2]
 	for _, pid := range stars {
-		if _, err := svc.SetStar(ctx, samCtx, pid, true, nil); err != nil {
+		if _, err := svc.Playback.SetStar(ctx, samCtx, pid, true, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 	list := smartPlaylist(t, ctx, svc, samCtx, handedName, "shared", SmartRule{
 		Root: RuleNode{Type: "condition", Field: "starred", Op: "is", Value: "true"},
 	})
-	if _, err := svc.PutPrefs(ctx, reader, Prefs{Pinned: []string{list}}); err != nil {
+	if _, err := svc.Identity.PutPrefs(ctx, reader, Prefs{Pinned: []string{list}}); err != nil {
 		t.Fatal(err)
 	}
 	return handoverFixture{ctx: ctx, svc: svc, admin: admin, sam: sam, reader: reader, list: list, stars: stars}
@@ -108,7 +108,7 @@ func (f handoverFixture) evaluated(t *testing.T) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items, err := f.svc.playlistMembers(f.ctx, pl)
+	items, err := f.svc.Playlists.members(f.ctx, pl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ var errCatalogAway = errors.New("the catalog went away")
 
 // failAt fails the named stages of a handover, every time they are reached.
 func failAt(svc *Library, stages ...string) {
-	svc.handoverHook = func(stage string, _ *model.Playlist) error {
+	svc.Playlists.handoverHook = func(stage string, _ *model.Playlist) error {
 		if slices.Contains(stages, stage) {
 			return fmt.Errorf("%w at %s", errCatalogAway, stage)
 		}
@@ -142,7 +142,7 @@ func failAt(svc *Library, stages ...string) {
 // as the handover can tell: nothing after it runs, and nothing is
 // cleaned up.
 func stopHandoverAt(svc *Library, stage string) {
-	svc.handoverHook = func(got string, _ *model.Playlist) error {
+	svc.Playlists.handoverHook = func(got string, _ *model.Playlist) error {
 		if got == stage {
 			panic("the process stopped at " + stage)
 		}
@@ -156,7 +156,7 @@ func (f handoverFixture) stopped(t *testing.T, opts AccountDeletion) bool {
 	var ended bool
 	func() {
 		defer func() { ended = recover() != nil }()
-		_, _ = f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, opts)
+		_, _ = f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, opts)
 	}()
 	return ended
 }
@@ -170,7 +170,7 @@ func TestAHandoverThatCannotTakeItsCopyBackIsFinishedByTheRetry(t *testing.T) {
 	f := newHandoverFixtureLogging(t, logs)
 	failAt(f.svc, "swap", "discard")
 
-	got, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{})
+	got, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{})
 	if err == nil || !strings.Contains(err.Error(), "could not be removed") {
 		t.Fatalf("err = %v, want the failure, saying a copy was left", err)
 	}
@@ -211,12 +211,12 @@ func TestAHandoverThatCannotTakeItsCopyBackIsFinishedByTheRetry(t *testing.T) {
 	if pl, err := f.svc.lib.Playlists().Get(f.ctx, mustBare(t, f.list)); err != nil || pl.Kind != model.PlaylistSmart {
 		t.Errorf("the old list = %+v (%v), want it still there and smart", pl, err)
 	}
-	if prefs, err := f.svc.Prefs(f.ctx, f.reader); err != nil || !slices.Equal(prefs.Pinned, []string{f.list}) {
+	if prefs, err := f.svc.Identity.Prefs(f.ctx, f.reader); err != nil || !slices.Equal(prefs.Pinned, []string{f.list}) {
 		t.Errorf("the reader's pins = %v (%v), want the old list", prefs.Pinned, err)
 	}
 
-	f.svc.handoverHook = nil
-	got, err = f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{})
+	f.svc.Playlists.handoverHook = nil
+	got, err = f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{})
 	if err != nil {
 		t.Fatalf("the retry: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestAHandoverThatCannotTakeItsCopyBackIsFinishedByTheRetry(t *testing.T) {
 	if members := memberPIDs(t, f.ctx, f.svc, f.reader, apiPID(PrefixPlaylist, left)); !slices.Equal(members, f.stars) {
 		t.Errorf("the copy holds %v, want sam's stars %v", members, f.stars)
 	}
-	if prefs, _ := f.svc.Prefs(f.ctx, f.reader); !slices.Equal(prefs.Pinned, []string{apiPID(PrefixPlaylist, left)}) {
+	if prefs, _ := f.svc.Identity.Prefs(f.ctx, f.reader); !slices.Equal(prefs.Pinned, []string{apiPID(PrefixPlaylist, left)}) {
 		t.Errorf("the reader's pins after the retry = %v, want the copy", prefs.Pinned)
 	}
 	if rec, err := f.record(t); !errors.Is(err, wdb.ErrNotFound) {
@@ -248,7 +248,7 @@ func TestAHandoverThatCannotTakeItsCopyBackIsFinishedByTheRetry(t *testing.T) {
 func TestAHandoverThatStopsBetweenMakingAndNamingItsCopyIsFinishedByTheRetry(t *testing.T) {
 	t.Parallel()
 	f := newHandoverFixture(t)
-	f.svc.handoverHook = func(stage string, _ *model.Playlist) error {
+	f.svc.Playlists.handoverHook = func(stage string, _ *model.Playlist) error {
 		if stage == "created" {
 			panic("the process stopped here")
 		}
@@ -256,7 +256,7 @@ func TestAHandoverThatStopsBetweenMakingAndNamingItsCopyIsFinishedByTheRetry(t *
 	}
 	stopped := func() (stopped bool) {
 		defer func() { stopped = recover() != nil }()
-		_, _ = f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{})
+		_, _ = f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{})
 		return false
 	}()
 	if !stopped {
@@ -280,8 +280,8 @@ func TestAHandoverThatStopsBetweenMakingAndNamingItsCopyIsFinishedByTheRetry(t *
 		t.Fatal(err)
 	}
 
-	f.svc.handoverHook = nil
-	if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
+	f.svc.Playlists.handoverHook = nil
+	if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
 		t.Fatalf("the retry: %v", err)
 	}
 	copies = f.copiesNamed(t, handedName)
@@ -313,7 +313,7 @@ func TestACopyThatCannotBeRecordedIsNotLeftToBeDuplicated(t *testing.T) {
 			f := newHandoverFixture(t)
 			failAt(f.svc, stages...)
 
-			if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err == nil {
+			if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err == nil {
 				t.Fatal("the deletion went through a failing step")
 			}
 			left := len(f.copiesNamed(t, handedName))
@@ -321,8 +321,8 @@ func TestACopyThatCannotBeRecordedIsNotLeftToBeDuplicated(t *testing.T) {
 				t.Errorf("copies left after the failure = %d, want %d", left, wantLeft)
 			}
 
-			f.svc.handoverHook = nil
-			if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
+			f.svc.Playlists.handoverHook = nil
+			if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
 				t.Fatalf("the retry: %v", err)
 			}
 			if copies := f.copiesNamed(t, handedName); len(copies) != 1 {
@@ -341,19 +341,19 @@ func TestARetryDoesNotTakeUpACopyThatHasGone(t *testing.T) {
 	t.Parallel()
 	f := newHandoverFixture(t)
 	failAt(f.svc, "swap", "discard")
-	if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err == nil {
+	if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err == nil {
 		t.Fatal("the deletion went through a failing step")
 	}
 	copies := f.copiesNamed(t, handedName)
 	if len(copies) != 1 {
 		t.Fatalf("copies after the failure = %d, want 1", len(copies))
 	}
-	if err := f.svc.removePlaylist(f.ctx, copies[0]); err != nil {
+	if err := f.svc.Playlists.removePlaylist(f.ctx, copies[0]); err != nil {
 		t.Fatal(err)
 	}
 
-	f.svc.handoverHook = nil
-	if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
+	f.svc.Playlists.handoverHook = nil
+	if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
 		t.Fatalf("the retry: %v", err)
 	}
 	copies = f.copiesNamed(t, handedName)
@@ -372,19 +372,19 @@ func TestARetryForAnotherRecipientTakesUpTheCopyForThem(t *testing.T) {
 	f := newHandoverFixture(t)
 	pat, _ := playlistMember(t, f.ctx, f.svc, "pat")
 	failAt(f.svc, "swap", "discard")
-	if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err == nil {
+	if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err == nil {
 		t.Fatal("the deletion went through a failing step")
 	}
 
-	f.svc.handoverHook = nil
-	got, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{TransferTo: pat.User.ID})
+	f.svc.Playlists.handoverHook = nil
+	got, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{TransferTo: pat.User.ID})
 	if err != nil {
 		t.Fatalf("the retry: %v", err)
 	}
 	if got.TransferredTo != "pat" {
 		t.Errorf("the retry = %+v, want the list handed to pat", got)
 	}
-	if held := ownedBy(t, f.ctx, f.svc, pat.User.WaxbinUserPID); !slices.Contains(held, handedName) {
+	if held := ownedBy(t, f.ctx, f.svc, pat.User.row.WaxbinUserPID); !slices.Contains(held, handedName) {
 		t.Errorf("pat holds %v, want the copy", held)
 	}
 	if held := ownedBy(t, f.ctx, f.svc, f.admin.CatalogPID); slices.Contains(held, handedName) {
@@ -403,7 +403,7 @@ func TestOneDeletionOfAnAccountRunsAtATime(t *testing.T) {
 	f := newHandoverFixture(t)
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
-	f.svc.handoverHook = func(stage string, _ *model.Playlist) error {
+	f.svc.Playlists.handoverHook = func(stage string, _ *model.Playlist) error {
 		if stage == "start" {
 			once.Do(func() { close(entered) })
 			<-release
@@ -412,12 +412,12 @@ func TestOneDeletionOfAnAccountRunsAtATime(t *testing.T) {
 	}
 	first := make(chan error, 1)
 	go func() {
-		_, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{})
+		_, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{})
 		first <- err
 	}()
 	<-entered
 
-	if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); KindOf(err) != KindConflict {
+	if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); KindOf(err) != KindConflict {
 		t.Errorf("a second deletion while the first runs = %v, want a conflict", err)
 	}
 	close(release)
@@ -428,7 +428,7 @@ func TestOneDeletionOfAnAccountRunsAtATime(t *testing.T) {
 		t.Errorf("static lists named %q = %d, want one", handedName, len(copies))
 	}
 	// And once it is over, the account is simply gone.
-	if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); KindOf(err) != KindNotFound {
+	if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); KindOf(err) != KindNotFound {
 		t.Errorf("a deletion after the first finished = %v, want not found", err)
 	}
 }
@@ -440,7 +440,7 @@ func TestARetryNeverWritesOverAListTheRecipientMade(t *testing.T) {
 	t.Parallel()
 	f := newHandoverFixture(t)
 	pids := fixtureItemPIDs(t, f.ctx, f.svc, f.admin)
-	f.svc.handoverHook = func(stage string, _ *model.Playlist) error {
+	f.svc.Playlists.handoverHook = func(stage string, _ *model.Playlist) error {
 		if stage == "created" {
 			panic("the process stopped here")
 		}
@@ -448,7 +448,7 @@ func TestARetryNeverWritesOverAListTheRecipientMade(t *testing.T) {
 	}
 	func() {
 		defer func() { _ = recover() }()
-		_, _ = f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{})
+		_, _ = f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{})
 	}()
 	stray := f.copiesNamed(t, handedName)
 	if len(stray) != 1 {
@@ -456,13 +456,13 @@ func TestARetryNeverWritesOverAListTheRecipientMade(t *testing.T) {
 	}
 	// The stop left nothing to find; the administrator makes a list of their
 	// own under the same name after it, with other tracks in it.
-	if err := f.svc.removePlaylist(f.ctx, stray[0]); err != nil {
+	if err := f.svc.Playlists.removePlaylist(f.ctx, stray[0]); err != nil {
 		t.Fatal(err)
 	}
 	theirs := playlistAs(t, f.ctx, f.svc, f.admin, handedName, "shared", pids[2:])
 
-	f.svc.handoverHook = nil
-	if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
+	f.svc.Playlists.handoverHook = nil
+	if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
 		t.Fatalf("the retry: %v", err)
 	}
 
@@ -505,8 +505,8 @@ func TestARetryTakesUpOnlyTheListCarryingTheMarker(t *testing.T) {
 	// that lost its members would look like, but not the marker.
 	theirs := playlistAs(t, f.ctx, f.svc, f.admin, handedName, "shared", nil)
 
-	f.svc.handoverHook = nil
-	if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
+	f.svc.Playlists.handoverHook = nil
+	if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
 		t.Fatalf("the retry: %v", err)
 	}
 	if stored := f.stored(t, stray[0].PID); !slices.Equal(stored, now) {
@@ -545,8 +545,8 @@ func TestARetryAfterAStopHoldsWhatTheListEvaluatesToNow(t *testing.T) {
 		t.Fatalf("the list evaluates to %v after the trashing, want the one track left", now)
 	}
 
-	f.svc.handoverHook = nil
-	if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
+	f.svc.Playlists.handoverHook = nil
+	if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
 		t.Fatalf("the retry: %v", err)
 	}
 	copies := f.copiesNamed(t, handedName)
@@ -567,7 +567,7 @@ func TestARetryBringsTheCopyItTakesUpUpToWhatTheListEvaluatesToNow(t *testing.T)
 	t.Parallel()
 	f := newHandoverFixture(t)
 	failAt(f.svc, "swap", "discard")
-	if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err == nil {
+	if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err == nil {
 		t.Fatal("the deletion went through a failing step")
 	}
 	left := f.copiesNamed(t, handedName)
@@ -580,8 +580,8 @@ func TestARetryBringsTheCopyItTakesUpUpToWhatTheListEvaluatesToNow(t *testing.T)
 		t.Fatalf("the list evaluates to %v after the trashing, want the one track left", now)
 	}
 
-	f.svc.handoverHook = nil
-	if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
+	f.svc.Playlists.handoverHook = nil
+	if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
 		t.Fatalf("the retry: %v", err)
 	}
 	copies := f.copiesNamed(t, handedName)
@@ -609,8 +609,8 @@ func TestARetryRenamesACopyThatAStopLeftUnderItsMarker(t *testing.T) {
 		t.Fatalf("after the stop: copies %+v, record %+v (%v), want one copy under its marker, named by the record", stray, rec, err)
 	}
 
-	f.svc.handoverHook = nil
-	if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
+	f.svc.Playlists.handoverHook = nil
+	if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
 		t.Fatalf("the retry: %v", err)
 	}
 	copies := f.copiesNamed(t, handedName)
@@ -632,15 +632,15 @@ func TestACopyThatCannotBeRenamedIsNotLeftToBeDuplicated(t *testing.T) {
 			t.Parallel()
 			f := newHandoverFixture(t)
 			failAt(f.svc, stages...)
-			if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err == nil {
+			if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err == nil {
 				t.Fatal("the deletion went through a failing step")
 			}
 			if left, want := len(f.copiesNamed(t, handedName)), len(stages)-1; left != want {
 				t.Errorf("copies left after the failure = %d, want %d", left, want)
 			}
 
-			f.svc.handoverHook = nil
-			if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
+			f.svc.Playlists.handoverHook = nil
+			if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err != nil {
 				t.Fatalf("the retry: %v", err)
 			}
 			copies := f.copiesNamed(t, handedName)
@@ -660,7 +660,7 @@ func TestARetryThatDeletesInsteadRemovesTheCopyAnEarlierAttemptLeft(t *testing.T
 	for name, leave := range map[string]func(*testing.T, handoverFixture){
 		"a copy the record names": func(t *testing.T, f handoverFixture) {
 			failAt(f.svc, "swap", "discard")
-			if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err == nil {
+			if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err == nil {
 				t.Fatal("the deletion went through a failing step")
 			}
 		},
@@ -684,8 +684,8 @@ func TestARetryThatDeletesInsteadRemovesTheCopyAnEarlierAttemptLeft(t *testing.T
 				t.Fatal(err)
 			}
 
-			f.svc.handoverHook = nil
-			got, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{Playlists: PlaylistsDelete})
+			f.svc.Playlists.handoverHook = nil
+			got, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{Playlists: PlaylistsDelete})
 			if err != nil {
 				t.Fatalf("the retry: %v", err)
 			}
@@ -702,7 +702,7 @@ func TestARetryThatDeletesInsteadRemovesTheCopyAnEarlierAttemptLeft(t *testing.T
 			if rec, err := f.record(t); !errors.Is(err, wdb.ErrNotFound) {
 				t.Errorf("the record after the deletion = %+v (%v), want it gone", rec, err)
 			}
-			if _, err := f.svc.Account(f.ctx, f.sam.User.ID); KindOf(err) != KindNotFound {
+			if _, err := f.svc.Identity.Account(f.ctx, f.sam.User.ID); KindOf(err) != KindNotFound {
 				t.Errorf("the account after the deletion = %v, want it gone", err)
 			}
 			// Every account hears that the copy went, as it heard of the playlist.
@@ -728,7 +728,7 @@ func TestARetryAfterTheListWasDeletedByHandKeepsItsCopyForTheRecipient(t *testin
 	for name, leave := range map[string]func(*testing.T, handoverFixture){
 		"a copy the record names": func(t *testing.T, f handoverFixture) {
 			failAt(f.svc, "swap", "discard")
-			if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err == nil {
+			if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{}); err == nil {
 				t.Fatal("the deletion went through a failing step")
 			}
 		},
@@ -744,17 +744,17 @@ func TestARetryAfterTheListWasDeletedByHandKeepsItsCopyForTheRecipient(t *testin
 			f := newHandoverFixture(t)
 			pat, _ := playlistMember(t, f.ctx, f.svc, "pat")
 			leave(t, f)
-			if err := f.svc.DeletePlaylist(f.ctx, f.admin, f.list); err != nil {
+			if err := f.svc.Playlists.DeletePlaylist(f.ctx, f.admin, f.list); err != nil {
 				t.Fatal(err)
 			}
 
-			f.svc.handoverHook = nil
-			got, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{TransferTo: pat.User.ID})
+			f.svc.Playlists.handoverHook = nil
+			got, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, AccountDeletion{TransferTo: pat.User.ID})
 			if err != nil {
 				t.Fatalf("the retry: %v", err)
 			}
 			copies := f.copiesNamed(t, handedName)
-			if len(copies) != 1 || copies[0].Name != handedName || string(copies[0].OwnerPID) != pat.User.WaxbinUserPID {
+			if len(copies) != 1 || copies[0].Name != handedName || string(copies[0].OwnerPID) != pat.User.row.WaxbinUserPID {
 				t.Fatalf("static lists named %q after the retry = %+v, want the one copy, pat's, under its own name", handedName, copies)
 			}
 			// The retry says what became of the copy: the entry names it.
@@ -805,15 +805,15 @@ func TestADeletionIgnoresARecordTheCatalogCanNoLongerAnswerFor(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	svc.catalogUsersMu.Lock()
-	svc.catalogUsers = map[string]model.PID{sam.User.ID: "01JZX5N8QW3F4V9T2B7KDXXXXX"}
-	svc.catalogUsersMu.Unlock()
+	svc.Identity.catalogUsersMu.Lock()
+	svc.Identity.catalogUsers = map[string]model.PID{sam.User.ID: "01JZX5N8QW3F4V9T2B7KDXXXXX"}
+	svc.Identity.catalogUsersMu.Unlock()
 
 	for name, opts := range map[string]AccountDeletion{"handing over": {}, "deleting": {Playlists: PlaylistsDelete}} {
 		if _, err := svc.db.PlaylistHandoverFor(ctx, "01JZX5N8QW3F4V9T2B7KDAAAAA"); err != nil {
 			t.Fatalf("%s: the record before the deletion: %v", name, err)
 		}
-		if _, err := svc.DeleteAccount(ctx, admin, sam.User.ID, opts); err != nil {
+		if _, err := svc.Identity.DeleteAccount(ctx, admin, sam.User.ID, opts); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
 		if _, err := svc.db.PlaylistHandoverFor(ctx, "01JZX5N8QW3F4V9T2B7KDAAAAA"); !errors.Is(err, wdb.ErrNotFound) {
@@ -826,9 +826,9 @@ func TestADeletionIgnoresARecordTheCatalogCanNoLongerAnswerFor(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		svc.catalogUsersMu.Lock()
-		svc.catalogUsers = map[string]model.PID{sam.User.ID: "01JZX5N8QW3F4V9T2B7KDXXXXX"}
-		svc.catalogUsersMu.Unlock()
+		svc.Identity.catalogUsersMu.Lock()
+		svc.Identity.catalogUsers = map[string]model.PID{sam.User.ID: "01JZX5N8QW3F4V9T2B7KDXXXXX"}
+		svc.Identity.catalogUsersMu.Unlock()
 	}
 }
 
@@ -860,13 +860,13 @@ func TestAnotherAccountsListCarryingTheMarkerIsNeverTakenForTheCopy(t *testing.T
 				t.Fatal("the handover did not reach the point the test stops it at")
 			}
 
-			f.svc.handoverHook = nil
-			if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, retry); err != nil {
+			f.svc.Playlists.handoverHook = nil
+			if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, retry); err != nil {
 				t.Fatalf("the retry: %v", err)
 			}
 
 			pl, err := f.svc.lib.Playlists().Get(f.ctx, mustBare(t, theirs))
-			if err != nil || pl.Name != hers || string(pl.OwnerPID) != mallory.User.WaxbinUserPID {
+			if err != nil || pl.Name != hers || string(pl.OwnerPID) != mallory.User.row.WaxbinUserPID {
 				t.Fatalf("her list = %+v (%v), want it as she made it, hers", pl, err)
 			}
 			if stored := f.stored(t, mustBare(t, theirs)); !slices.Equal(stored, pids[2:]) {
@@ -909,12 +909,12 @@ func TestACopyIsFoundWhenTheDepartingMemberIsUnmapped(t *testing.T) {
 			if len(stray) != 1 {
 				t.Fatalf("static lists named %q after the stop = %d, want the one it left", handedName, len(stray))
 			}
-			f.svc.catalogUsersMu.Lock()
-			f.svc.catalogUsers = map[string]model.PID{f.sam.User.ID: "01JZX5N8QW3F4V9T2B7KDXXXXX"}
-			f.svc.catalogUsersMu.Unlock()
+			f.svc.Identity.catalogUsersMu.Lock()
+			f.svc.Identity.catalogUsers = map[string]model.PID{f.sam.User.ID: "01JZX5N8QW3F4V9T2B7KDXXXXX"}
+			f.svc.Identity.catalogUsersMu.Unlock()
 
-			f.svc.handoverHook = nil
-			if _, err := f.svc.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, retry); err != nil {
+			f.svc.Playlists.handoverHook = nil
+			if _, err := f.svc.Identity.DeleteAccount(f.ctx, f.admin, f.sam.User.ID, retry); err != nil {
 				t.Fatalf("the retry: %v", err)
 			}
 			copies := f.copiesNamed(t, handedName)

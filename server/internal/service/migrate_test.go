@@ -27,7 +27,6 @@ import (
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxdeck/fixtures"
 
-	"github.com/colespringer/waxdeck/server/internal/auth"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 )
@@ -77,15 +76,11 @@ func newMigrateFixtureWith(t *testing.T, extra func(t *testing.T, libDir string)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sealer, err := auth.NewSealer([]byte("0123456789abcdef0123456789abcdef"), "waxdeck-app-password-v1")
-	if err != nil {
-		t.Fatal(err)
-	}
 	group := supervise.NewGroup(log)
 	svc, err := Open(ctx, Config{
 		DataDir: dataDir,
 		Roots:   append([]Root{{Name: "lib", Path: libDir}}, roots...),
-		Sealer:  sealer,
+		Sealer:  testSealer(t),
 		// The fake source servers listen on loopback, which the SSRF
 		// guard would otherwise refuse; the flag is the same LAN opt-in
 		// a real household migration would run with.
@@ -105,13 +100,13 @@ func newMigrateFixtureWith(t *testing.T, extra func(t *testing.T, libDir string)
 		t.Fatalf("scanning fixture library: %v", err)
 	}
 
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "admin", Password: "correct-horse", Roles: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +131,7 @@ func (f *migrateFixture) itemPID(t *testing.T, ctx context.Context, kind model.K
 
 func (f *migrateFixture) playState(t *testing.T, ctx context.Context, pid string) PlayState {
 	t.Helper()
-	st, err := f.svc.PlayState(ctx, f.uc, pid)
+	st, err := f.svc.Playback.PlayState(ctx, f.uc, pid)
 	if err != nil {
 		t.Fatalf("play state for %s: %v", pid, err)
 	}
@@ -164,7 +159,7 @@ func (f *migrateFixture) starredAt(t *testing.T, ctx context.Context, apiPID str
 // starredEntities reads back the caller's starred artists and albums.
 func (f *migrateFixture) starredEntities(t *testing.T, ctx context.Context) StarredEntities {
 	t.Helper()
-	res, err := f.svc.StarredEntities(ctx, f.uc)
+	res, err := f.svc.Identity.StarredEntities(ctx, f.uc)
 	if err != nil {
 		t.Fatalf("StarredEntities: %v", err)
 	}
@@ -178,7 +173,7 @@ func (f *migrateFixture) starredEntities(t *testing.T, ctx context.Context) Star
 // parsed summary.
 func (f *migrateFixture) runMigration(t *testing.T, ctx context.Context, req MigrationRequest) migrationSummary {
 	t.Helper()
-	dto, err := f.svc.StartMigration(ctx, f.uc, req)
+	dto, err := f.svc.Migrate.StartMigration(ctx, f.uc, req)
 	if err != nil {
 		t.Fatalf("StartMigration: %v", err)
 	}
@@ -195,7 +190,7 @@ func (f *migrateFixture) runMigration(t *testing.T, ctx context.Context, req Mig
 	if req.Token != "" && strings.Contains(row.Params, req.Token) {
 		t.Fatalf("params carry the plaintext token: %s", row.Params)
 	}
-	if err := f.svc.runMigrationTask(ctx, &row); err != nil {
+	if err := f.svc.Migrate.runMigrationTask(ctx, &row); err != nil {
 		t.Fatalf("runMigrationTask: %v", err)
 	}
 	f.finishTask(t, ctx, row)
@@ -219,7 +214,7 @@ func (f *migrateFixture) finishTask(t *testing.T, ctx context.Context, row wdb.T
 	if err := f.svc.db.UpdateToolTask(ctx, row); err != nil {
 		t.Fatal(err)
 	}
-	f.svc.settleMigrationExport(ctx, row.ID)
+	f.svc.Migrate.settleMigrationExport(ctx, row.ID)
 }
 
 // navStarredAt is the star time Alpha carries on the source, which the
@@ -313,27 +308,27 @@ func TestMigrateSubsonicImport(t *testing.T) {
 	}
 
 	// The entry is admin-gated and validates its inputs.
-	member, err := f.svc.CreateAccount(ctx, AccountCreate{Username: "member", Password: "pw"})
+	member, err := f.svc.Identity.CreateAccount(ctx, AccountCreate{Username: "member", Password: "pw"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	memberCtx, err := f.svc.UserCtx(ctx, member.User)
+	memberCtx, err := f.svc.Grants.UserCtxFor(ctx, member.User)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.svc.StartMigration(ctx, memberCtx, req); KindOf(err) != KindForbidden {
+	if _, err := f.svc.Migrate.StartMigration(ctx, memberCtx, req); KindOf(err) != KindForbidden {
 		t.Fatalf("non-admin start: kind = %v, want forbidden", KindOf(err))
 	}
-	if _, err := f.svc.StartMigration(ctx, f.uc, MigrationRequest{Source: "plex", ServerURL: ts.URL, Username: "u", Password: "p"}); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc, MigrationRequest{Source: "plex", ServerURL: ts.URL, Username: "u", Password: "p"}); KindOf(err) != KindInvalid {
 		t.Fatalf("unknown source: kind = %v, want invalid", KindOf(err))
 	}
-	if _, err := f.svc.StartMigration(ctx, f.uc, MigrationRequest{Source: "navidrome", ServerURL: "ftp://old-box", Username: "u", Password: "p"}); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc, MigrationRequest{Source: "navidrome", ServerURL: "ftp://old-box", Username: "u", Password: "p"}); KindOf(err) != KindInvalid {
 		t.Fatalf("bad scheme: kind = %v, want invalid", KindOf(err))
 	}
-	if _, err := f.svc.StartMigration(ctx, f.uc, MigrationRequest{Source: "navidrome", ServerURL: ts.URL}); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc, MigrationRequest{Source: "navidrome", ServerURL: ts.URL}); KindOf(err) != KindInvalid {
 		t.Fatalf("missing credentials: kind = %v, want invalid", KindOf(err))
 	}
-	if _, err := f.svc.StartMigration(ctx, f.uc, MigrationRequest{Source: "audiobookshelf", ServerURL: ts.URL}); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc, MigrationRequest{Source: "audiobookshelf", ServerURL: ts.URL}); KindOf(err) != KindInvalid {
 		t.Fatalf("missing token: kind = %v, want invalid", KindOf(err))
 	}
 
@@ -640,7 +635,7 @@ func TestMigrateAudiobookshelfImport(t *testing.T) {
 
 	// An imported position is the book's resume position everywhere, a
 	// Subsonic client's bookmarks included.
-	marks, err := f.svc.SubsonicBookmarks(ctx, f.uc)
+	marks, err := f.svc.Playback.SubsonicBookmarks(ctx, f.uc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -665,7 +660,7 @@ func TestMigrateABSBackdatedProgressLosesToLocal(t *testing.T) {
 
 	// The listener is already further along here, checkpointed live.
 	// Books are recency-primary, so only a newer replay may move them.
-	if _, err := f.svc.Checkpoint(ctx, f.uc, book, 9000, nil); err != nil {
+	if _, err := f.svc.Playback.Checkpoint(ctx, f.uc, book, 9000, nil); err != nil {
 		t.Fatalf("live checkpoint: %v", err)
 	}
 
@@ -736,11 +731,11 @@ func TestMigrateWritesToTheTargetAccount(t *testing.T) {
 	ts := newFakeNavidrome(t, "demo", "demo-pass")
 	alpha := f.itemPID(t, ctx, model.KindTrack, "Alpha Song")
 
-	acct, err := f.svc.CreateAccount(ctx, AccountCreate{Username: "housemate", Password: "correct-horse"})
+	acct, err := f.svc.Identity.CreateAccount(ctx, AccountCreate{Username: "housemate", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	memberCtx, err := f.svc.UserCtx(ctx, acct.User)
+	memberCtx, err := f.svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -755,7 +750,7 @@ func TestMigrateWritesToTheTargetAccount(t *testing.T) {
 		t.Fatalf("summary = %+v, want a real import", sum)
 	}
 
-	member, err := f.svc.PlayState(ctx, memberCtx, alpha)
+	member, err := f.svc.Playback.PlayState(ctx, memberCtx, alpha)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -783,27 +778,27 @@ func TestMigrateWritesToTheTargetAccount(t *testing.T) {
 	// A target that cannot hold state is refused before anything runs,
 	// and again at run time - a task can sit queued while an account is
 	// disabled underneath it.
-	dto, err := f.svc.StartMigration(ctx, f.uc, req)
+	dto, err := f.svc.Migrate.StartMigration(ctx, f.uc, req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.svc.UpdateAccount(ctx, acct.User.ID, AccountUpdate{Disabled: ptrTo(true)}); err != nil {
+	if _, err := f.svc.Identity.UpdateAccount(ctx, acct.User.ID, AccountUpdate{Disabled: ptrTo(true)}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.svc.StartMigration(ctx, f.uc, req); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc, req); KindOf(err) != KindInvalid {
 		t.Fatalf("start onto a disabled account: kind = %v, want invalid", KindOf(err))
 	}
 	row, err := f.svc.db.ToolTaskByID(ctx, dto.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.svc.runMigrationTask(ctx, &row); err == nil || !errors.Is(err, errToolPermanent) {
+	if err := f.svc.Migrate.runMigrationTask(ctx, &row); err == nil || !errors.Is(err, errToolPermanent) {
 		t.Fatalf("running onto a disabled account: %v, want a permanent failure", err)
 	}
 
 	// An account nobody has is a bad field, not a missing resource.
 	req.AccountID = "us-01JZX5N8QW3F4V9T2B7KD3M9R6"
-	if _, err := f.svc.StartMigration(ctx, f.uc, req); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc, req); KindOf(err) != KindInvalid {
 		t.Fatalf("start onto an unknown account: kind = %v, want invalid", KindOf(err))
 	}
 }
@@ -841,7 +836,7 @@ func TestMigrateNeverScrobbles(t *testing.T) {
 	// The same listen arriving live still does, so this is the source
 	// field doing the work rather than scrobbling being off.
 	alpha := f.itemPID(t, ctx, model.KindTrack, "Alpha Song")
-	if _, err := f.svc.IngestListens(ctx, f.uc, []ListenSession{{
+	if _, err := f.svc.Playback.IngestListens(ctx, f.uc, []ListenSession{{
 		SessionID: "live-1", PID: alpha, StartedAt: time.Now().Add(-time.Minute),
 		MsPlayed: 2000, Finished: true, Client: "test",
 	}}); err != nil {
@@ -984,10 +979,10 @@ func TestMigrateJellyfinImport(t *testing.T) {
 	// Jellyfin takes either a login or a server API key, and an API key
 	// alone names nobody: without a username there is no per-user data
 	// to read.
-	if _, err := f.svc.StartMigration(ctx, f.uc, MigrationRequest{Source: "jellyfin", ServerURL: ts.URL}); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc, MigrationRequest{Source: "jellyfin", ServerURL: ts.URL}); KindOf(err) != KindInvalid {
 		t.Fatalf("jellyfin with nothing: kind = %v, want invalid", KindOf(err))
 	}
-	if _, err := f.svc.StartMigration(ctx, f.uc, MigrationRequest{Source: "jellyfin", ServerURL: ts.URL, Username: "demo"}); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc, MigrationRequest{Source: "jellyfin", ServerURL: ts.URL, Username: "demo"}); KindOf(err) != KindInvalid {
 		t.Fatalf("jellyfin with no secret: kind = %v, want invalid", KindOf(err))
 	}
 
@@ -1127,19 +1122,19 @@ func TestMigrateLastfmImport(t *testing.T) {
 	}
 	// Read with the server's own credentials, so an install without them
 	// is refused where somebody can act on it rather than in a report.
-	if _, err := f.svc.StartMigration(ctx, f.uc, req); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc, req); KindOf(err) != KindInvalid {
 		t.Fatalf("lastfm with no server key: kind = %v, want invalid", KindOf(err))
 	}
 
 	ts := newFakeLastfm(t, "demo")
-	if _, err := f.svc.LastfmConfigPut(ctx, f.uc, "test-key", "test-secret"); err != nil {
+	if _, err := f.svc.Integrations.LastfmConfigPut(ctx, f.uc, "test-key", "test-secret"); err != nil {
 		t.Fatal(err)
 	}
-	f.svc.lastfmClient().BaseURL = ts.URL + "/2.0/"
+	f.svc.Integrations.lastfmClient().BaseURL = ts.URL + "/2.0/"
 
 	// A source that carries no server URL takes none: pointing this one
 	// somewhere would be a field with no meaning.
-	if _, err := f.svc.StartMigration(ctx, f.uc,
+	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc,
 		MigrationRequest{Source: "lastfm", Username: "demo", ServerURL: ts.URL}); KindOf(err) != KindInvalid {
 		t.Fatalf("lastfm with a server URL: kind = %v, want invalid", KindOf(err))
 	}
@@ -1336,7 +1331,7 @@ func TestMigrateListenBrainzImport(t *testing.T) {
 		http.Error(w, "not found", http.StatusNotFound)
 	}))
 	t.Cleanup(silent.Close)
-	dto, err := f.svc.StartMigration(ctx, f.uc, MigrationRequest{
+	dto, err := f.svc.Migrate.StartMigration(ctx, f.uc, MigrationRequest{
 		Source: "listenbrainz", ServerURL: silent.URL, Username: "demo", History: true,
 	})
 	if err != nil {
@@ -1346,7 +1341,7 @@ func TestMigrateListenBrainzImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = f.svc.runMigrationTask(ctx, &row)
+	err = f.svc.Migrate.runMigrationTask(ctx, &row)
 	if err == nil || !errors.Is(err, errToolPermanent) || !strings.Contains(err.Error(), "listen history") {
 		t.Fatalf("a submit-only server answered %v, want a permanent refusal naming the missing half", err)
 	}
@@ -1403,17 +1398,17 @@ func TestMigrateSpotifyExport(t *testing.T) {
 
 	// Something that is not an export at all is refused at the upload
 	// rather than staged for a task nobody is watching to fail on.
-	if _, err := f.svc.StageMigrationExport(ctx, f.uc, strings.NewReader("not a zip"), 0); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, strings.NewReader("not a zip"), 0); KindOf(err) != KindInvalid {
 		t.Fatalf("a non-zip upload: kind = %v, want invalid", KindOf(err))
 	}
 	var empty bytes.Buffer
 	zip.NewWriter(&empty).Close()
-	if _, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(empty.Bytes()), 0); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(empty.Bytes()), 0); KindOf(err) != KindInvalid {
 		t.Fatalf("a zip holding nothing readable: kind = %v, want invalid", KindOf(err))
 	}
 
 	archive := spotifyExportZip(t)
-	staged, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), int64(len(archive)))
+	staged, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), int64(len(archive)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1438,10 +1433,10 @@ func TestMigrateSpotifyExport(t *testing.T) {
 
 	// An export id is required for spotify and refused for a source that
 	// reads a server.
-	if _, err := f.svc.StartMigration(ctx, f.uc, MigrationRequest{Source: "spotify"}); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc, MigrationRequest{Source: "spotify"}); KindOf(err) != KindInvalid {
 		t.Fatalf("spotify with no export: kind = %v, want invalid", KindOf(err))
 	}
-	if _, err := f.svc.StartMigration(ctx, f.uc, MigrationRequest{
+	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc, MigrationRequest{
 		Source: "lastfm", Username: "demo", ExportID: staged.PID,
 	}); KindOf(err) != KindInvalid {
 		t.Fatalf("lastfm with an export: kind = %v, want invalid", KindOf(err))
@@ -1469,7 +1464,7 @@ func TestMigrateSpotifyExport(t *testing.T) {
 	}
 
 	req.DryRun = false
-	dto, err := f.svc.StartMigration(ctx, f.uc, req)
+	dto, err := f.svc.Migrate.StartMigration(ctx, f.uc, req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1477,7 +1472,7 @@ func TestMigrateSpotifyExport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.svc.runMigrationTask(ctx, &row); err != nil {
+	if err := f.svc.Migrate.runMigrationTask(ctx, &row); err != nil {
 		t.Fatal(err)
 	}
 	f.finishTask(t, ctx, row)
@@ -1514,7 +1509,7 @@ func TestMigrateSpotifyExport(t *testing.T) {
 	if _, err := f.svc.db.MigrationExportByID(ctx, staged.PID); err == nil {
 		t.Fatal("the export outlived the import that read it")
 	}
-	f.svc.scrubTaskSecrets(ctx, dto.ID)
+	f.svc.Tools.scrubTaskSecrets(ctx, dto.ID)
 	after, err := f.svc.db.ToolTaskByID(ctx, dto.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -1526,7 +1521,7 @@ func TestMigrateSpotifyExport(t *testing.T) {
 	// An export id that names nothing is refused where somebody can act
 	// on it, rather than accepted and failed in a task report.
 	req.ExportID = "mx-01JZX5N8QW3F4V9T2B7KD3M9R6"
-	if _, err := f.svc.StartMigration(ctx, f.uc, req); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc, req); KindOf(err) != KindInvalid {
 		t.Fatalf("an unknown export: kind = %v, want invalid", KindOf(err))
 	}
 }
@@ -1539,34 +1534,34 @@ func TestMigrationExportIsNotSharedBetweenAdmins(t *testing.T) {
 	t.Parallel()
 	ctx, f := newMigrateFixture(t)
 	archive := spotifyExportZip(t)
-	staged, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
+	staged, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	other, err := f.svc.CreateAccount(ctx, AccountCreate{
+	other, err := f.svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "second-admin", Password: "correct-horse", Roles: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	otherCtx, err := f.svc.UserCtx(ctx, other.User)
+	otherCtx, err := f.svc.Grants.UserCtxFor(ctx, other.User)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	order := MigrationRequest{Source: "spotify", ExportID: staged.PID, History: true}
-	if _, err := f.svc.StartMigration(ctx, otherCtx, order); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Migrate.StartMigration(ctx, otherCtx, order); KindOf(err) != KindInvalid {
 		t.Fatalf("another administrator's export: kind = %v, want invalid", KindOf(err))
 	}
-	if err := f.svc.DiscardMigrationExport(ctx, otherCtx, staged.PID); KindOf(err) != KindNotFound {
+	if err := f.svc.Migrate.DiscardMigrationExport(ctx, otherCtx, staged.PID); KindOf(err) != KindNotFound {
 		t.Fatalf("discarding another administrator's export: kind = %v, want not-found", KindOf(err))
 	}
 	// Untouched, so the administrator who uploaded it can still use it.
 	if _, err := f.svc.db.MigrationExportByID(ctx, staged.PID); err != nil {
 		t.Fatalf("the upload was destroyed by somebody else's order: %v", err)
 	}
-	if _, err := f.svc.StartMigration(ctx, f.uc, order); err != nil {
+	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc, order); err != nil {
 		t.Fatalf("the uploader's own order: %v", err)
 	}
 
@@ -1584,7 +1579,7 @@ func TestMigrationExportIsNotSharedBetweenAdmins(t *testing.T) {
 	if err := f.svc.db.InsertMigrationExport(ctx, expired); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.svc.StartMigration(ctx, f.uc, order); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc, order); KindOf(err) != KindInvalid {
 		t.Fatalf("an expired export: kind = %v, want invalid", KindOf(err))
 	}
 }
@@ -1612,7 +1607,7 @@ func TestMigrateSpotifyBasicExport(t *testing.T) {
 	if err := zw.Close(); err != nil {
 		t.Fatal(err)
 	}
-	staged, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(buf.Bytes()), 0)
+	staged, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(buf.Bytes()), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1651,32 +1646,32 @@ func TestMigrationExportRefusals(t *testing.T) {
 	was := migrateExportMaxBytes
 	t.Cleanup(func() { migrateExportMaxBytes = was })
 	migrateExportMaxBytes = int64(len(archive)) - 1
-	if _, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0); KindOf(err) != KindQuota {
+	if _, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0); KindOf(err) != KindQuota {
 		t.Fatalf("an over-cap body: kind = %v, want quota", KindOf(err))
 	}
 	// Declared as well as measured: a client that says how big the body
 	// is is refused before a byte of it is read.
-	if _, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(nil), int64(len(archive))); KindOf(err) != KindQuota {
+	if _, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(nil), int64(len(archive))); KindOf(err) != KindQuota {
 		t.Fatalf("an over-cap content length: kind = %v, want quota", KindOf(err))
 	}
 	migrateExportMaxBytes = was
 
-	f.svc.stagingFree = func(string) (int64, bool) { return 1 << 10, true }
-	if _, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), int64(len(archive))); KindOf(err) != KindStorageFull {
+	f.svc.Ingest.stagingFree = func(string) (int64, bool) { return 1 << 10, true }
+	if _, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), int64(len(archive))); KindOf(err) != KindStorageFull {
 		t.Fatalf("a full volume: kind = %v, want storage-full", KindOf(err))
 	}
-	f.svc.stagingFree = nil
+	f.svc.Ingest.stagingFree = nil
 
 	// Administrators only, like every other surface in this file.
-	acct, err := f.svc.CreateAccount(ctx, AccountCreate{Username: "member", Password: "correct-horse"})
+	acct, err := f.svc.Identity.CreateAccount(ctx, AccountCreate{Username: "member", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	memberCtx, err := f.svc.UserCtx(ctx, acct.User)
+	memberCtx, err := f.svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.svc.StageMigrationExport(ctx, memberCtx, bytes.NewReader(archive), 0); KindOf(err) != KindForbidden {
+	if _, err := f.svc.Migrate.StageMigrationExport(ctx, memberCtx, bytes.NewReader(archive), 0); KindOf(err) != KindForbidden {
 		t.Fatalf("a non-admin upload: kind = %v, want forbidden", KindOf(err))
 	}
 }
@@ -1686,7 +1681,7 @@ func TestMigrationExportSweep(t *testing.T) {
 	t.Parallel()
 	ctx, f := newMigrateFixture(t)
 	archive := spotifyExportZip(t)
-	staged, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
+	staged, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1694,14 +1689,14 @@ func TestMigrationExportSweep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := f.svc.migrationExportPath(row.FileName)
+	path := f.svc.Migrate.migrationExportPath(row.FileName)
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("staged file: %v", err)
 	}
 
 	// Not yet: a sweep at the wrong moment would take an export
 	// somebody is about to import from.
-	f.svc.SweepMigrationExports(ctx)
+	f.svc.Migrate.SweepMigrationExports(ctx)
 	if _, err := f.svc.db.MigrationExportByID(ctx, staged.PID); err != nil {
 		t.Fatalf("a live export was swept: %v", err)
 	}
@@ -1713,7 +1708,7 @@ func TestMigrationExportSweep(t *testing.T) {
 	if err := f.svc.db.InsertMigrationExport(ctx, row); err != nil {
 		t.Fatal(err)
 	}
-	f.svc.SweepMigrationExports(ctx)
+	f.svc.Migrate.SweepMigrationExports(ctx)
 	if _, err := f.svc.db.MigrationExportByID(ctx, staged.PID); err == nil {
 		t.Fatal("an expired export survived the sweep")
 	}
@@ -1724,17 +1719,17 @@ func TestMigrationExportSweep(t *testing.T) {
 	// An archive with no row behind it, which a crash between the write
 	// and the insert leaves: half a gigabyte on the volume the databases
 	// share, addressable by nothing.
-	orphan := f.svc.migrationExportPath("mx-01JZX5N8QW3F4V9T2B7KD3M9R6.zip")
+	orphan := f.svc.Migrate.migrationExportPath("mx-01JZX5N8QW3F4V9T2B7KD3M9R6.zip")
 	if err := os.WriteFile(orphan, archive, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	inFlight := f.svc.migrationExportPath(".mx-something.zip.tmp123")
+	inFlight := f.svc.Migrate.migrationExportPath(".mx-something.zip.tmp123")
 	if err := os.WriteFile(inFlight, []byte("uploading"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	// A stage writes the archive and then the row that names it, so an
 	// archive written moments ago is not yet evidence of anything.
-	f.svc.SweepMigrationExports(ctx)
+	f.svc.Migrate.SweepMigrationExports(ctx)
 	if _, err := os.Stat(orphan); err != nil {
 		t.Fatalf("the sweep took an archive a stage may still be placing: %v", err)
 	}
@@ -1742,7 +1737,7 @@ func TestMigrationExportSweep(t *testing.T) {
 	if err := os.Chtimes(orphan, aged, aged); err != nil {
 		t.Fatal(err)
 	}
-	f.svc.SweepMigrationExports(ctx)
+	f.svc.Migrate.SweepMigrationExports(ctx)
 	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
 		t.Fatalf("an orphaned archive survived the sweep: %v", err)
 	}
@@ -1753,14 +1748,14 @@ func TestMigrationExportSweep(t *testing.T) {
 
 	// Discarding one by hand does the same, and an id nothing names is
 	// a not-found rather than a silent success.
-	staged, err = f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
+	staged, err = f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.svc.DiscardMigrationExport(ctx, f.uc, staged.PID); err != nil {
+	if err := f.svc.Migrate.DiscardMigrationExport(ctx, f.uc, staged.PID); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.svc.DiscardMigrationExport(ctx, f.uc, staged.PID); KindOf(err) != KindNotFound {
+	if err := f.svc.Migrate.DiscardMigrationExport(ctx, f.uc, staged.PID); KindOf(err) != KindNotFound {
 		t.Fatalf("discarding twice: kind = %v, want not-found", KindOf(err))
 	}
 }
@@ -1773,10 +1768,10 @@ func TestMigrateAnnouncesOncePerItem(t *testing.T) {
 	t.Parallel()
 	ctx, f := newMigrateFixture(t)
 	ts := newFakeLastfm(t, "demo")
-	if _, err := f.svc.LastfmConfigPut(ctx, f.uc, "test-key", "test-secret"); err != nil {
+	if _, err := f.svc.Integrations.LastfmConfigPut(ctx, f.uc, "test-key", "test-secret"); err != nil {
 		t.Fatal(err)
 	}
-	f.svc.lastfmClient().BaseURL = ts.URL + "/2.0/"
+	f.svc.Integrations.lastfmClient().BaseURL = ts.URL + "/2.0/"
 
 	before, _, err := f.svc.db.EventsSince(ctx, f.uc.ID, 0, 1000)
 	if err != nil {
@@ -1855,10 +1850,10 @@ func TestMigrateLastfmWalksByCountAndByRows(t *testing.T) {
 		}
 	}))
 	t.Cleanup(ts.Close)
-	if _, err := f.svc.LastfmConfigPut(ctx, f.uc, "test-key", "test-secret"); err != nil {
+	if _, err := f.svc.Integrations.LastfmConfigPut(ctx, f.uc, "test-key", "test-secret"); err != nil {
 		t.Fatal(err)
 	}
-	f.svc.lastfmClient().BaseURL = ts.URL + "/2.0/"
+	f.svc.Integrations.lastfmClient().BaseURL = ts.URL + "/2.0/"
 
 	sum := f.runMigration(t, ctx, MigrationRequest{
 		Source: "lastfm", Username: "demo", History: true,
@@ -1913,7 +1908,7 @@ func TestMigrateSpotifySkipIsNotAPlay(t *testing.T) {
 		// subtracted from the stop time, a negative dates the play in
 		// the future and an enormous one overflows the duration.
 		fmt.Sprintf(row, 3, -5)+"]")
-	staged, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
+	staged, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1950,7 +1945,7 @@ func TestMigrateSpotifyKeepsWhatItDidNotRead(t *testing.T) {
 	t.Parallel()
 	ctx, f := newMigrateFixture(t)
 	archive := spotifyExportZip(t)
-	staged, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
+	staged, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1988,14 +1983,14 @@ func TestMigrationExportOutlivesAnUnrecordedCompletion(t *testing.T) {
 	t.Parallel()
 	ctx, f := newMigrateFixture(t)
 	archive := spotifyExportZip(t)
-	staged, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
+	staged, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	req := MigrationRequest{
 		Source: "spotify", ExportID: staged.PID, Stars: true, History: true,
 	}
-	dto, err := f.svc.StartMigration(ctx, f.uc, req)
+	dto, err := f.svc.Migrate.StartMigration(ctx, f.uc, req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2003,14 +1998,14 @@ func TestMigrationExportOutlivesAnUnrecordedCompletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.svc.runMigrationTask(ctx, &row); err != nil {
+	if err := f.svc.Migrate.runMigrationTask(ctx, &row); err != nil {
 		t.Fatal(err)
 	}
 
 	// The completion write never landed, so what is on disk is still a
 	// task that has not finished. Settling reads that rather than the
 	// caller's copy, and leaves everything where a retry needs it.
-	f.svc.settleMigrationExport(ctx, row.ID)
+	f.svc.Migrate.settleMigrationExport(ctx, row.ID)
 	if _, err := f.svc.db.MigrationExportByID(ctx, staged.PID); err != nil {
 		t.Fatalf("the archive went before the task's own completion did: %v", err)
 	}
@@ -2033,7 +2028,7 @@ func TestMigrationExportIsReadByOneImportAtATime(t *testing.T) {
 	t.Parallel()
 	ctx, f := newMigrateFixture(t)
 	archive := spotifyExportZip(t)
-	staged, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
+	staged, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2042,7 +2037,7 @@ func TestMigrationExportIsReadByOneImportAtATime(t *testing.T) {
 	}
 	start := func() wdb.ToolTask {
 		t.Helper()
-		dto, err := f.svc.StartMigration(ctx, f.uc, req)
+		dto, err := f.svc.Migrate.StartMigration(ctx, f.uc, req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2054,11 +2049,11 @@ func TestMigrationExportIsReadByOneImportAtATime(t *testing.T) {
 	}
 	first, second := start(), start()
 
-	if err := f.svc.runMigrationTask(ctx, &first); err != nil {
+	if err := f.svc.Migrate.runMigrationTask(ctx, &first); err != nil {
 		t.Fatal(err)
 	}
 	// The first task is still live on disk, so the archive is its own.
-	err = f.svc.runMigrationTask(ctx, &second)
+	err = f.svc.Migrate.runMigrationTask(ctx, &second)
 	if err == nil || !strings.Contains(err.Error(), "another import is reading") {
 		t.Fatalf("the second import = %v, want a refusal naming the first", err)
 	}
@@ -2073,7 +2068,7 @@ func TestMigrationExportIsReadByOneImportAtATime(t *testing.T) {
 	if err := f.svc.db.UpdateToolTask(ctx, first); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.svc.runMigrationTask(ctx, &second); err != nil {
+	if err := f.svc.Migrate.runMigrationTask(ctx, &second); err != nil {
 		t.Fatalf("the second import after the first was over: %v", err)
 	}
 }
@@ -2116,7 +2111,7 @@ func TestMigrateSpotifyReadsAnOlderExportNaming(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	staged, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(buf.Bytes()), 0)
+	staged, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(buf.Bytes()), 0)
 	if err != nil {
 		t.Fatalf("an older export naming: %v", err)
 	}
@@ -2150,7 +2145,7 @@ func TestMigrateSpotifyFailsOnAReadThatStopped(t *testing.T) {
 		`"master_metadata_track_name":"Alpha Song",` +
 		`"master_metadata_album_artist_name":"Fixture Artist"}`
 	archive := spotifyHistoryZip(t, "["+play+","+play+","+play+"]")
-	staged, err := f.svc.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
+	staged, err := f.svc.Migrate.StageMigrationExport(ctx, f.uc, bytes.NewReader(archive), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2161,7 +2156,7 @@ func TestMigrateSpotifyFailsOnAReadThatStopped(t *testing.T) {
 	spotifyReadMaxBytes = int64(len("[" + play))
 	t.Cleanup(func() { spotifyReadMaxBytes = prev })
 
-	dto, err := f.svc.StartMigration(ctx, f.uc, MigrationRequest{
+	dto, err := f.svc.Migrate.StartMigration(ctx, f.uc, MigrationRequest{
 		Source: "spotify", ExportID: staged.PID, History: true, Stars: true,
 	})
 	if err != nil {
@@ -2171,7 +2166,7 @@ func TestMigrateSpotifyFailsOnAReadThatStopped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = f.svc.runMigrationTask(ctx, &row)
+	err = f.svc.Migrate.runMigrationTask(ctx, &row)
 	if err == nil {
 		t.Fatal("a history that could not be read to the end reported success")
 	}
@@ -2180,7 +2175,7 @@ func TestMigrateSpotifyFailsOnAReadThatStopped(t *testing.T) {
 	}
 	// And the archive is still there, because a run that failed is not a
 	// run that consumed it.
-	f.svc.settleMigrationExport(ctx, row.ID)
+	f.svc.Migrate.settleMigrationExport(ctx, row.ID)
 	if _, err := f.svc.db.MigrationExportByID(ctx, staged.PID); err != nil {
 		t.Fatalf("the archive went with the failed import: %v", err)
 	}
@@ -2249,5 +2244,25 @@ func TestMigrateJellyfinWalksEveryPage(t *testing.T) {
 		if st := f.playState(t, ctx, pid); !st.Starred {
 			t.Fatalf("%s was not reached by the walk", pid)
 		}
+	}
+}
+
+// A failed read of the importing account says nothing about it. A run
+// cut off there, as by the server stopping, is left to run again rather
+// than failed for good as an account that is gone.
+func TestAMigrationRunsAgainAfterAFailedAccountRead(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin := newCatalogFixture(t)
+	stopping, stop := context.WithCancel(ctx)
+	stop()
+	err := svc.Migrate.runMigrationTask(stopping, &wdb.ToolTask{UserID: admin.ID, Params: "{}"})
+	if err == nil {
+		t.Fatal("a migration whose account could not be read finished clean")
+	}
+	if permanentToolErr(err) {
+		t.Fatalf("a failed read of the account = %v, which fails the task for good", err)
+	}
+	if err := svc.Migrate.runMigrationTask(ctx, &wdb.ToolTask{UserID: "us-nobody", Params: "{}"}); !permanentToolErr(err) {
+		t.Fatalf("a migration for a deleted account = %v, want a failure no retry is owed", err)
 	}
 }

@@ -17,8 +17,11 @@ func TestWhatAParkedTaskHoldsIsRefusedForWhatItNeeds(t *testing.T) {
 		ctx, svc, uc, book, _, _ := bookToolFixture(t, false)
 		id := parkMerge(t, ctx, svc, uc, book, "staged")
 		for name, start := range map[string]func() error{
-			"merge": func() error { _, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false); return err },
-			"split": func() error { _, err := svc.StartBookSplit(ctx, uc, apiPID(PrefixBook, book), false); return err },
+			"merge": func() error {
+				_, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+				return err
+			},
+			"split": func() error { _, err := svc.Tools.StartBookSplit(ctx, uc, apiPID(PrefixBook, book), false); return err },
 		} {
 			err := start()
 			if p := RefusalParams(err); KindOf(err) != KindConflict || p["reason"] != refusalTaskParked || p["task"] != id ||
@@ -30,15 +33,15 @@ func TestWhatAParkedTaskHoldsIsRefusedForWhatItNeeds(t *testing.T) {
 	t.Run("rip", func(t *testing.T) {
 		t.Parallel()
 		ctx, svc, uc, one, _, _ := cueSplitFixture(t)
-		task, err := svc.StartCueSplit(ctx, uc, one, false)
+		task, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 		if err != nil {
 			t.Fatal(err)
 		}
-		svc.toolStepHook = stopAt("staged", nil)
+		svc.Tools.toolStepHook = stopAt("staged", nil)
 		if err := attempt(t, ctx, svc, 1); !errors.Is(err, errStopped) {
 			t.Fatalf("first attempt = %v, want it stopped once cut", err)
 		}
-		svc.toolStepHook = nil
+		svc.Tools.toolStepHook = nil
 		setParams(t, ctx, svc, task.ID, func(p *toolTaskParams) { p.RunsStarted, p.RunsEnded = 4, 1 })
 		if !drainAt(ctx, svc, 2) {
 			t.Fatal("the worker found no task")
@@ -46,7 +49,7 @@ func TestWhatAParkedTaskHoldsIsRefusedForWhatItNeeds(t *testing.T) {
 		if got := toolTask(t, ctx, svc, task.ID); got.State != taskStateParked {
 			t.Fatalf("task = %s (error %q), want it parked", got.State, got.Error)
 		}
-		_, err = svc.StartCueSplit(ctx, uc, one, false)
+		_, err = svc.Tools.StartCueSplit(ctx, uc, one, false)
 		if p := RefusalParams(err); KindOf(err) != KindConflict || p["reason"] != refusalTaskParked || p["task"] != task.ID {
 			t.Errorf("a split of the parked task's rip = %v (params %v), want it refused for the parked task, naming it", err, p)
 		}

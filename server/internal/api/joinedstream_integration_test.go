@@ -100,7 +100,7 @@ func subsonicBook(t *testing.T, h *harness) (string, []string) {
 	if len(books) != 1 {
 		t.Fatalf("audiobooks = %d, want the fixture book", len(books))
 	}
-	parts, err := h.svc.BookParts(context.Background(), books[0].Pid)
+	parts, err := h.svc.Playback.BookParts(context.Background(), books[0].Pid)
 	if err != nil || len(parts) != 3 {
 		t.Fatalf("the fixture book lays out as %d parts (%v), want 3", len(parts), err)
 	}
@@ -199,7 +199,7 @@ func TestSubsonicBookInPartsTakesOneTranscodeSlot(t *testing.T) {
 	wantStatus(t, h.putJSON(t, "/api/v1/admin/transcoding", map[string]any{
 		"maxConcurrent": 1, "maxConcurrentPerUser": 0, "defaultMaxBitrateKbps": 0,
 	}), 200, "one transcode server-wide")
-	release, err := h.svc.TranscodeGate().Acquire(context.Background(), "someone-else", flow.TranscodeStream)
+	release, err := h.svc.Playback.TranscodeGate().Acquire(context.Background(), "someone-else", flow.TranscodeStream)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,11 +246,11 @@ func TestStreamPartsLayOutABookInParts(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 	book, files := subsonicBook(t, h)
-	laid, err := h.svc.BookParts(ctx, book)
+	laid, err := h.svc.Playback.BookParts(ctx, book)
 	if err != nil {
 		t.Fatal(err)
 	}
-	parts, err := h.svc.StreamParts(ctx, book)
+	parts, err := h.svc.Playback.StreamParts(ctx, book)
 	if err != nil || len(parts) != 3 {
 		t.Fatalf("parts = %d (%v), want the book's 3", len(parts), err)
 	}
@@ -268,7 +268,7 @@ func TestStreamPartsLayOutABookInParts(t *testing.T) {
 		}
 	}
 	track := h.items(t, "?mediaType=music").Items[0]
-	if got, err := h.svc.StreamParts(ctx, track.Pid); err != nil || got != nil {
+	if got, err := h.svc.Playback.StreamParts(ctx, track.Pid); err != nil || got != nil {
 		t.Fatalf("a track laid out as %+v (%v), want nothing", got, err)
 	}
 }
@@ -298,7 +298,7 @@ func TestSubsonicBookOffsetLandsOnTheBooksSecond(t *testing.T) {
 	if len(books) != 1 {
 		t.Fatalf("audiobooks = %d, want the uneven book", len(books))
 	}
-	parts, err := h.svc.BookParts(context.Background(), books[0].Pid)
+	parts, err := h.svc.Playback.BookParts(context.Background(), books[0].Pid)
 	if err != nil || len(parts) != 3 || parts[1].StartMS%1000 == 0 {
 		t.Fatalf("parts %+v (%v), want three with part two starting off a whole second", parts, err)
 	}
@@ -329,7 +329,7 @@ func TestABookPartIsDescribedByItsOwnFile(t *testing.T) {
 		_, err := fixtures.Generate(at, fixtures.Spec{Name: "02 - Part", Codec: fixtures.CodecMP3, Duration: 4 * time.Second, Tags: tags(2)})
 		return err
 	})
-	parts, err := h.svc.BookParts(ctx, book)
+	parts, err := h.svc.Playback.BookParts(ctx, book)
 	if err != nil || len(parts) != 2 {
 		t.Fatalf("the mixed book lays out as %d parts (%v), want 2", len(parts), err)
 	}
@@ -338,16 +338,16 @@ func TestABookPartIsDescribedByItsOwnFile(t *testing.T) {
 		if pi.MimeType != want {
 			t.Errorf("play-info inside part %d = %s, want %s", i+1, pi.MimeType, want)
 		}
-		src, err := h.svc.StreamSource(ctx, book, parts[i].FilePID)
+		src, err := h.svc.Playback.StreamSource(ctx, book, parts[i].FilePID)
 		if err != nil || flow.ContainerMime(src.Container) != want {
 			t.Errorf("part %d streams as %s/%s (%v), want %s", i+1, src.Codec, src.Container, err, want)
 		}
 	}
-	uc, err := h.svc.UserCtxByID(ctx, adminUserID(t, h))
+	uc, err := h.svc.Grants.UserCtxByID(ctx, adminUserID(t, h))
 	if err != nil {
 		t.Fatal(err)
 	}
-	pieces, err := h.svc.BookPieces(ctx, uc, book)
+	pieces, err := h.svc.Playback.BookPieces(ctx, uc, book)
 	if err != nil || len(pieces) != 2 {
 		t.Fatalf("pieces = %d (%v), want 2", len(pieces), err)
 	}

@@ -4,12 +4,28 @@ import (
 	"context"
 	"errors"
 	"hash/fnv"
+	"sync"
 	"time"
 
 	"github.com/colespringer/waxbin/model"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
+
+// Playback is playing and fetching media: play state (positions, stars,
+// ratings, listens), sessions, the player, streams, downloads,
+// transcoding, waveforms and the Subsonic play state.
+type Playback struct {
+	*core
+	// playedLocks serializes the played decide-act per (user, item);
+	// see lockPlayed.
+	playedLocks [playedStripes]sync.Mutex
+	// gate is the single transcode session gate, built on first use.
+	gate     *transcodeGate
+	gateOnce sync.Once
+}
+
+func newPlayback(c *core, _ Config) *Playback { return &Playback{core: c} }
 
 // playedStripes is how many mutexes the played decide-act paths share.
 // A fixed array rather than a map keyed by item: no allocation, no
@@ -38,7 +54,7 @@ const playedStripes = 64
 // position, so a stripe held across one covers a write per listener
 // with a position pending. The alternative is a per-item flush the
 // facade does not offer.
-func (l *Library) lockPlayed(userID string, itemPID model.PID) func() {
+func (l *Playback) lockPlayed(userID string, itemPID model.PID) func() {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(userID))
 	_, _ = h.Write([]byte("/"))
@@ -73,8 +89,8 @@ const (
 
 // PlayState returns the calling user's state for one item. Items never
 // played return a zero state.
-func (l *Library) PlayState(ctx context.Context, uc *UserCtx, apiItemPID string) (PlayState, error) {
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+func (l *Playback) PlayState(ctx context.Context, uc *UserCtx, apiItemPID string) (PlayState, error) {
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return PlayState{}, err
 	}
@@ -82,7 +98,7 @@ func (l *Library) PlayState(ctx context.Context, uc *UserCtx, apiItemPID string)
 }
 
 // playStateFor reads the user's state for an already-authorized item.
-func (l *Library) playStateFor(ctx context.Context, uc *UserCtx, apiItemPID string, pid model.PID) (PlayState, error) {
+func (l *Playback) playStateFor(ctx context.Context, uc *UserCtx, apiItemPID string, pid model.PID) (PlayState, error) {
 	st, err := l.lib.Playback().State(ctx, model.PID(uc.CatalogPID), pid)
 	if err != nil {
 		return PlayState{}, classify(err)
@@ -180,7 +196,7 @@ func applyReplayedPosition(recencyPrim bool, positionMS, recNS, curPositionMS, s
 // the event stream - but a caller counting what it wrote (a migration
 // report) must not count one, so the outcome is returned rather than
 // hidden behind a nil error.
-func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64, recordedAt *time.Time) (applied bool, err error) {
+func (l *Playback) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64, recordedAt *time.Time) (applied bool, err error) {
 	return l.checkpoint(ctx, uc, apiItemPID, positionMS, recordedAt, changeFirstParty)
 }
 
@@ -191,8 +207,8 @@ type playChange int64
 
 const changeFirstParty playChange = 0
 
-func (l *Library) checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64, recordedAt *time.Time, by playChange) (applied bool, err error) {
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+func (l *Playback) checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64, recordedAt *time.Time, by playChange) (applied bool, err error) {
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return false, err
 	}
@@ -224,7 +240,7 @@ func (l *Library) checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string
 // meanwhile - which is neither of the two sequential outcomes, since
 // running second the replay would have read the undo's newer stamp and
 // been dropped as stale.
-func (l *Library) checkpointLocked(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, recordedAt *time.Time, by playChange) (bool, error) {
+func (l *Playback) checkpointLocked(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, recordedAt *time.Time, by playChange) (bool, error) {
 	unlock := l.lockPlayed(uc.ID, it.PID)
 	defer unlock()
 	stampNS := time.Now().UnixNano()
@@ -283,7 +299,7 @@ func (l *Library) checkpointLocked(ctx context.Context, uc *UserCtx, it *model.I
 // tell this caller their own item is gone and, worse, would look like a
 // refusal they could act on. Only maintenance survives as itself; the
 // rest becomes an internal failure naming what did not happen.
-func (l *Library) writePosition(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, asOf *int64) error {
+func (l *Playback) writePosition(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, asOf *int64) error {
 	err := l.lib.Playback().Checkpoint(ctx, model.PID(uc.CatalogPID), it.PID, positionMS, asOf)
 	if err == nil {
 		return nil
@@ -302,7 +318,7 @@ func (l *Library) writePosition(ctx context.Context, uc *UserCtx, it *model.Item
 // cannot distort the thresholds; for multi-file books the position is
 // already book-timeline by contract. Best effort on the checkpoint
 // path: a missed mark self-heals at the next checkpoint.
-func (l *Library) markSpokenWordProgress(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, asOf *int64, by playChange) {
+func (l *Playback) markSpokenWordProgress(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, asOf *int64, by playChange) {
 	crossed, finished, err := l.spokenWordCrossing(ctx, uc, it, positionMS, asOf)
 	if err != nil || !crossed {
 		return
@@ -318,14 +334,14 @@ func (l *Library) markSpokenWordProgress(ctx context.Context, uc *UserCtx, it *m
 // change, which is what the gpodder surface reads as new unless a stored
 // gpodder action made it and still tells it. Other kinds never reach it,
 // so they keep no row for it.
-func (l *Library) touchPlayStamp(ctx context.Context, uc *UserCtx, it *model.ItemView, by playChange) {
+func (l *Playback) touchPlayStamp(ctx context.Context, uc *UserCtx, it *model.ItemView, by playChange) {
 	if mediaTypeForKind(it.Kind) != "podcast" {
 		return
 	}
 	if err := l.db.TouchPlayStamp(ctx, uc.ID, string(it.PID), int64(by)); err != nil {
 		l.log.Warn("touching play stamp", "pid", string(it.PID), "err", err)
 	}
-	l.requeueHeldShow(ctx, uc.ID, it.PID)
+	l.Podcasts.requeueHeldShow(ctx, uc.ID, it.PID)
 }
 
 // spokenWordCrossing evaluates the position-derived played rules for
@@ -337,7 +353,7 @@ func (l *Library) touchPlayStamp(ctx context.Context, uc *UserCtx, it *model.Ite
 // replayed checkpoint; nil for a live one and for a listen session's
 // own mark, which is a distinct event and counts whatever the flags
 // say. See the deferral below for why the two differ.
-func (l *Library) spokenWordCrossing(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, recordedAt *int64) (crossed, finished bool, err error) {
+func (l *Playback) spokenWordCrossing(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, recordedAt *int64) (crossed, finished bool, err error) {
 	mt := mediaTypeForKind(it.Kind)
 	if mt != "podcast" && mt != "audiobook" {
 		return false, false, nil
@@ -442,8 +458,8 @@ func listenPlayedAt(s ListenSession) int64 {
 // delta builder is a pure projection of stored events, so an event
 // carrying no change carries nothing. A stale replay still learns the
 // truth from the response body below.
-func (l *Library) SetStar(ctx context.Context, uc *UserCtx, apiItemPID string, starred bool, recordedAt *time.Time) (PlayState, error) {
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+func (l *Playback) SetStar(ctx context.Context, uc *UserCtx, apiItemPID string, starred bool, recordedAt *time.Time) (PlayState, error) {
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return PlayState{}, err
 	}
@@ -461,11 +477,11 @@ func (l *Library) SetStar(ctx context.Context, uc *UserCtx, apiItemPID string, s
 // returns the resulting state. Replayed offline changes carry their
 // recorded time and are ordered by the catalog, and a no-op write emits
 // no sync event; see SetStar.
-func (l *Library) SetRating(ctx context.Context, uc *UserCtx, apiItemPID string, rating *int, recordedAt *time.Time) (PlayState, error) {
+func (l *Playback) SetRating(ctx context.Context, uc *UserCtx, apiItemPID string, rating *int, recordedAt *time.Time) (PlayState, error) {
 	if rating != nil && (*rating < 0 || *rating > 100) {
 		return PlayState{}, errInvalid("rating must be between 0 and 100")
 	}
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return PlayState{}, err
 	}
@@ -506,7 +522,7 @@ func (l *Library) SetRating(ctx context.Context, uc *UserCtx, apiItemPID string,
 // one, so gating the position on the flags is not available; the field
 // is for a live write, and a replayed offline position belongs on the
 // checkpoint surface that reconciles it.
-func (l *Library) SetPlayed(ctx context.Context, uc *UserCtx, apiItemPID string, played, finished bool, playCount *int, positionMS *int64, recordedAt *time.Time) (PlayState, error) {
+func (l *Playback) SetPlayed(ctx context.Context, uc *UserCtx, apiItemPID string, played, finished bool, playCount *int, positionMS *int64, recordedAt *time.Time) (PlayState, error) {
 	if positionMS != nil && *positionMS < 0 {
 		return PlayState{}, errInvalid("positionMs must not be negative")
 	}
@@ -519,7 +535,7 @@ func (l *Library) SetPlayed(ctx context.Context, uc *UserCtx, apiItemPID string,
 		// observation and drop a genuinely newer one.
 		return PlayState{}, errInvalid("positionMs is for a live write; replay a queued position through the play-state endpoint")
 	}
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return PlayState{}, err
 	}
@@ -548,7 +564,7 @@ func (l *Library) SetPlayed(ctx context.Context, uc *UserCtx, apiItemPID string,
 // the checkpoint path already produces and heals from; the other order
 // would show the item unplayed at its end position, which is exactly
 // the state the undo exists to prevent.
-func (l *Library) setPlayedLocked(ctx context.Context, uc *UserCtx, it *model.ItemView,
+func (l *Playback) setPlayedLocked(ctx context.Context, uc *UserCtx, it *model.ItemView,
 	played, finished bool, playCount *int, positionMS *int64, recordedAt *time.Time,
 ) (bool, error) {
 	unlock := l.lockPlayed(uc.ID, it.PID)
@@ -593,7 +609,7 @@ func (l *Library) setPlayedLocked(ctx context.Context, uc *UserCtx, it *model.It
 // the whole request so the client retries the batch, which the
 // idempotency IDs make safe. Conflating the two here silently loses
 // listens.
-func (l *Library) IngestListens(ctx context.Context, uc *UserCtx, sessions []ListenSession) (ListenIngestResult, error) {
+func (l *Playback) IngestListens(ctx context.Context, uc *UserCtx, sessions []ListenSession) (ListenIngestResult, error) {
 	return l.ingestListens(ctx, uc, sessions, listenIngestOptions{})
 }
 
@@ -617,7 +633,7 @@ type listenIngestOptions struct {
 	announcedByCaller bool
 }
 
-func (l *Library) ingestListens(ctx context.Context, uc *UserCtx, sessions []ListenSession, opts listenIngestOptions) (ListenIngestResult, error) {
+func (l *Playback) ingestListens(ctx context.Context, uc *UserCtx, sessions []ListenSession, opts listenIngestOptions) (ListenIngestResult, error) {
 	var res ListenIngestResult
 	// Resolve, then claim, then mark. Splitting the batch that way is
 	// what keeps a long import off the write connection: the catalog
@@ -708,7 +724,7 @@ func (l *Library) ingestListens(ctx context.Context, uc *UserCtx, sessions []Lis
 			// already, and re-sending years of it would be a second copy
 			// on somebody else's service.
 			if r.mt == "music" && r.source != "import" {
-				l.enqueueScrobbles(ctx, uc, r.it, r.s.StartedAt)
+				l.Integrations.enqueueScrobbles(ctx, uc, r.it, r.s.StartedAt)
 			}
 		}
 	}
@@ -720,7 +736,7 @@ func (l *Library) ingestListens(ctx context.Context, uc *UserCtx, sessions []Lis
 // effort: a failure here leaves the rows claimed, which is exactly what
 // the sweep is for, and failing the ingest over it would take back
 // listens whose marks already landed.
-func (l *Library) recordListenMarks(ctx context.Context, userID string, landed, notOwed []string) {
+func (l *Playback) recordListenMarks(ctx context.Context, userID string, landed, notOwed []string) {
 	// Detached from the request's context for the same reason the
 	// compensating delete is: a cancelled one is the likeliest reason
 	// the batch stopped where it did, and leaving the states unwritten
@@ -787,13 +803,13 @@ type ListenMarkSweep struct {
 // late is worse than none, and the ingest that already marked this
 // listen may well have enqueued one before it died - a second copy on
 // somebody else's service is not recoverable the way a play count is.
-func (l *Library) SweepListenMarks(ctx context.Context) (ListenMarkSweep, error) {
+func (l *Playback) SweepListenMarks(ctx context.Context) (ListenMarkSweep, error) {
 	return l.sweepListenMarks(ctx, time.Now().Add(-listenMarkGrace).UnixNano())
 }
 
 // sweepListenMarks is the pass with its arrival cutoff supplied, so a
 // test can drive it without waiting out the grace.
-func (l *Library) sweepListenMarks(ctx context.Context, cutoffNS int64) (ListenMarkSweep, error) {
+func (l *Playback) sweepListenMarks(ctx context.Context, cutoffNS int64) (ListenMarkSweep, error) {
 	var rep ListenMarkSweep
 	rows, err := l.db.PendingListenMarks(ctx, cutoffNS, listenMarkSweepLimit)
 	if err != nil {
@@ -878,10 +894,11 @@ type sweptUser struct {
 }
 
 // sweptUserFor resolves one account for the sweep, distinguishing an
-// account that is gone from one that could not be read. userCtxByID
-// cannot: it answers not-found for every failure, which is right for a
-// request (the caller sees no such user either way) and wrong here.
-func (l *Library) sweptUserFor(ctx context.Context, userID string) sweptUser {
+// account that is gone from one that could not be read. UserCtxByID
+// does not serve: it answers a disabled account as gone, which is right
+// for a caller acting for someone who has to be able to sign in and
+// wrong here, where the play already happened.
+func (l *Playback) sweptUserFor(ctx context.Context, userID string) sweptUser {
 	u, err := l.db.UserByID(ctx, userID)
 	switch {
 	case errors.Is(err, wdb.ErrNotFound), err == nil && u == nil:
@@ -890,7 +907,7 @@ func (l *Library) sweptUserFor(ctx context.Context, userID string) sweptUser {
 		l.log.Warn("sweeping listen marks: reading the account", "user", userID, "err", err)
 		return sweptUser{}
 	}
-	uc, err := l.UserCtx(ctx, u)
+	uc, err := l.Grants.UserCtx(ctx, u)
 	if err != nil {
 		l.log.Warn("sweeping listen marks: building the account context", "user", userID, "err", err)
 		return sweptUser{}
@@ -899,7 +916,7 @@ func (l *Library) sweptUserFor(ctx context.Context, userID string) sweptUser {
 }
 
 // recordSweptMarks writes back the sweep's outcomes per user.
-func (l *Library) recordSweptMarks(ctx context.Context, landed, notOwed map[string][]string) {
+func (l *Playback) recordSweptMarks(ctx context.Context, landed, notOwed map[string][]string) {
 	for userID, ids := range landed {
 		l.recordListenMarks(ctx, userID, ids, nil)
 	}
@@ -945,7 +962,7 @@ type resolvedListen struct {
 // letting half the batch land: a mark against a vanished item is
 // already the permanent outcome the caller logs and keeps the listen
 // for.
-func (l *Library) resolveListens(ctx context.Context, uc *UserCtx, sessions []ListenSession) ([]resolvedListen, []RejectedListen, error) {
+func (l *Playback) resolveListens(ctx context.Context, uc *UserCtx, sessions []ListenSession) ([]resolvedListen, []RejectedListen, error) {
 	// answer is one pid's resolution: the item, or the rejection every
 	// session naming it earns.
 	type answer struct {
@@ -965,7 +982,7 @@ func (l *Library) resolveListens(ctx context.Context, uc *UserCtx, sessions []Li
 		}
 		a, known := seen[s.PID]
 		if !known {
-			it, err := l.getVisibleItem(ctx, uc, s.PID)
+			it, err := l.Grants.getVisibleItem(ctx, uc, s.PID)
 			switch {
 			case err == nil:
 				a = answer{it: it}
@@ -1016,7 +1033,7 @@ type listenMarkOutcome struct {
 //
 // Event emission and the scrobble enqueue are the caller's, so nothing
 // under the stripe reaches past the catalog.
-func (l *Library) markListenPlayed(ctx context.Context, uc *UserCtx, it *model.ItemView, s ListenSession, mt string) listenMarkOutcome {
+func (l *Playback) markListenPlayed(ctx context.Context, uc *UserCtx, it *model.ItemView, s ListenSession, mt string) listenMarkOutcome {
 	unlock := l.lockPlayed(uc.ID, it.PID)
 	defer unlock()
 	crossed := false

@@ -13,7 +13,7 @@ import (
 
 func (s *Server) GetEnrichmentStatus(ctx context.Context, _ GetEnrichmentStatusRequestObject) (GetEnrichmentStatusResponseObject, error) {
 	uc := userCtx(ctx)
-	st, err := s.svc.EnrichmentStatusFor(ctx, uc)
+	st, err := s.svc.Enrichment.StatusFor(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (s *Server) RunEnrichment(ctx context.Context, req RunEnrichmentRequestObje
 			walk = append(walk, string(p))
 		}
 	}
-	jobPid, err := s.svc.RunEnrichment(ctx, uc, force, phases, walk)
+	jobPid, err := s.svc.Enrichment.RunEnrichment(ctx, uc, force, phases, walk)
 	if err != nil {
 		if service.KindOf(err) == service.KindConflict {
 			return nil, refuse(http.StatusConflict, "conflict", "a conflicting catalog job is already running")
@@ -131,7 +131,7 @@ func (s *Server) EnrichItem(ctx context.Context, req EnrichItemRequestObject) (E
 		}
 		wants = append(wants, string(w))
 	}
-	applied, skipped, err := s.svc.EnrichItemFor(ctx, uc, string(req.Pid), wants, enrichProposalDTO(req.Body.Proposal))
+	applied, skipped, err := s.svc.Enrichment.EnrichItemFor(ctx, uc, string(req.Pid), wants, enrichProposalDTO(req.Body.Proposal))
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +159,7 @@ func (s *Server) PreviewEnrichItem(ctx context.Context, req PreviewEnrichItemReq
 		}
 		wants = append(wants, string(w))
 	}
-	preview, err := s.svc.EnrichPreviewFor(ctx, uc, string(req.Pid), wants)
+	preview, err := s.svc.Enrichment.EnrichPreviewFor(ctx, uc, string(req.Pid), wants)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ func (s *Server) PutEnrichmentSources(ctx context.Context, req PutEnrichmentSour
 	for _, src := range req.Body.Sources {
 		list = append(list, service.EnrichmentSource{Name: src.Name, Enabled: src.Enabled})
 	}
-	st, err := s.svc.PutEnrichmentSources(ctx, uc, list)
+	st, err := s.svc.Enrichment.PutEnrichmentSources(ctx, uc, list)
 	if err != nil {
 		return nil, err
 	}

@@ -94,7 +94,7 @@ func resetStaleCatalog(ctx context.Context, dbPath string, configuredRoots []Roo
 // catalog no longer knows takes the user named after it, or a new one. The
 // account's row keeps the old pid, which is what lets the older server
 // undo a reset on the old catalog; catalogPID answers the live one.
-func (l *Library) reconcileCatalogUsers(ctx context.Context) error {
+func (l *Identity) reconcileCatalogUsers(ctx context.Context) error {
 	users, err := l.lib.Users(ctx)
 	if err != nil {
 		l.usersUnmapped.Store(true)
@@ -143,7 +143,7 @@ func (l *Library) reconcileCatalogUsers(ctx context.Context) error {
 
 // catalogPID names the catalog user an account acts as: its stored one,
 // unless a reset dropped that and the account now has another.
-func (l *Library) catalogPID(u *wdb.User) string {
+func (l *Identity) catalogPID(u *wdb.User) string {
 	l.catalogUsersMu.RLock()
 	pid, ok := l.catalogUsers[u.ID]
 	l.catalogUsersMu.RUnlock()
@@ -244,7 +244,7 @@ func (l *Library) recordCatalogReset(ctx context.Context, rep *CatalogResetRepor
 		attrs = append(attrs, k, detail[k])
 	}
 	l.log.Warn("catalog was built from a different schema baseline; set it aside and created a fresh one", attrs...)
-	l.Audit(ctx, nil, "catalog.reset", AuditTarget{Kind: "catalog", Name: filepath.Base(l.catalogPath)}, detail)
+	l.Audit.Record(ctx, nil, "catalog.reset", AuditTarget{Kind: "catalog", Name: filepath.Base(l.catalogPath)}, detail)
 
 	body := "The catalog was built by a release with another schema, so the server built a new one " +
 		"from the library folders. Play positions, ratings, stars, playlists, curation edits, " +
@@ -256,5 +256,5 @@ func (l *Library) recordCatalogReset(ctx context.Context, rep *CatalogResetRepor
 		body += fmt.Sprintf(" Libraries added from the console were not restored (%d); the audit log names "+
 			"their folders, to add again under Libraries.", n)
 	}
-	l.EmitServerNotification(ctx, "catalog-reset", "Catalog recreated", body)
+	l.Integrations.EmitServerNotification(ctx, "catalog-reset", "Catalog recreated", body)
 }

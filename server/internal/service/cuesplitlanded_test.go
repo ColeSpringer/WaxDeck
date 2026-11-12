@@ -22,12 +22,12 @@ func TestACueSplitNeverImportsALandedPieceAgain(t *testing.T) {
 		t.Run(what, func(t *testing.T) {
 			t.Parallel()
 			ctx, svc, uc, one, _, engine := cueSplitFixture(t)
-			task, err := svc.StartCueSplit(ctx, uc, one, false)
+			task, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 			if err != nil {
 				t.Fatal(err)
 			}
 			var blocker string
-			svc.toolStepHook = func(step string) error {
+			svc.Tools.toolStepHook = func(step string) error {
 				if step != "importing" {
 					return nil
 				}
@@ -44,7 +44,7 @@ func TestACueSplitNeverImportsALandedPieceAgain(t *testing.T) {
 			if err := attempt(t, ctx, svc, 1); !errors.As(err, &wait) {
 				t.Fatalf("first attempt = %v, want it waiting on the piece that failed", err)
 			}
-			svc.toolStepHook = nil
+			svc.Tools.toolStepHook = nil
 			if err := os.Remove(blocker); err != nil {
 				t.Fatal(err)
 			}
@@ -102,7 +102,7 @@ func TestACueSplitNeverImportsALandedPieceAgain(t *testing.T) {
 func TestACueSplitWhosePiecesCannotLandEndsAtOnce(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, one, _, _ := cueSplitFixture(t)
-	first, err := svc.StartCueSplit(ctx, uc, one, true)
+	first, err := svc.Tools.StartCueSplit(ctx, uc, one, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestACueSplitWhosePiecesCannotLandEndsAtOnce(t *testing.T) {
 	if got := toolTask(t, ctx, svc, first.ID); got.State != taskStateDone {
 		t.Fatalf("the first split = %s (error %q), want it done", got.State, got.Error)
 	}
-	second, err := svc.StartCueSplit(ctx, uc, one, false)
+	second, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestACueSplitWaitsOutAReadOnlyTargetAmongManagedLibraries(t *testing.T) {
 	ctx, svc, uc, one, _, _ := cueSplitFixtureWith(t, func(c *Config) {
 		c.Roots = append(c.Roots, Root{Name: "books", Path: t.TempDir(), Managed: true, Media: "audiobook"})
 	})
-	task, err := svc.StartCueSplit(ctx, uc, one, false)
+	task, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,17 +164,17 @@ func TestACueSplitWaitsOutAReadOnlyTargetAmongManagedLibraries(t *testing.T) {
 		if _, err := svc.lib.SetLibraryReadOnly(ctx, tracksLib, on); err != nil {
 			t.Fatal(err)
 		}
-		svc.refreshLibraryState(ctx)
+		svc.Roots.refreshLibraryState(ctx)
 	}
 	// Flagged once the pieces are cut, before the import plans them.
-	svc.toolStepHook = func(step string) error {
+	svc.Tools.toolStepHook = func(step string) error {
 		if step == "staged" {
 			setReadOnly(true)
 		}
 		return nil
 	}
 	err = attempt(t, ctx, svc, 1)
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	var wait *toolRetry
 	if !errors.As(err, &wait) || wait.reason != "read-only" {
 		t.Fatalf("first attempt = %v, want it waiting on the read-only library", err)

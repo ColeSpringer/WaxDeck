@@ -85,17 +85,17 @@ func newEnvWith(t *testing.T, mutate func(*service.Config)) *env {
 		store.Close()
 	})
 
-	acct, err := svc.CreateAccount(ctx, service.AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, service.AccountCreate{
 		Username: "alice", Password: "login-password-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ap, err := svc.CreateAppPassword(ctx, uc, "gpodder test")
+	ap, err := svc.Identity.CreateAppPassword(ctx, uc, "gpodder test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -563,11 +563,11 @@ func TestEpisodeActions(t *testing.T) {
 	}
 
 	// The play position wrote through to WaxDeck playback state.
-	subs, _, err := e.svc.Subscriptions(e.ctx, e.uc, "", 10, false)
+	subs, _, err := e.svc.Podcasts.Subscriptions(e.ctx, e.uc, "", 10, false)
 	if err != nil || len(subs) != 1 {
 		t.Fatalf("subscriptions = %d (%v), want 1", len(subs), err)
 	}
-	eps, _, err := e.svc.Episodes(e.ctx, e.uc, subs[0].Show.PID, "", 10)
+	eps, _, err := e.svc.Podcasts.Episodes(e.ctx, e.uc, subs[0].Show.PID, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -580,7 +580,7 @@ func TestEpisodeActions(t *testing.T) {
 	if epPID == "" {
 		t.Fatalf("Episode One not cataloged; episodes = %+v", eps)
 	}
-	st, err := e.svc.PlayState(e.ctx, e.uc, epPID)
+	st, err := e.svc.Playback.PlayState(e.ctx, e.uc, epPID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -691,7 +691,7 @@ func TestCookieDiesWithItsAppPassword(t *testing.T) {
 	if got := e.withCookie(c, "GET", "/api/2/devices/alice.json", ""); got != 200 {
 		t.Fatalf("a fresh cookie = %d", got)
 	}
-	if err := e.svc.RevokeAppPassword(e.ctx, e.uc, e.apID); err != nil {
+	if err := e.svc.Identity.RevokeAppPassword(e.ctx, e.uc, e.apID); err != nil {
 		t.Fatal(err)
 	}
 	if got := e.withCookie(c, "GET", "/api/2/devices/alice.json", ""); got != 401 {
@@ -764,18 +764,18 @@ func TestRefusedLoginsLeaveTheDevicesSignedIn(t *testing.T) {
 func TestCookieDoesNotRebindToARecreatedUsername(t *testing.T) {
 	e := newEnv(t)
 	c := e.login("alice", e.secret)
-	if _, err := e.svc.DeleteAccount(e.ctx, nil, e.uc.ID, service.AccountDeletion{}); err != nil {
+	if _, err := e.svc.Identity.DeleteAccount(e.ctx, nil, e.uc.ID, service.AccountDeletion{}); err != nil {
 		t.Fatal(err)
 	}
-	acct, err := e.svc.CreateAccount(e.ctx, service.AccountCreate{Username: "alice", Password: "another-password-1"})
+	acct, err := e.svc.Identity.CreateAccount(e.ctx, service.AccountCreate{Username: "alice", Password: "another-password-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := e.svc.UserCtx(e.ctx, acct.User)
+	uc, err := e.svc.Grants.UserCtxFor(e.ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.svc.CreateAppPassword(e.ctx, uc, "the new alice"); err != nil {
+	if _, err := e.svc.Identity.CreateAppPassword(e.ctx, uc, "the new alice"); err != nil {
 		t.Fatal(err)
 	}
 	if got := e.withCookie(c, "GET", "/api/2/devices/alice.json", ""); got != 401 {
@@ -793,17 +793,17 @@ func TestCookieStopsWhenTheAccountIsDisabled(t *testing.T) {
 	e := newEnv(t)
 	c := e.login("alice", e.secret)
 	off, on := true, false
-	if _, err := e.svc.UpdateAccount(e.ctx, e.uc.ID, service.AccountUpdate{Disabled: &off}); err != nil {
+	if _, err := e.svc.Identity.UpdateAccount(e.ctx, e.uc.ID, service.AccountUpdate{Disabled: &off}); err != nil {
 		t.Fatal(err)
 	}
 	if got := e.withCookie(c, "GET", "/api/2/devices/alice.json", ""); got != 401 {
 		t.Errorf("the cookie of a disabled account = %d, want 401", got)
 	}
 	// The rest of the disable request (the API's UpdateUser).
-	if err := e.svc.EndGpodderSessions(e.ctx, e.uc.ID); err != nil {
+	if err := e.svc.Podcasts.EndGpodderSessions(e.ctx, e.uc.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.svc.UpdateAccount(e.ctx, e.uc.ID, service.AccountUpdate{Disabled: &on}); err != nil {
+	if _, err := e.svc.Identity.UpdateAccount(e.ctx, e.uc.ID, service.AccountUpdate{Disabled: &on}); err != nil {
 		t.Fatal(err)
 	}
 	if got := e.withCookie(c, "GET", "/api/2/devices/alice.json", ""); got != 401 {

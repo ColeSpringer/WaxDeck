@@ -173,7 +173,7 @@ func TestGpodderClientAntennaPod(t *testing.T) {
 	phone.mustJSON("POST", "/api/2/subscriptions/alice/phone-1.json",
 		fmt.Sprintf(`{"add":[%q],"remove":[]}`, e.feedURLOf(2)), &ack)
 	_, pilot := e.episodePID(e.feedURLOf(2), "Show 2 Pilot")
-	if _, err := e.svc.Checkpoint(e.ctx, e.uc, pilot, 42_000, nil); err != nil {
+	if _, err := e.svc.Playback.Checkpoint(e.ctx, e.uc, pilot, 42_000, nil); err != nil {
 		t.Fatal(err)
 	}
 	var next actionsPageJSON
@@ -195,13 +195,13 @@ func TestGpodderClientAntennaPod(t *testing.T) {
 	// Revoking the app password ends the tablet's session at its next
 	// call, and the app's recovery - a fresh login with a new app
 	// password - works.
-	if err := e.svc.RevokeAppPassword(e.ctx, e.uc, e.apID); err != nil {
+	if err := e.svc.Identity.RevokeAppPassword(e.ctx, e.uc, e.apID); err != nil {
 		t.Fatal(err)
 	}
 	if status, b := tablet.request("GET", "/api/2/devices/alice.json", "", false); status != http.StatusUnauthorized {
 		t.Fatalf("the tablet after the revoke = %d: %s, want 401", status, b)
 	}
-	fresh, err := e.svc.CreateAppPassword(e.ctx, e.uc, "antennapod again")
+	fresh, err := e.svc.Identity.CreateAppPassword(e.ctx, e.uc, "antennapod again")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -526,7 +526,7 @@ func TestGpodderClientsAreToldTheirOwnSpellings(t *testing.T) {
 	a, b := e.feedURLOf(1), e.feedURLOf(2)
 	e.subscribeFirstParty(a)
 	bob := e.listener("bob")
-	if _, _, err := e.svc.Subscribe(e.ctx, bob, service.SubscribeRequest{URL: b}); err != nil {
+	if _, _, err := e.svc.Podcasts.Subscribe(e.ctx, bob, service.SubscribeRequest{URL: b}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -552,11 +552,11 @@ func TestGpodderClientsAreToldTheirOwnSpellings(t *testing.T) {
 	// Another account's subscribe makes the catalog spell B its way, and
 	// the account then leaves B in the apps.
 	theirs := strings.Replace(b, "http://", "HTTP://", 1)
-	if _, _, err := e.svc.Subscribe(e.ctx, bob, service.SubscribeRequest{URL: theirs}); err != nil {
+	if _, _, err := e.svc.Podcasts.Subscribe(e.ctx, bob, service.SubscribeRequest{URL: theirs}); err != nil {
 		t.Fatal(err)
 	}
 	show, _ := e.episodePID(mine, "Show 2 Pilot")
-	if err := e.svc.Unsubscribe(e.ctx, e.uc, show, false); err != nil {
+	if err := e.svc.Podcasts.Unsubscribe(e.ctx, e.uc, show, false); err != nil {
 		t.Fatal(err)
 	}
 

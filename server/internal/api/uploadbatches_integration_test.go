@@ -438,7 +438,7 @@ func TestUploadBatchExpiry(t *testing.T) {
 		"UPDATE uploads SET expires_at_ns = 1 WHERE id = ?", member.Id); err != nil {
 		t.Fatal(err)
 	}
-	for h.svc.DrainExpiredUploads(ctx) {
+	for h.svc.Ingest.DrainExpiredUploads(ctx) {
 	}
 	kept := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+member.Id, h.token))
 	if kept.State != "staged" {
@@ -451,7 +451,7 @@ func TestUploadBatchExpiry(t *testing.T) {
 		"UPDATE upload_batches SET expires_at_ns = 1 WHERE id = ?", b.Id); err != nil {
 		t.Fatal(err)
 	}
-	if !h.svc.DrainExpiredUploadBatches(ctx) {
+	if !h.svc.Ingest.DrainExpiredUploadBatches(ctx) {
 		t.Fatal("janitor found no overdue batch")
 	}
 	entried := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+member.Id, h.token))
@@ -464,7 +464,7 @@ func TestUploadBatchExpiry(t *testing.T) {
 
 	// Once the batch is closed the member is back under normal
 	// retention: the next sweep reaps it and discards its entry.
-	for h.svc.DrainExpiredUploads(ctx) {
+	for h.svc.Ingest.DrainExpiredUploads(ctx) {
 	}
 	reaped := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+member.Id, h.token))
 	if reaped.State != "discarded" {
@@ -477,7 +477,7 @@ func TestUploadBatchExpiry(t *testing.T) {
 		"UPDATE upload_batches SET expires_at_ns = 1 WHERE id = ?", empty.Id); err != nil {
 		t.Fatal(err)
 	}
-	if !h.svc.DrainExpiredUploadBatches(ctx) {
+	if !h.svc.Ingest.DrainExpiredUploadBatches(ctx) {
 		t.Fatal("janitor found no overdue empty batch")
 	}
 	if r := h.postJSON(t, "/api/v1/uploads/batches/"+empty.Id+"/complete", nil); r.StatusCode != 409 {
@@ -511,7 +511,7 @@ func TestUploadBatchRepairPaths(t *testing.T) {
 		"UPDATE upload_batches SET state = 'expired' WHERE id = ?", b.Id); err != nil {
 		t.Fatal(err)
 	}
-	if !h.svc.DrainExpiredUploadBatches(ctx) {
+	if !h.svc.Ingest.DrainExpiredUploadBatches(ctx) {
 		t.Fatal("janitor did not pick up the half-expired batch")
 	}
 	healed := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+m1.Id, h.token))
@@ -519,7 +519,7 @@ func TestUploadBatchRepairPaths(t *testing.T) {
 		t.Fatal("repair arm opened no entry for the stranded member")
 	}
 	// Fully processed: the batch drops out of the janitor's listing.
-	if h.svc.DrainExpiredUploadBatches(ctx) {
+	if h.svc.Ingest.DrainExpiredUploadBatches(ctx) {
 		t.Fatal("janitor re-listed a fully repaired batch")
 	}
 

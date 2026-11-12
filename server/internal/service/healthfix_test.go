@@ -110,12 +110,12 @@ func TestHealthFixabilityNamesWhatIsMissing(t *testing.T) {
 			t.Parallel()
 			ctx, svc, uc := openEnrichFixture(t, tc.mutate)
 			if tc.sources != nil {
-				if _, err := svc.PutEnrichmentSources(ctx, uc, tc.sources); err != nil {
+				if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, tc.sources); err != nil {
 					t.Fatal(err)
 				}
 			}
 			for rule, w := range tc.want {
-				if fixable, blocked := svc.healthFixability(rule); fixable != w.fixable || blocked != w.blocked {
+				if fixable, blocked := svc.Health.fixability(rule); fixable != w.fixable || blocked != w.blocked {
 					t.Errorf("%s = (%v, %q), want (%v, %q)", rule, fixable, blocked, w.fixable, w.blocked)
 				}
 			}
@@ -128,11 +128,11 @@ func TestHealthFixabilityNamesWhatIsMissing(t *testing.T) {
 func TestAScopedFixFillsWhatItNames(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, track := openLyricsFixture(t, &lyricist{name: "a"})
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	api := apiPID(PrefixTrack, track)
-	start, err := svc.StartHealthFix(ctx, uc, ruleMissingLyrics, []string{api})
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleMissingLyrics, []string{api})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestAScopedFixFillsWhatItNames(t *testing.T) {
 	if sum.Rule != ruleMissingLyrics || sum.Attempted != 1 || sum.Filled != 1 || sum.Failed != 0 {
 		t.Fatalf("summary %+v, want one item filled", sum)
 	}
-	if issues, _, err := svc.ListHealthIssuesFor(ctx, uc, ruleMissingLyrics, "", 10); err != nil || len(issues) != 0 {
+	if issues, _, err := svc.Health.ListHealthIssuesFor(ctx, uc, ruleMissingLyrics, "", 10); err != nil || len(issues) != 0 {
 		t.Fatalf("still missing lyrics = %+v (%v), want none after the re-check", issues, err)
 	}
 	rows := inboxOf(t, ctx, svc, uc, "health-fix-finished")
@@ -166,7 +166,7 @@ func TestAScopedFixWhileAPassRunsIsAConflict(t *testing.T) {
 	defer close(a.gate)
 	<-a.asked
 	for _, scope := range [][]string{nil, {apiPID(PrefixTrack, track)}} {
-		if _, err := svc.StartHealthFix(ctx, uc, ruleMissingLyrics, scope); KindOf(err) != KindConflict {
+		if _, err := svc.Health.StartHealthFix(ctx, uc, ruleMissingLyrics, scope); KindOf(err) != KindConflict {
 			t.Errorf("fix scoped to %v during a pass = %v, want a conflict", scope, err)
 		}
 	}
@@ -175,7 +175,7 @@ func TestAScopedFixWhileAPassRunsIsAConflict(t *testing.T) {
 // ruleFixing reads whether the summary says a fix for rule is running.
 func ruleFixing(t *testing.T, ctx context.Context, svc *Library, rule string) bool {
 	t.Helper()
-	sum, err := svc.HealthSummaryFor(ctx, &UserCtx{Admin: true, AllLibraries: true, Explicit: true})
+	sum, err := svc.Health.SummaryFor(ctx, &UserCtx{Admin: true, AllLibraries: true, Explicit: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,13 +194,13 @@ func TestARuleReadsAsFixingUntilItsRecheckLands(t *testing.T) {
 	t.Parallel()
 	a := &lyricist{name: "a", asked: make(chan struct{}, 1), gate: make(chan struct{})}
 	ctx, svc, uc, _ := openLyricsFixture(t, a)
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if ruleFixing(t, ctx, svc, ruleMissingLyrics) {
 		t.Fatal("a rule nobody fixes reads as fixing")
 	}
-	start, err := svc.StartHealthFix(ctx, uc, ruleMissingLyrics, nil)
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleMissingLyrics, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestARuleReadsAsFixingUntilItsRecheckLands(t *testing.T) {
 func TestAFixWhileTheRuleIsFixingIsAConflict(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openLyricsFixture(t, &lyricist{name: "a"})
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	// A pass-backed fix whose pass has ended and whose re-check runs.
@@ -239,17 +239,17 @@ func TestAFixWhileTheRuleIsFixingIsAConflict(t *testing.T) {
 	if !ruleFixing(t, ctx, svc, ruleMissingLyrics) {
 		t.Fatal("a rule with a fix settling does not read as fixing")
 	}
-	if _, err := svc.StartHealthFix(ctx, uc, ruleMissingLyrics, nil); KindOf(err) != KindConflict {
+	if _, err := svc.Health.StartHealthFix(ctx, uc, ruleMissingLyrics, nil); KindOf(err) != KindConflict {
 		t.Fatalf("a second pass-backed fix = %v, want a conflict", err)
 	}
 	// A task-backed fix, twice.
-	if _, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, nil); err != nil {
+	if _, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, nil); KindOf(err) != KindConflict {
+	if _, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, nil); KindOf(err) != KindConflict {
 		t.Fatalf("a second task-backed fix = %v, want a conflict", err)
 	}
-	tasks, _, err := svc.ListToolTasksFor(ctx, uc, "", 100)
+	tasks, _, err := svc.Tools.ListToolTasksFor(ctx, uc, "", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +304,7 @@ func TestAFixSettleCutShortIsTakenOver(t *testing.T) {
 func TestARecheckCountsWhatPassesAndLeavesTheGoneOut(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _, track := openLyricsFixture(t, &lyricist{name: "a"})
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	gone := string(model.NewPID())
@@ -316,7 +316,7 @@ func TestARecheckCountsWhatPassesAndLeavesTheGoneOut(t *testing.T) {
 	if err := svc.lib.SetLyrics(ctx, track, &model.Lyrics{Unsynced: "la la"}, model.LockUnchanged, false); err != nil {
 		t.Fatal(err)
 	}
-	res, err := svc.recheckHealthRule(ctx, ruleMissingLyrics, nil)
+	res, err := svc.Health.recheckHealthRule(ctx, ruleMissingLyrics, nil)
 	if err != nil || res != (healthRecheck{passing: 1, gone: 1}) {
 		t.Fatalf("re-check = %+v (%v), want one passing and one gone", res, err)
 	}
@@ -361,10 +361,10 @@ func TestAScopedFixCountsFilledOnlyWhereTheRuleNowPasses(t *testing.T) {
 		waxbin.EditOptions{Lock: model.LockUnchanged}); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
-	start, err := svc.StartHealthFix(ctx, uc, ruleMissingASIN, []string{apiPID(PrefixBook, books[0].PID)})
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleMissingASIN, []string{apiPID(PrefixBook, books[0].PID)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -412,7 +412,7 @@ func TestAPathFixCountsItemsNotFiles(t *testing.T) {
 		}
 		scope = append(scope, apiPID(prefix, it.PID))
 	}
-	start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, scope)
+	start, err := svc.Health.StartHealthFix(ctx, uc, rulePathMismatch, scope)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -433,13 +433,13 @@ func TestMissingArtIsFixableWithOneOfItsSources(t *testing.T) {
 		CapsAt: map[enrich.TargetType]enrich.Capability{enrich.TargetRelease: enrich.CapCover},
 	}
 	ctx, svc, uc, _ := openLyricsFixture(t, albumCovers)
-	if fixable, blocked := svc.healthFixability(ruleMissingArt); !fixable || blocked != "" {
+	if fixable, blocked := svc.Health.fixability(ruleMissingArt); !fixable || blocked != "" {
 		t.Fatalf("missing-art = (%v, %q), want fixable with an album cover source", fixable, blocked)
 	}
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
-	start, err := svc.StartHealthFix(ctx, uc, ruleMissingArt, nil)
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleMissingArt, nil)
 	if err != nil || start.JobPID == "" {
 		t.Fatalf("start = %+v (%v), want a pass", start, err)
 	}
@@ -452,27 +452,27 @@ func TestMissingArtIsFixableWithOneOfItsSources(t *testing.T) {
 func TestHealthFixesRunOnTheLongTaskWorker(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openLyricsFixture(t, &lyricist{name: "a"})
-	fix, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, nil)
+	fix, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := svc.StartGenreNormalize(ctx, uc, true)
+	other, err := svc.Reads.StartGenreNormalize(ctx, uc, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	state := func(id string) string {
-		task, err := svc.GetToolTaskFor(ctx, uc, id)
+		task, err := svc.Tools.GetToolTaskFor(ctx, uc, id)
 		if err != nil {
 			t.Fatal(err)
 		}
 		return task.State
 	}
-	for svc.DrainToolTasks(ctx) {
+	for svc.Tools.DrainToolTasks(ctx) {
 	}
 	if fixed, normalized := state(fix.TaskID), state(other.ID); fixed != taskStateQueued || normalized != taskStateDone {
 		t.Fatalf("after the tool worker: fix %s, normalize %s; want the fix still queued", fixed, normalized)
 	}
-	for svc.DrainLongToolTasks(ctx) {
+	for svc.Tools.DrainLongToolTasks(ctx) {
 	}
 	if fixed := state(fix.TaskID); fixed != taskStateDone {
 		t.Fatalf("after the long-task worker: fix %s, want done", fixed)
@@ -485,11 +485,11 @@ func TestHealthFixesRunOnTheLongTaskWorker(t *testing.T) {
 func TestAFixTaskMarksHealthOnceItsEndLands(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openLyricsFixture(t, &lyricist{name: "a"})
-	start, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, nil)
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for svc.DrainLongToolTasks(ctx) {
+	for svc.Tools.DrainLongToolTasks(ctx) {
 	}
 	evs, _, err := svc.db.EventsSince(ctx, uc.ID, 0, 1000)
 	if err != nil {
@@ -527,8 +527,8 @@ func TestAFixTaskThatGaveUpTellsItsStarter(t *testing.T) {
 		t.Fatal("a running fix task does not read as fixing")
 	}
 	seen := markers(t, ctx, svc, uc.ID, eventHealth, "")
-	svc.DrainLongToolTasks(ctx)
-	if task, err := svc.GetToolTaskFor(ctx, uc, id); err != nil || task.State != taskStateFailed {
+	svc.Tools.DrainLongToolTasks(ctx)
+	if task, err := svc.Tools.GetToolTaskFor(ctx, uc, id); err != nil || task.State != taskStateFailed {
 		t.Fatalf("task = %+v (%v), want it retired", task, err)
 	}
 	if n := markers(t, ctx, svc, uc.ID, eventHealth, ""); n <= seen {
@@ -563,7 +563,7 @@ func TestAFixJobThatCouldNotRecheckSaysSo(t *testing.T) {
 func TestAScopedFixRechecksOnlyWhatItNames(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, track := openLyricsFixture(t, &lyricist{name: "a"})
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	other := string(model.NewPID())
@@ -572,10 +572,10 @@ func TestAScopedFixRechecksOnlyWhatItNames(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.StartHealthFix(ctx, uc, ruleMissingLyrics, []string{apiPID(PrefixTrack, track)}); err != nil {
+	if _, err := svc.Health.StartHealthFix(ctx, uc, ruleMissingLyrics, []string{apiPID(PrefixTrack, track)}); err != nil {
 		t.Fatal(err)
 	}
-	for svc.DrainLongToolTasks(ctx) {
+	for svc.Tools.DrainLongToolTasks(ctx) {
 	}
 	if _, err := svc.db.HealthRowByItem(ctx, other); err != nil {
 		t.Fatalf("a row the fix never named = %v, want it left for the sweep", err)
@@ -587,14 +587,14 @@ func TestAScopedFixRechecksOnlyWhatItNames(t *testing.T) {
 func TestATaskSaysItsProgressApartFromItsNews(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, track := openLyricsFixture(t, &lyricist{name: "a"})
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
-	start, err := svc.StartHealthFix(ctx, uc, ruleMissingLyrics, []string{apiPID(PrefixTrack, track)})
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleMissingLyrics, []string{apiPID(PrefixTrack, track)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for svc.DrainLongToolTasks(ctx) {
+	for svc.Tools.DrainLongToolTasks(ctx) {
 	}
 	evs, _, err := svc.db.EventsSince(ctx, uc.ID, 0, 1000)
 	if err != nil {
@@ -645,7 +645,7 @@ func TestAPathFixNamesWhatItHeldBack(t *testing.T) {
 	ctx, svc, uc, scope := untaggedBesideStrayFixture(t)
 	fix := func() healthFixSummary {
 		t.Helper()
-		start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, scope)
+		start, err := svc.Health.StartHealthFix(ctx, uc, rulePathMismatch, scope)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -699,13 +699,13 @@ func TestAHeldMoveIsStillAPathMismatch(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _, path, pid := managedTrackFixture(t)
 	_, bare, _ := parseAPIPID(pid)
-	if moves, err := svc.readPlannedMoves(ctx); err != nil || !moves[bare] {
+	if moves, err := svc.Health.readPlannedMoves(ctx); err != nil || !moves[bare] {
 		t.Fatalf("moves = %v (%v), want the misplaced track", moves, err)
 	}
 	if err := os.Rename(path, path+".away"); err != nil {
 		t.Fatal(err)
 	}
-	if moves, err := svc.readPlannedMoves(ctx); err != nil || !moves[bare] {
+	if moves, err := svc.Health.readPlannedMoves(ctx); err != nil || !moves[bare] {
 		t.Fatalf("moves = %v (%v), want the track flagged while its file is out of reach", moves, err)
 	}
 }
@@ -726,7 +726,7 @@ func setLibrariesReadOnly(t *testing.T, ctx context.Context, svc *Library, uc *U
 		t.Fatal(err)
 	}
 	for _, lib := range libs {
-		if err := svc.LibraryReadOnlySet(ctx, uc, apiPID(PrefixLibrary, lib.PID), readOnly); err != nil {
+		if err := svc.Settings.LibraryReadOnlySet(ctx, uc, apiPID(PrefixLibrary, lib.PID), readOnly); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -738,16 +738,16 @@ func setServerReadOnly(t *testing.T, ctx context.Context, svc *Library, readOnly
 	if err := svc.db.SettingSet(ctx, settingReadOnly, strconv.FormatBool(readOnly), time.Now().UnixNano()); err != nil {
 		t.Fatal(err)
 	}
-	svc.loadRuntimeToggles(ctx)
+	svc.Settings.loadRuntimeToggles(ctx)
 }
 
 // fixSummary runs the queued fixes and reads the report of the task,
 // which has to have finished.
 func fixSummary(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, taskID string) healthFixSummary {
 	t.Helper()
-	for svc.DrainLongToolTasks(ctx) {
+	for svc.Tools.DrainLongToolTasks(ctx) {
 	}
-	task, err := svc.GetToolTaskFor(ctx, uc, taskID)
+	task, err := svc.Tools.GetToolTaskFor(ctx, uc, taskID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -765,7 +765,7 @@ func fixSummary(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, ta
 func TestAPathFixLeavesAReadOnlyLibraryInPlace(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, path, pid := readOnlyFixture(t)
-	start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -785,7 +785,7 @@ func TestAWriteBackFixLeavesAReadOnlyLibraryAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	start, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -806,7 +806,7 @@ func TestAReadOnlyServerRefusesAFileWritingFix(t *testing.T) {
 	// A path fix names its items; unscoped, it is refused for that first.
 	scope := []string{apiPID(PrefixTrack, model.NewPID())}
 	for _, rule := range []string{ruleWriteUnsynced, rulePathMismatch} {
-		if _, err := svc.StartHealthFix(ctx, uc, rule, scope); KindOf(err) != KindReadOnly {
+		if _, err := svc.Health.StartHealthFix(ctx, uc, rule, scope); KindOf(err) != KindReadOnly {
 			t.Fatalf("%s: err = %v, want read-only", rule, err)
 		}
 	}
@@ -819,7 +819,7 @@ func TestAReadOnlyServerBlocksTheFileWritingFixes(t *testing.T) {
 	ctx, svc, _ := openEnrichFixture(t, func(c *Config) { c.Roots[0].Managed = true })
 	setServerReadOnly(t, ctx, svc, true)
 	for _, rule := range []string{ruleWriteUnsynced, rulePathMismatch} {
-		if fixable, blocked := svc.healthFixability(rule); fixable || blocked != fixBlockedReadOnly {
+		if fixable, blocked := svc.Health.fixability(rule); fixable || blocked != fixBlockedReadOnly {
 			t.Errorf("%s = (%v, %q), want blocked as read-only", rule, fixable, blocked)
 		}
 	}
@@ -830,7 +830,7 @@ func TestAReadOnlyServerBlocksTheFileWritingFixes(t *testing.T) {
 func TestAPathFixRunningOnAReadOnlyServerMovesNothing(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, path, pid := managedTrackFixture(t)
-	start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -849,10 +849,10 @@ func TestAPathFixRunningOnAReadOnlyServerMovesNothing(t *testing.T) {
 func TestAHeldPlanRunsNoOrganizeJob(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, pid := readOnlyFixture(t)
-	if _, err := svc.ApplyOrganize(ctx, uc, organize.DefaultProfileName, nil); err != nil {
+	if _, err := svc.Health.ApplyOrganize(ctx, uc, organize.DefaultProfileName, nil); err != nil {
 		t.Fatal(err)
 	}
-	start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -883,10 +883,10 @@ func TestAnUnscopedFixRunsOnlyItsPhases(t *testing.T) {
 	t.Parallel()
 	var painted atomic.Int32
 	ctx, svc, uc, _ := openLyricsFixture(t, &lyricist{name: "a"}, painter(&painted))
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
-	start, err := svc.StartHealthFix(ctx, uc, ruleMissingLyrics, nil)
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleMissingLyrics, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

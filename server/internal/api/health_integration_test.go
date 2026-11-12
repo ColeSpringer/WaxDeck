@@ -37,16 +37,16 @@ func TestHealthSweepAndIssues(t *testing.T) {
 		t.Fatalf("sweep status = %d, want 202", resp.StatusCode)
 	}
 	resp.Body.Close()
-	if !h.svc.SweepRequested(ctx) {
+	if !h.svc.Health.SweepRequested(ctx) {
 		t.Fatal("sweep request flag not set")
 	}
 	if sum := decode[HealthSummary](t, get(t, h.ts, "/api/v1/library/health", h.token)); sum.Sweeping == nil || !*sum.Sweeping {
 		t.Fatalf("sweeping = %v while the request waits, want true", sum.Sweeping)
 	}
-	if err := h.svc.RunHealthSweep(ctx); err != nil {
+	if err := h.svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
-	if h.svc.SweepRequested(ctx) {
+	if h.svc.Health.SweepRequested(ctx) {
 		t.Fatal("sweep request flag not cleared")
 	}
 
@@ -167,7 +167,7 @@ func TestHealthSweepAndIssues(t *testing.T) {
 		if fix.Queued != 1 || fix.TaskId == nil || fix.JobPid != nil {
 			t.Fatalf("fix = %+v, want one item on a task", fix)
 		}
-		for h.svc.DrainLongToolTasks(ctx) {
+		for h.svc.Tools.DrainLongToolTasks(ctx) {
 		}
 		task := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+*fix.TaskId, h.token))
 		if task.State != "done" || task.Summary == nil || (*task.Summary)["attempted"] != float64(1) ||
@@ -224,7 +224,7 @@ func TestHealthFixStartsEnrichJob(t *testing.T) {
 		c.EnrichmentProviders = []enrich.Provider{stub}
 	})
 	ctx := context.Background()
-	if err := h.svc.RunHealthSweep(ctx); err != nil {
+	if err := h.svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	since := decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server", h.token)).NextSince
@@ -315,7 +315,7 @@ func TestHealthFlagsAHeaderThatMisstatesTheAudio(t *testing.T) {
 	understateFLAC(t, paths[0], 1, 2)
 	h.rescanAndWait(t)
 	analyzeAndWait(t, h)
-	if err := h.svc.SweepHealth(ctx); err != nil {
+	if err := h.svc.Health.SweepHealth(ctx); err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
 
@@ -350,7 +350,7 @@ func TestHealthFlagsAHeaderThatMisstatesTheAudio(t *testing.T) {
 		t.Fatalf("after the fix, issues = %+v, want the swept row with its lengths", page.Items)
 	}
 	analyzeAndWait(t, h)
-	if err := h.svc.SweepHealth(ctx); err != nil {
+	if err := h.svc.Health.SweepHealth(ctx); err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
 	page = decode[HealthIssuePage](t, get(t, h.ts, "/api/v1/library/health/issues?rule=duration-mismatch", h.token))
@@ -389,7 +389,7 @@ func TestHealthFindsAMisstatedPartOfABook(t *testing.T) {
 	}
 	h.rescanAndWait(t)
 	analyzeAndWait(t, h)
-	if err := h.svc.SweepHealth(ctx); err != nil {
+	if err := h.svc.Health.SweepHealth(ctx); err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
 
@@ -429,7 +429,7 @@ func TestHealthNamesNoPartForACopiedOneFileBook(t *testing.T) {
 	}
 	h.rescanAndWait(t)
 	analyzeAndWait(t, h)
-	if err := h.svc.SweepHealth(ctx); err != nil {
+	if err := h.svc.Health.SweepHealth(ctx); err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
 
@@ -465,7 +465,7 @@ func TestHealthNamesTheWholeFileACarvedTrackIsCutFrom(t *testing.T) {
 	}
 	h.rescanAndWait(t)
 	analyzeAndWait(t, h)
-	if err := h.svc.SweepHealth(ctx); err != nil {
+	if err := h.svc.Health.SweepHealth(ctx); err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
 
@@ -876,7 +876,7 @@ func TestHealthIssuesFollowTheCallersGrants(t *testing.T) {
 		t.Fatalf("generating the series: %v", err)
 	}
 	h := newHarness(t, service.Root{Name: "books", Path: books})
-	if err := h.svc.RunHealthSweep(context.Background()); err != nil {
+	if err := h.svc.Health.RunHealthSweep(context.Background()); err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
 
@@ -958,7 +958,7 @@ func TestHealthLeavesFlaggedEpisodesToExplicitContent(t *testing.T) {
 		t.Fatalf("episodes = %v, want both", episodes)
 	}
 	ctx := context.Background()
-	if err := h.svc.RunHealthSweep(ctx); err != nil {
+	if err := h.svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
 	// What a sweep writes for an episode whose file fails a check: the
@@ -1015,7 +1015,7 @@ func TestHealthIssuesReadABoundedPartOfTheIndexPerPage(t *testing.T) {
 	t.Parallel()
 	s := newGrantsScene(t)
 	ctx := context.Background()
-	if err := s.h.svc.RunHealthSweep(ctx); err != nil {
+	if err := s.h.svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
 	// Rows for items the catalog does not hold, worse than any real one
@@ -1076,7 +1076,7 @@ func TestHealthIssuesCutCursorNamesNoHiddenRow(t *testing.T) {
 	t.Parallel()
 	s := newGrantsScene(t)
 	ctx := context.Background()
-	if err := s.h.svc.RunHealthSweep(ctx); err != nil {
+	if err := s.h.svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
 	for i := range 1599 {
@@ -1163,7 +1163,7 @@ func TestHealthCutCursorsHaveOneLength(t *testing.T) {
 	t.Parallel()
 	s := newGrantsScene(t)
 	ctx := context.Background()
-	if err := s.h.svc.RunHealthSweep(ctx); err != nil {
+	if err := s.h.svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
 	for i := range 1599 {
@@ -1219,7 +1219,7 @@ func TestHealthCutCursorOverARetitledRowSkipsNothing(t *testing.T) {
 	t.Parallel()
 	s := newGrantsScene(t)
 	ctx := context.Background()
-	if err := s.h.svc.RunHealthSweep(ctx); err != nil {
+	if err := s.h.svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
 	failing := func(pid, title string) {

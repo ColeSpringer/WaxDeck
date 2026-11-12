@@ -82,13 +82,13 @@ func newShelfFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
 		t.Fatalf("scanning fixture library: %v", err)
 	}
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "admin", Password: "correct-horse", Roles: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func newShelfFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 // bucketPID finds the entity pid behind one dimension's bucket by label.
 func bucketPID(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, dimension, label string) string {
 	t.Helper()
-	page, err := svc.Facets(ctx, uc, FacetQuery{Dimension: dimension, Limit: 500})
+	page, err := svc.Reads.Facets(ctx, uc, FacetQuery{Dimension: dimension, Limit: 500})
 	if err != nil {
 		t.Fatalf("enumerating %s: %v", dimension, err)
 	}
@@ -125,13 +125,13 @@ func TestEntityCardsAnswerInRequestOrder(t *testing.T) {
 	other := bucketPID(t, ctx, svc, uc, "album", "Contact Sheet")
 	artist := bucketPID(t, ctx, svc, uc, "artist", "Nightjar")
 
-	pl, err := svc.CreatePlaylist(ctx, uc, PlaylistCreate{Name: "Tape One", Kind: "static"})
+	pl, err := svc.Playlists.CreatePlaylist(ctx, uc, PlaylistCreate{Name: "Tape One", Kind: "static"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	want := []string{other, pl.PID, album, artist}
-	cards, _, err := svc.EntityCards(ctx, uc, want)
+	cards, _, err := svc.Reads.EntityCards(ctx, uc, want)
 	if err != nil {
 		t.Fatalf("resolving cards: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestEntityCardsDropWhatCannotBeResolved(t *testing.T) {
 	// prefix is pinnable.
 	show := "pc-01JZX5N8QW3F4V9T2B7KD3M9R7"
 
-	cards, gone, err := svc.EntityCards(ctx, uc, []string{departed, album, show})
+	cards, gone, err := svc.Reads.EntityCards(ctx, uc, []string{departed, album, show})
 	if err != nil {
 		t.Fatalf("resolving cards: %v", err)
 	}
@@ -196,24 +196,24 @@ func TestEntityCardsDropWhatCannotBeResolved(t *testing.T) {
 		t.Fatalf("departed = %v, want only %s", gone, departed)
 	}
 
-	if _, _, err := svc.EntityCards(ctx, uc, []string{"tr-01JZX5N8QW3F4V9T2B7KD3M9R6"}); KindOf(err) != KindInvalid {
+	if _, _, err := svc.Reads.EntityCards(ctx, uc, []string{"tr-01JZX5N8QW3F4V9T2B7KD3M9R6"}); KindOf(err) != KindInvalid {
 		t.Fatalf("a track pid should be a request error, got %v", err)
 	}
 	over := make([]string, maxEntityCards+1)
 	for i := range over {
 		over[i] = album
 	}
-	if _, _, err := svc.EntityCards(ctx, uc, over); KindOf(err) != KindInvalid {
+	if _, _, err := svc.Reads.EntityCards(ctx, uc, over); KindOf(err) != KindInvalid {
 		t.Fatalf("over the cap should be a request error, got %v", err)
 	}
-	if cards, _, err := svc.EntityCards(ctx, uc, nil); err != nil || len(cards) != 0 {
+	if cards, _, err := svc.Reads.EntityCards(ctx, uc, nil); err != nil || len(cards) != 0 {
 		t.Fatalf("an empty request should answer empty, got %+v %v", cards, err)
 	}
 
 	// Crockford base32 parses either case, and the catalog keys its batch
 	// answer by the stored pid, so a lower-case ULID that resolved and
 	// then failed to match would be a card silently missing from a shelf.
-	lower, _, err := svc.EntityCards(ctx, uc, []string{strings.ToLower(album)})
+	lower, _, err := svc.Reads.EntityCards(ctx, uc, []string{strings.ToLower(album)})
 	if err != nil {
 		t.Fatalf("resolving a lower-case pid: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestEntityCardsDropOutsideTheGrant(t *testing.T) {
 		CatalogPID: uc.CatalogPID,
 		Libraries:  map[string]bool{"lb-nothing": true},
 	}
-	cards, gone, err := svc.EntityCards(ctx, restricted, []string{album})
+	cards, gone, err := svc.Reads.EntityCards(ctx, restricted, []string{album})
 	if err != nil {
 		t.Fatalf("resolving cards: %v", err)
 	}
@@ -256,28 +256,28 @@ func TestEntityCardsNameTheDeparted(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newShelfFixture(t)
 
-	pl, err := svc.CreatePlaylist(ctx, uc, PlaylistCreate{Name: "Doomed", Kind: "static"})
+	pl, err := svc.Playlists.CreatePlaylist(ctx, uc, PlaylistCreate{Name: "Doomed", Kind: "static"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.DeletePlaylist(ctx, uc, pl.PID); err != nil {
+	if err := svc.Playlists.DeletePlaylist(ctx, uc, pl.PID); err != nil {
 		t.Fatal(err)
 	}
 
-	other, err := svc.CreateAccount(ctx, AccountCreate{Username: "neighbour", Password: "pw-neighbour-1"})
+	other, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "neighbour", Password: "pw-neighbour-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	otherCtx, err := svc.UserCtx(ctx, other.User)
+	otherCtx, err := svc.Grants.UserCtxFor(ctx, other.User)
 	if err != nil {
 		t.Fatal(err)
 	}
-	private, err := svc.CreatePlaylist(ctx, otherCtx, PlaylistCreate{Name: "Theirs", Kind: "static"})
+	private, err := svc.Playlists.CreatePlaylist(ctx, otherCtx, PlaylistCreate{Name: "Theirs", Kind: "static"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cards, gone, err := svc.EntityCards(ctx, uc, []string{pl.PID, private.PID})
+	cards, gone, err := svc.Reads.EntityCards(ctx, uc, []string{pl.PID, private.PID})
 	if err != nil {
 		t.Fatalf("resolving cards: %v", err)
 	}
@@ -300,7 +300,7 @@ func TestCountsAreOnlyAnsweredWhereTheyAreTrue(t *testing.T) {
 	ctx, svc, uc := newShelfFixture(t)
 
 	album := bucketPID(t, ctx, svc, uc, "album", "Long Exposure")
-	libs, err := svc.Libraries(ctx)
+	libs, err := svc.Roots.Libraries(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,14 +314,14 @@ func TestCountsAreOnlyAnsweredWhereTheyAreTrue(t *testing.T) {
 		Libraries: map[string]bool{strings.TrimPrefix(libs[0].PID, PrefixLibrary+"-"): true},
 	}
 
-	full, err := svc.Album(ctx, uc, album)
+	full, err := svc.Reads.Album(ctx, uc, album)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if full.ItemCount != 2 || full.TotalDurationMS == 0 {
 		t.Fatalf("a full-visibility caller should get the counts, got %+v", full)
 	}
-	scoped, err := svc.Album(ctx, granted, album)
+	scoped, err := svc.Reads.Album(ctx, granted, album)
 	if err != nil {
 		t.Fatalf("reading the album as a granted caller: %v", err)
 	}
@@ -334,7 +334,7 @@ func TestCountsAreOnlyAnsweredWhereTheyAreTrue(t *testing.T) {
 		t.Fatalf("the identity changed with the caller: %+v", scoped)
 	}
 
-	cards, _, err := svc.EntityCards(ctx, granted, []string{album})
+	cards, _, err := svc.Reads.EntityCards(ctx, granted, []string{album})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,7 +344,7 @@ func TestCountsAreOnlyAnsweredWhereTheyAreTrue(t *testing.T) {
 	if cards[0].ItemCount != nil {
 		t.Fatalf("a restricted caller's card carries a count: %v", *cards[0].ItemCount)
 	}
-	if own, _, err := svc.EntityCards(ctx, uc, []string{album}); err != nil {
+	if own, _, err := svc.Reads.EntityCards(ctx, uc, []string{album}); err != nil {
 		t.Fatal(err)
 	} else if own[0].ItemCount == nil || *own[0].ItemCount != 2 {
 		t.Fatalf("a full-visibility card lost its count: %+v", own[0])
@@ -358,7 +358,7 @@ func TestAlbumIdentity(t *testing.T) {
 	ctx, svc, uc := newShelfFixture(t)
 
 	album := bucketPID(t, ctx, svc, uc, "album", "Long Exposure")
-	got, err := svc.Album(ctx, uc, album)
+	got, err := svc.Reads.Album(ctx, uc, album)
 	if err != nil {
 		t.Fatalf("reading album: %v", err)
 	}
@@ -388,7 +388,7 @@ func TestAlbumIdentity(t *testing.T) {
 
 	// A release with nothing tagged answers the identity fields empty
 	// rather than refusing, which is what lets the client render nothing.
-	bare, err := svc.Album(ctx, uc, bucketPID(t, ctx, svc, uc, "album", "Contact Sheet"))
+	bare, err := svc.Reads.Album(ctx, uc, bucketPID(t, ctx, svc, uc, "album", "Contact Sheet"))
 	if err != nil {
 		t.Fatalf("reading the untagged album: %v", err)
 	}
@@ -403,20 +403,20 @@ func TestAlbumRejectsTheWrongPrefix(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newShelfFixture(t)
 
-	page, err := svc.Items(ctx, uc, ItemFilter{}, "", 1)
+	page, err := svc.Reads.Items(ctx, uc, ItemFilter{}, "", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(page.Items) == 0 {
 		t.Fatal("the fixture library listed nothing")
 	}
-	if _, err := svc.Album(ctx, uc, page.Items[0].PID); KindOf(err) != KindNotFound {
+	if _, err := svc.Reads.Album(ctx, uc, page.Items[0].PID); KindOf(err) != KindNotFound {
 		t.Fatalf("a track pid should be not-found, got %v", err)
 	}
-	if _, err := svc.Album(ctx, uc, "al-01JZX5N8QW3F4V9T2B7KD3M9R6"); KindOf(err) != KindNotFound {
+	if _, err := svc.Reads.Album(ctx, uc, "al-01JZX5N8QW3F4V9T2B7KD3M9R6"); KindOf(err) != KindNotFound {
 		t.Fatalf("an unknown album should be not-found, got %v", err)
 	}
-	if _, err := svc.Album(ctx, uc, "not-a-pid"); KindOf(err) != KindNotFound {
+	if _, err := svc.Reads.Album(ctx, uc, "not-a-pid"); KindOf(err) != KindNotFound {
 		t.Fatalf("a malformed pid should be not-found, got %v", err)
 	}
 }
@@ -433,7 +433,7 @@ func TestAlbumHiddenOutsideTheGrant(t *testing.T) {
 		CatalogPID: uc.CatalogPID,
 		Libraries:  map[string]bool{"lb-nothing": true},
 	}
-	if _, err := svc.Album(ctx, restricted, album); KindOf(err) != KindNotFound {
+	if _, err := svc.Reads.Album(ctx, restricted, album); KindOf(err) != KindNotFound {
 		t.Fatalf("an album outside the grant should be not-found, got %v", err)
 	}
 }
@@ -447,18 +447,18 @@ func TestEntityCardsDropABookInTheTrash(t *testing.T) {
 			t.Fatal(err)
 		}
 	}})
-	books, err := svc.Items(ctx, uc, ItemFilter{MediaType: "audiobook"}, "", 10)
+	books, err := svc.Reads.Items(ctx, uc, ItemFilter{MediaType: "audiobook"}, "", 10)
 	if err != nil || len(books.Items) != 1 {
 		t.Fatalf("books = %+v (%v), want the fixture book", books.Items, err)
 	}
 	book := books.Items[0].PID
-	if cards, _, err := svc.EntityCards(ctx, uc, []string{book}); err != nil || len(cards) != 1 {
+	if cards, _, err := svc.Reads.EntityCards(ctx, uc, []string{book}); err != nil || len(cards) != 1 {
 		t.Fatalf("cards before the trash = %+v (%v), want the book's", cards, err)
 	}
-	if _, err := svc.DeleteItems(ctx, uc, []string{book}, "trash", false); err != nil {
+	if _, err := svc.Tools.DeleteItems(ctx, uc, []string{book}, "trash", false); err != nil {
 		t.Fatal(err)
 	}
-	cards, gone, err := svc.EntityCards(ctx, uc, []string{book})
+	cards, gone, err := svc.Reads.EntityCards(ctx, uc, []string{book})
 	if err != nil {
 		t.Fatal(err)
 	}

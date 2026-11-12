@@ -28,7 +28,7 @@ func TestAYouTubeEpisodeIsNotRelayed(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			sub := f.subscribe(t, c.url, c.kind)
-			eps, _, err := f.svc.Episodes(f.ctx, f.uc, sub.Show.PID, "", 10)
+			eps, _, err := f.svc.Podcasts.Episodes(f.ctx, f.uc, sub.Show.PID, "", 10)
 			if err != nil || len(eps) != 1 {
 				t.Fatalf("episodes = %v (%v), want one", eps, err)
 			}
@@ -36,17 +36,17 @@ func TestAYouTubeEpisodeIsNotRelayed(t *testing.T) {
 			if ep.HasEnclosure != c.relays {
 				t.Errorf("hasEnclosure = %v, want %v", ep.HasEnclosure, c.relays)
 			}
-			src, err := f.svc.EnclosureStreamSource(f.ctx, f.uc.ID, ep.PID)
+			src, err := f.svc.Podcasts.EnclosureStreamSource(f.ctx, f.uc.ID, ep.PID)
 			if c.relays && (err != nil || src.URL != "https://www.youtube.com/watch?v=abc") {
 				t.Errorf("enclosure source = %+v (%v), want the feed's enclosure", src, err)
 			}
 			if !c.relays && KindOf(err) != KindNotFound {
 				t.Errorf("enclosure source = %+v (%v), want not-found", src, err)
 			}
-			if _, ok := f.svc.PassthroughEpisode(f.ctx, f.uc.ID, ep.PID); ok != c.relays {
+			if _, ok := f.svc.Podcasts.PassthroughEpisode(f.ctx, f.uc.ID, ep.PID); ok != c.relays {
 				t.Errorf("passthrough = %v, want %v", ok, c.relays)
 			}
-			if _, err := f.svc.StreamSource(f.ctx, ep.PID, ""); !errors.Is(err, ErrEpisodeNotFetched) {
+			if _, err := f.svc.Playback.StreamSource(f.ctx, ep.PID, ""); !errors.Is(err, ErrEpisodeNotFetched) {
 				t.Errorf("stream source = %v, want the not-fetched conflict", err)
 			}
 		})

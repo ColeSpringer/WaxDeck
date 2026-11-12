@@ -31,18 +31,18 @@ func TestShowPrivacyIsOneRule(t *testing.T) {
 		_, pid, _ := parseAPIPID(shows[name].sub.Show.PID)
 		return pid
 	}
-	f.svc.markShowPrivate(f.ctx, string(pidOf("flagged")))
+	f.svc.Podcasts.markShowPrivate(f.ctx, string(pidOf("flagged")))
 	if err := f.svc.lib.Podcasts().SetAuth(f.ctx, pidOf("paid"), "member", "secret"); err != nil {
 		t.Fatal(err)
 	}
 
-	private := f.svc.privateEpisodes()
+	private := f.svc.Reads.privateEpisodes()
 	for name, c := range shows {
 		pod, err := f.svc.lib.Podcasts().Get(f.ctx, pidOf(name))
 		if err != nil {
 			t.Fatal(err)
 		}
-		byRule := f.svc.showIsPrivate(f.ctx, pod)
+		byRule := f.svc.Podcasts.showIsPrivate(f.ctx, pod)
 		byFilter := private(f.ctx, &model.ItemView{Kind: model.KindEpisode, PodcastPID: pod.PID})
 		if byRule != byFilter {
 			t.Errorf("%s: showIsPrivate says %v and the playlist filter %v", name, byRule, byFilter)
@@ -58,13 +58,13 @@ func TestShowPrivacyIsOneRule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.svc.showReadHook = func(context.Context, model.PID) (*model.Podcast, error) { return open, nil }
+	f.svc.Podcasts.showReadHook = func(context.Context, model.PID) (*model.Podcast, error) { return open, nil }
 	gone, cancel := context.WithCancel(f.ctx)
 	cancel()
-	if !f.svc.showIsPrivate(gone, open) {
+	if !f.svc.Podcasts.showIsPrivate(gone, open) {
 		t.Error("showIsPrivate called an open show with an unreadable flag public")
 	}
-	if !f.svc.privateEpisodes()(gone, &model.ItemView{Kind: model.KindEpisode, PodcastPID: open.PID}) {
+	if !f.svc.Reads.privateEpisodes()(gone, &model.ItemView{Kind: model.KindEpisode, PodcastPID: open.PID}) {
 		t.Error("the playlist filter called an open show with an unreadable flag public")
 	}
 }

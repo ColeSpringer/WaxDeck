@@ -16,7 +16,7 @@ import (
 // The second rung of radio artwork: a cover for a song this library does
 // not hold, or holds without one.
 //
-// The first rung is RadioNowPlayingItem, which matches the announced
+// The first rung is NowPlayingItem, which matches the announced
 // title against the catalog and costs no network at all. That one runs
 // first and answers most of the time somebody is listening to a station
 // playing music they own. This one runs only on its miss.
@@ -157,7 +157,7 @@ func radioLogoFromBytes(data []byte, mime string) RadioLogo {
 	}
 }
 
-// RadioNowPlayingArt answers the cover held under one key, or a
+// NowPlayingArt answers the cover held under one key, or a
 // not-found.
 //
 // Addressed by key, not by whatever the station is announcing right now,
@@ -174,7 +174,7 @@ func radioLogoFromBytes(data []byte, mime string) RadioLogo {
 // safe to reach a paced third-party service at all - a fetch inside this
 // request would hold an image response open for two paced round trips,
 // and every client on the station would start its own.
-func (l *Library) RadioNowPlayingArt(key string) (RadioLogo, error) {
+func (l *Radio) NowPlayingArt(key string) (RadioLogo, error) {
 	if key == "" {
 		return RadioLogo{}, errNotFound("no artwork for this station")
 	}
@@ -193,22 +193,22 @@ func (l *Library) RadioNowPlayingArt(key string) (RadioLogo, error) {
 	// about this library was sent anywhere to learn of it. What the
 	// toggle exists to decide - whether a title a station chose leaves
 	// this server for a third party - is not in question here.
-	if !entry.announced && !l.RadioExternalArtEnabled() {
+	if !entry.announced && !l.Settings.RadioExternalArtEnabled() {
 		return RadioLogo{}, errNotFound("no artwork for this station")
 	}
 	return entry.art, nil
 }
 
-// RadioNowPlayingArtSource answers where the cover held under one key
+// NowPlayingArtSource answers where the cover held under one key
 // came from, so a face can caption it. Zero when nothing is held, which
-// is the same answer RadioNowPlayingArt gives and reads as "draw no
+// is the same answer NowPlayingArt gives and reads as "draw no
 // mark".
 //
 // It repeats that read's toggle gate for the same reason: an operator
 // who switched the external rung off is not told which third party a
 // still-cached cover came from, because they are no longer being served
 // that cover at all.
-func (l *Library) RadioNowPlayingArtSource(key string) ArtSourceDTO {
+func (l *Radio) NowPlayingArtSource(key string) ArtSourceDTO {
 	if key == "" {
 		return ArtSourceDTO{}
 	}
@@ -216,7 +216,7 @@ func (l *Library) RadioNowPlayingArtSource(key string) ArtSourceDTO {
 	if !ok || len(entry.art.Bytes) == 0 {
 		return ArtSourceDTO{}
 	}
-	if !entry.announced && !l.RadioExternalArtEnabled() {
+	if !entry.announced && !l.Settings.RadioExternalArtEnabled() {
 		return ArtSourceDTO{}
 	}
 	return entry.source
@@ -241,10 +241,10 @@ func announcedArtKey(artURL, announced string) string {
 	return hex.EncodeToString(sum[:16])
 }
 
-// RadioNowPlayingCover answers the cover key for one announcement from
+// NowPlayingCover answers the cover key for one announcement from
 // the station's picture and the lookup, starting fetches but never
 // waiting on one. An unproven picture yields to a cover the lookup holds.
-func (l *Library) RadioNowPlayingCover(stationPID, stationName string, a RadioAnnouncement) string {
+func (l *Radio) NowPlayingCover(stationPID, stationName string, a RadioAnnouncement) string {
 	announced, tryExternal := l.EnsureRadioAnnouncedArt(stationPID, a.ArtURL, a.Title)
 	switch {
 	case a.ArtURL != "" && !a.ArtProven:
@@ -278,7 +278,7 @@ func (l *Library) RadioNowPlayingCover(stationPID, stationName string, a RadioAn
 // 512 KB cap read as one-past-and-refuse, the declared-type gate, and
 // the served type decided by sniffing the bytes rather than by what the
 // host called them.
-func (l *Library) EnsureRadioAnnouncedArt(stationPID, artURL, announced string) (string, bool) {
+func (l *Radio) EnsureRadioAnnouncedArt(stationPID, artURL, announced string) (string, bool) {
 	if artURL == "" {
 		return "", true
 	}
@@ -365,8 +365,8 @@ func (l *Library) EnsureRadioAnnouncedArt(stationPID, artURL, announced string) 
 // cancel. The cache read is a mutex and a map, and the lookup runs on
 // procCtx - taking a request context would say the poll can call the
 // work off, which is the opposite of the point.
-func (l *Library) EnsureRadioNowPlayingArt(stationPID, stationName, announced string) string {
-	artist, title, key := l.radioNowPlayingArtKey(stationName, announced)
+func (l *Radio) EnsureRadioNowPlayingArt(stationPID, stationName, announced string) string {
+	artist, title, key := l.nowPlayingArtKey(stationName, announced)
 	if key == "" {
 		return ""
 	}
@@ -396,7 +396,7 @@ func (l *Library) EnsureRadioNowPlayingArt(stationPID, stationName, announced st
 		// Asked again on the way out: the walk takes up to a minute, and
 		// storing past a switch-off leaves third-party bytes resident for a
 		// week after the forget that ran when the operator said stop.
-		if !l.RadioExternalArtEnabled() {
+		if !l.Settings.RadioExternalArtEnabled() {
 			return nil
 		}
 		switch {
@@ -432,11 +432,11 @@ func (l *Library) EnsureRadioNowPlayingArt(stationPID, stationName, announced st
 	return ""
 }
 
-// radioNowPlayingArtKey names the lookup for an announcement, with the
+// nowPlayingArtKey names the lookup for an announcement, with the
 // query it sends; empty while the rung is off or the line names no song.
 // Key and query come from one normalization, so they cannot disagree.
-func (l *Library) radioNowPlayingArtKey(stationName, announced string) (artist, title, key string) {
-	if l.radioArtResolver == nil || !l.RadioExternalArtEnabled() {
+func (l *Radio) nowPlayingArtKey(stationName, announced string) (artist, title, key string) {
+	if l.radioArtResolver == nil || !l.Settings.RadioExternalArtEnabled() {
 		return "", "", ""
 	}
 	rawArtist, rawTitle, ok := parseRadioTitle(announced, stationName)
@@ -452,8 +452,8 @@ func (l *Library) radioNowPlayingArtKey(stationName, announced string) (artist, 
 
 // heldRadioNowPlayingArt answers the key of a cover the lookup already
 // holds for an announcement, and starts nothing.
-func (l *Library) heldRadioNowPlayingArt(stationName, announced string) string {
-	_, _, key := l.radioNowPlayingArtKey(stationName, announced)
+func (l *Radio) heldRadioNowPlayingArt(stationName, announced string) string {
+	_, _, key := l.nowPlayingArtKey(stationName, announced)
 	if key == "" {
 		return ""
 	}
@@ -466,7 +466,7 @@ func (l *Library) heldRadioNowPlayingArt(stationName, announced string) string {
 // wakeRadioListeners tells the clients tuned to stationPID that its face
 // has something new - a song, a cover, a failed picture letting the
 // lookup run - so they catch up now rather than on their next poll.
-func (l *Library) wakeRadioListeners(stationPID string) {
+func (l *Radio) wakeRadioListeners(stationPID string) {
 	if fn := l.radioWake.Load(); fn != nil {
 		(*fn)(stationPID)
 	}
@@ -475,7 +475,7 @@ func (l *Library) wakeRadioListeners(stationPID string) {
 // SetRadioInvalidator installs the fan-out wakeRadioListeners calls. A
 // setter rather than a Config field because the event hub is built over
 // the service, so it does not exist when Config is.
-func (l *Library) SetRadioInvalidator(fn func(stationPID string)) {
+func (l *Radio) SetRadioInvalidator(fn func(stationPID string)) {
 	if fn == nil {
 		l.radioWake.Store(nil)
 		return
@@ -483,7 +483,7 @@ func (l *Library) SetRadioInvalidator(fn func(stationPID string)) {
 	l.radioWake.Store(&fn)
 }
 
-func (l *Library) cachedRadioArt(key string) (radioArtEntry, bool) {
+func (l *Radio) cachedRadioArt(key string) (radioArtEntry, bool) {
 	l.radioArtCache.mu.Lock()
 	defer l.radioArtCache.mu.Unlock()
 	entry, ok := l.radioArtCache.entries[key]
@@ -501,7 +501,7 @@ func (l *Library) cachedRadioArt(key string) (radioArtEntry, bool) {
 	return entry, true
 }
 
-func (l *Library) storeRadioArt(key string, entry radioArtEntry) {
+func (l *Radio) storeRadioArt(key string, entry radioArtEntry) {
 	l.radioArtCache.mu.Lock()
 	defer l.radioArtCache.mu.Unlock()
 	if l.radioArtCache.entries == nil {
@@ -529,7 +529,7 @@ func (l *Library) storeRadioArt(key string, entry radioArtEntry) {
 }
 
 // dropRadioArt forgets one entry. The lock is the caller's.
-func (l *Library) dropRadioArt(key string) {
+func (l *Radio) dropRadioArt(key string) {
 	entry, ok := l.radioArtCache.entries[key]
 	if !ok {
 		return
@@ -545,7 +545,7 @@ func (l *Library) dropRadioArt(key string) {
 // external rung off: the read path refuses while it is off either way,
 // but bytes fetched from a third party should not sit resident after the
 // decision to stop asking for them.
-func (l *Library) forgetRadioArt() {
+func (l *Radio) forgetRadioArt() {
 	l.radioArtCache.mu.Lock()
 	defer l.radioArtCache.mu.Unlock()
 	// Announced covers stay. They were never fetched on the strength of
@@ -587,7 +587,7 @@ func (l *Library) forgetRadioArt() {
 // reaches this from every device at once; without the claim each would
 // start its own pair of paced calls against a service that rate-limits
 // at one request a second.
-func (l *Library) claimRadioArtLookup(key, stationPID string) bool {
+func (l *Radio) claimRadioArtLookup(key, stationPID string) bool {
 	l.radioArtCache.mu.Lock()
 	defer l.radioArtCache.mu.Unlock()
 	if l.radioArtCache.waiters == nil {
@@ -614,7 +614,7 @@ func (l *Library) claimRadioArtLookup(key, stationPID string) bool {
 // wakeRadioArtWaiters wakes every station that asked for key, and
 // forgets them: the next poll that asks is after the landing, and finds
 // the cover cached.
-func (l *Library) wakeRadioArtWaiters(key string) {
+func (l *Radio) wakeRadioArtWaiters(key string) {
 	l.radioArtCache.mu.Lock()
 	waiting := l.radioArtCache.waiters[key]
 	delete(l.radioArtCache.waiters, key)
@@ -624,7 +624,7 @@ func (l *Library) wakeRadioArtWaiters(key string) {
 	}
 }
 
-func (l *Library) releaseRadioArtLookup(key string) {
+func (l *Radio) releaseRadioArtLookup(key string) {
 	l.radioArtCache.mu.Lock()
 	defer l.radioArtCache.mu.Unlock()
 	delete(l.radioArtCache.inFlight, key)

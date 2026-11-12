@@ -56,7 +56,7 @@ func TestAListingCarriesTheKeyItsArtistsAreFiledUnder(t *testing.T) {
 		if it.Title != "Three" {
 			continue
 		}
-		d, err := svc.Item(ctx, admin, it.PID)
+		d, err := svc.Reads.Item(ctx, admin, it.PID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -85,7 +85,7 @@ func TestTheArtistKeyIsTheOneTheCatalogStores(t *testing.T) {
 		}
 	}
 	for title, key := range keys {
-		res, err := svc.Search(ctx, admin, key, 10)
+		res, err := svc.Reads.Search(ctx, admin, key, 10)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -31,9 +31,9 @@ func TestARootBackFromAbsenceIsTaughtToTheSidecar(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
 	flow := &folderFlowRoots{fakeFlowRoots{names: []string{"configured"}}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	later := filepath.Join(t.TempDir(), "later")
-	info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "later", Path: later, AllowAbsent: true})
+	info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "later", Path: later, AllowAbsent: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestARootBackFromAbsenceIsTaughtToTheSidecar(t *testing.T) {
 		t.Fatal("the absent folder streamed at once, want the sidecar's refusal")
 	}
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
 	if err := os.Mkdir(later, 0o755); err != nil {
@@ -51,9 +51,9 @@ func TestARootBackFromAbsenceIsTaughtToTheSidecar(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool { return flow.taught("later", later) }, "the sidecar taught the folder once it is there")
-	svc.flowSyncMu.Lock()
-	_, refused := svc.flowRefused["later"]
-	svc.flowSyncMu.Unlock()
+	svc.Roots.flowSyncMu.Lock()
+	_, refused := svc.Roots.flowRefused["later"]
+	svc.Roots.flowSyncMu.Unlock()
 	if refused {
 		t.Error("the refusal of the missing folder is still remembered")
 	}
@@ -77,19 +77,19 @@ func TestARootBackWhileTheEngineIsAwayWaitsForItsReturn(t *testing.T) {
 		c.Logger = slog.New(slog.NewTextHandler(&logged, nil))
 	})
 	flow := &awayFlowRoots{folderFlowRoots: folderFlowRoots{fakeFlowRoots{names: []string{"configured"}}}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	later := filepath.Join(t.TempDir(), "later")
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "later", Path: later, AllowAbsent: true}); err != nil {
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "later", Path: later, AllowAbsent: true}); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
 	refused := func() bool {
-		svc.flowSyncMu.Lock()
-		defer svc.flowSyncMu.Unlock()
-		_, ok := svc.flowRefused["later"]
+		svc.Roots.flowSyncMu.Lock()
+		defer svc.Roots.flowSyncMu.Unlock()
+		_, ok := svc.Roots.flowRefused["later"]
 		return ok
 	}
 	if !refused() {
@@ -120,7 +120,7 @@ func TestARootBackWhileTheEngineIsAwayWaitsForItsReturn(t *testing.T) {
 	}
 
 	flow.away.Store(false)
-	svc.syncFlowRoots(ctx)
+	svc.Roots.syncFlowRoots(ctx)
 	if !flow.taught("later", later) {
 		t.Error("the engine's return did not offer the folder")
 	}

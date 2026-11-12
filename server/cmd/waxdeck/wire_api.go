@@ -141,7 +141,7 @@ func newMux(ctx context.Context, group *supervise.Group, cfg coreConfig, deps mu
 	// The gpodder.net-compatible sync surface (AntennaPod and friends):
 	// app passwords over Basic plus its own stored session cookie.
 	gp := gpodder.New(deps.svc, cfg.cookieSecure, deps.log)
-	mountGpodder(ctx, mux, group, httpm.instrument("gpodder", gp.ServeHTTP), deps.svc.RetryPendingGpodder, time.Minute)
+	mountGpodder(ctx, mux, group, httpm.instrument("gpodder", gp.ServeHTTP), deps.svc.Podcasts.RetryPendingGpodder, time.Minute)
 	if deps.bridge != nil {
 		mux.Handle("/media/stream", httpm.instrumentStream("media-stream", deps.bridge.ServeStream))
 		// HLS fetches are many short requests (a playlist, an init
@@ -237,9 +237,9 @@ func newMetricsRegistry(version string, store *db.DB, svc *service.Library) *met
 	reg.GaugeFunc("waxdeck_notify_outbox_depth", "Undelivered notifications.",
 		count(`SELECT COUNT(*) FROM notify_outbox`))
 	reg.GaugeFunc("waxdeck_transcode_sessions_active", "Engine-backed sessions in flight.",
-		func() float64 { return float64(svc.ActiveTranscodeSessions().Sessions) })
+		func() float64 { return float64(svc.Playback.ActiveTranscodeSessions().Sessions) })
 	reg.GaugeFunc("waxdeck_transcode_timelines_active", "Listeners playing a queue as one gapless rendering.",
-		func() float64 { return float64(svc.ActiveTranscodeSessions().Timelines) })
+		func() float64 { return float64(svc.Playback.ActiveTranscodeSessions().Timelines) })
 	return reg
 }
 

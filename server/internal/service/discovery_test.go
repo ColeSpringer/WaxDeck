@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/colespringer/waxbin"
+	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/source"
 	"github.com/colespringer/waxdeck/fixtures"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -36,6 +38,8 @@ type catalogFixtureOptions struct {
 	workerLocalPaths bool
 	// logs receives the service's log; nil discards it.
 	logs io.Writer
+	// sources is Config.SourceProviders.
+	sources []source.Provider
 }
 
 func newCatalogFixtureWith(t *testing.T, opts catalogFixtureOptions) (context.Context, *Library, *UserCtx) {
@@ -93,6 +97,7 @@ func newCatalogFixtureWith(t *testing.T, opts catalogFixtureOptions) (context.Co
 		Roots:            []Root{{Name: "lib", Path: libDir}},
 		Logger:           log,
 		WorkerLocalPaths: opts.workerLocalPaths,
+		SourceProviders:  opts.sources,
 	}, store, group)
 	if err != nil {
 		t.Fatal(err)
@@ -103,21 +108,42 @@ func newCatalogFixtureWith(t *testing.T, opts catalogFixtureOptions) (context.Co
 		svc.Close()
 		store.Close()
 	})
-	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
+	scan, err := svc.lib.Scan(ctx, waxbin.ScanRequest{})
+	if err != nil {
 		t.Fatalf("scanning fixture library: %v", err)
 	}
+	// Before any account exists, so the scan's job news reaches nobody
+	// instead of landing in whichever test window the follower is late for.
+	jobFollowerSettled(t, svc, scan.JobPID)
 
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "admin", Password: "correct-horse", Roles: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return ctx, svc, uc
+}
+
+// jobFollowerSettled waits until the job follower has read pid's job and
+// announced what it found. The follower takes a wake only between rounds,
+// so once the wake sent after handing it the job is taken, the round that
+// read the job is over. It does not wait for an end the follower hands to
+// Jobs.settleLater (a job with an origin row, or an enrich, set-kind or
+// remove-root one), which may still be running.
+func jobFollowerSettled(t *testing.T, svc *Library, pid model.PID) {
+	t.Helper()
+	svc.Jobs.followJob(pid)
+	select {
+	case svc.Jobs.jobWake <- struct{}{}:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the job follower never took a wake")
+	}
+	waitFor(t, func() bool { return len(svc.Jobs.jobWake) == 0 }, "the job follower finishing its round")
 }
 
 func TestImportStreamingPlaylistTextDescriptive(t *testing.T) {
@@ -129,7 +155,7 @@ func TestImportStreamingPlaylistTextDescriptive(t *testing.T) {
 		"Test Ensemble \u2013 Basalt Steps\n" +
 		"Test Ensemble - Never Recorded\n" +
 		"Delta Groove\n"
-	out, err := svc.ImportStreamingPlaylist(ctx, uc, PlaylistImportInput{
+	out, err := svc.Playlists.ImportStreamingPlaylist(ctx, uc, PlaylistImportInput{
 		Source:  "text",
 		Name:    "Road Tape",
 		Payload: payload,
@@ -160,14 +186,14 @@ func TestImportStreamingPlaylistTextDescriptive(t *testing.T) {
 	}
 
 	// The playlist really exists and carries the matches in export order.
-	pl, err := svc.PlaylistByPID(ctx, uc, out.PlaylistPID)
+	pl, err := svc.Playlists.ByPID(ctx, uc, out.PlaylistPID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if pl.Name != "Road Tape" {
 		t.Fatalf("playlist name = %q", pl.Name)
 	}
-	page, err := svc.PlaylistItems(ctx, uc, out.PlaylistPID, "", 10)
+	page, err := svc.Playlists.Items(ctx, uc, out.PlaylistPID, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +204,7 @@ func TestImportStreamingPlaylistTextDescriptive(t *testing.T) {
 	}
 
 	// Nothing resolved means no playlist at all, not an empty one.
-	none, err := svc.ImportStreamingPlaylist(ctx, uc, PlaylistImportInput{
+	none, err := svc.Playlists.ImportStreamingPlaylist(ctx, uc, PlaylistImportInput{
 		Source:  "text",
 		Payload: "Nobody - Nothing At All\n",
 	})
@@ -195,14 +221,14 @@ func TestSimilarTracksForMetadataFallback(t *testing.T) {
 	ctx, svc, uc := newCatalogFixture(t)
 
 	// Find the seed by title through the import resolver itself.
-	seedOut, err := svc.ImportStreamingPlaylist(ctx, uc, PlaylistImportInput{
+	seedOut, err := svc.Playlists.ImportStreamingPlaylist(ctx, uc, PlaylistImportInput{
 		Source:  "text",
 		Payload: "Test Ensemble - Amber Waves\n",
 	})
 	if err != nil || seedOut.Resolved != 1 {
 		t.Fatalf("resolving the seed = (%+v, %v)", seedOut, err)
 	}
-	page, err := svc.PlaylistItems(ctx, uc, seedOut.PlaylistPID, "", 1)
+	page, err := svc.Playlists.Items(ctx, uc, seedOut.PlaylistPID, "", 1)
 	if err != nil || len(page.Entries) != 1 {
 		t.Fatalf("seed lookup = (%+v, %v)", page, err)
 	}
@@ -210,7 +236,7 @@ func TestSimilarTracksForMetadataFallback(t *testing.T) {
 
 	// No worker has ever posted embeddings, so the sonic engine is
 	// empty and the answer must come from the metadata fallback.
-	res, err := svc.SimilarTracksFor(ctx, uc, seedPID, 10)
+	res, err := svc.Similarity.SimilarTracksFor(ctx, uc, seedPID, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +267,7 @@ func TestImportRetriesMissesWithTrimmedArtist(t *testing.T) {
 	payload := "Test Ensemble, Guest Voice - Amber Waves\n" +
 		"Test Ensemble feat. Guest Voice - Basalt Steps\n" +
 		"Somebody, Else - Never Recorded\n"
-	out, err := svc.ImportStreamingPlaylist(ctx, uc, PlaylistImportInput{
+	out, err := svc.Playlists.ImportStreamingPlaylist(ctx, uc, PlaylistImportInput{
 		Source:  "text",
 		Name:    "Joined Credits",
 		Payload: payload,
@@ -261,7 +287,7 @@ func TestArtistMixHonorsExcludePids(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 
-	res, err := svc.Search(ctx, uc, "Test Ensemble", 10)
+	res, err := svc.Reads.Search(ctx, uc, "Test Ensemble", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +296,7 @@ func TestArtistMixHonorsExcludePids(t *testing.T) {
 	}
 	artistPID := res.Artists[0].PID
 
-	page, err := svc.Items(ctx, uc, ItemFilter{MediaType: "music"}, "", 10)
+	page, err := svc.Reads.Items(ctx, uc, ItemFilter{MediaType: "music"}, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +314,7 @@ func TestArtistMixHonorsExcludePids(t *testing.T) {
 	// (already played this radio session): the seed's own tracks stay
 	// eligible by absence from the exclude set, never by overwriting
 	// caller entries with false.
-	mix, err := svc.InstantMix(ctx, uc, InstantMixInput{
+	mix, err := svc.Similarity.InstantMix(ctx, uc, InstantMixInput{
 		SeedPID:     artistPID,
 		Size:        10,
 		ExcludePIDs: []string{excluded},
@@ -313,7 +339,7 @@ func TestInstantMixCountsExclusions(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 
-	page, err := svc.Items(ctx, uc, ItemFilter{MediaType: "music"}, "", 10)
+	page, err := svc.Reads.Items(ctx, uc, ItemFilter{MediaType: "music"}, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +359,7 @@ func TestInstantMixCountsExclusions(t *testing.T) {
 	// Every other track excluded: the mix is empty, and the count says
 	// why - each of the three was met and dropped. The seed's own drop
 	// stays out of it, so a bare seed still reads as "no candidates".
-	mix, err := svc.InstantMix(ctx, uc, InstantMixInput{
+	mix, err := svc.Similarity.InstantMix(ctx, uc, InstantMixInput{
 		SeedPID:     seed,
 		Size:        10,
 		ExcludePIDs: others,
@@ -350,7 +376,7 @@ func TestInstantMixCountsExclusions(t *testing.T) {
 
 	// Nothing excluded: the count stays zero even though the seed
 	// itself was dropped from its own candidate pools.
-	open, err := svc.InstantMix(ctx, uc, InstantMixInput{SeedPID: seed, Size: 10})
+	open, err := svc.Similarity.InstantMix(ctx, uc, InstantMixInput{SeedPID: seed, Size: 10})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +25,12 @@ type wsClient struct {
 	// status is the close status the socket ended with, set before recv
 	// closes.
 	status websocket.StatusCode
+	// closing is set before cleanup closes the socket, so a reply that
+	// fails after that is not a failure.
+	closing atomic.Bool
+	// answerers are the goroutines answering routed commands; cleanup
+	// joins them before the test ends.
+	answerers sync.WaitGroup
 }
 
 func dialWS(t *testing.T, h *harness, token string, topics ...string) *wsClient {
@@ -45,7 +53,11 @@ func dialWS(t *testing.T, h *harness, token string, topics ...string) *wsClient 
 		t.Fatalf("subscribing: %v", err)
 	}
 	c := &wsClient{t: t, conn: conn, recv: make(chan map[string]any, 64)}
-	t.Cleanup(func() { conn.Close(websocket.StatusNormalClosure, "") })
+	t.Cleanup(func() {
+		c.closing.Store(true)
+		conn.Close(websocket.StatusNormalClosure, "")
+		c.answerers.Wait()
+	})
 	// Nothing acks a subscribe frame, and the hub wakes only the sockets
 	// it has registered, so a caller that acted now could lose its
 	// invalidation. Frames are dispatched in order once the socket is
@@ -107,13 +119,26 @@ func (c *wsClient) decode(msg []byte) map[string]any {
 	return frame
 }
 
-func (c *wsClient) send(v map[string]any) {
-	c.t.Helper()
+func (c *wsClient) write(v map[string]any) error {
 	data, _ := json.Marshal(v)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := c.conn.Write(ctx, websocket.MessageText, data); err != nil {
+	return c.conn.Write(ctx, websocket.MessageText, data)
+}
+
+func (c *wsClient) send(v map[string]any) {
+	c.t.Helper()
+	if err := c.write(v); err != nil {
 		c.t.Fatalf("ws write: %v", err)
+	}
+}
+
+// reply is send for an answering goroutine, which may not stop the
+// test: a failed write is an error unless cleanup is closing the socket.
+func (c *wsClient) reply(v map[string]any) {
+	c.t.Helper()
+	if err := c.write(v); err != nil && !c.closing.Load() {
+		c.t.Errorf("ws write: %v", err)
 	}
 }
 
@@ -203,7 +228,7 @@ func (c *wsClient) register(name string) string {
 // acks every command and reports the implied state.
 func (c *wsClient) pumpEndpoint(t *testing.T, state *endpointState) {
 	t.Helper()
-	go func() {
+	c.answerers.Go(func() {
 		for f := range c.recv {
 			if f["type"] != "endpoint-cmd" {
 				continue
@@ -230,7 +255,7 @@ func (c *wsClient) pumpEndpoint(t *testing.T, state *endpointState) {
 					state.rate = floatField(f, "rate")
 				}
 			})
-			c.send(map[string]any{"type": "cmd-result", "id": id, "ok": true})
+			c.reply(map[string]any{"type": "cmd-result", "id": id, "ok": true})
 			// The report is what updates the mirror.
 			rep := map[string]any{
 				"type": "session-report", "playing": state.playing,
@@ -240,9 +265,9 @@ func (c *wsClient) pumpEndpoint(t *testing.T, state *endpointState) {
 				rep["itemPids"] = state.pids
 				rep["queueVersion"] = 1
 			}
-			c.send(rep)
+			c.reply(rep)
 		}
-	}()
+	})
 }
 
 // pumpRefusing answers routed endpoint commands the way a client that
@@ -251,22 +276,22 @@ func (c *wsClient) pumpEndpoint(t *testing.T, state *endpointState) {
 // session exists for the refusals that follow.
 func (c *wsClient) pumpRefusing(t *testing.T, ackLoad bool, code, message string) {
 	t.Helper()
-	go func() {
+	c.answerers.Go(func() {
 		for f := range c.recv {
 			if f["type"] != "endpoint-cmd" {
 				continue
 			}
 			id, _ := f["id"].(string)
 			if ackLoad && f["verb"] == "load" {
-				c.send(map[string]any{"type": "cmd-result", "id": id, "ok": true})
+				c.reply(map[string]any{"type": "cmd-result", "id": id, "ok": true})
 				continue
 			}
-			c.send(map[string]any{
+			c.reply(map[string]any{
 				"type": "cmd-result", "id": id, "ok": false,
 				"code": code, "message": message,
 			})
 		}
-	}()
+	})
 }
 
 type endpointState struct {
@@ -288,8 +313,8 @@ func newEndpointState() *endpointState {
 
 func (s *endpointState) mu(fn func()) {
 	<-s.lock
+	defer func() { s.lock <- struct{}{} }()
 	fn()
-	s.lock <- struct{}{}
 }
 
 func stringSlice(v any) []string {

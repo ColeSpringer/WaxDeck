@@ -78,7 +78,7 @@ func TestARepairRetiresCursorsOnlyOnceItHasRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for svc.DrainLongToolTasks(ctx) {
+	for svc.Tools.DrainLongToolTasks(ctx) {
 	}
 	if row, err := svc.db.ToolTaskByID(ctx, refused.ID); err != nil || row.State != taskStateFailed {
 		t.Fatalf("the repair refused at its first step = %+v (%v), want it failed", row, err)
@@ -99,7 +99,7 @@ func TestARepairRetiresCursorsOnlyOnceItHasRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !svc.DrainLongToolTasks(ctx) {
+	if !svc.Tools.DrainLongToolTasks(ctx) {
 		t.Fatal("the repair did not run")
 	}
 	if row, err := svc.db.ToolTaskByID(ctx, task.ID); err != nil || row.WaitReason != "catalog-maintenance" {
@@ -111,7 +111,7 @@ func TestARepairRetiresCursorsOnlyOnceItHasRun(t *testing.T) {
 	if retired(t, ctx, svc, uc, before) {
 		t.Fatal("a repair a hand-off cut short retired the cursors")
 	}
-	if !svc.drainToolTasksAt(ctx, wdb.TaskTypes{Only: longToolTasks}, time.Now().Add(time.Hour).UnixNano()) {
+	if !svc.Tools.drainToolTasksAt(ctx, wdb.TaskTypes{Only: longToolTasks}, time.Now().Add(time.Hour).UnixNano()) {
 		t.Fatal("the waiting repair did not run again")
 	}
 	repairSummary(t, ctx, svc, uc, task.ID)

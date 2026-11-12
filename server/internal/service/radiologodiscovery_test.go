@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// flat is the tiers in the order radioLogoCandidates consumes them,
+// flat is the tiers in the order logoCandidates consumes them,
 // minus the conventional guesses it interleaves. og trails, which is
 // the ordering the budget truncation makes load-bearing.
 func flat(l iconLinks) []string {
@@ -105,12 +105,12 @@ func TestIconLinksIn(t *testing.T) {
 
 func TestRadioLogoCandidates(t *testing.T) {
 	t.Parallel()
-	l := &Library{}
+	l := bareLibrary(&core{})
 
 	// With no homepage the stream host is the only lead there is, which
 	// is the By-URL station's case.
 	t.Run("stream host when there is no homepage", func(t *testing.T) {
-		got := l.radioLogoCandidates(t.Context(), "", "https://ice.example/live.mp3")
+		got := l.Radio.logoCandidates(t.Context(), "", "https://ice.example/live.mp3")
 		if len(got) != 1 || got[0] != "https://ice.example/favicon.ico" {
 			t.Fatalf("candidates = %v", got)
 		}
@@ -119,13 +119,13 @@ func TestRadioLogoCandidates(t *testing.T) {
 	// A stream URL that is not fetchable proposes nothing rather than a
 	// candidate that cannot be tried.
 	t.Run("a non-http stream proposes nothing", func(t *testing.T) {
-		if got := l.radioLogoCandidates(t.Context(), "", "rtsp://ice.example/live"); len(got) != 0 {
+		if got := l.Radio.logoCandidates(t.Context(), "", "rtsp://ice.example/live"); len(got) != 0 {
 			t.Fatalf("candidates = %v, want none", got)
 		}
 	})
 
 	t.Run("no leads at all", func(t *testing.T) {
-		if got := l.radioLogoCandidates(t.Context(), "", ""); len(got) != 0 {
+		if got := l.Radio.logoCandidates(t.Context(), "", ""); len(got) != 0 {
 			t.Fatalf("candidates = %v, want none", got)
 		}
 	})

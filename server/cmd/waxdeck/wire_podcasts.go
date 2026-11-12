@@ -29,7 +29,7 @@ func startPodcastWorkers(ctx context.Context, group *supervise.Group, svc *servi
 			case <-ctx.Done():
 				return nil
 			case <-tick.C:
-				svc.RefreshDueFeeds(ctx, refreshEvery)
+				svc.Podcasts.RefreshDueFeeds(ctx, refreshEvery)
 			}
 		}
 	})
@@ -42,7 +42,7 @@ func startPodcastWorkers(ctx context.Context, group *supervise.Group, svc *servi
 	if cfg.podping.on {
 		client := podping.New(podping.Config{NodeURL: cfg.podping.node, UserAgent: agent})
 		watcher := podping.NewWatcher(client, log, func(ctx context.Context, ping podping.Ping) {
-			svc.NotePodping(ctx, ping.IRI)
+			svc.Podcasts.NotePodping(ctx, ping.IRI)
 		})
 		pinned := splitNonEmpty(cfg.podping.writers, ",")
 		if len(pinned) > 0 {
@@ -64,7 +64,7 @@ func startPodcastWorkers(ctx context.Context, group *supervise.Group, svc *servi
 			case <-ctx.Done():
 				return nil
 			case <-tick.C:
-				svc.SweepRetention(ctx)
+				svc.Podcasts.SweepRetention(ctx)
 			}
 		}
 	})
@@ -76,7 +76,7 @@ func startPodcastWorkers(ctx context.Context, group *supervise.Group, svc *servi
 			case <-ctx.Done():
 				return nil
 			case <-tick.C:
-				for svc.DrainFetchQueue(ctx) {
+				for svc.Podcasts.DrainFetchQueue(ctx) {
 					if ctx.Err() != nil {
 						return nil
 					}

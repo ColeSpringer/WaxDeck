@@ -21,7 +21,7 @@ import (
 // every earlier lease.
 func drainAt(ctx context.Context, svc *Library, n int) bool {
 	now := time.Now().Add(time.Duration(n) * 2 * toolTaskLease).UnixNano()
-	return svc.drainToolTasksAt(ctx, wdb.TaskTypes{Except: longToolTasks}, now)
+	return svc.Tools.drainToolTasksAt(ctx, wdb.TaskTypes{Except: longToolTasks}, now)
 }
 
 // busyOnce answers a busy catalog the first time op runs, as a scan or
@@ -43,19 +43,21 @@ func busyOnce(op string) func(string) error {
 func TestASecondToolTaskOnABookIsRefusedWhileTheFirstIsLive(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, book, dir, _ := bookToolFixture(t, false)
-	first, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	first, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	parts := partFiles(t, ctx, svc, book)
-	svc.toolStepHook = stopAt("trashing", func() { trashAs(t, ctx, svc, taskTypeBookMerge, parts[0]) })
+	svc.Tools.toolStepHook = stopAt("trashing", func() { trashAs(t, ctx, svc, taskTypeBookMerge, parts[0]) })
 	if err := attempt(t, ctx, svc, 1); !errors.Is(err, errStopped) {
 		t.Fatalf("first attempt = %v, want it stopped mid-trash", err)
 	}
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	for _, start := range []func() (ToolTaskDTO, error){
-		func() (ToolTaskDTO, error) { return svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false) },
-		func() (ToolTaskDTO, error) { return svc.StartBookSplit(ctx, uc, apiPID(PrefixBook, book), false) },
+		func() (ToolTaskDTO, error) {
+			return svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+		},
+		func() (ToolTaskDTO, error) { return svc.Tools.StartBookSplit(ctx, uc, apiPID(PrefixBook, book), false) },
 	} {
 		_, err := start()
 		if p := RefusalParams(err); KindOf(err) != KindConflict || p["reason"] != refusalTaskRunning || p["task"] != first.ID {
@@ -75,8 +77,8 @@ func TestASecondToolTaskOnABookIsRefusedWhileTheFirstIsLive(t *testing.T) {
 func TestARunHoldsItsLeaseThroughEveryStep(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, book, _, _ := bookToolFixture(t, false)
-	svc.toolLeaseEvery = 5 * time.Millisecond
-	task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	svc.Tools.toolLeaseEvery = 5 * time.Millisecond
+	task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,14 +88,14 @@ func TestARunHoldsItsLeaseThroughEveryStep(t *testing.T) {
 	}
 	leased := row.LeaseUntilNS
 	var renewed int64
-	svc.toolStepHook = func(step string) error {
+	svc.Tools.toolStepHook = func(step string) error {
 		if step == "trashed" {
 			time.Sleep(60 * time.Millisecond)
 			renewed = toolTaskRow(t, ctx, svc, task.ID).LeaseUntilNS
 		}
 		return nil
 	}
-	if err := svc.runToolTask(ctx, &row); err != nil {
+	if err := svc.Tools.runToolTask(ctx, &row); err != nil {
 		t.Fatal(err)
 	}
 	if renewed <= leased {
@@ -117,20 +119,20 @@ func toolTaskRow(t *testing.T, ctx context.Context, svc *Library, id string) wdb
 func TestTheRetirePassLeavesATaskARunHolds(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, book, _, _ := chapteredBookFixture(t)
-	task, err := svc.StartBookSplit(ctx, uc, apiPID(PrefixBook, book), false)
+	task, err := svc.Tools.StartBookSplit(ctx, uc, apiPID(PrefixBook, book), false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for n := 1; n <= 2; n++ {
-		svc.toolStepHook = stopAt("producing", nil)
+		svc.Tools.toolStepHook = stopAt("producing", nil)
 		if err := attempt(t, ctx, svc, n); !errors.Is(err, errStopped) {
 			t.Fatalf("attempt %d = %v, want it stopped", n, err)
 		}
 	}
 	var during string
-	svc.toolStepHook = func(step string) error {
+	svc.Tools.toolStepHook = func(step string) error {
 		if step == "producing" {
-			svc.retireExhaustedToolTasks(ctx, time.Now().Add(20*toolTaskLease).UnixNano())
+			svc.Tools.retireExhaustedToolTasks(ctx, time.Now().Add(20*toolTaskLease).UnixNano())
 			during = toolTaskRow(t, ctx, svc, task.ID).State
 		}
 		return nil
@@ -155,15 +157,15 @@ func TestTheRetirePassLeavesATaskARunHolds(t *testing.T) {
 func TestARerunMissingItsOutputPutsBackAndProducesItAgain(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, book, dir, engine := bookToolFixture(t, false)
-	if _, err := svc.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
 		t.Fatal(err)
 	}
-	task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	parts := partFiles(t, ctx, svc, book)
-	svc.toolStepHook = stopAt("trashing", func() { trashAs(t, ctx, svc, taskTypeBookMerge, parts[0]) })
+	svc.Tools.toolStepHook = stopAt("trashing", func() { trashAs(t, ctx, svc, taskTypeBookMerge, parts[0]) })
 	if err := attempt(t, ctx, svc, 1); !errors.Is(err, errStopped) {
 		t.Fatalf("first attempt = %v, want it stopped mid-trash", err)
 	}
@@ -173,7 +175,7 @@ func TestARerunMissingItsOutputPutsBackAndProducesItAgain(t *testing.T) {
 		}
 	}
 	var trashedWithoutOutput bool
-	svc.toolStepHook = func(step string) error {
+	svc.Tools.toolStepHook = func(step string) error {
 		if step == "trashing" && len(hiddenLeft(t, dir)) == 0 {
 			trashedWithoutOutput = true
 		}
@@ -207,12 +209,12 @@ func TestARerunAfterAnUnrecordedPutBackTrashesNothing(t *testing.T) {
 	t.Parallel()
 	skipWithoutUnwritablePaths(t)
 	ctx, svc, uc, book, dir, _ := bookToolFixture(t, true)
-	task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.deleteApplyHook = func(context.Context) { lockFolder(t, filepath.Join(dir, "CD2")) }
-	svc.toolStepHook = stopAt("undone", nil)
+	svc.Tools.deleteApplyHook = func(context.Context) { lockFolder(t, filepath.Join(dir, "CD2")) }
+	svc.Tools.toolStepHook = stopAt("undone", nil)
 	if err := attempt(t, ctx, svc, 1); !errors.Is(err, errStopped) {
 		t.Fatalf("first attempt = %v, want it stopped once the put-back was done", err)
 	}
@@ -226,7 +228,7 @@ func TestARerunAfterAnUnrecordedPutBackTrashesNothing(t *testing.T) {
 	if recorded.Step != "" || recorded.TrashFromNS != 0 {
 		t.Fatalf("the task records step %q from %d after the put-back, want the start", recorded.Step, recorded.TrashFromNS)
 	}
-	svc.deleteApplyHook, svc.toolStepHook = nil, nil
+	svc.Tools.deleteApplyHook, svc.Tools.toolStepHook = nil, nil
 	if err := os.Chmod(filepath.Join(dir, "CD2"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -248,14 +250,14 @@ func TestARerunAfterAnUnrecordedPutBackTrashesNothing(t *testing.T) {
 func TestABusyCatalogAtTheTrashIsWaitedOut(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, book, dir, engine := bookToolFixture(t, false)
-	if _, err := svc.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
 		t.Fatal(err)
 	}
-	task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.mutateHook = busyOnce("trash")
+	svc.Tools.mutateHook = busyOnce("trash")
 	if !drainAt(ctx, svc, 1) {
 		t.Fatal("the worker found no task")
 	}
@@ -283,14 +285,14 @@ func TestABusyCatalogAtTheTrashIsWaitedOut(t *testing.T) {
 func TestABusyCatalogAtTheScanIsWaitedOut(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, book, dir, _ := bookToolFixture(t, false)
-	if _, err := svc.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
 		t.Fatal(err)
 	}
-	task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.mutateHook = busyOnce("scan")
+	svc.Tools.mutateHook = busyOnce("scan")
 	err = attempt(t, ctx, svc, 1)
 	var wait *toolRetry
 	if !errors.As(err, &wait) || KindOf(err) != KindCatalogBusy {
@@ -307,21 +309,21 @@ func TestABusyCatalogAtTheScanIsWaitedOut(t *testing.T) {
 func TestALastAttemptThatWaitsAfterTheTrashIsHandedBack(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, book, dir, _ := bookToolFixture(t, false)
-	if _, err := svc.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
 		t.Fatal(err)
 	}
-	task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for n, step := range []string{"trashed", "placed"} {
-		svc.toolStepHook = stopAt(step, nil)
+		svc.Tools.toolStepHook = stopAt(step, nil)
 		if err := attempt(t, ctx, svc, n+1); !errors.Is(err, errStopped) {
 			t.Fatalf("attempt %d = %v, want it stopped after %s", n+1, err, step)
 		}
 	}
-	svc.toolStepHook = nil
-	svc.mutateHook = busyOnce("scan")
+	svc.Tools.toolStepHook = nil
+	svc.Tools.mutateHook = busyOnce("scan")
 	if !drainAt(ctx, svc, 3) {
 		t.Fatal("the worker found no task")
 	}
@@ -339,12 +341,12 @@ func TestALastAttemptThatWaitsAfterTheTrashIsHandedBack(t *testing.T) {
 func TestTheRunsTrashIsCountedFromTheTrash(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, book, _, _ := bookToolFixture(t, false)
-	task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	parts := partFiles(t, ctx, svc, book)
-	svc.toolStepHook = stopAt("trashing", func() {
+	svc.Tools.toolStepHook = stopAt("trashing", func() {
 		trashAs(t, ctx, svc, taskTypeBookMerge, parts[0])
 		trashAs(t, ctx, svc, "user", parts[1])
 	})
@@ -356,7 +358,7 @@ func TestTheRunsTrashIsCountedFromTheTrash(t *testing.T) {
 	if err := json.Unmarshal([]byte(row.Params), &p); err != nil {
 		t.Fatal(err)
 	}
-	b, err := svc.bookToolFor(ctx, &row, &p)
+	b, err := svc.Tools.bookToolFor(ctx, &row, &p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -374,19 +376,19 @@ func TestTheRunsTrashIsCountedFromTheTrash(t *testing.T) {
 func TestAReadOnlyFlagAfterTheTrashStartedIsWaitedOut(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, book, dir, _ := bookToolFixture(t, false)
-	if _, err := svc.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
 		t.Fatal(err)
 	}
-	task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	parts := partFiles(t, ctx, svc, book)
-	svc.toolStepHook = stopAt("trashing", func() { trashAs(t, ctx, svc, taskTypeBookMerge, parts[0]) })
+	svc.Tools.toolStepHook = stopAt("trashing", func() { trashAs(t, ctx, svc, taskTypeBookMerge, parts[0]) })
 	if err := attempt(t, ctx, svc, 1); !errors.Is(err, errStopped) {
 		t.Fatalf("first attempt = %v, want it stopped mid-trash", err)
 	}
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	flagReadOnly(t, ctx, svc, true)
 	err = attempt(t, ctx, svc, 2)
 	var wait *toolRetry
@@ -415,7 +417,7 @@ func flagReadOnly(t *testing.T, ctx context.Context, svc *Library, on bool) {
 			t.Fatal(err)
 		}
 	}
-	svc.refreshLibraryState(ctx)
+	svc.Roots.refreshLibraryState(ctx)
 }
 
 // A part the catalog has that is not on disk where it has it, as the
@@ -426,12 +428,12 @@ func flagReadOnly(t *testing.T, ctx context.Context, svc *Library, on bool) {
 func TestAPartMissingFromItsPlaceStopsTheMergeKeepingItsOutput(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, book, dir, _ := bookToolFixture(t, true)
-	if _, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false); err != nil {
+	if _, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false); err != nil {
 		t.Fatal(err)
 	}
 	parts := partFiles(t, ctx, svc, book)
 	cd2 := filepath.Join(dir, "CD2", "part 2.m4b")
-	svc.toolStepHook = stopAt("trashing", func() {
+	svc.Tools.toolStepHook = stopAt("trashing", func() {
 		trashAs(t, ctx, svc, taskTypeBookMerge, parts[0])
 		stranded := filepath.Join(filepath.Dir(filepath.Dir(dir)), model.TrashDirName, "lost", "part 2.m4b")
 		if err := os.MkdirAll(filepath.Dir(stranded), 0o755); err != nil {
@@ -444,7 +446,7 @@ func TestAPartMissingFromItsPlaceStopsTheMergeKeepingItsOutput(t *testing.T) {
 	if err := attempt(t, ctx, svc, 1); !errors.Is(err, errStopped) {
 		t.Fatalf("first attempt = %v, want it stopped mid-trash", err)
 	}
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	var err error
 	for n := 2; n <= 2+toolStrandWaits; n++ {
 		err = attempt(t, ctx, svc, n)
@@ -470,18 +472,18 @@ func TestAPartMissingFromItsPlaceStopsTheMergeKeepingItsOutput(t *testing.T) {
 func TestARunRecordedBeforeItsTaskWasDoneIsRecordedOnce(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, book, dir, _ := bookToolFixture(t, false)
-	if _, err := svc.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
+	if _, err := svc.Playback.Checkpoint(ctx, uc, apiPID(PrefixBook, book), 4200, nil); err != nil {
 		t.Fatal(err)
 	}
-	task, err := svc.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
+	task, err := svc.Tools.StartBookMerge(ctx, uc, apiPID(PrefixBook, book), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.toolStepHook = stopAt("audited", nil)
+	svc.Tools.toolStepHook = stopAt("audited", nil)
 	if err := attempt(t, ctx, svc, 1); !errors.Is(err, errStopped) {
 		t.Fatalf("first attempt = %v, want it stopped once recorded", err)
 	}
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	if err := attempt(t, ctx, svc, 2); err != nil {
 		t.Fatalf("the rerun = %v, want it finished", err)
 	}

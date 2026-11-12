@@ -44,7 +44,7 @@ func trashedItems() *query.Builder {
 // Named rather than inlined so the predicate has one spelling where a
 // builder is what is in hand. It is not the only spelling in the tree,
 // and that is worth knowing before renaming the field or adding a
-// fourth state: playlists.go's withoutArchived conjoins the same
+// fourth state: playlists_rules.go's withoutArchived conjoins the same
 // condition onto a rule's node tree, which is not a builder and cannot
 // call this, and `archived` below asks the same question of a hydrated
 // view. Three encodings, one meaning.
@@ -87,7 +87,7 @@ var listableStates = []model.ItemState{
 // itemsAmong runs the query base builds once per 400 of the pids, each
 // run narrowed to its share of them, and answers what came back by pid.
 // 400 keeps every run under the engine's 500-value membership test.
-func (l *Library) itemsAmong(ctx context.Context, pids []model.PID, base func() *query.Builder) (map[model.PID]*model.ItemView, error) {
+func (l *core) itemsAmong(ctx context.Context, pids []model.PID, base func() *query.Builder) (map[model.PID]*model.ItemView, error) {
 	out := make(map[model.PID]*model.ItemView, len(pids))
 	for start := 0; start < len(pids); start += 400 {
 		chunk := pids[start:min(start+400, len(pids))]

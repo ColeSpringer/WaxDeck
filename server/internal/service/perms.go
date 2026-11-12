@@ -6,22 +6,12 @@ import (
 	"reflect"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
-	"github.com/colespringer/waxbin/read"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
-
-// tagValueCache memoizes each custom-tag field's stored spellings within
-// one generation of the catalog they were read from.
-type tagValueCache struct {
-	mu      sync.Mutex
-	gen     facetGeneration
-	byField map[string][]string
-}
 
 // Permissions is one account's granular toggles. Administrators
 // implicitly hold every permission and carry no tag rules; these govern
@@ -136,7 +126,7 @@ func validatePermissions(p Permissions) error {
 // visibility check. Episodes gate on the feed-declared explicit flag;
 // tag rules cover the music and audiobook side, where no canonical
 // explicit flag exists.
-func (l *Library) allowedByContent(ctx context.Context, uc *UserCtx, it *model.ItemView) bool {
+func (l *Grants) allowedByContent(ctx context.Context, uc *UserCtx, it *model.ItemView) bool {
 	if uc.Admin || uc.ContentUnrestricted() {
 		return true
 	}
@@ -187,7 +177,7 @@ func advisoryAllows(uc *UserCtx, it *model.ItemView) bool {
 // caller that happened to need it: a detail read hands its row straight
 // in, and a permission rule that panics on the input one caller already
 // treats as a refusal is not a shared rule.
-func (l *Library) episodeAllowed(ctx context.Context, uc *UserCtx, ep *model.Episode) bool {
+func (l *Grants) episodeAllowed(ctx context.Context, uc *UserCtx, ep *model.Episode) bool {
 	if ep == nil {
 		return false
 	}
@@ -197,14 +187,14 @@ func (l *Library) episodeAllowed(ctx context.Context, uc *UserCtx, ep *model.Epi
 	if ep.Explicit {
 		return false
 	}
-	show, err := l.readShow(ctx, ep.PodcastPID)
+	show, err := l.Podcasts.readShow(ctx, ep.PodcastPID)
 	return err == nil && !show.Explicit
 }
 
 // contentAllowsPID is allowedByContent for callers holding only a PID
 // (search hits): unrestricted callers short-circuit, restricted ones
 // pay one item read.
-func (l *Library) contentAllowsPID(ctx context.Context, uc *UserCtx, pid model.PID) bool {
+func (l *Grants) contentAllowsPID(ctx context.Context, uc *UserCtx, pid model.PID) bool {
 	if uc.Admin || uc.ContentUnrestricted() {
 		return true
 	}
@@ -241,7 +231,7 @@ func (l *Library) contentAllowsPID(ctx context.Context, uc *UserCtx, pid model.P
 // on an unreadable tag read, and the listing path carries this node in
 // place of that filter, so a transient store error must not serve a page
 // the deny rules would have hidden.
-func (l *Library) contentRuleNode(ctx context.Context, uc *UserCtx) query.Node {
+func (l *Grants) contentRuleNode(ctx context.Context, uc *UserCtx) query.Node {
 	if uc.Admin || uc.ContentUnrestricted() {
 		return nil
 	}
@@ -275,7 +265,7 @@ func (l *Library) contentRuleNode(ctx context.Context, uc *UserCtx) query.Node {
 			conds = append(conds, query.Cond{Field: field, Op: query.OpIsPresent})
 			continue
 		}
-		spellings, err := l.tagSpellings(ctx, field, r.Value)
+		spellings, err := l.Reads.tagSpellings(ctx, field, r.Value)
 		if err != nil {
 			noteDegraded(ctx)
 			return episodesAside(matchNothing)
@@ -293,7 +283,7 @@ func (l *Library) contentRuleNode(ctx context.Context, uc *UserCtx) query.Node {
 			conds = append(conds, query.Cond{Field: field, Op: query.OpIsMissing})
 			continue
 		}
-		spellings, err := l.tagSpellings(ctx, field, r.Value)
+		spellings, err := l.Reads.tagSpellings(ctx, field, r.Value)
 		if err != nil {
 			noteDegraded(ctx)
 			return episodesAside(matchNothing)
@@ -322,83 +312,52 @@ func tagRuleField(key string) (string, bool) {
 	return facetTagPrefix + canonical, true
 }
 
-// tagSpellings lists the stored values of a tag field that case-fold to
-// value, which is how EqualFold survives the trip into SQL. An error is
-// the caller's to fail closed on; a value nothing carries is a nil
-// slice and no error.
-//
-// Read off the catalog's own aggregation over the whole library, not the
-// caller's scope: this builds a filter, so it needs every spelling that
-// exists rather than the ones the caller can already see. Memoized per
-// field on the facet generation, beside the browse enumerations and for
-// the same reason - a listing page asks this once per rule per request
-// otherwise. Published the way facet buckets are: only while the
-// generation the read started under is still current, so a slow
-// aggregation neither lands stale nor rolls the stamp back over a newer
-// field's entry.
-func (l *Library) tagSpellings(ctx context.Context, field, value string) ([]string, error) {
-	gen := l.facetGeneration(ctx)
-	l.tagValues.mu.Lock()
-	if l.tagValues.gen == gen {
-		if held, ok := l.tagValues.byField[field]; ok {
-			l.tagValues.mu.Unlock()
-			return foldMatching(held, value), nil
+// tagVerdicts answers which of the items (episodes and trashed items
+// aside) pass the caller's tag rules, one query per 400; nil for a
+// caller no tag rule narrows, who needs no answer.
+func (l *Grants) tagVerdicts(ctx context.Context, uc *UserCtx, items []*model.ItemView) (map[model.PID]bool, error) {
+	if !tagRestricted(uc) {
+		return nil, nil
+	}
+	rules := l.contentRuleNode(ctx, uc)
+	if rules == nil {
+		return nil, nil
+	}
+	var pids []model.PID
+	seen := map[model.PID]bool{}
+	for _, it := range items {
+		if it == nil || it.Kind == model.KindEpisode || archived(it) || seen[it.PID] {
+			continue
 		}
+		seen[it.PID] = true
+		pids = append(pids, it.PID)
 	}
-	l.tagValues.mu.Unlock()
-
-	// visibleItems, not a bare query: a spelling carried only by trashed
-	// items cannot change any answer - the state predicate drops those
-	// rows wherever this node is conjoined - and narrowing the
-	// aggregation is the cheaper way to say so.
-	var res *read.FacetResult
-	err := l.fallbackFault("tag spellings")
-	if err == nil {
-		res, err = l.lib.Facet(ctx, visibleItems().Build(),
-			read.GroupBy(field), read.FacetOrderLabel, 0, "")
-	}
+	found, err := l.itemsAmong(ctx, pids, func() *query.Builder { return visibleItems().WhereNode(rules) })
 	if err != nil {
-		l.log.Warn("enumerating tag values for a content rule", "field", field, "err", err)
-		return nil, classify(err)
+		return nil, err
 	}
-	stored := make([]string, 0, len(res.Buckets))
-	for _, b := range res.Buckets {
-		if !b.IsUnknown && b.Display != "" {
-			stored = append(stored, b.Display)
-		}
+	allowed := make(map[model.PID]bool, len(found))
+	for pid := range found {
+		allowed[pid] = true
 	}
-	l.publishTagValues(ctx, gen, field, stored)
-	return foldMatching(stored, value), nil
+	return allowed, nil
 }
 
-// publishTagValues stores one field's spellings, read under gen, while gen
-// is still the current generation: read before the lock, which holds no
-// catalog read, with only a generation dominating the held one installed
-// under it, so no publisher holding an older one can land after a newer
-// publish.
-func (l *Library) publishTagValues(ctx context.Context, gen facetGeneration, field string, stored []string) {
-	if l.facetGeneration(ctx) != gen {
-		return
+// contentNarrow is the content half of a reader's narrowing: the tag
+// rules (episodes aside, which the advisory flags decide) and, for a
+// caller who hides explicit content, both advisory flags, which read 0
+// off anything that is not an episode. Nil for a caller nothing hides.
+func (l *Grants) contentNarrow(ctx context.Context, uc *UserCtx) []query.Node {
+	var nodes []query.Node
+	if rules := l.contentRuleNode(ctx, uc); rules != nil {
+		nodes = append(nodes, rules)
 	}
-	l.tagValues.mu.Lock()
-	defer l.tagValues.mu.Unlock()
-	if l.tagValues.byField != nil && !gen.dominates(l.tagValues.gen) {
-		return
+	if !uc.Admin && !uc.Explicit {
+		nodes = append(nodes,
+			query.Cond{Field: "explicit", Op: query.OpIs, Value: 0},
+			query.Cond{Field: "podcast_explicit", Op: query.OpIs, Value: 0})
 	}
-	if l.tagValues.gen != gen || l.tagValues.byField == nil {
-		l.tagValues.gen, l.tagValues.byField = gen, map[string][]string{}
-	}
-	l.tagValues.byField[field] = stored
-}
-
-func foldMatching(stored []string, value string) []string {
-	out := make([]string, 0, 1)
-	for _, s := range stored {
-		if strings.EqualFold(s, value) {
-			out = append(out, s)
-		}
-	}
-	return out
+	return nodes
 }
 
 // matchesTagRules applies allow-then-deny: every allow rule must match
@@ -486,7 +445,7 @@ func contentRulesChanged(a, b Permissions) bool {
 // UserSharedOutputsAllowed answers the connect service's permission
 // callback: whether the user may control shared device endpoints.
 // Unknown, disabled and pending users fail closed.
-func (l *Library) UserSharedOutputsAllowed(userID string) bool {
+func (l *Grants) UserSharedOutputsAllowed(userID string) bool {
 	u, err := l.db.UserByID(context.Background(), userID)
 	if err != nil || u.Disabled || u.Pending {
 		return false

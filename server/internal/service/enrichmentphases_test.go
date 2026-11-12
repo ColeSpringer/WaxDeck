@@ -61,13 +61,13 @@ func openEnrichFixture(t *testing.T, mutate func(*Config)) (context.Context, *Li
 		svc.Close()
 		store.Close()
 	})
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "admin", Password: "correct-horse", Roles: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 				c.EnrichmentRetryMissesDays = tc.retryDays
 				c.EnrichmentProviders = tc.providers
 			})
-			st, err := svc.EnrichmentStatusFor(ctx, uc)
+			st, err := svc.Enrichment.StatusFor(ctx, uc)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -182,7 +182,7 @@ func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 			// The library is empty, so an accepted force walks nothing.
 			for _, name := range apiPhases() {
 				if !slices.Contains(st.Phases, name) {
-					_, err := svc.RunEnrichment(ctx, uc, false, []string{name}, nil)
+					_, err := svc.Enrichment.RunEnrichment(ctx, uc, false, []string{name}, nil)
 					if KindOf(err) != KindUnsupported || !strings.Contains(err.Error(), "the "+name+" phase") {
 						t.Errorf("forcing %s, not listed = %v, want it refused by name", name, err)
 					}
@@ -230,7 +230,7 @@ func waitForJob(t *testing.T, ctx context.Context, svc *Library, pid model.PID) 
 func TestScheduledEnrichmentRefusesWithNothingConfigured(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := openEnrichFixture(t, func(*Config) {})
-	err := svc.RunScheduledEnrichment(ctx)
+	err := svc.Enrichment.RunScheduledEnrichment(ctx)
 	if KindOf(err) != KindUnsupported {
 		t.Fatalf("scheduled run = %v (kind %v), want unsupported", err, KindOf(err))
 	}
@@ -245,15 +245,15 @@ func TestScheduledEnrichmentStartsAPass(t *testing.T) {
 			fakeCapProvider{name: "faces", caps: enrich.CapArtistArt},
 		}
 	})
-	if err := svc.RunScheduledEnrichment(ctx); err != nil {
+	if err := svc.Enrichment.RunScheduledEnrichment(ctx); err != nil {
 		t.Fatalf("scheduled run: %v", err)
 	}
 	// The cron loop's own gate: due at 03:45 for a window that spans it.
 	base := time.Date(2026, 9, 6, 3, 0, 0, 0, time.Local)
-	if !svc.DueSchedule(ctx, "enrich", base, base.Add(time.Hour)) {
+	if !svc.Integrations.DueSchedule(ctx, "enrich", base, base.Add(time.Hour)) {
 		t.Error("the enrich schedule was not due across its default window")
 	}
-	if svc.DueSchedule(ctx, "enrich", base, base.Add(10*time.Minute)) {
+	if svc.Integrations.DueSchedule(ctx, "enrich", base, base.Add(10*time.Minute)) {
 		t.Error("the enrich schedule fired before its window")
 	}
 }
@@ -263,15 +263,15 @@ func TestRunEnrichmentForcePhases(t *testing.T) {
 	ctx, svc, uc := openEnrichFixture(t, func(c *Config) {
 		c.EnrichmentProviders = []enrich.Provider{fakeCapProvider{name: "faces", caps: enrich.CapArtistArt}}
 	})
-	if _, err := svc.RunEnrichment(ctx, uc, true, []string{"artist-art"}, nil); KindOf(err) != KindInvalid {
+	if _, err := svc.Enrichment.RunEnrichment(ctx, uc, true, []string{"artist-art"}, nil); KindOf(err) != KindInvalid {
 		t.Errorf("force beside forcePhases = %v, want invalid", err)
 	}
-	if _, err := svc.RunEnrichment(ctx, uc, false, []string{"everything"}, nil); KindOf(err) != KindInvalid {
+	if _, err := svc.Enrichment.RunEnrichment(ctx, uc, false, []string{"everything"}, nil); KindOf(err) != KindInvalid {
 		t.Errorf("an unknown phase = %v, want invalid", err)
 	}
 	// A phase this server does not run is refused in its own knobs'
 	// words, not the catalog's.
-	_, err := svc.RunEnrichment(ctx, uc, false, []string{"releases"}, nil)
+	_, err := svc.Enrichment.RunEnrichment(ctx, uc, false, []string{"releases"}, nil)
 	if KindOf(err) != KindUnsupported {
 		t.Fatalf("an unrunnable phase = %v, want unsupported", err)
 	}
@@ -288,13 +288,13 @@ func TestRunEnrichmentForcePhases(t *testing.T) {
 	// Both art backfills open on covers or auxiliary art, and the
 	// refusal says both.
 	for _, phase := range []string{"group-art", "album-art"} {
-		_, err = svc.RunEnrichment(ctx, uc, false, []string{phase}, nil)
+		_, err = svc.Enrichment.RunEnrichment(ctx, uc, false, []string{phase}, nil)
 		if KindOf(err) != KindUnsupported || !strings.Contains(err.Error(), "WAXDECK_ENRICHMENT_CONTACT") ||
 			!strings.Contains(err.Error(), "auxiliary art") {
 			t.Errorf("%s refusal = %v", phase, err)
 		}
 	}
-	pid, err := svc.RunEnrichment(ctx, uc, false, []string{"artist-art"}, nil)
+	pid, err := svc.Enrichment.RunEnrichment(ctx, uc, false, []string{"artist-art"}, nil)
 	if err != nil || !strings.HasPrefix(pid, PrefixJob+"-") {
 		t.Fatalf("a runnable phase = %q, %v; want a job", pid, err)
 	}
@@ -307,7 +307,7 @@ func TestRunEnrichmentForcePhasesBackstop(t *testing.T) {
 	_, svc, _ := openEnrichFixture(t, func(*Config) {})
 	refusal := waxerr.New(waxerr.CodeUnsupported, "waxbin.StartEnrich",
 		"phase album-release does not run on this install: it needs a MusicBrainz contact and enrichment.match_releases")
-	err := svc.explainEnrichRefusal(refusal, []string{"releases"})
+	err := svc.Enrichment.explainEnrichRefusal(refusal, []string{"releases"})
 	if KindOf(err) != KindUnsupported {
 		t.Fatalf("a refused force = %v, want unsupported", err)
 	}
@@ -330,7 +330,7 @@ func TestEveryCatalogPhaseHasAnAPIName(t *testing.T) {
 	}
 	_, svc, _ := openEnrichFixture(t, func(*Config) {})
 	for _, name := range want {
-		if _, ok := svc.phaseNeed(name); !ok {
+		if _, ok := svc.Enrichment.phaseNeed(name); !ok {
 			t.Errorf("no requirement worded for %s", name)
 		}
 	}
@@ -415,7 +415,7 @@ func TestCoverageCountsLyrics(t *testing.T) {
 			t.Fatal(err)
 		}
 		waitForJob(t, ctx, svc, pid)
-		st, err := svc.EnrichmentStatusFor(ctx, uc)
+		st, err := svc.Enrichment.StatusFor(ctx, uc)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -433,14 +433,14 @@ func TestAPhaseRefusalWithTheContactSetDoesNotAskForIt(t *testing.T) {
 	ctx, svc, uc := openEnrichFixture(t, func(c *Config) {
 		c.EnrichmentContact = "waxdeck@example.test"
 	})
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"lrclib", false}}); err != nil {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"lrclib", false}}); err != nil {
 		t.Fatal(err)
 	}
 	for phase, want := range map[string]string{
 		"lyrics":   "switched off",
 		"releases": "WAXDECK_ENRICHMENT_MATCH_RELEASES",
 	} {
-		_, err := svc.RunEnrichment(ctx, uc, false, []string{phase}, nil)
+		_, err := svc.Enrichment.RunEnrichment(ctx, uc, false, []string{phase}, nil)
 		if KindOf(err) != KindUnsupported || !strings.Contains(err.Error(), want) ||
 			strings.Contains(err.Error(), "WAXDECK_ENRICHMENT_CONTACT") {
 			t.Errorf("forcing %s = %v; want it to say %s and not ask for the contact", phase, err, want)
@@ -472,7 +472,7 @@ func TestPhaseRungsAreTheCatalogs(t *testing.T) {
 		ctx, svc, uc := openEnrichFixture(t, func(c *Config) {
 			c.EnrichmentProviders = []enrich.Provider{rungFake{caps: g.cap, rung: g.rung}}
 		})
-		st, err := svc.EnrichmentStatusFor(ctx, uc)
+		st, err := svc.Enrichment.StatusFor(ctx, uc)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -487,10 +487,10 @@ func TestPhaseRungsAreTheCatalogs(t *testing.T) {
 func TestARefusalBlamesOnlySwitchesThatMatter(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := openSourcesFixture(t)
-	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", false}, {"b", true}, {"fanart", true}}); err != nil {
+	if _, err := svc.Enrichment.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", false}, {"b", true}, {"fanart", true}}); err != nil {
 		t.Fatal(err)
 	}
-	_, err := svc.RunEnrichment(ctx, uc, false, []string{"book-fields"}, nil)
+	_, err := svc.Enrichment.RunEnrichment(ctx, uc, false, []string{"book-fields"}, nil)
 	if KindOf(err) != KindUnsupported || strings.Contains(err.Error(), "switched off") {
 		t.Errorf("forcing book-fields with a lyrics source off = %v, want no blame on the switch", err)
 	}

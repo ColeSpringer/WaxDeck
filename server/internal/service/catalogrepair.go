@@ -122,7 +122,7 @@ func (l *Library) StartCatalogRepair(ctx context.Context, uc *UserCtx) (ToolTask
 	}
 	t := newToolTask(uc, taskTypeCatalogRepair, "", toolTaskParams{}, "")
 	t.LockKey = catalogRepairLock
-	return l.queueLockedToolTask(ctx, t, "a catalog repair")
+	return l.Tools.queueLockedToolTask(ctx, t, "a catalog repair")
 }
 
 // catalogRepairSummary is a repair's report: what each step did, what
@@ -304,7 +304,7 @@ func (l *Library) runCatalogRepair(ctx context.Context, t *wdb.ToolTask) error {
 		run.Steps = append(run.Steps, step.name)
 		t.ProgressPct = 100 * float64(i+1) / float64(len(steps))
 		keep()
-		l.notifyToolTaskProgress(ctx, t.ID)
+		l.Tools.notifyToolTaskProgress(ctx, t.ID)
 	}
 	return nil
 }
@@ -352,7 +352,7 @@ func (l *Library) catalogRepairEnded(ctx context.Context, t *wdb.ToolTask) {
 	if t.Error != "" {
 		detail["error"] = t.Error
 	}
-	l.Audit(ctx, &UserCtx{ID: t.UserID}, "catalog.repair",
+	l.Audit.Record(ctx, &UserCtx{ID: t.UserID}, "catalog.repair",
 		AuditTarget{Kind: "catalog"}, detail)
 }
 

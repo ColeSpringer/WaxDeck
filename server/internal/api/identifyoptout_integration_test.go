@@ -358,7 +358,7 @@ func TestDecliningLeavesNothingInTheMatchQueue(t *testing.T) {
 		}
 	})
 	uploadDeclaring(t, h, h.token, quietTrack(t, "queue-empty"), map[string]any{"identify": false})
-	if h.svc.DrainMatchQueue(t.Context()) {
+	if h.svc.Ingest.DrainMatchQueue(t.Context()) {
 		t.Fatal("the match queue had work after a declined submission")
 	}
 }

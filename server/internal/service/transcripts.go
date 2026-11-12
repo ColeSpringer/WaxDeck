@@ -66,12 +66,12 @@ const (
 // Transcript answers one episode's transcript, fetching and caching on
 // first request. 404 semantics (no transcript announced) stay with the
 // caller: an episode without a pointer never reaches the fetch.
-func (l *Library) Transcript(ctx context.Context, uc *UserCtx, apiEpisodePID string) (Transcript, error) {
+func (l *Podcasts) Transcript(ctx context.Context, uc *UserCtx, apiEpisodePID string) (Transcript, error) {
 	det, err := l.getEpisode(ctx, apiEpisodePID)
 	if err != nil {
 		return Transcript{}, err
 	}
-	if !l.podcastsVisible(ctx, uc) {
+	if !l.Grants.podcastsVisible(ctx, uc) {
 		return Transcript{}, errNotFound("no episode with pid " + apiEpisodePID)
 	}
 	ep := det.Episode
@@ -139,7 +139,7 @@ func (l *Library) Transcript(ctx context.Context, uc *UserCtx, apiEpisodePID str
 }
 
 // cacheTranscript stores one row, holding the cache to its bound.
-func (l *Library) cacheTranscript(ctx context.Context, apiEpisodePID string, row wdb.TranscriptRow) {
+func (l *Podcasts) cacheTranscript(ctx context.Context, apiEpisodePID string, row wdb.TranscriptRow) {
 	bound := cmp.Or(l.transcriptCacheBytes, transcriptCacheMaxBytes)
 	if _, err := l.db.StoreTranscriptCache(ctx, row, bound); err != nil {
 		l.log.Warn("caching transcript", "episode", apiEpisodePID, "err", err)
@@ -153,12 +153,12 @@ func (l *Library) cacheTranscript(ctx context.Context, apiEpisodePID string, row
 // private show's subscribers only, its cap, its kept answer) and its text
 // handed to the catalog's index. The two keep separate stores: this
 // promotes reduced search text, never the cue JSON the display cache holds.
-func (l *Library) CaptureEpisodeTranscript(ctx context.Context, uc *UserCtx, apiEpisodePID string) error {
+func (l *Podcasts) CaptureEpisodeTranscript(ctx context.Context, uc *UserCtx, apiEpisodePID string) error {
 	det, err := l.getEpisode(ctx, apiEpisodePID)
 	if err != nil {
 		return err
 	}
-	if !l.podcastsVisible(ctx, uc) {
+	if !l.Grants.podcastsVisible(ctx, uc) {
 		return errNotFound("no episode with pid " + apiEpisodePID)
 	}
 	ep := det.Episode
@@ -197,7 +197,7 @@ func (l *Library) CaptureEpisodeTranscript(ctx context.Context, uc *UserCtx, api
 
 // fetchTranscript pulls and parses one transcript document through the
 // guarded client, the show's login on each request at its feed's origin.
-func (l *Library) fetchTranscript(ctx context.Context, rawURL, declaredType string, login feedLogin) (Transcript, error) {
+func (l *Podcasts) fetchTranscript(ctx context.Context, rawURL, declaredType string, login feedLogin) (Transcript, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return Transcript{}, fmt.Errorf("bad transcript url: %w", err)
@@ -256,7 +256,7 @@ func hostFailure(ctx context.Context, op string, err error) error {
 // transcriptClient builds the guarded HTTP client once: redirects
 // capped, private addresses refused unless the server allows LAN feed
 // hosts.
-func (l *Library) transcriptClient() *http.Client {
+func (l *Podcasts) transcriptClient() *http.Client {
 	l.transcriptHTTPOnce.Do(func() {
 		l.transcriptHTTP = &http.Client{
 			Transport: guardedTransport(l.allowPrivateFeedHosts),

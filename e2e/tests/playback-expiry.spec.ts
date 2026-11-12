@@ -51,13 +51,10 @@ test('a stream whose token lapsed during a pause is minted again when play meets
 }) => {
   const traffic = await MediaTraffic.watch(app.page);
   const { pid } = await app.seed.item(LONG);
-  // From the top, whatever a run before left: a resume point would have
-  // the player seek into the held stream, which never answers.
-  await app.seed.setPosition(pid, 0);
 
   // It arrives the way a long stream does: still being fetched, with the
   // element waiting on the rest, when its listener pauses.
-  const held = await traffic.holdContinuation(pid);
+  const held = await traffic.holdFromTop(app.seed, pid);
   await app.music.playAlbumOf(pid);
   await expect
     .poll(() => held() !== undefined, {
@@ -136,11 +133,10 @@ test('a play after the browser clock passed the token lifetime mints again befor
   await app.page.clock.install();
   const traffic = await MediaTraffic.watch(app.page);
   const { pid } = await app.seed.item(LONG);
-  await app.seed.setPosition(pid, 0);
   // Held mid-fetch, so the pause lands on it with play left to hear, and
   // it cannot run out or hand the queue on meanwhile. Paused a second in,
   // so that where it resumes tells a resume from a start over.
-  await traffic.holdContinuation(pid);
+  await traffic.holdFromTop(app.seed, pid);
   await app.music.playAlbumOf(pid);
   await expect
     .poll(async () => (await traffic.position(pid)) ?? 0, { message: 'it should play a second in' })
@@ -203,12 +199,11 @@ test('a stream the server refuses stands the queue on its track and never skips'
   const traffic = await MediaTraffic.watch(app.page);
   const { pid: alpha } = await app.seed.item('Alpha Song');
   const { pid: bravo } = await app.seed.item('Bravo Song');
-  await app.seed.setPosition(alpha, 0);
 
   // Alpha is held mid-fetch so it cannot run out on its own: the queue
   // moves when Next moves it. Bravo, the next track, is refused the way a
   // streaming engine that is away refuses it, probe included.
-  const held = await traffic.holdContinuation(alpha);
+  const held = await traffic.holdFromTop(app.seed, alpha);
   const restore = await traffic.refuse(bravo, 502, ENGINE_AWAY);
   await app.music.playAlbumOf(alpha);
   await expect
@@ -220,9 +215,10 @@ test('a stream the server refuses stands the queue on its track and never skips'
     req.url().includes(`/items/${bravo}/play-info`),
   );
 
-  // The start fails out loud, with its retry, and on Bravo.
+  // The start fails out loud, with its retry, and on Bravo: the toast
+  // the Retry stands on is named for the start that failed.
   await expect(app.player.startRetry()).toBeVisible();
-  await expect(app.player.text("Couldn't start Bravo Song")).toBeVisible();
+  await expect(app.player.startFailure()).toHaveAccessibleName("Couldn't start Bravo Song");
   await expect(app.queue.deckBar()).toHaveAccessibleName(/Bravo Song/);
   // And nothing walked the queue: no skip said, nothing after Bravo
   // minted or fetched.

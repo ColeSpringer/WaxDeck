@@ -18,11 +18,11 @@ func TestPublicArtAnswersTheSameRungAsTheAuthenticatedRead(t *testing.T) {
 	// size that was asked for" cannot be confused for each other.
 	const asked = 200
 
-	private, err := svc.Art(ctx, uc, pid, "", asked)
+	private, err := svc.Reads.Art(ctx, uc, pid, "", asked)
 	if err != nil {
 		t.Fatalf("reading item art: %v", err)
 	}
-	public, err := svc.PublicArt(ctx, pid, asked)
+	public, err := svc.Reads.PublicArt(ctx, pid, asked)
 	if err != nil {
 		t.Fatalf("reading share art: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestPublicArtNamesNoRungWhenNoSizeWasAsked(t *testing.T) {
 	pid := fixtureItemPIDs(t, ctx, svc, uc)[0]
 	giveCovers(t, ctx, svc, uc, []string{pid}, coverPNG(t, 90))
 
-	blob, err := svc.PublicArt(ctx, pid, 0)
+	blob, err := svc.Reads.PublicArt(ctx, pid, 0)
 	if err != nil {
 		t.Fatalf("reading share art: %v", err)
 	}

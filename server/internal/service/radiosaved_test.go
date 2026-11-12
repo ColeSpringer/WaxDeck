@@ -23,7 +23,7 @@ func TestRadioSavedSnapshotSkipsOversizeAndTheSwitchedOffRung(t *testing.T) {
 	key := radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology"))
 	cover := radioLogoFromBytes([]byte("tiny-cover"), "image/png")
 	store := func() {
-		svc.storeRadioArt(key, radioArtEntry{
+		svc.Radio.storeRadioArt(key, radioArtEntry{
 			art: cover, fetched: time.Now(), fresh: radioArtFreshFor,
 		})
 	}
@@ -31,7 +31,7 @@ func TestRadioSavedSnapshotSkipsOversizeAndTheSwitchedOffRung(t *testing.T) {
 	// On, and a cover that fits: the external rung answers.
 	enableRadioExternalArt(t, ctx, svc)
 	store()
-	data, mime, _ := svc.radioSavedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology")
+	data, mime, _ := svc.Radio.savedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology")
 	if string(data) != "tiny-cover" || mime != "image/png" {
 		t.Fatalf("snapshot = (%q, %q), want the cached external cover", data, mime)
 	}
@@ -41,7 +41,7 @@ func TestRadioSavedSnapshotSkipsOversizeAndTheSwitchedOffRung(t *testing.T) {
 	// here would put the operator's decision permanently out of reach.
 	disableRadioExternalArt(t, ctx, svc)
 	store()
-	if data, _, _ := svc.radioSavedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology"); data != nil {
+	if data, _, _ := svc.Radio.savedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology"); data != nil {
 		t.Fatalf("snapshot = %q with the external rung off, want nothing", data)
 	}
 
@@ -49,13 +49,13 @@ func TestRadioSavedSnapshotSkipsOversizeAndTheSwitchedOffRung(t *testing.T) {
 	// not answered, so the row saves artless rather than the ladder
 	// stopping on a picture that will be dropped.
 	enableRadioExternalArt(t, ctx, svc)
-	svc.storeRadioArt(key, radioArtEntry{
+	svc.Radio.storeRadioArt(key, radioArtEntry{
 		art: radioLogoFromBytes(
 			make([]byte, wdb.RadioSavedArtMaxBytes+1), "image/png"),
 		fetched: time.Now(),
 		fresh:   radioArtFreshFor,
 	})
-	if data, _, _ := svc.radioSavedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology"); data != nil {
+	if data, _, _ := svc.Radio.savedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology"); data != nil {
 		t.Fatalf("snapshot = %d bytes, want the oversize cover skipped", len(data))
 	}
 }
@@ -65,29 +65,29 @@ func TestRadioSavedSnapshotSkipsOversizeAndTheSwitchedOffRung(t *testing.T) {
 func TestRadioSavedSnapshotTakesTheCoverTheFaceShows(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	svc.allowPrivateRadioHosts = true
+	svc.Radio.allowPrivateRadioHosts = true
 	enableRadioExternalArt(t, ctx, svc)
-	svc.radioArtResolver = &fakeRadioArt{data: []byte("lookup-cover"), mime: "image/png"}
+	svc.Radio.radioArtResolver = &fakeRadioArt{data: []byte("lookup-cover"), mime: "image/png"}
 	var hits atomic.Int64
 	pictures := artHost(t, &hits, "image/png", coverPNG(t, 30))
 	show := func(line, picture string) {
 		t.Helper()
-		svc.NoteRadioMeta(testStationPID, line, picture)
-		svc.RadioNowPlayingCover(testStationPID, "Test FM", svc.RadioNowPlayingAnnouncement(testStationPID))
+		svc.Radio.NoteRadioMeta(testStationPID, line, picture)
+		svc.Radio.NowPlayingCover(testStationPID, "Test FM", svc.Radio.NowPlayingAnnouncement(testStationPID))
 		waitForAnnouncedArt(t, svc, picture, line)
 		artist, title, _ := parseRadioTitle(line, "Test FM")
 		waitForRadioArtLookupToSettle(t, svc, radioArtKey(radioSearchField(artist), radioSearchField(title)))
 	}
 
 	show("Charlie Parker - Ornithology", pictures.URL+"/ornithology.png")
-	data, _, _ := svc.radioSavedSnapshot(ctx, uc, testStationPID, "Test FM",
+	data, _, _ := svc.Radio.savedSnapshot(ctx, uc, testStationPID, "Test FM",
 		"Charlie Parker - Ornithology", "Charlie Parker", "Ornithology")
 	if string(data) != "lookup-cover" {
 		t.Fatalf("unproven snapshot = %d bytes, want the lookup's cover", len(data))
 	}
 
 	show("Pink Floyd - Echoes", pictures.URL+"/echoes.png")
-	data, _, _ = svc.radioSavedSnapshot(ctx, uc, testStationPID, "Test FM",
+	data, _, _ = svc.Radio.savedSnapshot(ctx, uc, testStationPID, "Test FM",
 		"Pink Floyd - Echoes", "Pink Floyd", "Echoes")
 	if len(data) == 0 || string(data) == "lookup-cover" {
 		t.Fatalf("proven snapshot = %q, want the station's own picture", data)
@@ -134,7 +134,7 @@ func TestRadioSavedSnapshotScalesAFullSizeCover(t *testing.T) {
 		t.Fatalf("fixture cover is %d bytes, want one past the %d cap",
 			len(full), wdb.RadioSavedArtMaxBytes)
 	}
-	svc.storeRadioArt(
+	svc.Radio.storeRadioArt(
 		radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology")),
 		radioArtEntry{
 			art:     radioLogoFromBytes(full, "image/jpeg"),
@@ -142,7 +142,7 @@ func TestRadioSavedSnapshotScalesAFullSizeCover(t *testing.T) {
 			fresh:   radioArtFreshFor,
 		})
 
-	data, mime, etag := svc.radioSavedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology")
+	data, mime, etag := svc.Radio.savedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology")
 	if len(data) == 0 {
 		t.Fatal("snapshot kept nothing, want the cover scaled to fit")
 	}
@@ -256,7 +256,7 @@ func TestRadioSavedSnapshotScalesACoverSmallerThanTheBox(t *testing.T) {
 		t.Fatalf("fixture cover is %d bytes, want one past the %d cap",
 			len(rendition), wdb.RadioSavedArtMaxBytes)
 	}
-	svc.storeRadioArt(
+	svc.Radio.storeRadioArt(
 		radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology")),
 		radioArtEntry{
 			art:     radioLogoFromBytes(rendition, "image/png"),
@@ -264,7 +264,7 @@ func TestRadioSavedSnapshotScalesACoverSmallerThanTheBox(t *testing.T) {
 			fresh:   radioArtFreshFor,
 		})
 
-	data, _, _ := svc.radioSavedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology")
+	data, _, _ := svc.Radio.savedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology")
 	if len(data) == 0 {
 		t.Fatal("the row saved artless, want the cover scaled under the cap")
 	}
@@ -287,7 +287,7 @@ func TestRadioSavedSnapshotKeepsHalvingUntilItFits(t *testing.T) {
 		t.Fatalf("fixture cover is %d bytes, want one past the %d cap",
 			len(announced), wdb.RadioSavedArtMaxBytes)
 	}
-	svc.storeRadioArt(
+	svc.Radio.storeRadioArt(
 		radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology")),
 		radioArtEntry{
 			art:     radioLogoFromBytes(announced, "image/png"),
@@ -295,7 +295,7 @@ func TestRadioSavedSnapshotKeepsHalvingUntilItFits(t *testing.T) {
 			fresh:   radioArtFreshFor,
 		})
 
-	data, _, _ := svc.radioSavedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology")
+	data, _, _ := svc.Radio.savedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology")
 	if len(data) == 0 {
 		t.Fatal("the row saved artless, want the cover shrunk under the cap")
 	}

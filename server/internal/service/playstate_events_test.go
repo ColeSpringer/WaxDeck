@@ -46,7 +46,7 @@ func TestStarEmitsOnlyOnChange(t *testing.T) {
 	pid, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
 
 	tail := eventTail(t, ctx, svc, uc)
-	if st, err := svc.SetStar(ctx, uc, pid, true, nil); err != nil || !st.Starred {
+	if st, err := svc.Playback.SetStar(ctx, uc, pid, true, nil); err != nil || !st.Starred {
 		t.Fatalf("star: %+v (%v), want starred", st, err)
 	}
 	evs := eventsAfter(t, ctx, svc, uc, tail)
@@ -56,7 +56,7 @@ func TestStarEmitsOnlyOnChange(t *testing.T) {
 
 	// The same value again: no delta, so no event.
 	tail = evs[0].ID
-	st, err := svc.SetStar(ctx, uc, pid, true, nil)
+	st, err := svc.Playback.SetStar(ctx, uc, pid, true, nil)
 	if err != nil || !st.Starred {
 		t.Fatalf("re-star: %+v (%v), want starred", st, err)
 	}
@@ -65,14 +65,14 @@ func TestStarEmitsOnlyOnChange(t *testing.T) {
 	}
 
 	// Unstarring is a change; unstarring twice is not.
-	if _, err := svc.SetStar(ctx, uc, pid, false, nil); err != nil {
+	if _, err := svc.Playback.SetStar(ctx, uc, pid, false, nil); err != nil {
 		t.Fatalf("unstar: %v", err)
 	}
 	if evs := eventsAfter(t, ctx, svc, uc, tail); len(evs) != 1 {
 		t.Fatalf("the unstar emitted %+v, want one event", evs)
 	}
 	tail = eventTail(t, ctx, svc, uc)
-	if _, err := svc.SetStar(ctx, uc, pid, false, nil); err != nil {
+	if _, err := svc.Playback.SetStar(ctx, uc, pid, false, nil); err != nil {
 		t.Fatalf("second unstar: %v", err)
 	}
 	if evs := eventsAfter(t, ctx, svc, uc, tail); len(evs) != 0 {
@@ -87,7 +87,7 @@ func TestRatingEmitsOnlyOnChange(t *testing.T) {
 
 	tail := eventTail(t, ctx, svc, uc)
 	forty := 40
-	if _, err := svc.SetRating(ctx, uc, pid, &forty, nil); err != nil {
+	if _, err := svc.Playback.SetRating(ctx, uc, pid, &forty, nil); err != nil {
 		t.Fatalf("rating: %v", err)
 	}
 	if evs := eventsAfter(t, ctx, svc, uc, tail); len(evs) != 1 || evs[0].Kind != eventPlayState {
@@ -96,7 +96,7 @@ func TestRatingEmitsOnlyOnChange(t *testing.T) {
 
 	tail = eventTail(t, ctx, svc, uc)
 	same := 40
-	if st, err := svc.SetRating(ctx, uc, pid, &same, nil); err != nil || st.Rating == nil || *st.Rating != 40 {
+	if st, err := svc.Playback.SetRating(ctx, uc, pid, &same, nil); err != nil || st.Rating == nil || *st.Rating != 40 {
 		t.Fatalf("re-rating: %+v (%v)", st, err)
 	}
 	if evs := eventsAfter(t, ctx, svc, uc, tail); len(evs) != 0 {
@@ -113,7 +113,7 @@ func TestStaleReplayEmitsNothingButReportsTruth(t *testing.T) {
 	pid, catalogPID := fixtureTrackPID(t, ctx, svc, uc, "Cobalt Sky")
 
 	old := time.Now().Add(-2 * time.Hour)
-	if _, err := svc.SetStar(ctx, uc, pid, true, &old); err != nil {
+	if _, err := svc.Playback.SetStar(ctx, uc, pid, true, &old); err != nil {
 		t.Fatalf("first replay: %v", err)
 	}
 	if _, err := svc.lib.Playback().SetStar(ctx, model.PID(uc.CatalogPID), catalogPID, false, nil); err != nil {
@@ -122,7 +122,7 @@ func TestStaleReplayEmitsNothingButReportsTruth(t *testing.T) {
 
 	tail := eventTail(t, ctx, svc, uc)
 	stale := time.Now().Add(-time.Hour)
-	st, err := svc.SetStar(ctx, uc, pid, true, &stale)
+	st, err := svc.Playback.SetStar(ctx, uc, pid, true, &stale)
 	if err != nil {
 		t.Fatalf("stale replay: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestEntityStarEmitsOnlyOnChange(t *testing.T) {
 	ctx, svc, uc, albumPID, _, _ := entityFixture(t)
 
 	tail := eventTail(t, ctx, svc, uc)
-	if st, err := svc.SetEntityStar(ctx, uc, albumPID, true, nil); err != nil || !st.Starred {
+	if st, err := svc.Identity.SetEntityStar(ctx, uc, albumPID, true, nil); err != nil || !st.Starred {
 		t.Fatalf("star: %+v (%v), want starred", st, err)
 	}
 	evs := eventsAfter(t, ctx, svc, uc, tail)
@@ -148,7 +148,7 @@ func TestEntityStarEmitsOnlyOnChange(t *testing.T) {
 	}
 
 	tail = evs[0].ID
-	if st, err := svc.SetEntityStar(ctx, uc, albumPID, true, nil); err != nil || !st.Starred {
+	if st, err := svc.Identity.SetEntityStar(ctx, uc, albumPID, true, nil); err != nil || !st.Starred {
 		t.Fatalf("re-star: %+v (%v), want starred", st, err)
 	}
 	if evs := eventsAfter(t, ctx, svc, uc, tail); len(evs) != 0 {
@@ -156,12 +156,12 @@ func TestEntityStarEmitsOnlyOnChange(t *testing.T) {
 	}
 
 	sixty := 60
-	if _, err := svc.SetEntityRating(ctx, uc, albumPID, &sixty, nil); err != nil {
+	if _, err := svc.Identity.SetEntityRating(ctx, uc, albumPID, &sixty, nil); err != nil {
 		t.Fatalf("rating: %v", err)
 	}
 	tail = eventTail(t, ctx, svc, uc)
 	same := 60
-	if _, err := svc.SetEntityRating(ctx, uc, albumPID, &same, nil); err != nil {
+	if _, err := svc.Identity.SetEntityRating(ctx, uc, albumPID, &same, nil); err != nil {
 		t.Fatalf("re-rating: %v", err)
 	}
 	if evs := eventsAfter(t, ctx, svc, uc, tail); len(evs) != 0 {

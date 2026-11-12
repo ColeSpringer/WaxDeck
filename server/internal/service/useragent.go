@@ -16,4 +16,4 @@ func UserAgentFor(version string) string {
 // UserAgent is the agent on the requests this server makes on its own
 // behalf. Hosts refuse a client that does not say who it is (Buzzsprout
 // answers a bare Go client 403).
-func (l *Library) UserAgent() string { return UserAgentFor(l.version) }
+func (l *core) UserAgent() string { return UserAgentFor(l.version) }

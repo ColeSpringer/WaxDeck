@@ -36,10 +36,10 @@ func fileTag(t *testing.T, path string, key tag.Key) string {
 // holds, after a sweep.
 func writeUnsyncedIssues(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) []string {
 	t.Helper()
-	if err := svc.RunHealthSweep(ctx); err != nil {
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
-	issues, _, err := svc.ListHealthIssuesFor(ctx, uc, ruleWriteUnsynced, "", 10)
+	issues, _, err := svc.Health.ListHealthIssuesFor(ctx, uc, ruleWriteUnsynced, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,17 +56,17 @@ func writeUnsyncedIssues(t *testing.T, ctx context.Context, svc *Library, uc *Us
 func TestAWriteUnsyncedFixPaysWhatAnEditLeftOwed(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, path, pid := managedTrackFixture(t)
-	if _, err := svc.EditItemMetadata(ctx, uc, pid, map[string]string{"genre": "Dub", "comment": "late night"},
+	if _, err := svc.Editor.EditItemMetadata(ctx, uc, pid, map[string]string{"genre": "Dub", "comment": "late night"},
 		MetadataEditParams{Lock: true}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SetItemTag(ctx, uc, pid, "MOOD", []string{"calm"}, MetadataEditParams{Lock: true}); err != nil {
+	if _, err := svc.Editor.SetItemTag(ctx, uc, pid, "MOOD", []string{"calm"}, MetadataEditParams{Lock: true}); err != nil {
 		t.Fatal(err)
 	}
 	if got := writeUnsyncedIssues(t, ctx, svc, uc); len(got) != 1 || got[0] != pid {
 		t.Fatalf("listed = %v, want the edited track", got)
 	}
-	start, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestAWriteUnsyncedFixPaysWhatAnEditLeftOwed(t *testing.T) {
 func TestAWriteUnsyncedFixOnAnItemInSyncIsNotAFill(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, pid := managedTrackFixture(t)
-	start, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestPayingUnsyncedDriftKeepsATagValueTheTags(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.payWriteDrift(ctx, it, writeDrift{unsynced: true}); err != nil {
+	if err := svc.Ingest.payWriteDrift(ctx, it, writeDrift{unsynced: true}); err != nil {
 		t.Fatal(err)
 	}
 	prov, err := svc.lib.Provenance(ctx, it.PID)
@@ -151,7 +151,7 @@ func TestPayingOwedArtLeavesAClearedCoverCleared(t *testing.T) {
 		waxbin.ArtEditOptions{Source: model.SourceUser}); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.payOwedArt(ctx, it, model.Attribution{Source: model.SourceUser}); err != nil {
+	if err := svc.Ingest.payOwedArt(ctx, it, model.Attribution{Source: model.SourceUser}); err != nil {
 		t.Fatal(err)
 	}
 	roles, err := svc.lib.ArtRoles(ctx, model.EntityRef{Type: model.ArtTrack, PID: it.PID})
@@ -178,7 +178,7 @@ func TestPayingOwedArtEmbedsTheTracksOwnCover(t *testing.T) {
 		waxbin.ArtEditOptions{Source: model.SourceUser}); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.payOwedArt(ctx, it, model.Attribution{Source: model.SourceUser}); err != nil {
+	if err := svc.Ingest.payOwedArt(ctx, it, model.Attribution{Source: model.SourceUser}); err != nil {
 		t.Fatal(err)
 	}
 	doc, err := waxlabel.ParseFile(ctx, path)
@@ -224,7 +224,7 @@ func TestAReadOnlyCopyDoesNotHoldAWriteDriftFixBack(t *testing.T) {
 	}
 	for _, lib := range libs {
 		if filepath.Clean(lib.DisplayRoot) == filepath.Clean(archive) {
-			if err := svc.LibraryReadOnlySet(ctx, uc, apiPID(PrefixLibrary, lib.PID), true); err != nil {
+			if err := svc.Settings.LibraryReadOnlySet(ctx, uc, apiPID(PrefixLibrary, lib.PID), true); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -234,10 +234,10 @@ func TestAReadOnlyCopyDoesNotHoldAWriteDriftFixBack(t *testing.T) {
 		t.Fatalf("items = %v (%v), want the one track", items, err)
 	}
 	pid := apiPID(PrefixTrack, items[0].PID)
-	if _, err := svc.EditItemMetadata(ctx, uc, pid, map[string]string{"genre": "Dub"}, MetadataEditParams{Lock: true}); err != nil {
+	if _, err := svc.Editor.EditItemMetadata(ctx, uc, pid, map[string]string{"genre": "Dub"}, MetadataEditParams{Lock: true}); err != nil {
 		t.Fatal(err)
 	}
-	start, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +257,7 @@ func TestAWriteDriftFixTheFileRefusesIsSkippedAsRefused(t *testing.T) {
 		t.Skip("a folder cannot be made unwritable here")
 	}
 	ctx, svc, uc, path, pid := managedTrackFixture(t)
-	if _, err := svc.EditItemMetadata(ctx, uc, pid, map[string]string{"genre": "Dub"}, MetadataEditParams{Lock: true}); err != nil {
+	if _, err := svc.Editor.EditItemMetadata(ctx, uc, pid, map[string]string{"genre": "Dub"}, MetadataEditParams{Lock: true}); err != nil {
 		t.Fatal(err)
 	}
 	dir := filepath.Dir(path)
@@ -265,7 +265,7 @@ func TestAWriteDriftFixTheFileRefusesIsSkippedAsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
-	start, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,14 +280,14 @@ func TestAWriteDriftFixTheFileRefusesIsSkippedAsRefused(t *testing.T) {
 func TestAWriteDriftFixKeepsAComposerTypedOverItsCredit(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, path, pid := managedTrackFixture(t)
-	if _, err := svc.SetItemCredits(ctx, uc, pid, "composer", []string{"Ada Credit"}, MetadataEditParams{}); err != nil {
+	if _, err := svc.Editor.SetItemCredits(ctx, uc, pid, "composer", []string{"Ada Credit"}, MetadataEditParams{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.EditItemMetadata(ctx, uc, pid, map[string]string{"composer": "Typed Composer"},
+	if _, err := svc.Editor.EditItemMetadata(ctx, uc, pid, map[string]string{"composer": "Typed Composer"},
 		MetadataEditParams{Lock: true}); err != nil {
 		t.Fatal(err)
 	}
-	start, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,14 +310,14 @@ func TestAWriteDriftFixPaysANormalizedComposerItsCreditStillOwes(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, path, pid := managedTrackFixture(t)
 	_, bare, _ := parseAPIPID(pid)
-	if _, err := svc.SetItemCredits(ctx, uc, pid, "composer", []string{"ada credit"}, MetadataEditParams{}); err != nil {
+	if _, err := svc.Editor.SetItemCredits(ctx, uc, pid, "composer", []string{"ada credit"}, MetadataEditParams{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.lib.EditManyFields(ctx, []model.PID{bare}, map[string]string{"composer": "Ada Credit"},
 		waxbin.EditOptions{Lock: model.LockUnchanged, Source: model.SourceNormalize}); err != nil {
 		t.Fatal(err)
 	}
-	start, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,7 +348,7 @@ func TestAWriteDriftFixLeavesASourcesArtistTheSources(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, path, pid := managedTrackFixture(t)
 	_, bare, _ := parseAPIPID(pid)
-	if _, err := svc.SetItemCredits(ctx, uc, pid, "artist", []string{"Credit Person"}, MetadataEditParams{}); err != nil {
+	if _, err := svc.Editor.SetItemCredits(ctx, uc, pid, "artist", []string{"Credit Person"}, MetadataEditParams{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.lib.EditFields(ctx, bare, map[string]string{"artist": "Enriched Artist"}, waxbin.EditOptions{
@@ -356,7 +356,7 @@ func TestAWriteDriftFixLeavesASourcesArtistTheSources(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	start, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -392,7 +392,7 @@ func TestPayingOwedArtKeepsWhereTheCoverWasFetched(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	start, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -434,7 +434,7 @@ func TestAWriteDriftFixRewritesAnUnsyncedFileThatOwesOnlyItsAlbum(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out, err := svc.EditEntity(ctx, "album", apiPID(PrefixAlbum, it.AlbumPID), map[string]string{"label": "Night Shift"},
+	if out, err := svc.Editor.EditEntity(ctx, "album", apiPID(PrefixAlbum, it.AlbumPID), map[string]string{"label": "Night Shift"},
 		MetadataEditParams{WriteBack: true}); err != nil || len(out.Failures) != 1 {
 		t.Fatalf("album edit = %+v (%v), want its write refused", out.Failures, err)
 	}
@@ -455,7 +455,7 @@ func TestAWriteDriftFixRewritesAnUnsyncedFileThatOwesOnlyItsAlbum(t *testing.T) 
 	if !unsynced() {
 		t.Fatal("the refused write left no unsynced row")
 	}
-	start, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
+	start, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
 	if err != nil {
 		t.Fatal(err)
 	}

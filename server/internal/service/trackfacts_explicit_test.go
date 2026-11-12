@@ -69,13 +69,13 @@ func newAdvisoryFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 		t.Fatalf("scanning fixture library: %v", err)
 	}
 
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "admin", Password: "correct-horse", Roles: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestTrackFactsExplicitFromAdvisoryTag(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newAdvisoryFixture(t)
 
-	rows, err := svc.TrackFacts(ctx, uc)
+	rows, err := svc.Reads.TrackFacts(ctx, uc)
 	if err != nil {
 		t.Fatalf("TrackFacts: %v", err)
 	}
@@ -118,12 +118,12 @@ func TestTrackFactsExplicitFromAdvisoryTag(t *testing.T) {
 		}
 	}
 
-	if _, err := svc.SetItemTag(ctx, uc, unsaidPID, "ITUNESADVISORY", []string{"1"}, MetadataEditParams{Lock: true, Force: false}); err != nil {
+	if _, err := svc.Editor.SetItemTag(ctx, uc, unsaidPID, "ITUNESADVISORY", []string{"1"}, MetadataEditParams{Lock: true, Force: false}); err != nil {
 		t.Fatalf("tagging through the editor: %v", err)
 	}
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		rows, err := svc.TrackFacts(ctx, uc)
+		rows, err := svc.Reads.TrackFacts(ctx, uc)
 		if err != nil {
 			t.Fatalf("TrackFacts after the edit: %v", err)
 		}
@@ -154,7 +154,7 @@ func TestTrackFactsCarryContentRules(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newAdvisoryFixture(t)
 
-	if _, err := svc.TrackFacts(ctx, uc); err != nil {
+	if _, err := svc.Reads.TrackFacts(ctx, uc); err != nil {
 		t.Fatalf("seeding the unrestricted cache: %v", err)
 	}
 
@@ -165,7 +165,7 @@ func TestTrackFactsCarryContentRules(t *testing.T) {
 		Explicit:     true,
 		TagDeny:      []TagRule{{Key: advisoryTagKey, Value: "1"}},
 	}
-	rows, err := svc.TrackFacts(ctx, restricted)
+	rows, err := svc.Reads.TrackFacts(ctx, restricted)
 	if err != nil {
 		t.Fatalf("restricted TrackFacts: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestTrackFactsCarryContentRules(t *testing.T) {
 	}
 
 	// The narrowed sweep must not have poisoned the shared entry.
-	rows, err = svc.TrackFacts(ctx, uc)
+	rows, err = svc.Reads.TrackFacts(ctx, uc)
 	if err != nil {
 		t.Fatalf("unrestricted TrackFacts after the restricted one: %v", err)
 	}

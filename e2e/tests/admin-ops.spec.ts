@@ -679,9 +679,14 @@ test('an admin merges a book from its page and it stays in its library', async (
   const queued = app.page.waitForResponse(
     (r) => r.url().includes(`/books/${book.pid}/merge`) && r.request().method() === 'POST',
   );
+  // Settled on the toast's own action, which stays up; its sentence is
+  // the toast's name, never a text node (see `toast`).
   await clickThrough(
     app.books.control(SemanticsIds.bookMergeConfirm),
-    app.books.text('Queued. Follow it in Tasks.'),
+    app.books.control(SemanticsIds.openTasks),
+  );
+  await expect(app.books.toast(SemanticsIds.openTasks)).toHaveAccessibleName(
+    'Queued. Follow it in Tasks.',
   );
   const taskId = ((await (await queued).json()) as { id: string }).id;
 

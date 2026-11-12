@@ -16,8 +16,42 @@ import (
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
 
+	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/genre"
 )
+
+// Reads is reading the catalog: listings, facets, genres, stats, books,
+// shares and the per-entity facts and marks clients render, and the
+// writes that keep those reads' state: kind changes, the genre tree,
+// shares and folds.
+type Reads struct {
+	*core
+	// remapHook stands in for db.RemapItems in a test; nothing in the
+	// server sets it.
+	remapHook func(context.Context, wdb.KindMoves) error
+	// kindReadHook stands in for the catalog's item read in a kind
+	// change's follow-up and tally in a test; nothing in the server sets
+	// it.
+	kindReadHook func(context.Context, model.PID) (*model.ItemView, error)
+	// fileReadHook stands in for the catalog's read of a file's row in a
+	// test; nothing in the server sets it.
+	fileReadHook func(context.Context, model.PID) (*model.File, error)
+	// trackFacts caches the compatibility surface's track sweep.
+	trackFacts trackFactsCache
+	// genres holds the built genre vocabulary; facets caches the
+	// full-visibility browse-dimension enumerations.
+	genres genreVocabulary
+	facets facetCache
+	// tagValues holds the stored spellings of each custom-tag field, for
+	// compiling a caller's tag rules into a query. Same generation as
+	// facets, since both are functions of the catalog's contents.
+	tagValues tagValueCache
+	// searchCandidates shrinks Search's candidate pool in a test; zero is
+	// searchMaxCandidates.
+	searchCandidates int
+}
+
+func newReads(c *core, _ Config) *Reads { return &Reads{core: c} }
 
 // ItemFilter narrows a library listing. Facet and FacetKey together
 // drill one bucket of a browse dimension (the enumeration answers both
@@ -72,20 +106,20 @@ func applyItemFilter(b *query.Builder, filter ItemFilter) (*query.Builder, []str
 // offer this caller. subs is the caller's follow set: read here, once,
 // for the query, which pageDTO then checks the page's rows against, and
 // not read at all where the filter leaves episodes out.
-func (l *Library) listingQuery(ctx context.Context, uc *UserCtx, base *query.Builder, filter ItemFilter, subs *subscriptionFilter) (*query.Builder, []string, error) {
+func (l *Reads) listingQuery(ctx context.Context, uc *UserCtx, base *query.Builder, filter ItemFilter, subs *subscriptionFilter) (*query.Builder, []string, error) {
 	b, scope, err := applyItemFilter(base, filter)
 	if err != nil {
 		return nil, nil, err
 	}
 	episodes := (scope[0] == "" || scope[0] == "podcast") && !facetNoEpisodes[scope[1]]
-	return b.WhereNode(l.listingNarrow(ctx, uc, subs, episodes)), scope, nil
+	return b.WhereNode(l.Playlists.listingNarrow(ctx, uc, subs, episodes)), scope, nil
 }
 
 // Items pages the whole library (optionally one media type, optionally
 // one browse-dimension bucket) in stable (title, pid) order for the
 // acting user. The cursor is WaxBin's token inside a scope envelope.
-func (l *Library) Items(ctx context.Context, uc *UserCtx, filter ItemFilter, cursor string, limit int) (Page, error) {
-	subs := l.newSubscriptionFilter(uc)
+func (l *Reads) Items(ctx context.Context, uc *UserCtx, filter ItemFilter, cursor string, limit int) (Page, error) {
+	subs := l.Podcasts.newSubscriptionFilter(uc)
 	b, scope, err := l.listingQuery(ctx, uc, visibleItems().OrderBy("title", false), filter, subs)
 	if err != nil {
 		return Page{}, err
@@ -179,8 +213,8 @@ var collectionLists = map[string]func() query.Node{
 // Both halves are pushed into the catalog's query, so a narrowed page
 // comes back full. It is the same filter the bucket's own listing uses,
 // so a count, the list it opens, and a shuffle over it cannot disagree.
-func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, filter ItemFilter, seed int64, cursor string, limit int) (Page, error) {
-	subs := l.newSubscriptionFilter(uc)
+func (l *Reads) Browse(ctx context.Context, uc *UserCtx, list string, filter ItemFilter, seed int64, cursor string, limit int) (Page, error) {
+	subs := l.Podcasts.newSubscriptionFilter(uc)
 	b, scope, err := l.listingQuery(ctx, uc, visibleItems(), filter, subs)
 	if err != nil {
 		return Page{}, err
@@ -363,13 +397,13 @@ func decodeScopedCursor(cursor, scope string) (string, error) {
 // which in the ordinary case drops nothing, and subs is the follow set
 // the query was built from. A third caller has to build its query the
 // same way, or it will list what the checks hide.
-func (l *Library) pageDTO(ctx context.Context, uc *UserCtx, subs *subscriptionFilter, p *read.Page, scope string) Page {
+func (l *Reads) pageDTO(ctx context.Context, uc *UserCtx, subs *subscriptionFilter, p *read.Page, scope string) Page {
 	out := Page{Items: make([]ItemSummary, 0, len(p.Items))}
 	for _, it := range p.Items {
-		if !l.viewVisible(ctx, uc, it) {
+		if !l.Grants.viewVisible(ctx, uc, it) {
 			continue
 		}
-		if !subs.allowsItem(ctx, l, it) {
+		if !subs.allowsItem(ctx, l.Podcasts, it) {
 			continue
 		}
 		if !advisoryAllows(uc, it) {
@@ -409,7 +443,7 @@ const searchMaxCandidates = 5000
 // for a restricted caller, and for everyone the episode group's
 // subscriptions. That was true before the widening pass existed and is
 // what it deliberately never tried to fix.
-func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) (SearchResults, error) {
+func (l *Reads) Search(ctx context.Context, uc *UserCtx, q string, limit int) (SearchResults, error) {
 	// A restricted caller with no granted libraries can see nothing: every
 	// item hit fails the visibility check below and entity groups are
 	// omitted, so skip the FTS ranking entirely rather than rank a whole
@@ -425,11 +459,11 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 	if l.searchCandidates > 0 {
 		opts.MaxCandidates = l.searchCandidates
 	}
-	subs := l.newSubscriptionFilter(uc)
+	subs := l.Podcasts.newSubscriptionFilter(uc)
 	// A restricted caller sees an episode by the podcast library rule the
 	// listings hold, wherever its file sits, and is shown only episodes of
 	// shows it follows: one that follows none needs no episode searched.
-	episodes := uc.AllLibraries || (l.podcastsVisible(ctx, uc) && subs.followsAny(ctx, l))
+	episodes := uc.AllLibraries || (l.Grants.podcastsVisible(ctx, uc) && subs.followsAny(ctx, l.Podcasts))
 	// A restricted caller's item hits are filtered by library visibility
 	// below; scoping the FTS pool to the same libraries up front shrinks
 	// the worst-case ranking set and drops fileless items, which fail
@@ -444,7 +478,7 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 		// Every podcast library, so an episode fetched under an earlier
 		// podcast directory is found as the listings find it.
 		if episodes {
-			podcastLibs, err := l.podcastLibraries(ctx)
+			podcastLibs, err := l.Grants.podcastLibraries(ctx)
 			if err != nil {
 				return SearchResults{}, err
 			}
@@ -533,13 +567,13 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 				// Title and transcript matches alike, by the podcast
 				// library and the caller's subscriptions, as every list
 				// surface decides them.
-				if !episodes || !subs.allowsEpisodePID(ctx, l, h.PID) {
+				if !episodes || !subs.allowsEpisodePID(ctx, l.Podcasts, h.PID) {
 					continue
 				}
-			} else if !uc.AllLibraries && !l.itemVisible(ctx, uc, h.PID) {
+			} else if !uc.AllLibraries && !l.Grants.itemVisible(ctx, uc, h.PID) {
 				continue
 			}
-			if !l.contentAllowsPID(ctx, uc, h.PID) {
+			if !l.Grants.contentAllowsPID(ctx, uc, h.PID) {
 				continue
 			}
 			title, subtitle := h.Title, h.Subtitle
@@ -609,7 +643,7 @@ func fullReach(uc *UserCtx) bool {
 // Never nil without an error: callers read a nil set as "nothing was
 // filtered" (a caller of full reach), so a kind missing from
 // entityScopes is an error rather than a set any of them could misread.
-func (l *Library) visibleEntities(ctx context.Context, uc *UserCtx, prefix string, pids []model.PID) (map[model.PID]bool, error) {
+func (l *Reads) visibleEntities(ctx context.Context, uc *UserCtx, prefix string, pids []model.PID) (map[model.PID]bool, error) {
 	scope, ok := entityScopes[prefix]
 	if !ok {
 		return nil, &Error{Kind: KindInternal, Err: fmt.Errorf("no visibility scope for entity kind %q", prefix)}
@@ -637,7 +671,7 @@ func (l *Library) visibleEntities(ctx context.Context, uc *UserCtx, prefix strin
 
 // entityVisible is visibleEntities for one entity, skipped for a caller
 // of full reach.
-func (l *Library) entityVisible(ctx context.Context, uc *UserCtx, prefix string, pid model.PID) (bool, error) {
+func (l *Reads) entityVisible(ctx context.Context, uc *UserCtx, prefix string, pid model.PID) (bool, error) {
 	if fullReach(uc) {
 		return true, nil
 	}
@@ -653,7 +687,7 @@ func (l *Library) entityVisible(ctx context.Context, uc *UserCtx, prefix string,
 // The facet gate reads the first alone, which would hide the portrait of
 // a featured artist the caller is offered a track by; it is still asked
 // first, being the indexed read and the usual answer.
-func (l *Library) artistReached(ctx context.Context, uc *UserCtx, pid model.PID) (bool, error) {
+func (l *Reads) artistReached(ctx context.Context, uc *UserCtx, pid model.PID) (bool, error) {
 	if ok, err := l.entityVisible(ctx, uc, PrefixArtist, pid); err != nil || ok {
 		return ok, err
 	}
@@ -665,7 +699,7 @@ func (l *Library) artistReached(ctx context.Context, uc *UserCtx, pid model.PID)
 
 // offeredWhere reports whether the caller's listings offer any item the
 // node selects.
-func (l *Library) offeredWhere(ctx context.Context, uc *UserCtx, node query.Node) (bool, error) {
+func (l *Reads) offeredWhere(ctx context.Context, uc *UserCtx, node query.Node) (bool, error) {
 	items, err := l.lib.Query(ctx, l.facetScopeBuilder(ctx, uc).WhereNode(node).Limit(1).Build(), "")
 	if err != nil {
 		return false, classify(err)
@@ -676,7 +710,7 @@ func (l *Library) offeredWhere(ctx context.Context, uc *UserCtx, node query.Node
 // entityReached is the gate an entity's curation read shares with its
 // detail read: an entity none of whose items the caller is offered
 // answers as one that does not exist. Free for a caller of full reach.
-func (l *Library) entityReached(ctx context.Context, uc *UserCtx, et model.MergeEntity, pid model.PID) (bool, error) {
+func (l *Reads) entityReached(ctx context.Context, uc *UserCtx, et model.MergeEntity, pid model.PID) (bool, error) {
 	if fullReach(uc) {
 		return true, nil
 	}
@@ -700,7 +734,7 @@ func (l *Library) entityReached(ctx context.Context, uc *UserCtx, et model.Merge
 // this (they see every entity). A nil info (which the facade never
 // returns alongside a nil error, but the helper stays robust to)
 // attributes to no library and reads as not visible.
-func (l *Library) entityInLibraries(info *read.EntityInfo, uc *UserCtx) bool {
+func (l *Reads) entityInLibraries(info *read.EntityInfo, uc *UserCtx) bool {
 	if info == nil {
 		return false
 	}
@@ -721,16 +755,16 @@ func (l *Library) entityInLibraries(info *read.EntityInfo, uc *UserCtx) bool {
 // use one number from each. Same visibility rules and same not-found error
 // as Item, so a caller can swap one for the other without changing what it
 // reports.
-func (l *Library) ItemDuration(ctx context.Context, uc *UserCtx, apiItemPID string) (int64, error) {
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+func (l *Reads) ItemDuration(ctx context.Context, uc *UserCtx, apiItemPID string) (int64, error) {
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return 0, err
 	}
 	return it.DurationMS, nil
 }
 
-func (l *Library) Item(ctx context.Context, uc *UserCtx, apiItemPID string) (ItemDetail, error) {
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+func (l *Reads) Item(ctx context.Context, uc *UserCtx, apiItemPID string) (ItemDetail, error) {
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return ItemDetail{}, err
 	}
@@ -795,7 +829,7 @@ func (l *Library) Item(ctx context.Context, uc *UserCtx, apiItemPID string) (Ite
 // episodeAddedNS is when the lists first saw an episode, in unix
 // nanoseconds, and zero when the catalog does not say. A read that fails
 // is logged, and the caller carries on with the file's clock.
-func (l *Library) episodeAddedNS(ctx context.Context, pid model.PID) int64 {
+func (l *Reads) episodeAddedNS(ctx context.Context, pid model.PID) int64 {
 	eps, err := l.lib.Podcasts().EpisodesByPIDs(ctx, []model.PID{pid})
 	if err != nil {
 		l.log.Debug("reading an episode's added time", "episode", pid, "err", err)
@@ -816,7 +850,7 @@ func (l *Library) episodeAddedNS(ctx context.Context, pid model.PID) int64 {
 // number, the media, or the country, because those describe the edition
 // and upstream keeps them off the item row on purpose. This is the read
 // half of the editEntity write surface.
-func (l *Library) Album(ctx context.Context, uc *UserCtx, apiAlbumPID string) (AlbumDetail, error) {
+func (l *Reads) Album(ctx context.Context, uc *UserCtx, apiAlbumPID string) (AlbumDetail, error) {
 	prefix, pid, ok := parseAPIPID(apiAlbumPID)
 	if !ok || prefix != PrefixAlbum {
 		// A track pid presented as an album is a not-found rather than a
@@ -931,7 +965,7 @@ func artMime(format string) string {
 // playlist PIDs, so search hits render artwork without a second
 // identifier scheme, and each answers only what its own read would show
 // the caller (artTarget).
-func (l *Library) Art(ctx context.Context, uc *UserCtx, apiPID, role string, size int) (ArtBlob, error) {
+func (l *Reads) Art(ctx context.Context, uc *UserCtx, apiPID, role string, size int) (ArtBlob, error) {
 	art, ok := model.ParseArtRole(role)
 	if !ok {
 		return ArtBlob{}, errInvalid("unknown art role " + role)
@@ -942,7 +976,7 @@ func (l *Library) Art(ctx context.Context, uc *UserCtx, apiPID, role string, siz
 	}
 	generated := false
 	if pl != nil && art == model.ArtRoleFront {
-		member, err := l.readerPlaylistCover(ctx, uc, pl)
+		member, err := l.Playlists.readerPlaylistCover(ctx, uc, pl)
 		if err != nil {
 			return ArtBlob{}, err
 		}
@@ -1029,7 +1063,7 @@ func artSourceMark(attr model.Attribution, level model.ArtEntity, derived bool, 
 // It walks the same chain a front-cover read walks and answers off the row
 // alone, so a detail screen that draws a caption does not pay for the
 // picture it is not going to show.
-func (l *Library) artSourceForRef(ctx context.Context, ref model.EntityRef) ArtSourceDTO {
+func (l *Reads) artSourceForRef(ctx context.Context, ref model.EntityRef) ArtSourceDTO {
 	prov, err := l.lib.ArtProvenance(ctx, ref, model.ArtRoleFront)
 	if err != nil || prov == nil {
 		return ArtSourceDTO{}
@@ -1050,7 +1084,7 @@ func (l *Library) artSourceForRef(ctx context.Context, ref model.EntityRef) ArtS
 // It lives here, between the resolve and every DTO, rather than at the
 // call sites: the leak this closes was four call sites wide, and a
 // fifth would not know the rule either.
-func (l *Library) artSourceFor(ctx context.Context, ref model.EntityRef, out ArtSourceDTO) ArtSourceDTO {
+func (l *Reads) artSourceFor(ctx context.Context, ref model.EntityRef, out ArtSourceDTO) ArtSourceDTO {
 	return l.artSourceRedactor(ctx, ref)(out)
 }
 
@@ -1063,7 +1097,7 @@ func (l *Library) artSourceFor(ctx context.Context, ref model.EntityRef, out Art
 // host and path, for the reason redactedSourceURL gives: these reads
 // answer everyone who can see the item, and what the catalog stored is
 // verbatim.
-func (l *Library) artSourceRedactor(ctx context.Context, ref model.EntityRef) func(ArtSourceDTO) ArtSourceDTO {
+func (l *Reads) artSourceRedactor(ctx context.Context, ref model.EntityRef) func(ArtSourceDTO) ArtSourceDTO {
 	var public, checked bool
 	return func(out ArtSourceDTO) ArtSourceDTO {
 		if out.SourceURL == "" {
@@ -1088,7 +1122,7 @@ func (l *Library) artSourceRedactor(ctx context.Context, ref model.EntityRef) fu
 // whose show cannot be established withholds the URL, because a chain
 // that grew a rung this rule has not been taught must not leak while it
 // waits to be taught.
-func (l *Library) feedArtIsPublic(ctx context.Context, ref model.EntityRef) bool {
+func (l *Reads) feedArtIsPublic(ctx context.Context, ref model.EntityRef) bool {
 	show := ref.PID
 	switch ref.Type {
 	case model.ArtPodcast:
@@ -1105,11 +1139,11 @@ func (l *Library) feedArtIsPublic(ctx context.Context, ref model.EntityRef) bool
 	if err != nil || pod == nil {
 		return false
 	}
-	return !l.showIsPrivate(ctx, pod)
+	return !l.Podcasts.showIsPrivate(ctx, pod)
 }
 
 // artRef resolves an art read/roles pid to its entity ref; see artTarget.
-func (l *Library) artRef(ctx context.Context, uc *UserCtx, apiPID string) (model.EntityRef, error) {
+func (l *Reads) artRef(ctx context.Context, uc *UserCtx, apiPID string) (model.EntityRef, error) {
 	ref, _, err := l.artTarget(ctx, uc, apiPID)
 	return ref, err
 }
@@ -1120,7 +1154,7 @@ func (l *Library) artRef(ctx context.Context, uc *UserCtx, apiPID string) (model
 // the caller is offered, a show while the podcast library is granted,
 // and a playlist of the caller's own or a shared one, which comes back
 // too for the cover rule a reader of somebody else's follows.
-func (l *Library) artTarget(ctx context.Context, uc *UserCtx, apiPID string) (model.EntityRef, *model.Playlist, error) {
+func (l *Reads) artTarget(ctx context.Context, uc *UserCtx, apiPID string) (model.EntityRef, *model.Playlist, error) {
 	prefix, pid, ok := parseAPIPID(apiPID)
 	if !ok {
 		return model.EntityRef{}, nil, errNotFound("no artwork for pid " + apiPID)
@@ -1156,18 +1190,18 @@ func (l *Library) artTarget(ctx context.Context, uc *UserCtx, apiPID string) (mo
 	case prefix == PrefixPodcast:
 		// A show is not a catalog item: it resolves to its own art level
 		// (its feed image) behind what the show's detail answers.
-		if err := gate(l.showReached(ctx, uc, pid)); err != nil {
+		if err := gate(l.Podcasts.showReached(ctx, uc, pid)); err != nil {
 			return model.EntityRef{}, nil, err
 		}
 		return model.EntityRef{Type: model.ArtPodcast, PID: pid}, nil, nil
 	case prefix == PrefixPlaylist:
-		pl, err := l.resolvePlaylist(ctx, uc, apiPID)
+		pl, err := l.Playlists.resolvePlaylist(ctx, uc, apiPID)
 		if err != nil {
 			return model.EntityRef{}, nil, missing(err)
 		}
 		return model.EntityRef{Type: model.ArtPlaylist, PID: pl.PID}, pl, nil
 	case itemPrefix(prefix):
-		it, err := l.getVisibleItem(ctx, uc, apiPID)
+		it, err := l.Grants.getVisibleItem(ctx, uc, apiPID)
 		if err != nil {
 			return model.EntityRef{}, nil, missing(err)
 		}
@@ -1214,7 +1248,7 @@ type ArtRolesDTO struct {
 // (not inherited from the album/artist chain), the own-versus-inherited
 // signal the front-cover read cannot give. Accepts the PIDs Art does,
 // behind the same gate.
-func (l *Library) ItemArtRoles(ctx context.Context, uc *UserCtx, apiPID string) (ArtRolesDTO, error) {
+func (l *Reads) ItemArtRoles(ctx context.Context, uc *UserCtx, apiPID string) (ArtRolesDTO, error) {
 	ref, err := l.artRef(ctx, uc, apiPID)
 	if err != nil {
 		return ArtRolesDTO{}, err
@@ -1260,8 +1294,8 @@ func (l *Library) ItemArtRoles(ctx context.Context, uc *UserCtx, apiPID string) 
 }
 
 // ItemLyrics returns the item's lyrics; not-found when it has none.
-func (l *Library) ItemLyrics(ctx context.Context, uc *UserCtx, apiItemPID string) (Lyrics, error) {
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+func (l *Reads) ItemLyrics(ctx context.Context, uc *UserCtx, apiItemPID string) (Lyrics, error) {
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		if KindOf(err) == KindNotFound {
 			return Lyrics{}, errNotFound("no lyrics for pid " + apiItemPID)

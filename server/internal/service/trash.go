@@ -41,7 +41,7 @@ type TrashEmptyDTO struct {
 
 // TrashEntries lists the catalog trash, newest first. Administrators
 // only (the journal spans every library).
-func (l *Library) TrashEntries(ctx context.Context, uc *UserCtx, includeRestored bool, limit int) ([]TrashEntryDTO, error) {
+func (l *Tools) TrashEntries(ctx context.Context, uc *UserCtx, includeRestored bool, limit int) ([]TrashEntryDTO, error) {
 	if !uc.Admin {
 		return nil, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -50,7 +50,7 @@ func (l *Library) TrashEntries(ctx context.Context, uc *UserCtx, includeRestored
 		return nil, classify(err)
 	}
 	names := map[string]string{}
-	for _, r := range l.libraryRoots() {
+	for _, r := range l.Roots.libraryRoots() {
 		names[r.PID] = r.Name
 	}
 	out := make([]TrashEntryDTO, 0, len(entries))
@@ -84,8 +84,8 @@ func (l *Library) TrashEntries(ctx context.Context, uc *UserCtx, includeRestored
 
 // trashEntryName is a trashed file's name: its place in its library, as
 // the contract says, never the server's folders.
-func (l *Library) trashEntryName(e model.TrashEntry) string {
-	for _, r := range l.libraryRoots() {
+func (l *Tools) trashEntryName(e model.TrashEntry) string {
+	for _, r := range l.Roots.libraryRoots() {
 		root := cleanRootPath(r.Path)
 		if r.PID != string(e.LibraryPID) || !pathsOverlap(root, e.OrigDisplay) {
 			continue
@@ -100,7 +100,7 @@ func (l *Library) trashEntryName(e model.TrashEntry) string {
 }
 
 // RestoreTrashEntry moves a trashed file back and re-catalogs it.
-func (l *Library) RestoreTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID string) error {
+func (l *Tools) RestoreTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID string) error {
 	if !uc.Admin {
 		return &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -108,14 +108,14 @@ func (l *Library) RestoreTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID
 	if !ok || prefix != PrefixTrash {
 		return errInvalid("bad trash id " + apiTrashID)
 	}
-	if err := l.CheckWritable(ctx, ""); err != nil {
+	if err := l.Settings.CheckWritable(ctx, ""); err != nil {
 		return err
 	}
 	target, detail := l.trashRestoreAudit(ctx, apiTrashID, pid)
 	if err := l.lib.RestoreTrash(ctx, pid); err != nil {
 		// A folder that will not take the file back is the library's to
 		// fix, as on the way into the trash.
-		if cause := l.storageRefused(err.Error()); cause != "" {
+		if cause := l.Roots.storageRefused(err.Error()); cause != "" {
 			e := errStorageUnwritable(cause)
 			e.Err = err
 			return e
@@ -125,16 +125,16 @@ func (l *Library) RestoreTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID
 		}
 		return classify(err)
 	}
-	l.Audit(ctx, uc, "trash.restore", target, detail)
+	l.Audit.Record(ctx, uc, "trash.restore", target, detail)
 	return nil
 }
 
 // EmptyTrash permanently purges every active trashed file.
-func (l *Library) EmptyTrash(ctx context.Context, uc *UserCtx) (TrashEmptyDTO, error) {
+func (l *Tools) EmptyTrash(ctx context.Context, uc *UserCtx) (TrashEmptyDTO, error) {
 	if !uc.Admin {
 		return TrashEmptyDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	if err := l.CheckWritable(ctx, ""); err != nil {
+	if err := l.Settings.CheckWritable(ctx, ""); err != nil {
 		return TrashEmptyDTO{}, err
 	}
 	rep, err := l.lib.EmptyTrash(ctx, waxbin.EmptyTrashOptions{})
@@ -142,16 +142,16 @@ func (l *Library) EmptyTrash(ctx context.Context, uc *UserCtx) (TrashEmptyDTO, e
 		return TrashEmptyDTO{}, classify(err)
 	}
 	out := trashEmptyDTO(rep)
-	l.Audit(ctx, uc, "trash.empty", AuditTarget{Kind: "trash"},
+	l.Audit.Record(ctx, uc, "trash.empty", AuditTarget{Kind: "trash"},
 		map[string]any{"purged": out.Purged, "errored": out.Errored, "reclaimedBytes": out.ReclaimedBytes,
 			"skippedReadOnly": out.SkippedReadOnly})
-	l.EmitNotificationFor(ctx, "job-finished", jobTitle("empty-trash", false), trashBody(out), "", []string{uc.ID})
+	l.Integrations.EmitNotificationFor(ctx, "job-finished", jobTitle("empty-trash", false), trashBody(out), "", []string{uc.ID})
 	return out, nil
 }
 
 // PurgeTrashEntry permanently purges one trashed file and reports the
 // bytes it reclaimed. Administrators only.
-func (l *Library) PurgeTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID string) (int64, error) {
+func (l *Tools) PurgeTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID string) (int64, error) {
 	if !uc.Admin {
 		return 0, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -159,14 +159,14 @@ func (l *Library) PurgeTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID s
 	if !ok || prefix != PrefixTrash {
 		return 0, errInvalid("bad trash id " + apiTrashID)
 	}
-	if err := l.CheckWritable(ctx, ""); err != nil {
+	if err := l.Settings.CheckWritable(ctx, ""); err != nil {
 		return 0, err
 	}
 	reclaimed, err := l.lib.PurgeTrash(ctx, pid)
 	if err != nil {
 		return 0, classify(err)
 	}
-	l.Audit(ctx, uc, "trash.purge", AuditTarget{Kind: "trash", PID: apiTrashID},
+	l.Audit.Record(ctx, uc, "trash.purge", AuditTarget{Kind: "trash", PID: apiTrashID},
 		map[string]any{"reclaimedBytes": reclaimed})
 	return reclaimed, nil
 }
@@ -175,11 +175,11 @@ func (l *Library) PurgeTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID s
 // given age, backing the retention sweeper. A zero or negative age is a
 // no-op rather than an empty-everything, so a disabled policy (0 days) or
 // a misconfigured caller never wipes the whole undo journal.
-func (l *Library) PurgeTrashOlderThan(ctx context.Context, olderThan time.Duration) (TrashEmptyDTO, error) {
+func (l *Tools) PurgeTrashOlderThan(ctx context.Context, olderThan time.Duration) (TrashEmptyDTO, error) {
 	if olderThan <= 0 {
 		return TrashEmptyDTO{}, nil
 	}
-	if err := l.CheckWritable(ctx, ""); err != nil {
+	if err := l.Settings.CheckWritable(ctx, ""); err != nil {
 		if KindOf(err) == KindReadOnly {
 			return TrashEmptyDTO{}, nil
 		}
@@ -194,7 +194,7 @@ func (l *Library) PurgeTrashOlderThan(ctx context.Context, olderThan time.Durati
 	// way backup retention does, but only when it actually reclaimed
 	// something so a routine no-op pass never floods the log.
 	if out.Purged > 0 || out.Errored > 0 {
-		l.Audit(ctx, nil, "trash.retention", AuditTarget{Kind: "trash"},
+		l.Audit.Record(ctx, nil, "trash.retention", AuditTarget{Kind: "trash"},
 			map[string]any{"purged": out.Purged, "errored": out.Errored, "reclaimedBytes": out.ReclaimedBytes})
 	}
 	return out, nil
@@ -203,9 +203,9 @@ func (l *Library) PurgeTrashOlderThan(ctx context.Context, olderThan time.Durati
 // SweepTrashRetention runs one retention pass using the configured
 // policy. It is the entry point for the supervised background sweeper;
 // when retention is disabled (0 days) it purges nothing.
-func (l *Library) SweepTrashRetention(ctx context.Context) (TrashEmptyDTO, error) {
-	days := l.TrashRetentionDays(ctx)
-	if days <= 0 || l.Maintenance() {
+func (l *Tools) SweepTrashRetention(ctx context.Context) (TrashEmptyDTO, error) {
+	days := l.Settings.TrashRetentionDays(ctx)
+	if days <= 0 || l.library.Maintenance() {
 		return TrashEmptyDTO{}, nil
 	}
 	return l.PurgeTrashOlderThan(ctx, time.Duration(days)*24*time.Hour)
@@ -286,7 +286,7 @@ func (e *CueRipTracks) Is(target error) bool { return target == ErrCueRipPart }
 // see, which stays and keeps the item, as one in a read-only library
 // does. A run whose every move failed is refused, and one that moved
 // some files answers what went and what stayed.
-func (l *Library) DeleteItems(ctx context.Context, uc *UserCtx, apiPIDs []string, mode string, dryRun bool) (DeleteItemsResultDTO, error) {
+func (l *Tools) DeleteItems(ctx context.Context, uc *UserCtx, apiPIDs []string, mode string, dryRun bool) (DeleteItemsResultDTO, error) {
 	dm, mode, err := deleteModeFor(uc, mode)
 	if err != nil {
 		return DeleteItemsResultDTO{}, err
@@ -301,14 +301,14 @@ func (l *Library) DeleteItems(ctx context.Context, uc *UserCtx, apiPIDs []string
 	d := newDeletion(uc)
 	var carved []*model.ItemView
 	for _, p := range apiPIDs {
-		it, err := l.getVisibleItem(ctx, uc, p)
+		it, err := l.Grants.getVisibleItem(ctx, uc, p)
 		if err != nil {
 			return DeleteItemsResultDTO{}, err
 		}
 		if it.Kind == model.KindEpisode {
 			return DeleteItemsResultDTO{}, errEpisodeNotDeletable()
 		}
-		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+		if err := l.Settings.checkPathWritable(ctx, string(it.Path)); err != nil {
 			return DeleteItemsResultDTO{}, err
 		}
 		if err := d.add(ctx, l, it, p); err != nil {
@@ -344,7 +344,7 @@ func (l *Library) DeleteItems(ctx context.Context, uc *UserCtx, apiPIDs []string
 		return DeleteItemsResultDTO{}, err
 	}
 	if refused := l.deletionRefused(plan, rep, stayed); refused != nil {
-		l.Audit(ctx, uc, "items.delete.refused", AuditTarget{Kind: "item"},
+		l.Audit.Record(ctx, uc, "items.delete.refused", AuditTarget{Kind: "item"},
 			map[string]any{"mode": mode, "pids": apiPIDs, "error": refused.Msg})
 		return DeleteItemsResultDTO{}, refused
 	}
@@ -365,7 +365,7 @@ func (l *Library) DeleteItems(ctx context.Context, uc *UserCtx, apiPIDs []string
 			}
 		}
 	}
-	l.Audit(ctx, uc, "items.delete", AuditTarget{Kind: "item"},
+	l.Audit.Record(ctx, uc, "items.delete", AuditTarget{Kind: "item"},
 		d.auditDetail(map[string]any{"mode": mode, "count": itemsTaken(out.Entries), "pids": apiPIDs}, plan, rep, stayed))
 	return out, nil
 }
@@ -388,7 +388,7 @@ func itemsTaken(entries []DeletePlanDTO) int {
 // warning names. Every file must be one the caller sees in ItemFiles, in
 // a writable library, and the file of a cue rip only goes with every
 // track it plays, which this surface cannot name.
-func (l *Library) DeleteItemFiles(ctx context.Context, uc *UserCtx, apiItemPID string, filePIDs []string, mode string, dryRun bool) (DeleteItemsResultDTO, error) {
+func (l *Tools) DeleteItemFiles(ctx context.Context, uc *UserCtx, apiItemPID string, filePIDs []string, mode string, dryRun bool) (DeleteItemsResultDTO, error) {
 	dm, mode, err := deleteModeFor(uc, mode)
 	if err != nil {
 		return DeleteItemsResultDTO{}, err
@@ -399,7 +399,7 @@ func (l *Library) DeleteItemFiles(ctx context.Context, uc *UserCtx, apiItemPID s
 	if len(filePIDs) > 100 {
 		return DeleteItemsResultDTO{}, errInvalid("at most 100 files per call")
 	}
-	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	it, err := l.Grants.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return DeleteItemsResultDTO{}, err
 	}
@@ -420,7 +420,7 @@ func (l *Library) DeleteItemFiles(ctx context.Context, uc *UserCtx, apiItemPID s
 		if slices.Contains(pids, ref.FilePID) {
 			continue
 		}
-		if err := l.CheckWritable(ctx, string(ref.LibraryPID)); err != nil {
+		if err := l.Settings.CheckWritable(ctx, string(ref.LibraryPID)); err != nil {
 			return DeleteItemsResultDTO{}, err
 		}
 		pids = append(pids, ref.FilePID)
@@ -448,13 +448,13 @@ func (l *Library) DeleteItemFiles(ctx context.Context, uc *UserCtx, apiItemPID s
 		return DeleteItemsResultDTO{}, err
 	}
 	if refused := l.deletionRefused(plan, rep, stayed); refused != nil {
-		l.Audit(ctx, uc, "items.delete-files.refused", AuditTarget{Kind: "item", PID: apiItemPID},
+		l.Audit.Record(ctx, uc, "items.delete-files.refused", AuditTarget{Kind: "item", PID: apiItemPID},
 			map[string]any{"mode": mode, "filePids": filePIDs, "error": refused.Msg})
 		return DeleteItemsResultDTO{}, refused
 	}
 	d.settle(&out, plan, rep, stayed, false)
 	out.Warnings = append(out.Warnings, l.promotedWarnings(ctx, uc, it.PID, rep.Promoted)...)
-	l.Audit(ctx, uc, "items.delete-files", AuditTarget{Kind: "item", PID: apiItemPID},
+	l.Audit.Record(ctx, uc, "items.delete-files", AuditTarget{Kind: "item", PID: apiItemPID},
 		d.auditDetail(map[string]any{"mode": mode, "count": len(pids) - len(stayed), "filePids": filePIDs}, plan, rep, stayed))
 	return out, nil
 }
@@ -464,7 +464,7 @@ func (l *Library) DeleteItemFiles(ctx context.Context, uc *UserCtx, apiItemPID s
 // make, and skips an action whose library was flagged read-only, or whose
 // cue rip's tracks changed, since the plan, so the plan alone would
 // report the file gone.
-func (l *Library) applyDeletion(ctx context.Context, plan *trash.Plan) (*trash.Report, map[model.PID]string, error) {
+func (l *Tools) applyDeletion(ctx context.Context, plan *trash.Plan) (*trash.Report, map[model.PID]string, error) {
 	if l.deleteApplyHook != nil {
 		l.deleteApplyHook(ctx)
 	}
@@ -478,7 +478,7 @@ func (l *Library) applyDeletion(ctx context.Context, plan *trash.Plan) (*trash.R
 	refused := false
 	for _, f := range rep.Failures {
 		stayed[f.FilePID] = l.failureCause(f.Err)
-		refused = refused || l.storageRefused(f.Err) != ""
+		refused = refused || l.Roots.storageRefused(f.Err) != ""
 	}
 	planned := 0
 	for _, a := range plan.Actions {
@@ -494,7 +494,7 @@ func (l *Library) applyDeletion(ctx context.Context, plan *trash.Plan) (*trash.R
 
 // applyDelete is the catalog's apply of a delete plan, or what a test's
 // mutateHook answers in its place.
-func (l *Library) applyDelete(ctx context.Context, plan *trash.Plan) (*trash.Report, error) {
+func (l *Tools) applyDelete(ctx context.Context, plan *trash.Plan) (*trash.Report, error) {
 	if l.mutateHook != nil {
 		if err := l.mutateHook("trash"); err != nil {
 			return nil, err
@@ -506,7 +506,7 @@ func (l *Library) applyDelete(ctx context.Context, plan *trash.Plan) (*trash.Rep
 // skippedAsItRan adds to stayed each file the catalog skipped as the
 // delete ran, which its report counts and does not name: a file its item
 // still holds after the run did not go.
-func (l *Library) skippedAsItRan(ctx context.Context, plan *trash.Plan, stayed map[model.PID]string) {
+func (l *Tools) skippedAsItRan(ctx context.Context, plan *trash.Plan, stayed map[model.PID]string) {
 	readOnly := map[model.PID]bool{}
 	libs, err := l.lib.Libraries(ctx)
 	if err != nil {
@@ -550,7 +550,7 @@ var errNothingDeleted = errors.New("nothing was deleted")
 // library's to fix, a library flagged read-only or a cue rip changed since
 // the plan is said as such, anything else is the server's. Nil once a
 // file went.
-func (l *Library) deletionRefused(plan *trash.Plan, rep *trash.Report, stayed map[model.PID]string) *Error {
+func (l *Tools) deletionRefused(plan *trash.Plan, rep *trash.Report, stayed map[model.PID]string) *Error {
 	if rep.Trashed+rep.Deleted > 0 {
 		return nil
 	}
@@ -614,11 +614,11 @@ func pathBelow(root, path string) string {
 
 // failureCause is the innermost reason of an error's text, the part
 // after its last ": ", with storage roots scrubbed.
-func (l *Library) failureCause(msg string) string {
+func (l *Tools) failureCause(msg string) string {
 	if i := strings.LastIndex(msg, ": "); i >= 0 {
 		msg = msg[i+2:]
 	}
-	return l.scrubStoragePaths(msg)
+	return l.Ingest.scrubStoragePaths(msg)
 }
 
 // deleteModeFor reads a delete mode for the caller: trash for anyone
@@ -653,7 +653,7 @@ func errCueRipPart(tracks ...string) error {
 
 // ripTracks is every track of the rips the carved items are cut from, as
 // the API names them, each rip's in the order they play.
-func (l *Library) ripTracks(ctx context.Context, carved []*model.ItemView) []string {
+func (l *Tools) ripTracks(ctx context.Context, carved []*model.ItemView) []string {
 	var out []string
 	seen := map[model.PID]bool{}
 	for _, it := range carved {
@@ -714,7 +714,7 @@ func newDeletion(uc *UserCtx) *deletion {
 }
 
 // add records one item the delete names.
-func (d *deletion) add(ctx context.Context, l *Library, it *model.ItemView, apiPID string) error {
+func (d *deletion) add(ctx context.Context, l *Tools, it *model.ItemView, apiPID string) error {
 	refs, err := l.lib.ItemFiles(ctx, it.PID)
 	if err != nil {
 		return classify(err)
@@ -894,7 +894,7 @@ func (d *deletion) auditDetail(detail map[string]any, plan *trash.Plan, rep *tra
 // promotedWarnings names each copy a deletion moved into a removed
 // file's place, by the place it now holds; one the caller cannot see is
 // left unsaid.
-func (l *Library) promotedWarnings(ctx context.Context, uc *UserCtx, item model.PID, promoted []model.PromotedFile) []string {
+func (l *Tools) promotedWarnings(ctx context.Context, uc *UserCtx, item model.PID, promoted []model.PromotedFile) []string {
 	if len(promoted) == 0 {
 		return nil
 	}

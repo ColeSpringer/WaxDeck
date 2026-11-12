@@ -222,7 +222,7 @@ func newToolHarness(t *testing.T) *harness {
 func drainToolTasks(t *testing.T, h *harness) {
 	t.Helper()
 	deadline := time.Now().Add(90 * time.Second)
-	for h.svc.DrainToolTasks(context.Background()) {
+	for h.svc.Tools.DrainToolTasks(context.Background()) {
 		if time.Now().After(deadline) {
 			t.Fatal("tool tasks did not drain in time")
 		}

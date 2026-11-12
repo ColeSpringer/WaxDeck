@@ -26,7 +26,7 @@ func startDrains(ctx context.Context, group *supervise.Group, svc *service.Libra
 			case <-ctx.Done():
 				return nil
 			case <-tick.C:
-				svc.SyncDuePlaylistSources(ctx)
+				svc.Playlists.SyncDuePlaylistSources(ctx)
 			}
 		}
 	})
@@ -44,7 +44,7 @@ func startDrains(ctx context.Context, group *supervise.Group, svc *service.Libra
 				case <-ctx.Done():
 					return nil
 				case <-tick.C:
-					for svc.DrainAnalysisQueue(ctx) {
+					for svc.Tools.DrainAnalysisQueue(ctx) {
 						if ctx.Err() != nil {
 							return nil
 						}
@@ -64,7 +64,7 @@ func startDrains(ctx context.Context, group *supervise.Group, svc *service.Libra
 			case <-ctx.Done():
 				return nil
 			case <-tick.C:
-				for svc.DrainScrobbleOutbox(ctx) {
+				for svc.Integrations.DrainScrobbleOutbox(ctx) {
 					if ctx.Err() != nil {
 						return nil
 					}
@@ -80,7 +80,7 @@ func startDrains(ctx context.Context, group *supervise.Group, svc *service.Libra
 			case <-ctx.Done():
 				return nil
 			case <-tick.C:
-				for svc.DrainNotifyOutbox(ctx) {
+				for svc.Integrations.DrainNotifyOutbox(ctx) {
 					if ctx.Err() != nil {
 						return nil
 					}

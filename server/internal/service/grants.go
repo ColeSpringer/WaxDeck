@@ -19,6 +19,18 @@ import (
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
+// Grants is who may see what: library grants, permissions and the
+// visibility the catalog queries filter by, and with them a caller's
+// context built from an account and which library holds a path.
+type Grants struct {
+	*core
+	// libDirs caches path-to-library attribution: which library holds a
+	// path, for visibility checks and every other caller of libraryForPath.
+	libDirs libraryDirs
+}
+
+func newGrants(c *core, _ Config) *Grants { return &Grants{core: c} }
+
 // UserCtx is the acting user as the catalog surfaces need it: the
 // WaxDeck identity, the catalog user its playback state binds to, and
 // the library-visibility scope. Handlers build one per request from the
@@ -87,11 +99,11 @@ func (uc *UserCtx) ScopeKey() string {
 	return hex.EncodeToString(sum[:])
 }
 
-// UserByName resolves an account row by its username, for the surfaces
+// UserByName resolves an account by its username, for the surfaces
 // where the caller names somebody else - the Subsonic getUser view is
 // the one such surface today. Answers KindNotFound for a name no
 // account carries; the caller decides who may ask.
-func (l *Library) UserByName(ctx context.Context, username string) (*wdb.User, error) {
+func (l *Grants) UserByName(ctx context.Context, username string) (*User, error) {
 	u, err := l.db.UserByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
@@ -99,14 +111,24 @@ func (l *Library) UserByName(ctx context.Context, username string) (*wdb.User, e
 		}
 		return nil, &Error{Kind: KindInternal, Err: err}
 	}
-	return u, nil
+	return userOf(u), nil
+}
+
+// UserCtxFor is UserCtx for an account the service answered as a User,
+// for callers that hold the User rather than its row.
+func (l *Grants) UserCtxFor(ctx context.Context, u *User) (*UserCtx, error) {
+	row, err := u.held()
+	if err != nil {
+		return nil, err
+	}
+	return l.UserCtx(ctx, row)
 }
 
 // UserCtx assembles the per-request user context from an account row.
-func (l *Library) UserCtx(ctx context.Context, u *wdb.User) (*UserCtx, error) {
+func (l *Grants) UserCtx(ctx context.Context, u *wdb.User) (*UserCtx, error) {
 	uc := &UserCtx{
 		ID:               u.ID,
-		CatalogPID:       l.catalogPID(u),
+		CatalogPID:       l.Identity.catalogPID(u),
 		Admin:            hasRole(u.Roles, "admin"),
 		UploadEnabled:    u.UploadEnabled,
 		UploadQuotaBytes: u.UploadQuotaBytes,
@@ -170,7 +192,7 @@ type libraryDir struct {
 // next lookup rebuilds it. A miss already forces a reload, so this is not
 // required for correctness; it makes a runtime library add take effect at
 // once rather than on the first cache miss under the new root.
-func (l *Library) invalidateAttribution() {
+func (l *Grants) invalidateAttribution() {
 	l.libDirs.mu.Lock()
 	l.libDirs.dirs, l.libDirs.podcast, l.libDirs.podcastAtRoot, l.libDirs.missed = nil, "", false, time.Time{}
 	l.libDirs.podcasts, l.libDirs.missFailed = nil, false
@@ -179,7 +201,7 @@ func (l *Library) invalidateAttribution() {
 
 // attribution returns the attribution table, loading it on first use.
 // forceReload refreshes it (a miss may mean a library appeared since).
-func (l *Library) attribution(ctx context.Context, forceReload bool) ([]libraryDir, error) {
+func (l *Grants) attribution(ctx context.Context, forceReload bool) ([]libraryDir, error) {
 	dirs, _, _, err := l.attributionTable(ctx, forceReload)
 	return dirs, err
 }
@@ -191,7 +213,7 @@ func (l *Library) attribution(ctx context.Context, forceReload bool) ([]libraryD
 // the old library too, and the one at the configured root, by the rule
 // the catalog matches roots with, is the one downloads land in now;
 // atRoot says the one recorded is that one.
-func (l *Library) attributionTable(ctx context.Context, forceReload bool) (dirs []libraryDir, podcast string, atRoot bool, err error) {
+func (l *Grants) attributionTable(ctx context.Context, forceReload bool) (dirs []libraryDir, podcast string, atRoot bool, err error) {
 	l.libDirs.mu.Lock()
 	defer l.libDirs.mu.Unlock()
 	if err = l.loadLibraryDirs(ctx, forceReload); err != nil {
@@ -202,7 +224,7 @@ func (l *Library) attributionTable(ctx context.Context, forceReload bool) (dirs 
 
 // loadLibraryDirs reads the attribution table into libDirs, unless it
 // holds one and forceReload is false. libDirs.mu is held.
-func (l *Library) loadLibraryDirs(ctx context.Context, forceReload bool) error {
+func (l *Grants) loadLibraryDirs(ctx context.Context, forceReload bool) error {
 	if l.libDirs.dirs != nil && !forceReload {
 		return nil
 	}
@@ -216,7 +238,7 @@ func (l *Library) loadLibraryDirs(ctx context.Context, forceReload bool) error {
 	var podcasts []string
 	for _, lib := range libs {
 		if lib.Mode == model.ModePodcast {
-			here := samePath(rootKey(lib.DisplayRoot), rootKey(l.podcastDir))
+			here := samePath(rootKey(lib.DisplayRoot), rootKey(l.Podcasts.podcastDir))
 			if podcast == "" || (here && !atRoot) {
 				podcast, atRoot = string(lib.PID), here
 			}
@@ -241,7 +263,7 @@ func (l *Library) loadLibraryDirs(ctx context.Context, forceReload bool) error {
 // configured directory, and any an earlier directory left, which still
 // holds the episodes fetched while it was configured. Read under the lock
 // that loads the table: a table dropped in between would answer none.
-func (l *Library) podcastLibraries(ctx context.Context) ([]string, error) {
+func (l *Grants) podcastLibraries(ctx context.Context) ([]string, error) {
 	l.libDirs.mu.Lock()
 	defer l.libDirs.mu.Unlock()
 	if err := l.loadLibraryDirs(ctx, false); err != nil {
@@ -252,7 +274,7 @@ func (l *Library) podcastLibraries(ctx context.Context) ([]string, error) {
 
 // libraryForPath attributes a file path to its library PID, or "" when
 // no library contains it.
-func (l *Library) libraryForPath(ctx context.Context, path string) (string, error) {
+func (l *Grants) libraryForPath(ctx context.Context, path string) (string, error) {
 	dirs, err := l.attribution(ctx, false)
 	if err != nil {
 		return "", err
@@ -292,7 +314,7 @@ func matchDir(dirs []libraryDir, path string) string {
 // rather than re-deriving it from the path. That is also the more
 // durable of the two: a relocate rewrites every root's paths and leaves
 // the library pids alone.
-func (l *Library) itemVisible(ctx context.Context, uc *UserCtx, pid model.PID) bool {
+func (l *Grants) itemVisible(ctx context.Context, uc *UserCtx, pid model.PID) bool {
 	if uc.AllLibraries {
 		return true
 	}
@@ -315,7 +337,7 @@ func (l *Library) itemVisible(ctx context.Context, uc *UserCtx, pid model.PID) b
 // to that library whether or not it has a file, and an unfetched one has
 // none to attribute. Every episode file is bound to the podcast library,
 // so for a fetched one the two answers are the same.
-func (l *Library) viewVisible(ctx context.Context, uc *UserCtx, it *model.ItemView) bool {
+func (l *Grants) viewVisible(ctx context.Context, uc *UserCtx, it *model.ItemView) bool {
 	if uc.AllLibraries {
 		return true
 	}
@@ -328,7 +350,7 @@ func (l *Library) viewVisible(ctx context.Context, uc *UserCtx, it *model.ItemVi
 	return uc.Libraries[string(it.LibraryPID)]
 }
 
-// grantNode is viewVisible's rule as a query node, for a caller granted
+// node is viewVisible's rule as a query node, for a caller granted
 // libraries by pid: the libraries granted, and every episode for a caller
 // granted the podcast library, since an unfetched episode's library
 // column is empty. Nil for a caller who sees every library.
@@ -339,7 +361,7 @@ func (l *Library) viewVisible(ctx context.Context, uc *UserCtx, it *model.ItemVi
 // Sorted so the compiled SQL is stable across map iteration orders, and
 // chunked (inSet), since the engine takes at most 500 values in one
 // membership test.
-func (l *Library) grantNode(ctx context.Context, uc *UserCtx) query.Node {
+func (l *Grants) node(ctx context.Context, uc *UserCtx) query.Node {
 	if uc.AllLibraries {
 		return nil
 	}
@@ -358,10 +380,24 @@ func (l *Library) grantNode(ctx context.Context, uc *UserCtx) query.Node {
 	}}
 }
 
+// scopedTo narrows a builder to what the caller may enumerate: their tag
+// rules and their library grants.
+func (l *Grants) scopedTo(ctx context.Context, uc *UserCtx, b *query.Builder) *query.Builder {
+	// The caller's tag rules, as a node rather than the per-item pass
+	// that used to be their only home: a bucket count that ignored them
+	// read higher than the list it opened, and an "Appears on" card could
+	// open onto nothing.
+	b = b.WhereNode(l.contentRuleNode(ctx, uc))
+	if grants := l.node(ctx, uc); grants != nil {
+		b = b.WhereNode(grants)
+	}
+	return b
+}
+
 // podcastsVisible reports whether the caller can see the podcast
 // library (shows are not items, so show surfaces gate on the library
 // itself). Servers without a podcast dir have nothing to show.
-func (l *Library) podcastsVisible(ctx context.Context, uc *UserCtx) bool {
+func (l *Grants) podcastsVisible(ctx context.Context, uc *UserCtx) bool {
 	visible, judged := l.podcastsJudged(ctx, uc)
 	if !judged {
 		// A no standing on a library list that could not be read.
@@ -373,7 +409,7 @@ func (l *Library) podcastsVisible(ctx context.Context, uc *UserCtx) bool {
 // podcastsJudged is podcastsVisible saying whether its answer is a
 // judgment: a false that stands on a podcast library which could not be
 // read is not one.
-func (l *Library) podcastsJudged(ctx context.Context, uc *UserCtx) (visible, judged bool) {
+func (l *Grants) podcastsJudged(ctx context.Context, uc *UserCtx) (visible, judged bool) {
 	if uc.AllLibraries {
 		return true, true
 	}
@@ -391,8 +427,8 @@ func (l *Library) podcastsJudged(ctx context.Context, uc *UserCtx) (visible, jud
 // most once a second rather than on every call: every episode offered a
 // restricted reader asks, and on a server that has fetched nothing every
 // ask misses. The earlier directory's library stands in meanwhile.
-func (l *Library) podcastLibrary(ctx context.Context) (pid string, read bool) {
-	if l.podcastDir == "" {
+func (l *Grants) podcastLibrary(ctx context.Context) (pid string, read bool) {
+	if l.Podcasts.podcastDir == "" {
 		return "", true
 	}
 	_, pid, atRoot, err := l.attributionTable(ctx, false)
@@ -429,8 +465,8 @@ func (l *Library) podcastLibrary(ctx context.Context) (pid string, read bool) {
 // reloads it at once: the catalog creates that library on the first
 // download, and a miss holds the table's next reload off for a second,
 // which would tell every request meanwhile there is none.
-func (l *Library) podcastLibraryMayHaveLanded() {
-	if l.podcastDir == "" {
+func (l *Grants) podcastLibraryMayHaveLanded() {
+	if l.Podcasts.podcastDir == "" {
 		return
 	}
 	l.libDirs.mu.Lock()
@@ -443,7 +479,7 @@ func (l *Library) podcastLibraryMayHaveLanded() {
 
 // getVisibleItem is getItem plus the visibility check: an item outside
 // the caller's scope behaves exactly as if it did not exist.
-func (l *Library) getVisibleItem(ctx context.Context, uc *UserCtx, apiItemPID string) (*model.ItemView, error) {
+func (l *Grants) getVisibleItem(ctx context.Context, uc *UserCtx, apiItemPID string) (*model.ItemView, error) {
 	it, err := l.getItem(ctx, apiItemPID)
 	if err != nil {
 		return nil, err
@@ -467,13 +503,13 @@ func (l *Library) getVisibleItem(ctx context.Context, uc *UserCtx, apiItemPID st
 // the located-path cache invalidates on a scan poll, which would drop an
 // item out for the length of one. allowedByContent, not advisoryAllows:
 // the tag rules are what nothing upstream applied.
-func (l *Library) offers(ctx context.Context, uc *UserCtx, it *model.ItemView) bool {
+func (l *Grants) offers(ctx context.Context, uc *UserCtx, it *model.ItemView) bool {
 	return l.offersWith(ctx, uc, nil, it)
 }
 
 // offersWith is offers taking the tag rules' verdicts from a batch read
 // beforehand (tagVerdicts); nil asks per item.
-func (l *Library) offersWith(ctx context.Context, uc *UserCtx, verdicts map[model.PID]bool, it *model.ItemView) bool {
+func (l *Grants) offersWith(ctx context.Context, uc *UserCtx, verdicts map[model.PID]bool, it *model.ItemView) bool {
 	return !archived(it) && l.viewVisible(ctx, uc, it) && l.contentAllows(ctx, uc, verdicts, it)
 }
 
@@ -481,7 +517,7 @@ func (l *Library) offersWith(ctx context.Context, uc *UserCtx, verdicts map[mode
 // verdicts where one was read. An episode stays per item, its advisory
 // flags being fields on the view, and so does a trashed item, which the
 // batch query leaves out.
-func (l *Library) contentAllows(ctx context.Context, uc *UserCtx, verdicts map[model.PID]bool, it *model.ItemView) bool {
+func (l *Grants) contentAllows(ctx context.Context, uc *UserCtx, verdicts map[model.PID]bool, it *model.ItemView) bool {
 	if verdicts != nil && it.Kind != model.KindEpisode && !archived(it) {
 		return verdicts[it.PID]
 	}
@@ -490,7 +526,7 @@ func (l *Library) contentAllows(ctx context.Context, uc *UserCtx, verdicts map[m
 
 // VisibleItem verifies the caller can see the item (play-info calls it
 // before minting stream URLs).
-func (l *Library) VisibleItem(ctx context.Context, uc *UserCtx, apiItemPID string) error {
+func (l *Grants) VisibleItem(ctx context.Context, uc *UserCtx, apiItemPID string) error {
 	_, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	return err
 }
@@ -500,7 +536,7 @@ func (l *Library) VisibleItem(ctx context.Context, uc *UserCtx, apiItemPID strin
 // to ask for a book's layout asks nothing of anything else. The kind is
 // the catalog's, never the pid's prefix, since a track's pid names the
 // book it became.
-func (l *Library) VisibleBook(ctx context.Context, uc *UserCtx, apiItemPID string) (bool, error) {
+func (l *Grants) VisibleBook(ctx context.Context, uc *UserCtx, apiItemPID string) (bool, error) {
 	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return false, err
@@ -508,128 +544,32 @@ func (l *Library) VisibleBook(ctx context.Context, uc *UserCtx, apiItemPID strin
 	return it.Kind == model.KindBook, nil
 }
 
-// LibraryInfo is one catalog library for the admin surface.
-type LibraryInfo struct {
-	PID   string
-	Name  string
-	Media string
-	// MediaDeclared is the configuration naming what the root holds, which
-	// SetLibraryMedia then refuses to change.
-	MediaDeclared bool
-	// Path is the root directory, for the screen that manages it. Empty
-	// where the catalog holds a path it cannot render as text.
-	Path string
-	// ItemCount is what the catalog holds under the root, counted at read
-	// time. Only Libraries fills it; a create has nothing there yet.
-	ItemCount int64
-	// StreamingWarning is set by AddLibrary when the root exists but the
-	// streaming sidecar did not take it.
-	StreamingWarning string
-	// ScanStarted is AddLibrary's scan starting; false when another job
-	// held the catalog, so the root waits for the next scan.
-	ScanStarted bool
-	// ReadOnly, FolderFallback, Managed and Profile are the catalog's
-	// policy for the root.
-	ReadOnly       bool
-	FolderFallback bool
-	Managed        bool
-	Profile        string
-	// Configured is the server's configuration naming the root, which
-	// only a configuration change takes away. Unreachable is its folder
-	// missing at its last scan. Writable is a managed root taking the
-	// server's writes when last probed; nil where the server does not
-	// probe: an in-place root, or one it treats as read-only.
-	Configured  bool
-	Unreachable bool
-	Writable    *bool
+// grantEpoch reads the user's current visibility epoch (0 until ever
+// bumped).
+func (l *Grants) grantEpoch(ctx context.Context, userID string) (int64, error) {
+	return l.Identity.epoch(ctx, syncKeyGrantEpoch+userID)
 }
 
-// Libraries lists the catalog's libraries with their configured root
-// names (falling back to the root directory's base name) and their
-// paths. Cheap: no counting.
-//
-// The Subsonic surface calls this on every getMusicFolders, which
-// clients issue on connect, so nothing here may touch the catalog's
-// item tables. LibrariesWithCounts is the variant that does, and only
-// the administrative listing asks for it.
-func (l *Library) Libraries(ctx context.Context) ([]LibraryInfo, error) {
-	return l.libraries(ctx, false)
+// bumpGrantEpoch retires the user's outstanding catalog cursors after a
+// visibility change; their next delta answers sync-reset and the
+// re-snapshot reflects the new grants.
+func (l *Grants) bumpGrantEpoch(ctx context.Context, userID string) {
+	l.Identity.bumpEpoch(ctx, syncKeyGrantEpoch+userID)
 }
 
-// LibrariesWithCounts is Libraries plus how much each root holds: one
-// indexed count per library. It is the administrators' listing, which
-// says what the last write probe found and writes nothing itself.
-func (l *Library) LibrariesWithCounts(ctx context.Context) ([]LibraryInfo, error) {
-	return l.libraries(ctx, true)
-}
-
-func (l *Library) libraries(ctx context.Context, counts bool) ([]LibraryInfo, error) {
-	libs, err := l.lib.Libraries(ctx)
-	if err != nil {
-		return nil, classify(err)
+// UserCtxByID rebuilds a user context from a bare user id, for the paths
+// that carry ids rather than principals: the connect core, a media
+// capability, a share, a queued task. It refuses a disabled or pending
+// account as if it did not exist: every caller acts for an account that
+// has to be able to sign in. A read that failed is not an answer, so it
+// stays an internal error.
+func (l *Grants) UserCtxByID(ctx context.Context, userID string) (*UserCtx, error) {
+	u, err := l.db.UserByID(ctx, userID)
+	if err != nil && !errors.Is(err, wdb.ErrNotFound) {
+		return nil, &Error{Kind: KindInternal, Err: err}
 	}
-	out := make([]LibraryInfo, 0, len(libs))
-	for _, lib := range libs {
-		info := l.libraryInfo(lib)
-		if counts {
-			info.ItemCount = l.libraryItemCount(ctx, lib.PID)
-		}
-		out = append(out, info)
+	if u == nil || u.Disabled || u.Pending {
+		return nil, errNotFound("no such user")
 	}
-	return out, nil
-}
-
-// libraryInfo maps a catalog library, named as the root table names it.
-// The catalog stores no media for the podcast library.
-func (l *Library) libraryInfo(lib *model.Library) LibraryInfo {
-	name, writable := filepath.Base(lib.DisplayRoot), true
-	for _, r := range l.libraryRoots() {
-		if rootKey(r.Path) == rootKey(lib.DisplayRoot) {
-			name, writable = r.Name, !r.Unwritable
-		}
-	}
-	var probed *bool
-	if l.probesRoot(lib.Mode == model.ModeManaged, lib.ReadOnly) {
-		probed = &writable
-	}
-	media := string(lib.MediaType())
-	if lib.Mode == model.ModePodcast {
-		media = "podcast"
-	}
-	return LibraryInfo{
-		PID:            apiPID(PrefixLibrary, lib.PID),
-		Name:           name,
-		Media:          media,
-		MediaDeclared:  l.declaredMedia(lib) != "",
-		Path:           lib.DisplayRoot,
-		ReadOnly:       lib.ReadOnly,
-		FolderFallback: lib.FolderFallback,
-		Managed:        lib.Mode == model.ModeManaged,
-		Profile:        lib.Profile,
-		Configured:     l.configuredRoot(lib.DisplayRoot),
-		Unreachable:    l.rootReach.unreachable(lib.PID),
-		Writable:       probed,
-	}
-}
-
-// libraryItemCount counts the playable items a root holds, keyed on the
-// catalog's own library dimension: an indexed integer comparison, not
-// the path-prefix scan this used to be. The old form compiled
-// `startsWith` to `LIKE ? ESCAPE '\'`, and SQLite turns its LIKE
-// optimization off whenever an ESCAPE clause is present.
-//
-// A count that cannot be taken reports zero rather than failing the
-// listing - the number is a caption on an administrative table, and
-// losing the table over it would be the worse answer.
-func (l *Library) libraryItemCount(ctx context.Context, libraryPID model.PID) int64 {
-	if libraryPID == "" {
-		return 0
-	}
-	q := query.New(query.EntityItems).Where("library", query.OpIs, string(libraryPID)).Build()
-	n, err := l.lib.Count(ctx, q, "")
-	if err != nil {
-		l.log.Warn("counting a library's items", "library", libraryPID, "err", err)
-		return 0
-	}
-	return int64(n)
+	return l.UserCtx(ctx, u)
 }

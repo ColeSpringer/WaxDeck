@@ -285,7 +285,7 @@ func drainFetches(t *testing.T, h *harness) {
 	t.Helper()
 	ctx := context.Background()
 	deadline := time.Now().Add(30 * time.Second)
-	for h.svc.DrainFetchQueue(ctx) {
+	for h.svc.Podcasts.DrainFetchQueue(ctx) {
 		if time.Now().After(deadline) {
 			t.Fatal("fetch queue did not drain")
 		}
@@ -467,7 +467,7 @@ func TestPodcastLifecycle(t *testing.T) {
 	if sm := decode[SkipMap](t, resp); sm.State != "pending" {
 		t.Fatalf("skip map state = %q, want pending", sm.State)
 	}
-	for h.svc.DrainAnalysisQueue(context.Background()) {
+	for h.svc.Tools.DrainAnalysisQueue(context.Background()) {
 	}
 	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/skip-map", h.token)
 	sm := decode[SkipMap](t, resp)
@@ -755,7 +755,7 @@ func TestPodcastRetentionUnion(t *testing.T) {
 		map[string]any{"retentionKeep": keepAll})
 	resp.Body.Close()
 
-	h.svc.SweepRetention(ctx)
+	h.svc.Podcasts.SweepRetention(ctx)
 	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
 	page = decode[EpisodePage](t, resp)
 	downloaded := 0
@@ -780,7 +780,7 @@ func TestPodcastRetentionUnion(t *testing.T) {
 		map[string]any{"retentionKeep": keepTwo})
 	resp.Body.Close()
 
-	h.svc.SweepRetention(ctx)
+	h.svc.Podcasts.SweepRetention(ctx)
 	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
 	page = decode[EpisodePage](t, resp)
 	downloaded = 0
@@ -815,7 +815,7 @@ func TestPodcastRetentionUnion(t *testing.T) {
 	if err := h.store.EnqueueRetention(ctx, strings.TrimPrefix(show, "pc-"), time.Now().UnixNano()); err != nil {
 		t.Fatal(err)
 	}
-	h.svc.SweepRetention(ctx)
+	h.svc.Podcasts.SweepRetention(ctx)
 	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
 	page = decode[EpisodePage](t, resp)
 	if !page.Items[2].Downloaded {
@@ -1243,7 +1243,7 @@ func TestAnalysisWithNoAudioIsDroppedNotFailed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for h.svc.DrainAnalysisQueue(ctx) {
+	for h.svc.Tools.DrainAnalysisQueue(ctx) {
 	}
 
 	// A year on, with an unexhaustable attempt budget: an entry still here
@@ -1296,7 +1296,7 @@ func TestAnalysisWithMissingFileIsDropped(t *testing.T) {
 			drainFetches(t, h)
 			tc.wipe(t, podcastDir)
 
-			for h.svc.DrainAnalysisQueue(ctx) {
+			for h.svc.Tools.DrainAnalysisQueue(ctx) {
 			}
 
 			future := time.Now().Add(365 * 24 * time.Hour).UnixNano()
@@ -1382,7 +1382,7 @@ func TestRefetchedEpisodePlaysAtOnce(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("play-info right after a re-fetch = %d, want 200", resp.StatusCode)
 	}
-	for h.svc.DrainAnalysisQueue(ctx) {
+	for h.svc.Tools.DrainAnalysisQueue(ctx) {
 	}
 	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/skip-map", h.token)
 	sm := decode[SkipMap](t, resp)
@@ -1615,7 +1615,7 @@ func TestAutoDownloadFilterUnion(t *testing.T) {
 
 	// The feed publishes three more; the refresh decides what to fetch.
 	feed.writeFeed(t, 5)
-	h.svc.RefreshDueFeeds(ctx, 0)
+	h.svc.Podcasts.RefreshDueFeeds(ctx, 0)
 	drainFetches(t, h)
 
 	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
@@ -1659,7 +1659,7 @@ func TestAutoDownloadFetchesWhatTheRefreshAdded(t *testing.T) {
 	resp.Body.Close()
 
 	feed.writeFeedOf(t, 1, 2, 3) // episode 1 is the oldest by date
-	h.svc.RefreshDueFeeds(ctx, 0)
+	h.svc.Podcasts.RefreshDueFeeds(ctx, 0)
 	drainFetches(t, h)
 
 	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
@@ -1732,7 +1732,7 @@ func TestAutoDownloadLeavesWhatRetentionWouldReclaim(t *testing.T) {
 			drainFetches(t, h)
 
 			feed.writeFeedOf(t, 1, 2, 3)
-			h.svc.RefreshDueFeeds(ctx, 0)
+			h.svc.Podcasts.RefreshDueFeeds(ctx, 0)
 			drainFetches(t, h)
 
 			got := episodes()
@@ -2539,7 +2539,7 @@ func TestSkipMapReportsAudioDeletedBehindTheServersBack(t *testing.T) {
 
 	// The worker resolves the path off the request, finds nothing, and
 	// tells the catalog rather than dropping the entry silently.
-	for h.svc.DrainAnalysisQueue(context.Background()) {
+	for h.svc.Tools.DrainAnalysisQueue(context.Background()) {
 	}
 
 	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/skip-map", h.token)
@@ -2730,8 +2730,8 @@ func TestAnArrivalTellsEverySubscriberOnce(t *testing.T) {
 	wantStatus(t, reqAs(t, h, "POST", "/api/v1/podcasts", sam, map[string]any{"url": feed.feedURL()}), 201, "sam subscribes")
 
 	feed.writeFeed(t, 3)
-	h.svc.RefreshDueFeeds(ctx, 0)
-	h.svc.RefreshDueFeeds(ctx, 0)
+	h.svc.Podcasts.RefreshDueFeeds(ctx, 0)
+	h.svc.Podcasts.RefreshDueFeeds(ctx, 0)
 	for who, token := range map[string]string{"the admin": h.token, "sam": sam} {
 		rows := inboxRows(t, h, token, "episode-arrived")
 		if len(rows) != 1 || rows[0].Title != "New episode: "+sub.Show.Title ||
@@ -2832,7 +2832,7 @@ func TestAReadOnlyServerKeepsThePodcastTreeAsItIs(t *testing.T) {
 		wantStatus(t, h.putJSON(t, "/api/v1/items/"+pid+"/played", map[string]any{"played": true, "finished": true}), 200, "marking it heard")
 	}
 	setReadOnly(true)
-	h.svc.SweepRetention(ctx)
+	h.svc.Podcasts.SweepRetention(ctx)
 	if n, _ := downloaded(); n != 2 {
 		t.Fatalf("retention left %d downloads in a read-only library, want both", n)
 	}
@@ -2844,7 +2844,7 @@ func TestAReadOnlyServerKeepsThePodcastTreeAsItIs(t *testing.T) {
 		t.Fatalf("removal code = %q, want read-only", e.Code)
 	}
 	setReadOnly(false)
-	h.svc.SweepRetention(ctx)
+	h.svc.Podcasts.SweepRetention(ctx)
 	if n, _ := downloaded(); n != 1 {
 		t.Fatalf("retention left %d downloads once writable, want one", n)
 	}

@@ -44,23 +44,23 @@ func newCoverReach(t *testing.T) coverReach {
 		t.Fatalf("scanning: %v", err)
 	}
 	var seenLib string
-	for _, r := range svc.libraryRoots() {
+	for _, r := range svc.Roots.libraryRoots() {
 		if r.Name == "seen" {
 			seenLib = r.PID
 		}
 	}
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "reader", Password: "correct-horse", AccessMode: "granted",
 		LibraryPIDs: []string{apiPID(PrefixLibrary, model.PID(seenLib))},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader, err := svc.UserCtx(ctx, acct.User)
+	reader, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := svc.Items(ctx, owner, ItemFilter{}, "", 50)
+	page, err := svc.Reads.Items(ctx, owner, ItemFilter{}, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,13 +84,13 @@ func newCoverReach(t *testing.T) coverReach {
 // it once, which stores its cover.
 func (r coverReach) sharedList(t *testing.T, name string, members ...string) string {
 	t.Helper()
-	pl, err := r.svc.CreatePlaylist(r.ctx, r.owner, PlaylistCreate{
+	pl, err := r.svc.Playlists.CreatePlaylist(r.ctx, r.owner, PlaylistCreate{
 		Name: name, Kind: "static", Visibility: "shared", ItemPIDs: members,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.svc.PlaylistItems(r.ctx, r.owner, pl.PID, "", 50); err != nil {
+	if _, err := r.svc.Playlists.Items(r.ctx, r.owner, pl.PID, "", 50); err != nil {
 		t.Fatal(err)
 	}
 	return pl.PID
@@ -105,7 +105,7 @@ func (r coverReach) readerCovers(t *testing.T, reads *atomic.Int32, pl string, n
 	settleCatalogFeed(t, r.svc)
 	before := reads.Load()
 	for range n {
-		blob, err := r.svc.Art(r.ctx, r.reader, pl, "", 0)
+		blob, err := r.svc.Reads.Art(r.ctx, r.reader, pl, "", 0)
 		if err != nil {
 			t.Fatalf("the reader's cover: %v", err)
 		}
@@ -125,7 +125,7 @@ func TestAReadersSharedListCoverReadsBoundedMembers(t *testing.T) {
 	t.Parallel()
 	r := newCoverReach(t)
 	var reads atomic.Int32
-	r.svc.memberReadHook = func(*model.Playlist) { reads.Add(1) }
+	r.svc.Playlists.memberReadHook = func(*model.Playlist) { reads.Add(1) }
 
 	seen := r.sharedList(t, "All seen", r.seen...)
 	if n := r.readerCovers(t, &reads, seen, 5, nil); n != 0 {
@@ -133,14 +133,14 @@ func TestAReadersSharedListCoverReadsBoundedMembers(t *testing.T) {
 	}
 
 	mixed := r.sharedList(t, "Partly unseen", r.unseen, r.seen[0])
-	own, err := r.svc.Art(r.ctx, r.reader, r.seen[0], "", 0)
+	own, err := r.svc.Reads.Art(r.ctx, r.reader, r.seen[0], "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n := r.readerCovers(t, &reads, mixed, 5, own.Bytes); n != 1 {
 		t.Errorf("five cover reads of a list drawn from a member the reader cannot see read its members %d times, want once", n)
 	}
-	r.svc.noteArtworkChanged(r.ctx)
+	r.svc.Playlists.noteArtworkChanged(r.ctx)
 	if n := r.readerCovers(t, &reads, mixed, 3, own.Bytes); n != 1 {
 		t.Errorf("after an artwork change, three cover reads read the members %d times, want once", n)
 	}
@@ -154,25 +154,25 @@ func TestACoverWithoutRecordedSourcesGoesToNoRestrictedReader(t *testing.T) {
 	t.Parallel()
 	r := newCoverReach(t)
 	pl := r.sharedList(t, "Changing", r.seen[0])
-	r.svc.coverRecordHook = func() error { return errors.New("cut short") }
-	if err := r.svc.ReplacePlaylistItems(r.ctx, r.owner, pl, []string{r.unseen, r.seen[0]}, nil); err != nil {
+	r.svc.Playlists.coverRecordHook = func() error { return errors.New("cut short") }
+	if err := r.svc.Playlists.ReplacePlaylistItems(r.ctx, r.owner, pl, []string{r.unseen, r.seen[0]}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.svc.PlaylistItems(r.ctx, r.owner, pl, "", 50); err != nil {
+	if _, err := r.svc.Playlists.Items(r.ctx, r.owner, pl, "", 50); err != nil {
 		t.Fatal(err)
 	}
-	unseen, err := r.svc.Art(r.ctx, r.owner, r.unseen, "", 0)
+	unseen, err := r.svc.Reads.Art(r.ctx, r.owner, r.unseen, "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored, err := r.svc.Art(r.ctx, r.owner, pl, "", 0); err != nil || !bytes.Equal(stored.Bytes, unseen.Bytes) {
+	if stored, err := r.svc.Reads.Art(r.ctx, r.owner, pl, "", 0); err != nil || !bytes.Equal(stored.Bytes, unseen.Bytes) {
 		t.Fatalf("the owner's cover (%v) is not the one drawn from the new first member", err)
 	}
-	seen, err := r.svc.Art(r.ctx, r.reader, r.seen[0], "", 0)
+	seen, err := r.svc.Reads.Art(r.ctx, r.reader, r.seen[0], "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := r.svc.Art(r.ctx, r.reader, pl, "", 0)
+	got, err := r.svc.Reads.Art(r.ctx, r.reader, pl, "", 0)
 	if err != nil || !bytes.Equal(got.Bytes, seen.Bytes) {
 		t.Errorf("the reader is served (%v) a cover other than the member it sees: one drawn from a member it cannot see", err)
 	}

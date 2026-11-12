@@ -47,7 +47,7 @@ func (s *Server) ListShares(ctx context.Context, req ListSharesRequestObject) (L
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.svc.Shares(ctx, uc, derefBool(req.Params.All), deref(req.Params.Cursor), limit)
+	res, err := s.svc.Reads.Shares(ctx, uc, derefBool(req.Params.All), deref(req.Params.Cursor), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (s *Server) CreateShare(ctx context.Context, req CreateShareRequestObject) 
 		}
 		expiresIn = time.Duration(*req.Body.ExpiresInHours) * time.Hour
 	}
-	info, err := s.svc.CreateShare(ctx, uc, req.Body.Pid, expiresIn,
+	info, err := s.svc.Reads.CreateShare(ctx, uc, req.Body.Pid, expiresIn,
 		derefBool(req.Body.AllowDownload), derefInt64(req.Body.PositionMs))
 	if err != nil {
 		return nil, err
@@ -83,7 +83,7 @@ func (s *Server) CreateShare(ctx context.Context, req CreateShareRequestObject) 
 
 func (s *Server) RevokeShare(ctx context.Context, req RevokeShareRequestObject) (RevokeShareResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.RevokeShare(ctx, uc, req.ShareId); err != nil {
+	if err := s.svc.Reads.RevokeShare(ctx, uc, req.ShareId); err != nil {
 		return nil, err
 	}
 	s.shareTransfers.end(barePID(req.ShareId))

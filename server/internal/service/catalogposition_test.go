@@ -15,18 +15,18 @@ func TestContentPositionNeverGoesBack(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newCatalogFixture(t)
 	settleCatalogFeed(t, svc)
-	good := svc.CatalogContentSeq(ctx)
+	good := svc.Reads.CatalogContentSeq(ctx)
 	// The feed ahead of the last content row, as it is after any play.
-	svc.trackFacts.feedHook = func() int64 { return good + 3 }
-	if got := svc.CatalogContentSeq(ctx); got != good {
+	svc.Reads.trackFacts.feedHook = func() int64 { return good + 3 }
+	if got := svc.Reads.CatalogContentSeq(ctx); got != good {
 		t.Fatalf("a good look answered %d, want the content position %d", got, good)
 	}
-	svc.trackFacts.headHook = func(context.Context) (int64, error) { return 0, errors.New("catalog busy") }
-	if got := svc.CatalogContentSeq(ctx); got != good {
+	svc.Reads.trackFacts.headHook = func(context.Context) (int64, error) { return 0, errors.New("catalog busy") }
+	if got := svc.Reads.CatalogContentSeq(ctx); got != good {
 		t.Errorf("a failed look answered %d, want the last good %d", got, good)
 	}
-	svc.trackFacts.headHook = nil
-	if got := svc.CatalogContentSeq(ctx); got != good {
+	svc.Reads.trackFacts.headHook = nil
+	if got := svc.Reads.CatalogContentSeq(ctx); got != good {
 		t.Errorf("the next good look answered %d, want %d", got, good)
 	}
 }
@@ -38,15 +38,15 @@ func TestTrackFactsLooksAtTheLogOutsideItsLock(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	var underLock atomic.Bool
-	svc.trackFacts.headHook = func(ctx context.Context) (int64, error) {
-		if svc.trackFacts.mu.TryLock() {
-			svc.trackFacts.mu.Unlock()
+	svc.Reads.trackFacts.headHook = func(ctx context.Context) (int64, error) {
+		if svc.Reads.trackFacts.mu.TryLock() {
+			svc.Reads.trackFacts.mu.Unlock()
 		} else {
 			underLock.Store(true)
 		}
 		return svc.lib.LatestChangeSeq(ctx)
 	}
-	if _, err := svc.TrackFacts(ctx, uc); err != nil {
+	if _, err := svc.Reads.TrackFacts(ctx, uc); err != nil {
 		t.Fatal(err)
 	}
 	if underLock.Load() {
@@ -59,11 +59,11 @@ func TestTrackFactsKeepTheNewerSweep(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := newCatalogFixture(t)
 	newer := []TrackFacts{{PID: "tr-newer"}}
-	svc.publishTrackFacts(9, newer)
-	svc.publishTrackFacts(7, []TrackFacts{{PID: "tr-older"}})
-	svc.trackFacts.mu.Lock()
-	defer svc.trackFacts.mu.Unlock()
-	if svc.trackFacts.tail != 9 || len(svc.trackFacts.rows) != 1 || svc.trackFacts.rows[0].PID != "tr-newer" {
-		t.Fatalf("held sweep = %d %+v, want the one made at 9", svc.trackFacts.tail, svc.trackFacts.rows)
+	svc.Reads.publishTrackFacts(9, newer)
+	svc.Reads.publishTrackFacts(7, []TrackFacts{{PID: "tr-older"}})
+	svc.Reads.trackFacts.mu.Lock()
+	defer svc.Reads.trackFacts.mu.Unlock()
+	if svc.Reads.trackFacts.tail != 9 || len(svc.Reads.trackFacts.rows) != 1 || svc.Reads.trackFacts.rows[0].PID != "tr-newer" {
+		t.Fatalf("held sweep = %d %+v, want the one made at 9", svc.Reads.trackFacts.tail, svc.Reads.trackFacts.rows)
 	}
 }

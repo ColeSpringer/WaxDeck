@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/colespringer/waxdeck/server/internal/auth"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 )
@@ -20,7 +19,7 @@ func TestRecordRadioListenReachesStats(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 	settled := watchRadioScrobbles(t, svc)
-	st, err := svc.CreateRadioStation(ctx, admin, RadioStationEdit{
+	st, err := svc.Radio.CreateRadioStation(ctx, admin, RadioStationEdit{
 		Name: "Groove Salad", StreamURL: "https://ice.example.net/groove",
 	})
 	if err != nil {
@@ -28,10 +27,10 @@ func TestRecordRadioListenReachesStats(t *testing.T) {
 	}
 
 	started := time.Now().Add(-10 * time.Minute)
-	svc.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, started, 4*time.Minute)
+	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, started, 4*time.Minute)
 	settled()
 
-	stats, err := svc.ListeningStats(ctx, admin, "30d", "day")
+	stats, err := svc.Reads.ListeningStats(ctx, admin, "30d", "day")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +47,7 @@ func TestRecordRadioListenReachesStats(t *testing.T) {
 		t.Fatalf("radio has no media slice: %+v", stats.ByMediaType)
 	}
 
-	top, err := svc.TopListFor(ctx, admin, "stations", "30d", 10)
+	top, err := svc.Reads.TopListFor(ctx, admin, "stations", "30d", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,9 +62,9 @@ func TestRecordRadioListenReachesStats(t *testing.T) {
 	// A second checkpoint of the same connection extends the one row
 	// rather than adding a session: the payload carries the elapsed
 	// total, which is what makes a dropped checkpoint survivable.
-	svc.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, started, 9*time.Minute)
+	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, started, 9*time.Minute)
 	settled()
-	stats, err = svc.ListeningStats(ctx, admin, "30d", "day")
+	stats, err = svc.Reads.ListeningStats(ctx, admin, "30d", "day")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +74,7 @@ func TestRecordRadioListenReachesStats(t *testing.T) {
 
 	// The log names the station from the station library; the catalog
 	// has never heard of it.
-	log, err := svc.ListenLog(ctx, admin, "", "", 10)
+	log, err := svc.Reads.ListenLog(ctx, admin, "", "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +88,7 @@ func TestRecordRadioListenReachesStats(t *testing.T) {
 
 	// A station is not an item, so the recap counts its time without
 	// counting it as a different thing listened to.
-	recap, err := svc.UserYearInReview(ctx, admin, time.Now().Year())
+	recap, err := svc.Reads.UserYearInReview(ctx, admin, time.Now().Year())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,17 +105,17 @@ func TestRecordRadioListenReachesStats(t *testing.T) {
 func TestRecordRadioListenIgnoresAGlance(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
-	st, err := svc.CreateRadioStation(ctx, admin, RadioStationEdit{
+	st, err := svc.Radio.CreateRadioStation(ctx, admin, RadioStationEdit{
 		Name: "Groove Salad", StreamURL: "https://ice.example.net/groove",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	svc.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, time.Now(), svc.radioListenFloor-time.Second)
+	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, time.Now(), svc.Radio.radioListenFloor-time.Second)
 	// Nothing was queued, so there is no writer tick to wait for; the
 	// assertion is that the row never appears.
-	stats, err := svc.ListeningStats(ctx, admin, "30d", "day")
+	stats, err := svc.Reads.ListeningStats(ctx, admin, "30d", "day")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,31 +146,27 @@ func TestRadioListenSurvivesShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Close() })
-	sealer, err := auth.NewSealer([]byte("0123456789abcdef0123456789abcdef"), "waxdeck-app-password-v1")
-	if err != nil {
-		t.Fatal(err)
-	}
 	group := supervise.NewGroup(log)
 	svc, err := Open(ctx, Config{
 		DataDir: t.TempDir(),
 		Roots:   []Root{{Name: "lib", Path: t.TempDir()}},
-		Sealer:  sealer,
+		Sealer:  testSealer(t),
 		Logger:  log,
 	}, store, group)
 	if err != nil {
 		t.Fatal(err)
 	}
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "admin", Password: "correct-horse", Roles: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, err := svc.UserCtx(ctx, acct.User)
+	admin, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
-	st, err := svc.CreateRadioStation(ctx, admin, RadioStationEdit{
+	st, err := svc.Radio.CreateRadioStation(ctx, admin, RadioStationEdit{
 		Name: "Groove Salad", StreamURL: "https://ice.example.net/groove",
 	})
 	if err != nil {
@@ -189,7 +184,7 @@ func TestRadioListenSurvivesShutdown(t *testing.T) {
 	// listener's context dies at the same instant their last segment is
 	// reported.
 	started := time.Now().Add(-4 * time.Minute)
-	svc.RecordRadioListen(context.WithoutCancel(ctx), admin.ID, "listen-1", st.PID, started, 4*time.Minute)
+	svc.Radio.RecordRadioListen(context.WithoutCancel(ctx), admin.ID, "listen-1", st.PID, started, 4*time.Minute)
 
 	if err := svc.Close(); err != nil {
 		t.Fatal(err)
@@ -222,13 +217,13 @@ func TestTopStationsAfterTheStationIsDeleted(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 	settled := watchRadioScrobbles(t, svc)
-	kept, err := svc.CreateRadioStation(ctx, admin, RadioStationEdit{
+	kept, err := svc.Radio.CreateRadioStation(ctx, admin, RadioStationEdit{
 		Name: "Groove Salad", StreamURL: "https://ice.example.net/groove",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	gone, err := svc.CreateRadioStation(ctx, admin, RadioStationEdit{
+	gone, err := svc.Radio.CreateRadioStation(ctx, admin, RadioStationEdit{
 		Name: "Drone Zone", StreamURL: "https://ice.example.net/drone",
 	})
 	if err != nil {
@@ -236,19 +231,19 @@ func TestTopStationsAfterTheStationIsDeleted(t *testing.T) {
 	}
 
 	started := time.Now().Add(-time.Hour)
-	svc.RecordRadioListen(ctx, admin.ID, "listen-1", kept.PID, started, 4*time.Minute)
+	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", kept.PID, started, 4*time.Minute)
 	settled()
 	// More time on the one about to go, so its place in the ranking is
 	// unambiguous and the assertion is about the entry rather than the
 	// order.
-	svc.RecordRadioListen(ctx, admin.ID, "listen-2", gone.PID, started, 9*time.Minute)
+	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-2", gone.PID, started, 9*time.Minute)
 	settled()
 
-	if err := svc.DeleteRadioStation(ctx, gone.PID); err != nil {
+	if err := svc.Radio.DeleteRadioStation(ctx, gone.PID); err != nil {
 		t.Fatal(err)
 	}
 
-	top, err := svc.TopListFor(ctx, admin, "stations", "30d", 10)
+	top, err := svc.Reads.TopListFor(ctx, admin, "stations", "30d", 10)
 	if err != nil {
 		t.Fatal(err)
 	}

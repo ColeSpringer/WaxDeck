@@ -18,26 +18,26 @@ func TestAPodcastLibraryMissReloadsAtMostOnceASecond(t *testing.T) {
 	f := openStubFeeds(t)
 	restricted := &UserCtx{ID: f.uc.ID, CatalogPID: f.uc.CatalogPID, Libraries: map[string]bool{"elsewhere": true}}
 	table := func() []libraryDir {
-		f.svc.libDirs.mu.Lock()
-		defer f.svc.libDirs.mu.Unlock()
-		return f.svc.libDirs.dirs
+		f.svc.Grants.libDirs.mu.Lock()
+		defer f.svc.Grants.libDirs.mu.Unlock()
+		return f.svc.Grants.libDirs.dirs
 	}
 	missed := func(set func(*time.Time)) time.Time {
-		f.svc.libDirs.mu.Lock()
-		defer f.svc.libDirs.mu.Unlock()
+		f.svc.Grants.libDirs.mu.Lock()
+		defer f.svc.Grants.libDirs.mu.Unlock()
 		if set != nil {
-			set(&f.svc.libDirs.missed)
+			set(&f.svc.Grants.libDirs.missed)
 		}
-		return f.svc.libDirs.missed
+		return f.svc.Grants.libDirs.missed
 	}
 	// Loaded once first, so a reload is a new table rather than the first.
-	if dirs, err := f.svc.attribution(f.ctx, false); err != nil || len(dirs) == 0 {
+	if dirs, err := f.svc.Grants.attribution(f.ctx, false); err != nil || len(dirs) == 0 {
 		t.Fatalf("the library table = %v, %v; want the configured root", dirs, err)
 	}
 	reloaded := func() bool {
 		t.Helper()
 		before := table()
-		if f.svc.podcastsVisible(f.ctx, restricted) {
+		if f.svc.Grants.podcastsVisible(f.ctx, restricted) {
 			t.Fatal("a server with no podcast library shows podcasts to a restricted reader")
 		}
 		return &before[0] != &table()[0]
@@ -54,7 +54,7 @@ func TestAPodcastLibraryMissReloadsAtMostOnceASecond(t *testing.T) {
 	if !reloaded() {
 		t.Error("a miss a second later did not reload the library table")
 	}
-	f.svc.invalidateAttribution()
+	f.svc.Grants.invalidateAttribution()
 	if !missed(nil).IsZero() {
 		t.Error("dropping the library table kept the last miss, so the next one would wait")
 	}
@@ -67,27 +67,27 @@ func TestAFailedReloadJudgesNothingUntilALoadWorks(t *testing.T) {
 	f := openStubFeeds(t)
 	restricted := &UserCtx{ID: f.uc.ID, CatalogPID: f.uc.CatalogPID, Libraries: map[string]bool{"elsewhere": true}}
 	due := func() {
-		f.svc.libDirs.mu.Lock()
-		f.svc.libDirs.missed = time.Now().Add(-2 * time.Second)
-		f.svc.libDirs.mu.Unlock()
+		f.svc.Grants.libDirs.mu.Lock()
+		f.svc.Grants.libDirs.missed = time.Now().Add(-2 * time.Second)
+		f.svc.Grants.libDirs.mu.Unlock()
 	}
-	if _, read := f.svc.podcastLibrary(f.ctx); !read {
+	if _, read := f.svc.Grants.podcastLibrary(f.ctx); !read {
 		t.Fatal("a load that worked answered unread")
 	}
 	due()
 	canceled, cancel := context.WithCancel(f.ctx)
 	cancel()
-	if _, read := f.svc.podcastLibrary(canceled); read {
+	if _, read := f.svc.Grants.podcastLibrary(canceled); read {
 		t.Fatal("a reload that failed answered read")
 	}
-	if _, judged := f.svc.podcastsJudged(f.ctx, restricted); judged {
+	if _, judged := f.svc.Grants.podcastsJudged(f.ctx, restricted); judged {
 		t.Error("within the second after a failed reload, the throttle answered a judgment")
 	}
 	due()
-	if _, read := f.svc.podcastLibrary(f.ctx); !read {
+	if _, read := f.svc.Grants.podcastLibrary(f.ctx); !read {
 		t.Fatal("a reload that worked answered unread")
 	}
-	if _, judged := f.svc.podcastsJudged(f.ctx, restricted); !judged {
+	if _, judged := f.svc.Grants.podcastsJudged(f.ctx, restricted); !judged {
 		t.Error("after a reload worked, the throttle still answered no judgment")
 	}
 }
@@ -115,14 +115,14 @@ func TestARowFromBeforeTheStartKeepsTheLibraryTable(t *testing.T) {
 	if !history {
 		t.Fatal("the root's row is not from before the start; the start continued its position")
 	}
-	if dirs, err := f.svc.attribution(f.ctx, false); err != nil || len(dirs) == 0 {
+	if dirs, err := f.svc.Grants.attribution(f.ctx, false); err != nil || len(dirs) == 0 {
 		t.Fatalf("the library table = %v, %v; want the configured root", dirs, err)
 	}
 
 	f.svc.advanceFeed(f.ctx, rows[i])
-	f.svc.libDirs.mu.Lock()
-	dropped := f.svc.libDirs.dirs == nil
-	f.svc.libDirs.mu.Unlock()
+	f.svc.Grants.libDirs.mu.Lock()
+	dropped := f.svc.Grants.libDirs.dirs == nil
+	f.svc.Grants.libDirs.mu.Unlock()
 	if dropped {
 		t.Error("a row from before the start dropped the library table")
 	}

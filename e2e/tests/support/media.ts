@@ -270,9 +270,20 @@ export class MediaTraffic {
   /// element comes back with for the rest is held open. A later stream of
   /// `pid`, under another token, goes to the server untouched.
   ///
+  /// Played from the top, whatever a run before left: a resume point
+  /// would have the player seek into the held stream, which never answers.
+  ///
   /// Answers a reader for the held stream, undefined until the element
   /// has come back for the rest; `refuse` on it answers the held fetch.
-  async holdContinuation(pid: string): Promise<() => HeldStream | undefined> {
+  async holdFromTop(
+    seed: { setPosition(pid: string, positionMs: number): Promise<unknown> },
+    pid: string,
+  ): Promise<() => HeldStream | undefined> {
+    await seed.setPosition(pid, 0);
+    return this.holdContinuation(pid);
+  }
+
+  private async holdContinuation(pid: string): Promise<() => HeldStream | undefined> {
     let token = '';
     let refusal: { status: number; body: object } | undefined;
     const held: Route[] = [];

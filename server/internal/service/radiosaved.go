@@ -116,7 +116,7 @@ func foldRadioLine(raw string) string {
 // Idempotent on identity. A second save answers the row already held,
 // so a filled heart tapped twice on two devices cannot mint two rows,
 // and the only refusal is the list being full.
-func (l *Library) SaveRadioSong(ctx context.Context, uc *UserCtx, apiStationPID, nowPlaying string) (RadioSavedSong, error) {
+func (l *Radio) SaveRadioSong(ctx context.Context, uc *UserCtx, apiStationPID, nowPlaying string) (RadioSavedSong, error) {
 	line := strings.TrimSpace(nowPlaying)
 	if line == "" {
 		return RadioSavedSong{}, errInvalid("a saved song needs the announced line")
@@ -124,7 +124,7 @@ func (l *Library) SaveRadioSong(ctx context.Context, uc *UserCtx, apiStationPID,
 	if len(line) > radioSavedLineMax {
 		return RadioSavedSong{}, errInvalid("the announced line is too long to save")
 	}
-	station, err := l.radioStationRow(ctx, apiStationPID)
+	station, err := l.stationRow(ctx, apiStationPID)
 	if err != nil {
 		return RadioSavedSong{}, err
 	}
@@ -143,7 +143,7 @@ func (l *Library) SaveRadioSong(ctx context.Context, uc *UserCtx, apiStationPID,
 		StationName: station.Name,
 		CreatedAtNS: time.Now().UnixNano(),
 	}
-	row.Art, row.ArtMime, row.ArtETag = l.radioSavedSnapshot(ctx, uc, apiStationPID, station.Name, line, artist, title)
+	row.Art, row.ArtMime, row.ArtETag = l.savedSnapshot(ctx, uc, apiStationPID, station.Name, line, artist, title)
 
 	saved, err := l.db.CreateRadioSavedSong(ctx, row)
 	if errors.Is(err, wdb.ErrConflict) {
@@ -158,33 +158,33 @@ func (l *Library) SaveRadioSong(ctx context.Context, uc *UserCtx, apiStationPID,
 	return radioSavedDTO(saved), nil
 }
 
-// radioSavedSnapshot copies the cover the listener was looking at, from
+// savedSnapshot copies the cover the listener was looking at, from
 // what this server already holds and in the face's order, so a save costs
 // no network. A rung answers only with a picture the row can keep.
-func (l *Library) radioSavedSnapshot(ctx context.Context, uc *UserCtx, apiStationPID, stationName, line, artist, title string) ([]byte, string, string) {
+func (l *Radio) savedSnapshot(ctx context.Context, uc *UserCtx, apiStationPID, stationName, line, artist, title string) ([]byte, string, string) {
 	fits := func(data []byte) bool {
 		return len(data) > 0 && len(data) <= wdb.RadioSavedArtMaxBytes
 	}
-	if pid := l.RadioNowPlayingItem(ctx, uc, apiStationPID, stationName, line); pid != "" {
-		if blob, err := l.Art(ctx, uc, pid, "front", radioSavedSnapshotPx); err == nil && fits(blob.Bytes) {
+	if pid := l.NowPlayingItem(ctx, uc, apiStationPID, stationName, line); pid != "" {
+		if blob, err := l.Reads.Art(ctx, uc, pid, "front", radioSavedSnapshotPx); err == nil && fits(blob.Bytes) {
 			return blob.Bytes, blob.MimeType, radioSavedETag(blob.Bytes)
 		}
 	}
 	// Only while the announcement is still this line, so a rollover
 	// between the tap and the save cannot hand the row the next song's.
-	a := l.RadioNowPlayingAnnouncement(apiStationPID)
+	a := l.NowPlayingAnnouncement(apiStationPID)
 	announced := func() ([]byte, string, bool) {
 		if a.Title != line || a.ArtURL == "" {
 			return nil, "", false
 		}
-		return l.radioSnapshotCover(announcedArtKey(a.ArtURL, line), fits)
+		return l.snapshotCover(announcedArtKey(a.ArtURL, line), fits)
 	}
 	// Only while the rung is on: a snapshot outlives the toggle.
 	external := func() ([]byte, string, bool) {
-		if artist == "" || title == "" || !l.RadioExternalArtEnabled() {
+		if artist == "" || title == "" || !l.Settings.RadioExternalArtEnabled() {
 			return nil, "", false
 		}
-		return l.radioSnapshotCover(radioArtKey(radioSearchField(artist), radioSearchField(title)), fits)
+		return l.snapshotCover(radioArtKey(radioSearchField(artist), radioSearchField(title)), fits)
 	}
 	rungs := []func() ([]byte, string, bool){announced, external}
 	if a.Title == line && a.ArtURL != "" && !a.ArtProven {
@@ -198,7 +198,7 @@ func (l *Library) radioSavedSnapshot(ctx context.Context, uc *UserCtx, apiStatio
 	return nil, "", ""
 }
 
-// radioSnapshotCover answers a cached cover at the snapshot's size, or
+// snapshotCover answers a cached cover at the snapshot's size, or
 // reports that this rung has nothing to keep.
 //
 // Scaled only when it has to be: the cache holds whatever the face
@@ -206,7 +206,7 @@ func (l *Library) radioSavedSnapshot(ctx context.Context, uc *UserCtx, apiStatio
 // every heart to make it slightly worse. A source that cannot be
 // decoded is not a picture this can keep, so the rung below gets its
 // turn rather than the row saving artless.
-func (l *Library) radioSnapshotCover(key string, fits func([]byte) bool) ([]byte, string, bool) {
+func (l *Radio) snapshotCover(key string, fits func([]byte) bool) ([]byte, string, bool) {
 	entry, ok := l.cachedRadioArt(key)
 	if !ok || len(entry.art.Bytes) == 0 {
 		return nil, "", false
@@ -241,7 +241,7 @@ func radioSavedETag(data []byte) string {
 // text match the full-screen face runs, under this caller's own
 // visibility, so two accounts looking at the same song can honestly
 // disagree about whether it is in the library.
-func (l *Library) ListRadioSaved(ctx context.Context, uc *UserCtx, cursor string, limit int) (RadioSavedPage, error) {
+func (l *Radio) ListRadioSaved(ctx context.Context, uc *UserCtx, cursor string, limit int) (RadioSavedPage, error) {
 	// Guarded here as well as at the handler, because the page slice
 	// below is a slice: a limit under one makes `rows[:limit]` a panic
 	// rather than a wrong answer, and that is not a failure mode to
@@ -291,7 +291,7 @@ func (l *Library) ListRadioSaved(ctx context.Context, uc *UserCtx, cursor string
 // once per page rather than per row: the station library is capped at
 // five hundred shared rows and this is one query, where a per-row
 // existence check would be fifty.
-func (l *Library) liveStationPIDs(ctx context.Context) map[string]bool {
+func (l *Radio) liveStationPIDs(ctx context.Context) map[string]bool {
 	rows, err := l.db.ListRadioStations(ctx)
 	if err != nil {
 		// Best effort. A read that failed is not a reason to tell the
@@ -310,7 +310,7 @@ func (l *Library) liveStationPIDs(ctx context.Context) map[string]bool {
 // RemoveRadioSaved drops one of the caller's saved songs. Removing one
 // that is already gone is success: an untap racing a second device is
 // not an error, and the caller asked for it to be absent.
-func (l *Library) RemoveRadioSaved(ctx context.Context, uc *UserCtx, apiPID string) error {
+func (l *Radio) RemoveRadioSaved(ctx context.Context, uc *UserCtx, apiPID string) error {
 	if prefix, _, ok := parseAPIPID(apiPID); !ok || prefix != PrefixRadioSaved {
 		// Nothing under that name to remove, which is the same answer as
 		// having removed it.
@@ -322,14 +322,14 @@ func (l *Library) RemoveRadioSaved(ctx context.Context, uc *UserCtx, apiPID stri
 	return nil
 }
 
-// RadioSavedArt answers a saved song's snapshot cover, in the shape the
+// SavedArt answers a saved song's snapshot cover, in the shape the
 // station-logo and now-playing-art endpoints already serve.
 //
 // A read and only a read: the bytes were copied at save time and never
 // change, so there is no lookup to start and no freshness to reason
 // about. Every way there is nothing to draw is a not-found, because the
 // client draws a monogram for all of them.
-func (l *Library) RadioSavedArt(ctx context.Context, uc *UserCtx, apiPID string) (RadioLogo, error) {
+func (l *Radio) SavedArt(ctx context.Context, uc *UserCtx, apiPID string) (RadioLogo, error) {
 	missing := errNotFound("no artwork for saved song " + apiPID)
 	if prefix, _, ok := parseAPIPID(apiPID); !ok || prefix != PrefixRadioSaved {
 		return RadioLogo{}, missing
@@ -352,14 +352,14 @@ func (l *Library) RadioSavedArt(ctx context.Context, uc *UserCtx, apiPID string)
 	return RadioLogo{Bytes: row.Art, MimeType: mime, ETag: etag}, nil
 }
 
-// RadioSavedPIDForNowPlaying answers the pid of the caller's saved row
+// SavedPIDForNowPlaying answers the pid of the caller's saved row
 // for an announcement, empty when they have not kept it.
 //
 // One indexed read against the unique constraint, run per play-info
 // poll. That is what keeps the heart honest across devices without a
 // push: a save made on the phone fills the desktop's heart on its next
 // poll, and a rollover empties it.
-func (l *Library) RadioSavedPIDForNowPlaying(ctx context.Context, uc *UserCtx, stationName, raw string) string {
+func (l *Radio) SavedPIDForNowPlaying(ctx context.Context, uc *UserCtx, stationName, raw string) string {
 	if raw == "" {
 		return ""
 	}

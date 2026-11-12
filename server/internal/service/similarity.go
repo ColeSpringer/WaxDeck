@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/colespringer/waxbin/model"
@@ -19,6 +21,52 @@ import (
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/similarity"
 )
+
+// Similarity is sonic similarity and the discoveries drawn from it.
+type Similarity struct {
+	*core
+	// sim is the in-memory sonic-similarity engine, warmed lazily from
+	// waxdeck.db on first use (it only holds data when a worker has
+	// posted embeddings). simSweepVersion remembers the catalog data
+	// version the last analysis sweep covered, so an unchanged catalog
+	// never re-walks. simDrops counts the queue rows removed because their
+	// own track left or moved on, or because they rested out of attempts
+	// for a week, whose audio may be queued again, and simSweptDrops is the
+	// count the last sweep covered: a sweep owed one runs on an unchanged
+	// catalog. simWake nudges the sweep loop when tracks may have arrived;
+	// lossy, ticker-backstopped.
+	// simIndex is the latest walk's analysisIndex, which the status counts
+	// from; simIndexMu keeps two walks of one catalog from running at
+	// once, and simIndexChecked is when the index was last walked or
+	// checked against the catalog, in unix nanoseconds. simWalk is the
+	// walk running off any request, under simWalkMu. workerLocalPaths
+	// mirrors Config.WorkerLocalPaths.
+	sim              *similarity.Engine
+	simWarm          sync.Once
+	simWarmErr       error
+	simSweepVersion  atomic.Int64
+	simDrops         atomic.Uint64
+	simSweptDrops    atomic.Uint64
+	simWake          chan struct{}
+	simIndex         atomic.Pointer[analysisIndex]
+	simIndexMu       sync.Mutex
+	simIndexChecked  atomic.Int64
+	simWalkMu        sync.Mutex
+	simWalk          *analysisWalk
+	workerLocalPaths bool
+	// workerAPIConfigured mirrors Config.WorkerAPIConfigured.
+	workerAPIConfigured bool
+}
+
+func newSimilarity(c *core, cfg Config) *Similarity {
+	return &Similarity{
+		core:                c,
+		sim:                 similarity.New(),
+		simWake:             make(chan struct{}, 1),
+		workerLocalPaths:    cfg.WorkerLocalPaths,
+		workerAPIConfigured: cfg.WorkerAPIConfigured,
+	}
+}
 
 // SimilarityStatus is the coverage answer for the status surface.
 type SimilarityStatus struct {
@@ -103,8 +151,8 @@ const embeddedAnalysisBatch = 5
 // before the decode or as its vector is filed, keeps that row leased
 // without spending its attempt, and the batch goes on, paced like an
 // analyzed row since the worker loop calls again while work is attempted.
-func (l *Library) DrainEmbeddedAnalysis(ctx context.Context, an SonicAnalyzer) (_ bool, err error) {
-	if an == nil || !l.SonicAnalysisEnabled() || l.Maintenance() {
+func (l *Similarity) DrainEmbeddedAnalysis(ctx context.Context, an SonicAnalyzer) (_ bool, err error) {
+	if an == nil || !l.Settings.SonicAnalysisEnabled() || l.library.Maintenance() {
 		return false, nil
 	}
 	work, err := l.db.LeaseSimilarityWork(ctx, embeddedAnalysisBatch, workLease, true)
@@ -213,7 +261,7 @@ func restBetweenTracks(ctx context.Context) bool {
 // attempted nothing, and keepUnread returns nil so the batch goes on. A
 // hand-off is returned with the row unsettled: it ends the batch (every
 // read fails then), whose owner settles what it left.
-func (l *Library) keepUnread(ctx context.Context, err error, w wdb.SimilarityWork) error {
+func (l *Similarity) keepUnread(ctx context.Context, err error, w wdb.SimilarityWork) error {
 	if KindOf(err) == KindMaintenance {
 		return err
 	}
@@ -228,7 +276,7 @@ func (l *Library) keepUnread(ctx context.Context, err error, w wdb.SimilarityWor
 // refundAttempts gives back the attempt a lease charged each row, on a
 // context the caller's end does not cut short: a shutdown is no verdict on
 // a row either.
-func (l *Library) refundAttempts(ctx context.Context, rows []wdb.SimilarityWork) {
+func (l *Similarity) refundAttempts(ctx context.Context, rows []wdb.SimilarityWork) {
 	ctx = context.WithoutCancel(ctx)
 	for _, w := range rows {
 		if err := l.db.RefundSimilarityAttempt(ctx, w.Essence); err != nil {
@@ -241,23 +289,23 @@ func (l *Library) refundAttempts(ctx context.Context, rows []wdb.SimilarityWork)
 // catalog or holds other audio now. Another track can hold that audio
 // still, so the next sweep queues it again even if nothing else in the
 // catalog moved.
-func (l *Library) dropSonicRow(ctx context.Context, key string) {
+func (l *Similarity) dropSonicRow(ctx context.Context, key string) {
 	l.completeAnalysis(ctx, key)
 	l.sweepOwed(1)
 }
 
 // sweepOwed has the next sweep walk the catalog though its data version
 // did not move, for n queue rows removed whose audio may be queued again.
-func (l *Library) sweepOwed(n int64) {
+func (l *Similarity) sweepOwed(n int64) {
 	l.simDrops.Add(uint64(n))
-	l.similarityWakeup()
+	l.wakeup()
 }
 
 // sonicTrack reads a queued track as the catalog holds it now: its view,
 // and the file its analysis key is taken from. errAnalysisStale when they
 // hold other audio than key; not-found when the track or its file is gone.
-func (l *Library) sonicTrack(ctx context.Context, pid model.PID, key string) (*model.ItemView, *model.File, error) {
-	it, f, err := l.itemFile(ctx, pid)
+func (l *Similarity) sonicTrack(ctx context.Context, pid model.PID, key string) (*model.ItemView, *model.File, error) {
+	it, f, err := l.Playback.itemFile(ctx, pid)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -288,7 +336,7 @@ func sonicWindow(it *model.ItemView) (from, to int64, err error) {
 }
 
 // retireAnalysis rests a key whose audio cannot be analyzed, and says so.
-func (l *Library) retireAnalysis(ctx context.Context, w wdb.SimilarityWork, reason string) {
+func (l *Similarity) retireAnalysis(ctx context.Context, w wdb.SimilarityWork, reason string) {
 	l.log.Warn("sonic analysis cannot read a track; it rests until its audio changes", "pid", w.ItemPID, "reason", reason)
 	if err := l.db.RetireSimilarityWork(ctx, w.Essence, reason); err != nil {
 		l.log.Warn("retiring analysis work", "essence", w.Essence, "err", err)
@@ -311,7 +359,7 @@ func keyAudio(key string) string {
 	return essence
 }
 
-func (l *Library) completeAnalysis(ctx context.Context, essence string) {
+func (l *Similarity) completeAnalysis(ctx context.Context, essence string) {
 	if err := l.db.CompleteSimilarityWork(ctx, essence); err != nil {
 		l.log.Warn("retiring analysis work", "essence", essence, "err", err)
 	}
@@ -319,7 +367,7 @@ func (l *Library) completeAnalysis(ctx context.Context, essence string) {
 
 // warmSimilarity loads stored vectors and edges into the in-memory
 // engine once. Cheap when empty (the common case without a worker).
-func (l *Library) warmSimilarity(ctx context.Context) error {
+func (l *Similarity) warmSimilarity(ctx context.Context) error {
 	l.simWarm.Do(func() {
 		_, _, err := l.db.Embeddings(ctx, func(e wdb.Embedding) {
 			if vec := similarity.Decode(e.Vector); vec != nil {
@@ -350,14 +398,14 @@ func (l *Library) warmSimilarity(ctx context.Context) error {
 	return nil
 }
 
-// SimilarityStatusFor answers coverage. enabled reports whether an
+// StatusFor answers coverage. enabled reports whether an
 // analyzer can feed the surface. The counts are the whole library's for
 // a caller of full reach and the caller's own tracks' otherwise, both
 // read off the latest analysisIndex, so they are the sweep's own reading
 // of the library: a vector kept for a trashed track counts nowhere, and
 // audio the analyzer judged unreadable leaves the total along with the
 // queue.
-func (l *Library) SimilarityStatusFor(ctx context.Context, uc *UserCtx) (SimilarityStatus, error) {
+func (l *Similarity) StatusFor(ctx context.Context, uc *UserCtx) (SimilarityStatus, error) {
 	idx, err := l.statusAnalysisIndex(ctx)
 	if err != nil {
 		return SimilarityStatus{}, err
@@ -392,8 +440,8 @@ func (l *Library) SimilarityStatusFor(ctx context.Context, uc *UserCtx) (Similar
 // analysisOn reports whether an analyzer can feed the sonic surface: the
 // embedded one, or an external worker holding a token. Sweeps run only
 // then.
-func (l *Library) analysisOn() bool {
-	return l.SonicAnalysisEnabled() || l.workerAPIConfigured
+func (l *Similarity) analysisOn() bool {
+	return l.Settings.SonicAnalysisEnabled() || l.workerAPIConfigured
 }
 
 // analysisCoverage is the status counts: tracks holding a vector, tracks
@@ -410,7 +458,7 @@ func (c analysisCoverage) total() int { return c.embedded + c.queued + c.pending
 // judged it cannot read: nothing will ever drain them. Library grants are
 // read off the index; tag rules need the catalog, one count per chunk of
 // each class.
-func (l *Library) coverageOf(ctx context.Context, uc *UserCtx, idx *analysisIndex, stored map[string]bool, queue map[string]wdb.QueueState) (analysisCoverage, error) {
+func (l *Similarity) coverageOf(ctx context.Context, uc *UserCtx, idx *analysisIndex, stored map[string]bool, queue map[string]wdb.QueueState) (analysisCoverage, error) {
 	const embedded, queued, pending = 0, 1, 2
 	var counts [3]int
 	var pids [3][]string
@@ -437,7 +485,7 @@ func (l *Library) coverageOf(ctx context.Context, uc *UserCtx, idx *analysisInde
 		}
 	}
 	if ruled {
-		rule := l.contentRuleNode(ctx, uc)
+		rule := l.Grants.contentRuleNode(ctx, uc)
 		base := func() *query.Builder { return visibleItems().WhereNode(rule) }
 		for class := range pids {
 			n, err := l.countAmong(ctx, pids[class], base)
@@ -452,7 +500,7 @@ func (l *Library) coverageOf(ctx context.Context, uc *UserCtx, idx *analysisInde
 
 // countAmong counts the items base selects among the bare pids, once per
 // 400 of them, under the engine's 500-value membership test.
-func (l *Library) countAmong(ctx context.Context, pids []string, base func() *query.Builder) (int, error) {
+func (l *Similarity) countAmong(ctx context.Context, pids []string, base func() *query.Builder) (int, error) {
 	n := 0
 	for start := 0; start < len(pids); start += 400 {
 		chunk := pids[start:min(start+400, len(pids))]
@@ -497,7 +545,7 @@ func (x *analysisIndex) live() map[string]bool {
 }
 
 // walkAnalysis reads the catalog, as of version, into an analysisIndex.
-func (l *Library) walkAnalysis(ctx context.Context, version int64) (*analysisIndex, error) {
+func (l *Similarity) walkAnalysis(ctx context.Context, version int64) (*analysisIndex, error) {
 	defaultUser, err := l.lib.DefaultUser(ctx)
 	if err != nil {
 		return nil, classify(err)
@@ -553,7 +601,7 @@ func (l *Library) walkAnalysis(ctx context.Context, version int64) (*analysisInd
 // analysisIndexAt answers the index of catalog version, walking one
 // unless the latest is of it. DataVersion is only ever compared for
 // equality.
-func (l *Library) analysisIndexAt(ctx context.Context, version int64) (*analysisIndex, error) {
+func (l *Similarity) analysisIndexAt(ctx context.Context, version int64) (*analysisIndex, error) {
 	l.simIndexMu.Lock()
 	defer l.simIndexMu.Unlock()
 	if cur := l.simIndex.Load(); cur != nil && cur.version == version {
@@ -578,9 +626,9 @@ const statusIndexReuse = 30 * time.Second
 // once and has a fresh one start in the background, at most once a
 // statusIndexReuse and whether or not analysis is on: departures reach a
 // sweep only at its backstop, and a sweep that keeps failing never walks.
-func (l *Library) statusAnalysisIndex(ctx context.Context) (*analysisIndex, error) {
+func (l *Similarity) statusAnalysisIndex(ctx context.Context) (*analysisIndex, error) {
 	if cur := l.simIndex.Load(); cur != nil {
-		if !l.Maintenance() {
+		if !l.library.Maintenance() {
 			l.refreshAnalysisIndex()
 		}
 		return cur, nil
@@ -611,7 +659,7 @@ func (l *Library) statusAnalysisIndex(ctx context.Context) (*analysisIndex, erro
 // refreshAnalysisIndex starts a walk in the background, which reads the
 // catalog only if it moved past the latest, unless one was checked
 // within statusIndexReuse.
-func (l *Library) refreshAnalysisIndex() {
+func (l *Similarity) refreshAnalysisIndex() {
 	now := time.Now().UnixNano()
 	last := l.simIndexChecked.Load()
 	if now-last < int64(statusIndexReuse) || !l.simIndexChecked.CompareAndSwap(last, now) {
@@ -629,7 +677,7 @@ type analysisWalk struct {
 
 // walkInBackground answers the walk in flight, starting one under the
 // supervisor when none is; nil when the Library has no supervisor.
-func (l *Library) walkInBackground() *analysisWalk {
+func (l *Similarity) walkInBackground() *analysisWalk {
 	if l.workers == nil || l.procCtx == nil {
 		return nil
 	}
@@ -672,8 +720,8 @@ func (l *Library) walkInBackground() *analysisWalk {
 // mid-batch ends it, as does a request that ends mid-batch: nothing of it
 // reaches the worker, and every row it kept stays leased with its attempt
 // given back.
-func (l *Library) LeaseSimilarityWork(ctx context.Context, limit int, windows bool) (_ []SimilarityWorkItem, err error) {
-	if l.Maintenance() {
+func (l *Similarity) LeaseSimilarityWork(ctx context.Context, limit int, windows bool) (_ []SimilarityWorkItem, err error) {
+	if l.library.Maintenance() {
 		return nil, nil
 	}
 	work, err := l.db.LeaseSimilarityWork(ctx, limit, workLease, windows)
@@ -683,7 +731,7 @@ func (l *Library) LeaseSimilarityWork(ctx context.Context, limit int, windows bo
 	// Snapshot the root count once: the single-root local-path optimization
 	// only holds when exactly one root exists, and a runtime-added root must
 	// disable it for the rest of this batch consistently.
-	singleRoot := len(l.libraryRoots()) == 1
+	singleRoot := len(l.Roots.libraryRoots()) == 1
 	out := make([]SimilarityWorkItem, 0, len(work))
 	// A batch that stops reaches no worker: the rows read ready, and those
 	// from work[settled] on, not read yet, get back their attempts.
@@ -739,7 +787,7 @@ func (l *Library) LeaseSimilarityWork(ctx context.Context, limit int, windows bo
 // refused as not-found; one whose track the catalog could not read is
 // refused as internal, its work left leased to come back. A hand-off ends
 // the report, as does a request that ends mid-report.
-func (l *Library) IngestEmbeddings(ctx context.Context, mdl string, dims int, batch []EmbeddingUpload) (EmbeddingIngestResult, error) {
+func (l *Similarity) IngestEmbeddings(ctx context.Context, mdl string, dims int, batch []EmbeddingUpload) (EmbeddingIngestResult, error) {
 	if err := l.warmSimilarity(ctx); err != nil {
 		return EmbeddingIngestResult{}, err
 	}
@@ -834,7 +882,7 @@ func (l *Library) IngestEmbeddings(ctx context.Context, mdl string, dims int, ba
 // audio under key. A track in the trash holds none: it has no file to check
 // key against, and a rewrite before the trash would have had a worker pull
 // other audio by its pid.
-func (l *Library) holdsSonicKey(ctx context.Context, pid model.PID, key string) (bool, error) {
+func (l *Similarity) holdsSonicKey(ctx context.Context, pid model.PID, key string) (bool, error) {
 	_, _, err := l.sonicTrack(ctx, pid, key)
 	switch {
 	case err == nil:
@@ -852,7 +900,7 @@ func mustVector(e *similarity.Engine, essence string) []float32 {
 	return v
 }
 
-func (l *Library) persistEdges(ctx context.Context, essence string, edges []similarity.Edge) error {
+func (l *Similarity) persistEdges(ctx context.Context, essence string, edges []similarity.Edge) error {
 	rows := make([]wdb.GraphEdge, len(edges))
 	for i, e := range edges {
 		rows[i] = wdb.GraphEdge{Essence: essence, Rank: i, Neighbor: e.Neighbor, Distance: e.Distance}
@@ -879,11 +927,11 @@ var defaultSimilaritySchedule = similaritySchedule{
 
 // RunSimilaritySweeps keeps the analysis queue reconciled with the
 // catalog until ctx ends.
-func (l *Library) RunSimilaritySweeps(ctx context.Context) error {
+func (l *Similarity) RunSimilaritySweeps(ctx context.Context) error {
 	return l.runSimilaritySweeps(ctx, defaultSimilaritySchedule)
 }
 
-func (l *Library) runSimilaritySweeps(ctx context.Context, s similaritySchedule) error {
+func (l *Similarity) runSimilaritySweeps(ctx context.Context, s similaritySchedule) error {
 	first := time.NewTimer(s.first)
 	defer first.Stop()
 	tick := time.NewTicker(s.backstop)
@@ -907,7 +955,7 @@ func (l *Library) runSimilaritySweeps(ctx context.Context, s similaritySchedule)
 		case <-settle.C:
 		}
 		settle.Stop() // whatever was owed, this walk covers
-		if _, err := l.SimilaritySweep(ctx); err != nil {
+		if _, err := l.Sweep(ctx); err != nil {
 			if ctx.Err() != nil {
 				return nil
 			}
@@ -924,15 +972,15 @@ func (l *Library) runSimilaritySweeps(ctx context.Context, s similaritySchedule)
 	}
 }
 
-// similarityWakeup tells the sweep loop that tracks may have arrived.
-func (l *Library) similarityWakeup() {
+// wakeup tells the sweep loop that tracks may have arrived.
+func (l *Similarity) wakeup() {
 	select {
 	case l.simWake <- struct{}{}:
 	default:
 	}
 }
 
-// SimilaritySweep reconciles the analysis queue with the catalog: new
+// Sweep reconciles the analysis queue with the catalog: new
 // music tracks enqueue, embeddings whose audio left the catalog prune
 // (edges removed, affected nodes queued for lazy recompute), and
 // pending backfills recompute. Its walk is the analysisIndex the status
@@ -940,8 +988,8 @@ func (l *Library) similarityWakeup() {
 // moved since the last sweep and no queue row was dropped for its track or
 // pruned out of attempts since. Returns true when it did meaningful work
 // (the worker loop uses that to pace itself).
-func (l *Library) SimilaritySweep(ctx context.Context) (bool, error) {
-	if !l.analysisOn() || l.Maintenance() {
+func (l *Similarity) Sweep(ctx context.Context) (bool, error) {
+	if !l.analysisOn() || l.library.Maintenance() {
 		return false, nil
 	}
 	if err := l.warmSimilarity(ctx); err != nil {
@@ -1054,7 +1102,7 @@ func (l *Library) SimilaritySweep(ctx context.Context) (bool, error) {
 }
 
 // drainBackfill recomputes queued nodes' edge lists.
-func (l *Library) drainBackfill(ctx context.Context) (bool, error) {
+func (l *Similarity) drainBackfill(ctx context.Context) (bool, error) {
 	worked := false
 	for {
 		batch, err := l.db.TakeSimilarityBackfill(ctx, 100)

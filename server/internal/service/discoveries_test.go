@@ -83,13 +83,13 @@ func newDiscoveryFixture(t *testing.T) discoveryFixture {
 	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
 		t.Fatalf("scanning fixture library: %v", err)
 	}
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "admin", Password: "correct-horse", Roles: []string{"admin"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func (f discoveryFixture) sweepToQuiet(t *testing.T) DiscoverySweepReport {
 	t.Helper()
 	var last DiscoverySweepReport
 	for i := 0; i < 20; i++ {
-		rep, err := f.svc.SweepDiscoveries(f.ctx)
+		rep, err := f.svc.Similarity.SweepDiscoveries(f.ctx)
 		if err != nil {
 			t.Fatalf("discovery sweep: %v", err)
 		}
@@ -205,7 +205,7 @@ func TestDiscoveryCappedPassAdvancesToWhereItStopped(t *testing.T) {
 		t.Fatalf("rescanning: %v", err)
 	}
 
-	first, err := f.svc.SweepDiscoveries(f.ctx)
+	first, err := f.svc.Similarity.SweepDiscoveries(f.ctx)
 	if err != nil {
 		t.Fatalf("first pass: %v", err)
 	}
@@ -304,11 +304,11 @@ func TestDiscoveryRespectsMatchingOff(t *testing.T) {
 	f := newDiscoveryFixture(t)
 	f.sweepToQuiet(t)
 
-	libs, err := f.svc.Libraries(f.ctx)
+	libs, err := f.svc.Roots.Libraries(f.ctx)
 	if err != nil || len(libs) == 0 {
 		t.Fatalf("listing libraries: %v (%d)", err, len(libs))
 	}
-	if err := f.svc.SetLibraryMatching(f.ctx, f.uc, libs[0].PID, LibraryMatching{Mode: matchingOff}); err != nil {
+	if err := f.svc.Ingest.SetLibraryMatching(f.ctx, f.uc, libs[0].PID, LibraryMatching{Mode: matchingOff}); err != nil {
 		t.Fatalf("setting matching mode: %v", err)
 	}
 
@@ -343,7 +343,7 @@ func TestDiscoveryLeavesTheTracksAKindChangeMinted(t *testing.T) {
 	if got := len(f.pendingEntries(t)); got != 0 {
 		t.Fatalf("%d entries for a scanned book, want none", got)
 	}
-	page, err := f.svc.Items(f.ctx, f.uc, ItemFilter{}, "", 50)
+	page, err := f.svc.Reads.Items(f.ctx, f.uc, ItemFilter{}, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,12 +356,12 @@ func TestDiscoveryLeavesTheTracksAKindChangeMinted(t *testing.T) {
 	if book == "" {
 		t.Fatal("the fixture scanned to no book")
 	}
-	job, err := f.svc.SetItemsKind(f.ctx, f.uc, []string{book}, "music", false)
+	job, err := f.svc.Reads.SetItemsKind(f.ctx, f.uc, []string{book}, "music", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(20 * time.Millisecond) {
-		j, err := f.svc.JobStatus(f.ctx, job.PID)
+		j, err := f.svc.Jobs.Status(f.ctx, job.PID)
 		if err != nil {
 			t.Fatal(err)
 		}

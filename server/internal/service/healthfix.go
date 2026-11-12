@@ -29,7 +29,6 @@ import (
 	"github.com/colespringer/waxbin/read"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
-	"github.com/colespringer/waxdeck/server/internal/providers"
 )
 
 const (
@@ -157,23 +156,23 @@ var (
 	}
 )
 
-// healthFixability says whether this install can fix a rule and, for a
+// fixability says whether this install can fix a rule and, for a
 // rule with a fix it cannot run, what it lacks. The contact comes first
 // where it is the missing piece, since setting it is what registers the
 // free public sources; book metadata has none of those. genre-whitelist
 // and the file-quality rules have no fix at all.
-func (l *Library) healthFixability(rule string) (bool, string) {
+func (l *Health) fixability(rule string) (bool, string) {
 	switch rule {
 	case ruleWriteUnsynced:
-		if l.currentToggles().readOnly {
+		if l.Settings.currentToggles().readOnly {
 			return false, fixBlockedReadOnly
 		}
 		return true, ""
 	case rulePathMismatch:
-		if !slices.ContainsFunc(l.libraryRoots(), func(r Root) bool { return r.Managed }) {
+		if !slices.ContainsFunc(l.Roots.libraryRoots(), func(r Root) bool { return r.Managed }) {
 			return false, fixBlockedNoManaged
 		}
-		if l.currentToggles().readOnly {
+		if l.Settings.currentToggles().readOnly {
 			return false, fixBlockedReadOnly
 		}
 		return true, ""
@@ -182,34 +181,17 @@ func (l *Library) healthFixability(rule string) (bool, string) {
 		return false, ""
 	}
 	if _, force := fixPhases(rule, l.lib.EnrichmentPhases()); len(force) == 0 {
-		if !l.musicbrainzConfigured && fixBlockedSource[rule] != fixBlockedBookSource {
+		if !l.Enrichment.musicbrainzConfigured && fixBlockedSource[rule] != fixBlockedBookSource {
 			return false, fixBlockedContact
 		}
 		return false, fixBlockedSource[rule]
 	}
 	// The release-group walk runs on the contact alone, and fills genres
 	// only from the genre sources in the pass.
-	if rule == ruleMissingGenre && !l.sourceServes(enrich.CapGenres, enrich.TargetReleaseGroup) {
+	if rule == ruleMissingGenre && !l.Enrichment.sourceServes(enrich.CapGenres, enrich.TargetReleaseGroup) {
 		return false, fixBlockedGenreSource
 	}
 	return true, ""
-}
-
-// sourceServes reports a switched-on source serving capability c at target.
-func (l *Library) sourceServes(c enrich.Capability, target enrich.TargetType) bool {
-	for _, src := range l.sources.resolved() {
-		if !src.Enabled {
-			continue
-		}
-		p := l.sources.provider(src.Name)
-		if p == nil {
-			p = l.sources.builtin(src.Name)
-		}
-		if p != nil && providers.CapabilitiesAt(p, target).Has(c) {
-			return true
-		}
-	}
-	return false
 }
 
 // HealthFixStartDTO is a fix that started: exactly one of JobPID and
@@ -229,7 +211,7 @@ var (
 
 // StartHealthFix starts the fix for one rule, over the named items or
 // every item failing it. Administrators only.
-func (l *Library) StartHealthFix(ctx context.Context, uc *UserCtx, rule string, apiItemPids []string) (HealthFixStartDTO, error) {
+func (l *Health) StartHealthFix(ctx context.Context, uc *UserCtx, rule string, apiItemPids []string) (HealthFixStartDTO, error) {
 	if !uc.Admin {
 		return HealthFixStartDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -239,11 +221,11 @@ func (l *Library) StartHealthFix(ctx context.Context, uc *UserCtx, rule string, 
 		return HealthFixStartDTO{}, errInvalid("the path fix moves every mismatched file; preview and apply it from /organize")
 	}
 	if rule == ruleWriteUnsynced || rule == rulePathMismatch {
-		if err := l.CheckWritable(ctx, ""); err != nil {
+		if err := l.Settings.CheckWritable(ctx, ""); err != nil {
 			return HealthFixStartDTO{}, err
 		}
 	}
-	if fixable, _ := l.healthFixability(rule); !fixable {
+	if fixable, _ := l.fixability(rule); !fixable {
 		return HealthFixStartDTO{}, errInvalid("no automated fix for rule " + rule + " on this server")
 	}
 	if len(apiItemPids) > maxItemPids {
@@ -266,7 +248,7 @@ func (l *Library) StartHealthFix(ctx context.Context, uc *UserCtx, rule string, 
 	}
 	_, enrichBacked := healthFixWants[rule]
 	if enrichBacked {
-		if _, running, err := l.runningJob(ctx, "enrich", enrichJobWindow); err != nil {
+		if _, running, err := l.Jobs.runningJob(ctx, "enrich", enrichJobWindow); err != nil {
 			return HealthFixStartDTO{}, err
 		} else if running {
 			return HealthFixStartDTO{}, errEnrichBusy
@@ -284,12 +266,12 @@ func (l *Library) StartHealthFix(ctx context.Context, uc *UserCtx, rule string, 
 	var out HealthFixStartDTO
 	if enrichBacked && len(scope) == 0 {
 		walk, force := fixPhases(rule, l.lib.EnrichmentPhases())
-		pid, err := l.startEnrichJob(ctx, uc, waxbin.EnrichOptions{Phases: walk, ForcePhases: force}, rule)
+		pid, err := l.Enrichment.startEnrichJob(ctx, uc, waxbin.EnrichOptions{Phases: walk, ForcePhases: force}, rule)
 		if err != nil {
 			if KindOf(classify(err)) == KindConflict {
 				return HealthFixStartDTO{}, errEnrichBusy
 			}
-			return HealthFixStartDTO{}, l.explainEnrichRefusal(err, apiNames(force))
+			return HealthFixStartDTO{}, l.Enrichment.explainEnrichRefusal(err, apiNames(force))
 		}
 		out = HealthFixStartDTO{Queued: queued, JobPID: apiPID(PrefixJob, pid)}
 	} else {
@@ -304,13 +286,13 @@ func (l *Library) StartHealthFix(ctx context.Context, uc *UserCtx, rule string, 
 		if !inserted {
 			return HealthFixStartDTO{}, errFixRunning
 		}
-		l.notifyToolTask(ctx, t.ID)
+		l.Tools.notifyToolTask(ctx, t.ID)
 		out = HealthFixStartDTO{Queued: queued, TaskID: t.ID}
 	}
-	l.Audit(ctx, uc, "health.fix", AuditTarget{Kind: "health-rule", Name: rule},
+	l.Audit.Record(ctx, uc, "health.fix", AuditTarget{Kind: "health-rule", Name: rule},
 		map[string]any{"queued": out.Queued, "scoped": len(scope) > 0, "job": out.JobPID, "task": out.TaskID})
 	// Every open health screen learns the rule is fixing.
-	l.emitEveryoneEvent(ctx, eventHealth)
+	l.Jobs.emitEveryoneEvent(ctx, eventHealth)
 	return out, nil
 }
 
@@ -332,7 +314,7 @@ type healthFixSummary struct {
 
 // runHealthFixTask works a health-fix task's items, then re-checks the
 // rule and says what it did.
-func (l *Library) runHealthFixTask(ctx context.Context, t *wdb.ToolTask, p toolTaskParams) error {
+func (l *Health) runHealthFixTask(ctx context.Context, t *wdb.ToolTask, p toolTaskParams) error {
 	scope := p.ItemPIDs
 	if len(scope) == 0 {
 		pids, err := l.db.FailingItems(ctx, p.Rule, healthFixScopeCap)
@@ -342,7 +324,7 @@ func (l *Library) runHealthFixTask(ctx context.Context, t *wdb.ToolTask, p toolT
 		scope = pids
 	}
 	sum := healthFixSummary{Rule: p.Rule, Skipped: map[string]int{}}
-	prog := newToolProgress(l, t)
+	prog := newToolProgress(l.Tools, t)
 	if p.Rule == rulePathMismatch {
 		var err error
 		if sum, err = l.fixPathScope(ctx, t, &p, scope, prog, healthFixPathChunk); err != nil {
@@ -397,7 +379,7 @@ func (s *healthFixSummary) add(chunk healthFixSummary) {
 // earlier attempt left off, keeping in the task how far it got, and
 // answers what the whole fix did. A chunk a stop cuts short is done again
 // by the next attempt, which counts what this one moved of it.
-func (l *Library) fixPathScope(ctx context.Context, t *wdb.ToolTask, p *toolTaskParams, scope []string,
+func (l *Health) fixPathScope(ctx context.Context, t *wdb.ToolTask, p *toolTaskParams, scope []string,
 	prog *toolProgress, chunk int) (healthFixSummary, error) {
 	pf := p.PathFix
 	if pf == nil {
@@ -445,7 +427,7 @@ func (l *Library) fixPathScope(ctx context.Context, t *wdb.ToolTask, p *toolTask
 // undo takes back, and what every attempt of it did. A fix that did not
 // finish counts what it moved of the chunk in hand by where those items
 // are now.
-func (l *Library) auditPathFix(ctx context.Context, t *wdb.ToolTask, p toolTaskParams) {
+func (l *Health) auditPathFix(ctx context.Context, t *wdb.ToolTask, p toolTaskParams) {
 	ctx = context.WithoutCancel(ctx)
 	var sum healthFixSummary
 	if t.State != taskStateDone || json.Unmarshal([]byte(t.Summary), &sum) != nil {
@@ -460,13 +442,13 @@ func (l *Library) auditPathFix(ctx context.Context, t *wdb.ToolTask, p toolTaskP
 			}
 		}
 	}
-	l.Audit(ctx, &UserCtx{ID: t.UserID}, "health.fix", AuditTarget{Kind: "health-rule", Name: rulePathMismatch},
+	l.Audit.Record(ctx, &UserCtx{ID: t.UserID}, "health.fix", AuditTarget{Kind: "health-rule", Name: rulePathMismatch},
 		map[string]any{"task": t.ID, "jobPids": sum.JobPIDs, "moved": sum.Filled, "held": sum.Held, "failed": sum.Failed})
 }
 
 // itemsInPlace answers which of pids have every file where their library's
 // profile places it.
-func (l *Library) itemsInPlace(ctx context.Context, pids []string) (map[model.PID]bool, error) {
+func (l *Health) itemsInPlace(ctx context.Context, pids []string) (map[model.PID]bool, error) {
 	plan, err := l.lib.PlanOrganize(ctx, visibleItems().WhereValues("pid", query.OpIn, query.Values(pids)...).Build(),
 		waxbin.OrganizeOptions{})
 	if err != nil {
@@ -486,16 +468,16 @@ func (l *Library) itemsInPlace(ctx context.Context, pids []string) (map[model.PI
 	return out, nil
 }
 
-// healthFixTaskEnded tells every account a fix task's rule is no longer
+// fixTaskEnded tells every account a fix task's rule is no longer
 // being fixed, once the task's end is recorded, and its starter what it
 // did or why it failed. A path fix is audited here, at its one end.
-func (l *Library) healthFixTaskEnded(ctx context.Context, t *wdb.ToolTask) {
+func (l *Health) fixTaskEnded(ctx context.Context, t *wdb.ToolTask) {
 	var p toolTaskParams
 	_ = json.Unmarshal([]byte(t.Params), &p)
 	if p.Rule == rulePathMismatch {
 		l.auditPathFix(ctx, t, p)
 	}
-	l.emitEveryoneEvent(ctx, eventHealth)
+	l.Jobs.emitEveryoneEvent(ctx, eventHealth)
 	body := "The fix failed: " + cmp.Or(t.Error, "no reason was recorded")
 	if t.State == taskStateDone {
 		var sum healthFixSummary
@@ -503,11 +485,11 @@ func (l *Library) healthFixTaskEnded(ctx context.Context, t *wdb.ToolTask) {
 			body = healthFixBody(sum, l.readOnlyCause())
 		}
 	}
-	l.EmitNotificationFor(ctx, "health-fix-finished", healthFixTitle(p.Rule), body, t.ID, []string{t.UserID})
+	l.Integrations.EmitNotificationFor(ctx, "health-fix-finished", healthFixTitle(p.Rule), body, t.ID, []string{t.UserID})
 }
 
 // fixHealthItem fixes one item's rule, counting what came of it.
-func (l *Library) fixHealthItem(ctx context.Context, rule string, pid model.PID, sum *healthFixSummary) {
+func (l *Health) fixHealthItem(ctx context.Context, rule string, pid model.PID, sum *healthFixSummary) {
 	sum.Attempted++
 	it, err := l.lib.Get(ctx, pid)
 	if err != nil {
@@ -519,7 +501,7 @@ func (l *Library) fixHealthItem(ctx context.Context, rule string, pid model.PID,
 		return
 	}
 	if rule == ruleWriteUnsynced {
-		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+		if err := l.Settings.checkPathWritable(ctx, string(it.Path)); err != nil {
 			if KindOf(err) == KindReadOnly {
 				sum.Skipped[l.readOnlyCause()]++
 			} else {
@@ -527,11 +509,11 @@ func (l *Library) fixHealthItem(ctx context.Context, rule string, pid model.PID,
 			}
 			return
 		}
-		l.fixWriteDrift(ctx, it, sum)
+		l.Ingest.fixWriteDrift(ctx, it, sum)
 		return
 	}
 	want := healthFixWants[rule]
-	_, skipped, err := l.enrichItemFully(ctx, it, []string{want})
+	_, skipped, err := l.Enrichment.enrichItemFully(ctx, it, []string{want})
 	if err != nil {
 		sum.Failed++
 		return
@@ -555,7 +537,7 @@ func (l *Library) fixHealthItem(ctx context.Context, rule string, pid model.PID,
 // The items it sets out to move and the job it runs go into the fix's
 // progress pf, saved by save, before the job runs; an item an earlier
 // attempt set out to move and that is in place now counts as moved.
-func (l *Library) fixPaths(ctx context.Context, pids []string, sum *healthFixSummary, prog *toolProgress,
+func (l *Health) fixPaths(ctx context.Context, pids []string, sum *healthFixSummary, prog *toolProgress,
 	pf *pathFixProgress, save func()) {
 	sum.Attempted += len(pids)
 	q := query.New(query.EntityItems).WhereValues("pid", query.OpIn, query.Values(pids)...).Build()
@@ -670,13 +652,13 @@ func (l *Library) fixPaths(ctx context.Context, pids []string, sum *healthFixSum
 // the fix's progress, keeping the task's lease while it waits the job out,
 // and answers what the job recorded; a job that did not finish is an
 // error beside what it did.
-func (l *Library) organizePaths(ctx context.Context, q query.Query, pf *pathFixProgress, save func(),
+func (l *Health) organizePaths(ctx context.Context, q query.Query, pf *pathFixProgress, save func(),
 	prog *toolProgress) (*organize.Report, error) {
 	pid, err := l.lib.RunOrganize(l.procCtx, q, waxbin.OrganizeOptions{})
 	if err != nil {
 		return nil, classifyMutation(err)
 	}
-	l.followJob(pid)
+	l.Jobs.followJob(pid)
 	pf.Sum.JobPIDs = append(pf.Sum.JobPIDs, apiPID(PrefixJob, pid))
 	save()
 	j, err := l.awaitJob(ctx, pid, pathFixJobSilence, func(ctx context.Context) { prog.report(ctx, prog.lastPct) })
@@ -718,7 +700,7 @@ func holdLabel(c organize.HoldCode, readOnly string) string {
 
 // itemsInReadOnlyLibraries answers which items sit in a library the
 // catalog flags read-only.
-func (l *Library) itemsInReadOnlyLibraries(ctx context.Context, pids []model.PID) map[model.PID]bool {
+func (l *Health) itemsInReadOnlyLibraries(ctx context.Context, pids []model.PID) map[model.PID]bool {
 	out := map[model.PID]bool{}
 	if len(pids) == 0 {
 		return out
@@ -729,7 +711,7 @@ func (l *Library) itemsInReadOnlyLibraries(ctx context.Context, pids []model.PID
 		return out
 	}
 	for _, it := range items {
-		if it != nil && l.libraryReadOnly(string(it.LibraryPID)) {
+		if it != nil && l.Roots.libraryReadOnly(string(it.LibraryPID)) {
 			out[it.PID] = true
 		}
 	}
@@ -769,7 +751,7 @@ type recheckInputs struct {
 // against, taking it off the items that now pass and dropping the rows of
 // items gone. Each change is made against the row as it stands, so a
 // sweep writing the same rows meanwhile keeps what it wrote.
-func (l *Library) recheckHealthRule(ctx context.Context, rule string, scope []string) (healthRecheck, error) {
+func (l *Health) recheckHealthRule(ctx context.Context, rule string, scope []string) (healthRecheck, error) {
 	var res healthRecheck
 	pids := scope
 	if pids == nil {
@@ -823,7 +805,7 @@ func (l *Library) recheckHealthRule(ctx context.Context, rule string, scope []st
 
 // plannedMovesOf is readPlannedMoves for the named items alone, so a
 // re-check stats their files rather than the library's.
-func (l *Library) plannedMovesOf(ctx context.Context, pids []string) (map[model.PID]bool, error) {
+func (l *Health) plannedMovesOf(ctx context.Context, pids []string) (map[model.PID]bool, error) {
 	out := map[model.PID]bool{}
 	for i := 0; i < len(pids); i += healthFixPathChunk {
 		chunk := pids[i:min(i+healthFixPathChunk, len(pids))]
@@ -846,7 +828,7 @@ func (l *Library) plannedMovesOf(ctx context.Context, pids []string) (map[model.
 
 // presentItems reads which of pids are present items, as the sweep
 // grades only those.
-func (l *Library) presentItems(ctx context.Context, pids []string) (map[model.PID]*model.ItemView, error) {
+func (l *Health) presentItems(ctx context.Context, pids []string) (map[model.PID]*model.ItemView, error) {
 	q := query.New(query.EntityItems).
 		Where("state", query.OpIs, string(model.StatePresent)).
 		WhereValues("pid", query.OpIn, query.Values(pids)...).Build()
@@ -869,7 +851,7 @@ func (l *Library) presentItems(ctx context.Context, pids []string) (map[model.PI
 
 // stillFails re-tests one rule for one item as the sweep does; an answer
 // it cannot read counts as failing.
-func (l *Library) stillFails(ctx context.Context, rule string, it *model.ItemView, in recheckInputs) bool {
+func (l *Health) stillFails(ctx context.Context, rule string, it *model.ItemView, in recheckInputs) bool {
 	switch rule {
 	case ruleMissingLyrics:
 		if in.lyrics != nil {
@@ -899,7 +881,7 @@ func (l *Library) stillFails(ctx context.Context, rule string, it *model.ItemVie
 // re-checked, the administrator who started it hears what it filled, and
 // the rule stops reading as fixing. A stop during the re-check leaves the
 // origin for the next start to finish.
-func (l *Library) finishHealthFixJob(ctx context.Context, o wdb.JobOrigin, j Job) {
+func (l *Health) finishHealthFixJob(ctx context.Context, o wdb.JobOrigin, j Job) {
 	res, err := l.recheckHealthRule(ctx, o.Rule, nil)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -908,16 +890,16 @@ func (l *Library) finishHealthFixJob(ctx context.Context, o wdb.JobOrigin, j Job
 		l.log.Warn("health: re-checking a fixed rule", "rule", o.Rule, "err", err)
 	}
 	ctx = context.WithoutCancel(ctx)
-	l.EmitNotificationFor(ctx, "health-fix-finished", healthFixTitle(o.Rule),
+	l.Integrations.EmitNotificationFor(ctx, "health-fix-finished", healthFixTitle(o.Rule),
 		healthFixJobBody(j, res, err), j.PID, []string{o.UserID})
-	l.dropJobOrigin(ctx, o.PID)
-	l.emitEveryoneEvent(ctx, eventHealth)
+	l.Jobs.dropJobOrigin(ctx, o.PID)
+	l.Jobs.emitEveryoneEvent(ctx, eventHealth)
 }
 
 // fixingRules is every rule a fix is under way for: a pass-backed fix
 // from its start until its re-check lands, a task-backed one while its
 // task is queued or running.
-func (l *Library) fixingRules(ctx context.Context) (map[string]bool, error) {
+func (l *Health) fixingRules(ctx context.Context) (map[string]bool, error) {
 	jobs, err := l.db.JobOriginRules(ctx)
 	if err != nil {
 		return nil, err

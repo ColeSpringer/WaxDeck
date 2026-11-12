@@ -49,12 +49,12 @@ func newRetentionShow(t *testing.T) retentionShow {
 	}))
 	t.Cleanup(ts.Close)
 	s := retentionShow{ctx: ctx, svc: svc, admin: admin, feed: ts.URL + "/feed.xml", episodes: map[string]string{}}
-	sub, _, err := svc.Subscribe(ctx, admin, SubscribeRequest{URL: s.feed})
+	sub, _, err := svc.Podcasts.Subscribe(ctx, admin, SubscribeRequest{URL: s.feed})
 	if err != nil {
 		t.Fatal(err)
 	}
 	s.show = sub.Show.PID
-	eps, _, err := svc.Episodes(ctx, admin, s.show, "", 10)
+	eps, _, err := svc.Podcasts.Episodes(ctx, admin, s.show, "", 10)
 	if err != nil || len(eps) != 3 {
 		t.Fatalf("episodes = %+v (%v), want three", eps, err)
 	}
@@ -72,23 +72,23 @@ func newRetentionShow(t *testing.T) retentionShow {
 			t.Fatal(err)
 		}
 	}
-	podcastLib, _ := svc.podcastLibrary(ctx)
+	podcastLib, _ := svc.Grants.podcastLibrary(ctx)
 	grants := []string{apiPID(PrefixLibrary, model.PID(podcastLib))}
-	for _, r := range svc.libraryRoots() {
+	for _, r := range svc.Roots.libraryRoots() {
 		if r.Name == "configured" {
 			grants = append(grants, apiPID(PrefixLibrary, model.PID(r.PID)))
 		}
 	}
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "listener", Password: "correct-horse", AccessMode: "granted", LibraryPIDs: grants,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.listener, err = svc.UserCtx(ctx, acct.User); err != nil {
+	if s.listener, err = svc.Grants.UserCtxFor(ctx, acct.User); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := svc.Subscribe(ctx, s.listener, SubscribeRequest{URL: s.feed}); err != nil {
+	if _, _, err := svc.Podcasts.Subscribe(ctx, s.listener, SubscribeRequest{URL: s.feed}); err != nil {
 		t.Fatal(err)
 	}
 	return s
@@ -97,7 +97,7 @@ func newRetentionShow(t *testing.T) retentionShow {
 // keep sets how many downloads uc keeps, which queues the show's sweep.
 func (s retentionShow) keep(t *testing.T, uc *UserCtx, n int64) {
 	t.Helper()
-	if _, err := s.svc.PutSubscriptionSettings(s.ctx, uc, s.show, SubscriptionSettings{RetentionKeep: &n}); err != nil {
+	if _, err := s.svc.Podcasts.PutSubscriptionSettings(s.ctx, uc, s.show, SubscriptionSettings{RetentionKeep: &n}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -105,7 +105,7 @@ func (s retentionShow) keep(t *testing.T, uc *UserCtx, n int64) {
 // downloaded names the show's episodes on the server, newest first.
 func (s retentionShow) downloaded(t *testing.T) []string {
 	t.Helper()
-	eps, _, err := s.svc.Episodes(s.ctx, s.admin, s.show, "", 10)
+	eps, _, err := s.svc.Podcasts.Episodes(s.ctx, s.admin, s.show, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,14 +154,14 @@ func TestARetentionSweepWaitsForEveryFollowersVote(t *testing.T) {
 	s := newRetentionShow(t)
 	s.keep(t, s.admin, 1)
 	s.keep(t, s.listener, 0)
-	s.svc.listenerReadHook = func(ctx context.Context, userID string) (*UserCtx, error) {
+	s.svc.Podcasts.listenerReadHook = func(ctx context.Context, userID string) (*UserCtx, error) {
 		if userID == s.listener.ID {
 			return nil, &Error{Kind: KindInternal, Err: errors.New("database is locked")}
 		}
-		return s.svc.userCtxByID(ctx, userID)
+		return s.svc.Grants.UserCtxByID(ctx, userID)
 	}
 	had := s.catalogKeep(t)
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	if got := s.downloaded(t); len(got) != 3 {
 		t.Errorf("downloads after a sweep missing a vote = %v, want all three", got)
 	}
@@ -172,8 +172,8 @@ func TestARetentionSweepWaitsForEveryFollowersVote(t *testing.T) {
 		t.Fatal("the show does not wait for the next sweep")
 	}
 
-	s.svc.listenerReadHook = nil
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.listenerReadHook = nil
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	if got := s.downloaded(t); len(got) != 3 {
 		t.Errorf("downloads once every vote reads = %v, want all three by the listener's keep-all", got)
 	}
@@ -194,13 +194,13 @@ func TestAGrantedFollowerIsUnjudgedWhileThePodcastLibraryCannotBeRead(t *testing
 	}
 	// The accounts read; the catalog's list of libraries, read afresh
 	// under a canceled context, does not.
-	s.svc.listenerReadHook = func(_ context.Context, userID string) (*UserCtx, error) {
-		return s.svc.userCtxByID(s.ctx, userID)
+	s.svc.Podcasts.listenerReadHook = func(_ context.Context, userID string) (*UserCtx, error) {
+		return s.svc.Grants.UserCtxByID(s.ctx, userID)
 	}
-	s.svc.invalidateAttribution()
+	s.svc.Grants.invalidateAttribution()
 	failing, cancel := context.WithCancel(s.ctx)
 	cancel()
-	listening, judged := s.svc.podcastListeners(failing, subs)
+	listening, judged := s.svc.Podcasts.listeners(failing, subs)
 	if judged {
 		t.Error("every follower judged while the podcast library could not be read")
 	}
@@ -208,7 +208,7 @@ func TestAGrantedFollowerIsUnjudgedWhileThePodcastLibraryCannotBeRead(t *testing
 		t.Errorf("listening = %+v, want the administrator alone", listening)
 	}
 
-	listening, judged = s.svc.podcastListeners(s.ctx, subs)
+	listening, judged = s.svc.Podcasts.listeners(s.ctx, subs)
 	if !judged || len(listening) != 2 {
 		t.Errorf("once the library reads: listening = %+v, judged = %v, want both judged", listening, judged)
 	}
@@ -221,20 +221,20 @@ func TestARetentionSweepWaitsForEveryGuard(t *testing.T) {
 	s := newRetentionShow(t)
 	s.keep(t, s.admin, 1)
 	s.keep(t, s.listener, 1)
-	if _, err := s.svc.SetStar(s.ctx, s.listener, s.episodes["Episode 1"], true, nil); err != nil {
+	if _, err := s.svc.Playback.SetStar(s.ctx, s.listener, s.episodes["Episode 1"], true, nil); err != nil {
 		t.Fatal(err)
 	}
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	kept := []string{"Episode 3", "Episode 1"}
 	if got := s.downloaded(t); !slices.Equal(got, kept) {
 		t.Fatalf("downloads = %v, want the newest and the starred one", got)
 	}
 
-	s.svc.retentionStatesHook = func(context.Context, []model.PID) (map[model.PID][]model.PlayState, error) {
+	s.svc.Podcasts.retentionStatesHook = func(context.Context, []model.PID) (map[model.PID][]model.PlayState, error) {
 		return nil, errors.New("database is locked")
 	}
 	s.keep(t, s.admin, 1)
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	if got := s.downloaded(t); !slices.Equal(got, kept) {
 		t.Errorf("downloads after a sweep that could not read the stars = %v, want %v", got, kept)
 	}
@@ -242,8 +242,8 @@ func TestARetentionSweepWaitsForEveryGuard(t *testing.T) {
 		t.Fatal("the show does not wait for the next sweep")
 	}
 
-	s.svc.retentionStatesHook = nil
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.retentionStatesHook = nil
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	if got := s.downloaded(t); !slices.Equal(got, kept) {
 		t.Errorf("downloads once the stars read = %v, want %v", got, kept)
 	}
@@ -258,13 +258,13 @@ func TestARetentionSweepWaitsForItsPins(t *testing.T) {
 	s := newRetentionShow(t)
 	s.keep(t, s.admin, 1)
 	s.keep(t, s.listener, 1)
-	if _, err := s.svc.SetStar(s.ctx, s.listener, s.episodes["Episode 1"], true, nil); err != nil {
+	if _, err := s.svc.Playback.SetStar(s.ctx, s.listener, s.episodes["Episode 1"], true, nil); err != nil {
 		t.Fatal(err)
 	}
-	s.svc.pinHook = func(context.Context, model.PID, *model.Episode, bool) error {
+	s.svc.Podcasts.pinHook = func(context.Context, model.PID, *model.Episode, bool) error {
 		return errors.New("database is locked")
 	}
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	if got := s.downloaded(t); len(got) != 3 {
 		t.Errorf("downloads after a sweep whose pin failed = %v, want all three", got)
 	}
@@ -272,8 +272,8 @@ func TestARetentionSweepWaitsForItsPins(t *testing.T) {
 		t.Fatal("the show does not wait for the next sweep")
 	}
 
-	s.svc.pinHook = nil
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.pinHook = nil
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	if got := s.downloaded(t); !slices.Equal(got, []string{"Episode 3", "Episode 1"}) {
 		t.Errorf("downloads once the pin lands = %v, want the newest and the starred one", got)
 	}
@@ -285,18 +285,18 @@ func TestAFailedUnpinHoldsNothingBack(t *testing.T) {
 	s := newRetentionShow(t)
 	s.keep(t, s.admin, 2)
 	s.keep(t, s.listener, 2)
-	if _, err := s.svc.SetStar(s.ctx, s.listener, s.episodes["Episode 1"], true, nil); err != nil {
+	if _, err := s.svc.Playback.SetStar(s.ctx, s.listener, s.episodes["Episode 1"], true, nil); err != nil {
 		t.Fatal(err)
 	}
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	if got := s.downloaded(t); len(got) != 3 {
 		t.Fatalf("downloads = %v, want all three, the oldest pinned by its star", got)
 	}
 
-	if _, err := s.svc.SetStar(s.ctx, s.listener, s.episodes["Episode 1"], false, nil); err != nil {
+	if _, err := s.svc.Playback.SetStar(s.ctx, s.listener, s.episodes["Episode 1"], false, nil); err != nil {
 		t.Fatal(err)
 	}
-	s.svc.pinHook = func(_ context.Context, _ model.PID, _ *model.Episode, pinned bool) error {
+	s.svc.Podcasts.pinHook = func(_ context.Context, _ model.PID, _ *model.Episode, pinned bool) error {
 		if pinned {
 			t.Error("the sweep pinned an episode nobody keeps")
 		}
@@ -304,8 +304,8 @@ func TestAFailedUnpinHoldsNothingBack(t *testing.T) {
 	}
 	s.keep(t, s.admin, 1)
 	s.keep(t, s.listener, 1)
-	s.svc.SweepRetention(s.ctx)
-	s.svc.pinHook = nil
+	s.svc.Podcasts.SweepRetention(s.ctx)
+	s.svc.Podcasts.pinHook = nil
 	if got := s.downloaded(t); !slices.Equal(got, []string{"Episode 3", "Episode 1"}) {
 		t.Errorf("downloads after a sweep whose unpin failed = %v, want the newest and the still-pinned one", got)
 	}
@@ -320,18 +320,18 @@ func TestARetentionSweepWaitsForAListenerWhoFollowsNothing(t *testing.T) {
 	s := newRetentionShow(t)
 	s.keep(t, s.admin, 1)
 	s.keep(t, s.listener, 1)
-	acct, err := s.svc.CreateAccount(s.ctx, AccountCreate{Username: "visitor", Password: "correct-horse"})
+	acct, err := s.svc.Identity.CreateAccount(s.ctx, AccountCreate{Username: "visitor", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	visitor, err := s.svc.UserCtx(s.ctx, acct.User)
+	visitor, err := s.svc.Grants.UserCtxFor(s.ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.svc.Checkpoint(s.ctx, visitor, s.episodes["Episode 1"], 500, nil); err != nil {
+	if _, err := s.svc.Playback.Checkpoint(s.ctx, visitor, s.episodes["Episode 1"], 500, nil); err != nil {
 		t.Fatal(err)
 	}
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	if got := s.downloaded(t); len(got) != 3 {
 		t.Errorf("downloads while a reader plays one = %v, want all three", got)
 	}
@@ -347,12 +347,12 @@ func TestARetentionSweepWaitsForARemoteSessionsTicks(t *testing.T) {
 	s := newRetentionShow(t)
 	s.keep(t, s.admin, 1)
 	s.keep(t, s.listener, 1)
-	acct, err := s.svc.CreateAccount(s.ctx, AccountCreate{Username: "caster", Password: "correct-horse"})
+	acct, err := s.svc.Identity.CreateAccount(s.ctx, AccountCreate{Username: "caster", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.svc.PlayerProgress(acct.User.ID, s.episodes["Episode 1"], 500)
-	s.svc.SweepRetention(s.ctx)
+	s.svc.Playback.PlayerProgress(acct.User.ID, s.episodes["Episode 1"], 500)
+	s.svc.Podcasts.SweepRetention(s.ctx)
 	if got := s.downloaded(t); len(got) != 3 {
 		t.Errorf("downloads while a renderer plays one = %v, want all three", got)
 	}
@@ -365,12 +365,12 @@ func TestARetentionSweepWaitsForARemoteSessionsTicks(t *testing.T) {
 // does while a local player does.
 func TestRemovingADownloadWaitsForARemoteSession(t *testing.T) {
 	s := newRetentionShow(t)
-	acct, err := s.svc.CreateAccount(s.ctx, AccountCreate{Username: "caster", Password: "correct-horse"})
+	acct, err := s.svc.Identity.CreateAccount(s.ctx, AccountCreate{Username: "caster", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.svc.PlayerProgress(acct.User.ID, s.episodes["Episode 2"], 500)
-	if err := s.svc.RemoveEpisodeDownload(s.ctx, s.admin, s.episodes["Episode 2"]); KindOf(err) != KindConflict {
+	s.svc.Playback.PlayerProgress(acct.User.ID, s.episodes["Episode 2"], 500)
+	if err := s.svc.Podcasts.RemoveEpisodeDownload(s.ctx, s.admin, s.episodes["Episode 2"]); KindOf(err) != KindConflict {
 		t.Errorf("removing a download a renderer plays = %v, want a conflict", err)
 	}
 	if got := s.downloaded(t); len(got) != 3 {

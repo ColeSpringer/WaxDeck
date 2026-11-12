@@ -19,7 +19,7 @@ func TestCreateUploadRefusesDRMFormatsByName(t *testing.T) {
 	// The positive control walks all the way to the staging check, and
 	// the real probe answers for the test volume; see uploadFixture's
 	// file for why it is stubbed rather than trusted.
-	svc.stagingFree = func(string) (int64, bool) { return 1 << 62, true }
+	svc.Ingest.stagingFree = func(string) (int64, bool) { return 1 << 62, true }
 
 	for _, name := range []string{"book.aax", "book.aaxc", "BOOK.AAX"} {
 		err := openSessionErr(ctx, svc, uc, name, 4096)
@@ -44,7 +44,7 @@ func TestCreateUploadRefusesDRMFormatsByName(t *testing.T) {
 func TestDRMDenyListWinsOverAWidenedFormatSet(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := uploadFixtureFormats(t, []string{"flac", "aax"})
-	svc.stagingFree = func(string) (int64, bool) { return 1 << 62, true }
+	svc.Ingest.stagingFree = func(string) (int64, bool) { return 1 << 62, true }
 
 	if e := openSessionErr(ctx, svc, uc, "book.aax", 4096); KindOf(e) != KindDRM {
 		t.Fatalf("an operator listing aax still gets it refused as DRM; got %v (kind %q)", e, KindOf(e))
@@ -66,17 +66,17 @@ func TestDRMDenyListWinsOverAWidenedFormatSet(t *testing.T) {
 // refuses those files whatever the operator listed.
 func TestUploadFormatsReporting(t *testing.T) {
 	t.Parallel()
-	custom := &Library{}
-	custom.setUploadFormats([]string{" .WV", "Ape"})
-	if got := custom.UploadFormats(); !slices.Equal(got, []string{"ape", "wv"}) {
+	custom := bareLibrary(&core{})
+	custom.Ingest.setUploadFormats([]string{" .WV", "Ape"})
+	if got := custom.Ingest.UploadFormats(); !slices.Equal(got, []string{"ape", "wv"}) {
 		t.Fatalf("custom UploadFormats() = %v", got)
 	}
-	if got := custom.RejectedFormats(); !slices.Equal(got, []string{"aax", "aaxc"}) {
+	if got := custom.Ingest.RejectedFormats(); !slices.Equal(got, []string{"aax", "aaxc"}) {
 		t.Fatalf("RejectedFormats() = %v", got)
 	}
-	widened := &Library{}
-	widened.setUploadFormats([]string{"aax", "flac"})
-	if got := widened.UploadFormats(); !slices.Equal(got, []string{"flac"}) {
+	widened := bareLibrary(&core{})
+	widened.Ingest.setUploadFormats([]string{"aax", "flac"})
+	if got := widened.Ingest.UploadFormats(); !slices.Equal(got, []string{"flac"}) {
 		t.Fatalf("a widened set must not report deny-listed formats as accepted; got %v", got)
 	}
 	// The default set is the scanner's own, so an upload that lands is
@@ -84,9 +84,9 @@ func TestUploadFormatsReporting(t *testing.T) {
 	// unexported table upstream, so it is pinned against the predicate
 	// that table backs rather than against its length: a format added
 	// or dropped upstream shows up here instead of drifting.
-	def := &Library{}
-	def.setUploadFormats(nil)
-	got := def.UploadFormats()
+	def := bareLibrary(&core{})
+	def.Ingest.setUploadFormats(nil)
+	got := def.Ingest.UploadFormats()
 	if len(got) == 0 || !slices.IsSorted(got) {
 		t.Fatalf("default UploadFormats() = %v", got)
 	}

@@ -24,7 +24,7 @@ import (
 // --- internet radio ---------------------------------------------------------------
 
 func (s *Server) ListRadioStations(ctx context.Context, _ ListRadioStationsRequestObject) (ListRadioStationsResponseObject, error) {
-	stations, err := s.svc.RadioStations(ctx)
+	stations, err := s.svc.Radio.Stations(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +40,7 @@ func (s *Server) CreateRadioStation(ctx context.Context, req CreateRadioStationR
 		return nil, errNoBody()
 	}
 	uc := userCtx(ctx)
-	st, err := s.svc.CreateRadioStation(ctx, uc, radioEditFromWire(*req.Body))
+	st, err := s.svc.Radio.CreateRadioStation(ctx, uc, radioEditFromWire(*req.Body))
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func (s *Server) CreateRadioStation(ctx context.Context, req CreateRadioStationR
 }
 
 func (s *Server) GetRadioStation(ctx context.Context, req GetRadioStationRequestObject) (GetRadioStationResponseObject, error) {
-	st, err := s.svc.RadioStationByPID(ctx, req.Pid)
+	st, err := s.svc.Radio.StationByPID(ctx, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (s *Server) UpdateRadioStation(ctx context.Context, req UpdateRadioStationR
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
-	st, err := s.svc.UpdateRadioStation(ctx, req.Pid, radioEditFromWire(*req.Body))
+	st, err := s.svc.Radio.UpdateRadioStation(ctx, req.Pid, radioEditFromWire(*req.Body))
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (s *Server) UpdateRadioStation(ctx context.Context, req UpdateRadioStationR
 }
 
 func (s *Server) DeleteRadioStation(ctx context.Context, req DeleteRadioStationRequestObject) (DeleteRadioStationResponseObject, error) {
-	if err := s.svc.DeleteRadioStation(ctx, req.Pid); err != nil {
+	if err := s.svc.Radio.DeleteRadioStation(ctx, req.Pid); err != nil {
 		return nil, err
 	}
 	return DeleteRadioStation204Response{}, nil
@@ -76,7 +76,7 @@ func (s *Server) DeleteRadioStation(ctx context.Context, req DeleteRadioStationR
 func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoRequestObject) (GetRadioPlayInfoResponseObject, error) {
 	uc := userCtx(ctx)
 	p, _ := principalFromContext(ctx)
-	station, err := s.svc.RadioStationByPID(ctx, req.Pid)
+	station, err := s.svc.Radio.StationByPID(ctx, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -89,14 +89,14 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 	// Read once and passed along, so the fields describe the same song:
 	// the relay rewrites the title whenever the station announces one,
 	// and a second read could land on the next track.
-	if announced := s.svc.RadioNowPlayingAnnouncement(req.Pid); announced.Title != "" {
+	if announced := s.svc.Radio.NowPlayingAnnouncement(req.Pid); announced.Title != "" {
 		title := announced.Title
 		out.NowPlaying = ptr(title)
 		// One indexed read, and what keeps the heart honest across
 		// devices: a save made on the phone fills the desktop's heart on
 		// its next poll. Absent rather than false when nothing is kept,
 		// which the contract says means the same thing.
-		if savedPID := s.svc.RadioSavedPIDForNowPlaying(ctx, uc, station.Name, title); savedPID != "" {
+		if savedPID := s.svc.Radio.SavedPIDForNowPlaying(ctx, uc, station.Name, title); savedPID != "" {
 			out.NowPlayingSaved = ptr(true)
 			out.NowPlayingSavedPid = ptr(savedPID)
 		}
@@ -105,11 +105,11 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 		// answer, and the two rungs below it decide: the picture the
 		// station announced and the external lookup, which the service
 		// walks without ever waiting on either.
-		if pid := s.svc.RadioNowPlayingItem(ctx, uc, req.Pid, station.Name, title); pid != "" {
+		if pid := s.svc.Radio.NowPlayingItem(ctx, uc, req.Pid, station.Name, title); pid != "" {
 			out.NowPlayingItemPid = ptr(pid)
-		} else if key := s.svc.RadioNowPlayingCover(req.Pid, station.Name, announced); key != "" {
+		} else if key := s.svc.Radio.NowPlayingCover(req.Pid, station.Name, announced); key != "" {
 			out.NowPlayingArtKey = ptr(key)
-			out.NowPlayingArtSource = artSourceJSON(s.svc.RadioNowPlayingArtSource(key))
+			out.NowPlayingArtSource = artSourceJSON(s.svc.Radio.NowPlayingArtSource(key))
 		}
 	}
 	return GetRadioPlayInfo200JSONResponse(out), nil
@@ -138,7 +138,7 @@ const (
 )
 
 func (s *Server) GetRadioStationLogo(ctx context.Context, req GetRadioStationLogoRequestObject) (GetRadioStationLogoResponseObject, error) {
-	logo, err := s.svc.RadioStationLogo(ctx, req.Pid)
+	logo, err := s.svc.Radio.StationLogo(ctx, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func (s *Server) GetRadioStationLogo(ctx context.Context, req GetRadioStationLog
 }
 
 func (s *Server) GetRadioNowPlayingArt(ctx context.Context, req GetRadioNowPlayingArtRequestObject) (GetRadioNowPlayingArtResponseObject, error) {
-	art, err := s.svc.RadioNowPlayingArt(req.Params.V)
+	art, err := s.svc.Radio.NowPlayingArt(req.Params.V)
 	if err != nil {
 		// Same collapse as the logo: nothing announced, nothing parsed,
 		// the rung off, the lookup not landed, upstream empty - the
@@ -223,7 +223,7 @@ func (s *Server) ListRadioSavedSongs(ctx context.Context, req ListRadioSavedSong
 	if req.Params.Cursor != nil {
 		cursor = *req.Params.Cursor
 	}
-	page, err := s.svc.ListRadioSaved(ctx, uc, cursor, limit)
+	page, err := s.svc.Radio.ListRadioSaved(ctx, uc, cursor, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +242,7 @@ func (s *Server) SaveRadioSong(ctx context.Context, req SaveRadioSongRequestObje
 		return nil, errNoBody()
 	}
 	uc := userCtx(ctx)
-	song, err := s.svc.SaveRadioSong(ctx, uc, req.Body.StationPid, req.Body.NowPlaying)
+	song, err := s.svc.Radio.SaveRadioSong(ctx, uc, req.Body.StationPid, req.Body.NowPlaying)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +251,7 @@ func (s *Server) SaveRadioSong(ctx context.Context, req SaveRadioSongRequestObje
 
 func (s *Server) DeleteRadioSavedSong(ctx context.Context, req DeleteRadioSavedSongRequestObject) (DeleteRadioSavedSongResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.RemoveRadioSaved(ctx, uc, req.Pid); err != nil {
+	if err := s.svc.Radio.RemoveRadioSaved(ctx, uc, req.Pid); err != nil {
 		return nil, err
 	}
 	return DeleteRadioSavedSong204Response{}, nil
@@ -259,7 +259,7 @@ func (s *Server) DeleteRadioSavedSong(ctx context.Context, req DeleteRadioSavedS
 
 func (s *Server) GetRadioSavedSongArt(ctx context.Context, req GetRadioSavedSongArtRequestObject) (GetRadioSavedSongArtResponseObject, error) {
 	uc := userCtx(ctx)
-	art, err := s.svc.RadioSavedArt(ctx, uc, req.Pid)
+	art, err := s.svc.Radio.SavedArt(ctx, uc, req.Pid)
 	if err != nil {
 		return nil, err
 	}
@@ -332,7 +332,7 @@ func (s *Server) SearchRadioDirectory(ctx context.Context, req SearchRadioDirect
 	}
 	// The caller is needed for their locale: the directory's own ranking
 	// is by votes, which knows nothing about where the listener is.
-	entries, err := s.svc.SearchRadioDirectory(ctx, uc, req.Params.Query, limit)
+	entries, err := s.svc.Radio.SearchRadioDirectory(ctx, uc, req.Params.Query, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +389,7 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release()
-	streamURL, err := s.svc.RadioStreamSource(r.Context(), pid)
+	streamURL, err := s.svc.Radio.StreamSource(r.Context(), pid)
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindNotFound:
@@ -407,7 +407,7 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 	// answer that says nothing of what it is, does not arrive in time.
 	stationCtx, stopStation := context.WithCancel(ctx)
 	defer stopStation()
-	client, agent := s.svc.RadioHTTP(), s.svc.UserAgent()
+	client, agent := s.svc.Radio.HTTP(), s.svc.UserAgent()
 	req, err := stationRequest(stationCtx, streamURL, agent)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "service-unreachable", "the station could not be contacted")
@@ -456,7 +456,7 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 	// Some operators name their logo in the connect headers, which is a
 	// better answer than the discovery walk and free to keep: this is
 	// the one moment the station itself is talking to this server.
-	s.svc.NoteRadioLogoHint(pid, strings.TrimSpace(resp.Header.Get("Icy-Logo")))
+	s.svc.Radio.NoteRadioLogoHint(pid, strings.TrimSpace(resp.Header.Get("Icy-Logo")))
 	w.Header().Set("Content-Type", ct)
 	w.Header().Set("Cache-Control", "no-store")
 	for name, vals := range resp.Header {
@@ -493,7 +493,7 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 	seg := &radioSegment{
 		now: time.Now,
 		report: func(title string, since time.Time) {
-			s.svc.ScrobbleRadioPlay(r.Context(), user, pid, title, since)
+			s.svc.Radio.ScrobbleRadioPlay(r.Context(), user, pid, title, since)
 		},
 	}
 	// The listening record, which is a different question from
@@ -511,7 +511,7 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 	// rather than on the first chunk.
 	checkpointed := listenStart
 	checkpoint := func(now time.Time) {
-		s.svc.RecordRadioListen(r.Context(), user, listenID, pid, listenStart, now.Sub(listenStart))
+		s.svc.Radio.RecordRadioListen(r.Context(), user, listenID, pid, listenStart, now.Sub(listenStart))
 		checkpointed = now
 	}
 	// Runs however the relay leaves: a read error, a write error, the
@@ -521,7 +521,7 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 		// The one thing every block says whatever is in it: the station is
 		// still sending. Unconditional and first, because the blocks that
 		// carry nothing are the ones that arrive every few seconds.
-		s.svc.NoteRadioAlive(pid)
+		s.svc.Radio.NoteRadioAlive(pid)
 		meta := icyMetaOf(block)
 		// What the listener is hearing and what the face says are decided
 		// separately: an ad break ends the song without ever becoming one,
@@ -531,7 +531,7 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 		// block and an ident both leave the song that is still playing
 		// exactly where it is.
 		if meta.announcement() {
-			s.svc.NoteRadioMeta(pid, meta.title, meta.artURL)
+			s.svc.Radio.NoteRadioMeta(pid, meta.title, meta.artURL)
 		}
 	}
 	// A station is not finite, so neither a size cap nor a rate floor
@@ -597,7 +597,7 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) ListScrobblers(ctx context.Context, _ ListScrobblersRequestObject) (ListScrobblersResponseObject, error) {
 	uc := userCtx(ctx)
-	rows, err := s.svc.ListScrobblers(ctx, uc)
+	rows, err := s.svc.Integrations.ListScrobblers(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -617,7 +617,7 @@ func (s *Server) ConnectListenBrainz(ctx context.Context, req ConnectListenBrain
 	if req.Body.ApiUrl != nil {
 		apiURL = *req.Body.ApiUrl
 	}
-	sc, err := s.svc.ConnectListenBrainz(ctx, uc, req.Body.Token, apiURL)
+	sc, err := s.svc.Integrations.ConnectListenBrainz(ctx, uc, req.Body.Token, apiURL)
 	if err != nil {
 		return nil, err
 	}
@@ -626,7 +626,7 @@ func (s *Server) ConnectListenBrainz(ctx context.Context, req ConnectListenBrain
 
 func (s *Server) DisconnectListenBrainz(ctx context.Context, _ DisconnectListenBrainzRequestObject) (DisconnectListenBrainzResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.DisconnectScrobbler(ctx, uc, service.ScrobblerListenBrainz); err != nil {
+	if err := s.svc.Integrations.DisconnectScrobbler(ctx, uc, service.ScrobblerListenBrainz); err != nil {
 		return nil, err
 	}
 	return DisconnectListenBrainz204Response{}, nil
@@ -634,7 +634,7 @@ func (s *Server) DisconnectListenBrainz(ctx context.Context, _ DisconnectListenB
 
 func (s *Server) DisconnectLastfm(ctx context.Context, _ DisconnectLastfmRequestObject) (DisconnectLastfmResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.DisconnectScrobbler(ctx, uc, service.ScrobblerLastfm); err != nil {
+	if err := s.svc.Integrations.DisconnectScrobbler(ctx, uc, service.ScrobblerLastfm); err != nil {
 		return nil, err
 	}
 	return DisconnectLastfm204Response{}, nil
@@ -643,7 +643,7 @@ func (s *Server) DisconnectLastfm(ctx context.Context, _ DisconnectLastfmRequest
 func (s *Server) StartLastfmConnect(ctx context.Context, _ StartLastfmConnectRequestObject) (StartLastfmConnectResponseObject, error) {
 	uc := userCtx(ctx)
 	callback := strings.TrimSuffix(s.publicBase, "/") + "/api/v1/scrobble/lastfm/callback"
-	authURL, err := s.svc.StartLastfmConnect(ctx, uc, callback)
+	authURL, err := s.svc.Integrations.StartLastfmConnect(ctx, uc, callback)
 	if err != nil {
 		return nil, err
 	}
@@ -652,7 +652,7 @@ func (s *Server) StartLastfmConnect(ctx context.Context, _ StartLastfmConnectReq
 
 func (s *Server) LastfmCallback(ctx context.Context, req LastfmCallbackRequestObject) (LastfmCallbackResponseObject, error) {
 	loc := pageStringsFromContext(ctx)
-	username, err := s.svc.CompleteLastfmConnect(ctx, req.Params.State, req.Params.Token)
+	username, err := s.svc.Integrations.CompleteLastfmConnect(ctx, req.Params.State, req.Params.Token)
 	if err != nil {
 		// A message the service carried up is a diagnostic and shows in
 		// its own English; the localized sentence is what stands in when
@@ -686,7 +686,7 @@ func scrobblePage(loc *pagetext.Strings, title, body string) string {
 
 func (s *Server) ListPushRegistrations(ctx context.Context, _ ListPushRegistrationsRequestObject) (ListPushRegistrationsResponseObject, error) {
 	uc := userCtx(ctx)
-	rows, err := s.svc.PushRegistrations(ctx, uc)
+	rows, err := s.svc.Integrations.PushRegistrations(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -706,7 +706,7 @@ func (s *Server) CreatePushRegistration(ctx context.Context, req CreatePushRegis
 	if req.Body.Label != nil {
 		label = *req.Body.Label
 	}
-	reg, created, err := s.svc.RegisterPushEndpoint(ctx, uc, req.Body.Endpoint, label)
+	reg, created, err := s.svc.Integrations.RegisterPushEndpoint(ctx, uc, req.Body.Endpoint, label)
 	if err != nil {
 		return nil, err
 	}
@@ -718,7 +718,7 @@ func (s *Server) CreatePushRegistration(ctx context.Context, req CreatePushRegis
 
 func (s *Server) DeletePushRegistration(ctx context.Context, req DeletePushRegistrationRequestObject) (DeletePushRegistrationResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.DeletePushRegistration(ctx, uc, req.RegistrationId); err != nil {
+	if err := s.svc.Integrations.DeletePushRegistration(ctx, uc, req.RegistrationId); err != nil {
 		return nil, err
 	}
 	return DeletePushRegistration204Response{}, nil
@@ -726,7 +726,7 @@ func (s *Server) DeletePushRegistration(ctx context.Context, req DeletePushRegis
 
 func (s *Server) DeleteAllPushRegistrations(ctx context.Context, _ DeleteAllPushRegistrationsRequestObject) (DeleteAllPushRegistrationsResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.DeleteAllPushRegistrations(ctx, uc); err != nil {
+	if err := s.svc.Integrations.DeleteAllPushRegistrations(ctx, uc); err != nil {
 		return nil, err
 	}
 	return DeleteAllPushRegistrations204Response{}, nil
@@ -735,7 +735,7 @@ func (s *Server) DeleteAllPushRegistrations(ctx context.Context, _ DeleteAllPush
 // --- notifications ----------------------------------------------------------------
 
 func (s *Server) ListNotificationEvents(ctx context.Context, _ ListNotificationEventsRequestObject) (ListNotificationEventsResponseObject, error) {
-	events := s.svc.NotifyEvents()
+	events := s.svc.Integrations.NotifyEvents()
 	out := NotificationEventList{Events: make([]NotificationEvent, 0, len(events))}
 	for _, e := range events {
 		out.Events = append(out.Events, NotificationEvent{
@@ -751,7 +751,7 @@ func (s *Server) ListServerNotificationTargets(ctx context.Context, _ ListServer
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	rows, err := s.svc.ListServerNotificationTargets(ctx)
+	rows, err := s.svc.Integrations.ListServerNotificationTargets(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -769,7 +769,7 @@ func (s *Server) CreateServerNotificationTarget(ctx context.Context, req CreateS
 	if err != nil {
 		return nil, err
 	}
-	created, err := s.svc.CreateServerNotificationTarget(ctx, in)
+	created, err := s.svc.Integrations.CreateServerNotificationTarget(ctx, in)
 	if err != nil {
 		return nil, err
 	}
@@ -788,7 +788,7 @@ func (s *Server) UpdateServerNotificationTarget(ctx context.Context, req UpdateS
 	if err != nil {
 		return nil, err
 	}
-	updated, err := s.svc.UpdateServerNotificationTarget(ctx, req.TargetId, in)
+	updated, err := s.svc.Integrations.UpdateServerNotificationTarget(ctx, req.TargetId, in)
 	if err != nil {
 		return nil, err
 	}
@@ -805,7 +805,7 @@ func (s *Server) DeleteServerNotificationTarget(ctx context.Context, req DeleteS
 	if gone == nil {
 		gone = &service.NotificationTarget{PID: req.TargetId}
 	}
-	if err := s.svc.DeleteServerNotificationTarget(ctx, req.TargetId); err != nil {
+	if err := s.svc.Integrations.DeleteServerNotificationTarget(ctx, req.TargetId); err != nil {
 		return nil, err
 	}
 	s.auditNotificationTarget(ctx, "notification-target.delete", *gone)
@@ -814,7 +814,7 @@ func (s *Server) DeleteServerNotificationTarget(ctx context.Context, req DeleteS
 
 // serverNotificationTarget reads one server-scope target.
 func (s *Server) serverNotificationTarget(ctx context.Context, pid string) (*service.NotificationTarget, error) {
-	all, err := s.svc.ListServerNotificationTargets(ctx)
+	all, err := s.svc.Integrations.ListServerNotificationTargets(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -835,7 +835,7 @@ func (s *Server) auditNotificationTarget(ctx context.Context, action string, t s
 	if name == "" {
 		name = t.Kind
 	}
-	s.svc.Audit(ctx, uc, action,
+	s.svc.Audit.Record(ctx, uc, action,
 		service.AuditTarget{Kind: "notification-target", PID: t.PID, Name: name},
 		map[string]any{"kind": t.Kind, "label": t.Label})
 }
@@ -844,7 +844,7 @@ func (s *Server) TestServerNotificationTarget(ctx context.Context, req TestServe
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.svc.TestServerNotificationTarget(ctx, req.TargetId); err != nil {
+	if err := s.svc.Integrations.TestServerNotificationTarget(ctx, req.TargetId); err != nil {
 		return nil, err
 	}
 	return TestServerNotificationTarget202Response{}, nil
@@ -852,7 +852,7 @@ func (s *Server) TestServerNotificationTarget(ctx context.Context, req TestServe
 
 func (s *Server) ListMyNotificationTargets(ctx context.Context, _ ListMyNotificationTargetsRequestObject) (ListMyNotificationTargetsResponseObject, error) {
 	uc := userCtx(ctx)
-	rows, err := s.svc.ListMyNotificationTargets(ctx, uc)
+	rows, err := s.svc.Integrations.ListMyNotificationTargets(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
@@ -868,7 +868,7 @@ func (s *Server) CreateMyNotificationTarget(ctx context.Context, req CreateMyNot
 	if err != nil {
 		return nil, err
 	}
-	created, err := s.svc.CreateMyNotificationTarget(ctx, uc, in)
+	created, err := s.svc.Integrations.CreateMyNotificationTarget(ctx, uc, in)
 	if err != nil {
 		return nil, err
 	}
@@ -884,7 +884,7 @@ func (s *Server) UpdateMyNotificationTarget(ctx context.Context, req UpdateMyNot
 	if err != nil {
 		return nil, err
 	}
-	updated, err := s.svc.UpdateMyNotificationTarget(ctx, uc, req.TargetId, in)
+	updated, err := s.svc.Integrations.UpdateMyNotificationTarget(ctx, uc, req.TargetId, in)
 	if err != nil {
 		return nil, err
 	}
@@ -893,7 +893,7 @@ func (s *Server) UpdateMyNotificationTarget(ctx context.Context, req UpdateMyNot
 
 func (s *Server) DeleteMyNotificationTarget(ctx context.Context, req DeleteMyNotificationTargetRequestObject) (DeleteMyNotificationTargetResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.DeleteMyNotificationTarget(ctx, uc, req.TargetId); err != nil {
+	if err := s.svc.Integrations.DeleteMyNotificationTarget(ctx, uc, req.TargetId); err != nil {
 		return nil, err
 	}
 	return DeleteMyNotificationTarget204Response{}, nil
@@ -901,7 +901,7 @@ func (s *Server) DeleteMyNotificationTarget(ctx context.Context, req DeleteMyNot
 
 func (s *Server) TestMyNotificationTarget(ctx context.Context, req TestMyNotificationTargetRequestObject) (TestMyNotificationTargetResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.TestMyNotificationTarget(ctx, uc, req.TargetId); err != nil {
+	if err := s.svc.Integrations.TestMyNotificationTarget(ctx, uc, req.TargetId); err != nil {
 		return nil, err
 	}
 	return TestMyNotificationTarget202Response{}, nil
@@ -919,7 +919,7 @@ func (s *Server) ListMyNotifications(ctx context.Context, req ListMyNotification
 	if req.Params.Cursor != nil {
 		cursor = *req.Params.Cursor
 	}
-	page, err := s.svc.Notifications(ctx, uc, cursor, limit)
+	page, err := s.svc.Integrations.Notifications(ctx, uc, cursor, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -942,7 +942,7 @@ func (s *Server) MarkMyNotificationsRead(ctx context.Context, req MarkMyNotifica
 	if req.Body != nil && req.Body.Ids != nil {
 		ids = *req.Body.Ids
 	}
-	if err := s.svc.MarkNotificationsRead(ctx, uc, ids); err != nil {
+	if err := s.svc.Integrations.MarkNotificationsRead(ctx, uc, ids); err != nil {
 		return nil, err
 	}
 	return MarkMyNotificationsRead204Response{}, nil
@@ -950,7 +950,7 @@ func (s *Server) MarkMyNotificationsRead(ctx context.Context, req MarkMyNotifica
 
 func (s *Server) DeleteMyNotification(ctx context.Context, req DeleteMyNotificationRequestObject) (DeleteMyNotificationResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.DeleteNotification(ctx, uc, req.NotificationId); err != nil {
+	if err := s.svc.Integrations.DeleteNotification(ctx, uc, req.NotificationId); err != nil {
 		return nil, err
 	}
 	return DeleteMyNotification204Response{}, nil
@@ -958,7 +958,7 @@ func (s *Server) DeleteMyNotification(ctx context.Context, req DeleteMyNotificat
 
 func (s *Server) ClearMyNotifications(ctx context.Context, _ ClearMyNotificationsRequestObject) (ClearMyNotificationsResponseObject, error) {
 	uc := userCtx(ctx)
-	if err := s.svc.ClearNotifications(ctx, uc); err != nil {
+	if err := s.svc.Integrations.ClearNotifications(ctx, uc); err != nil {
 		return nil, err
 	}
 	return ClearMyNotifications204Response{}, nil

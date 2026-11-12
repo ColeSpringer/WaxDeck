@@ -22,14 +22,14 @@ func TestKindRefusalsKeepTheirWording(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCueFixture(t)
 	one, _, _ := carvedTracks(t, ctx, svc, uc)
-	_, cue := svc.SetItemsKind(ctx, uc, []string{one}, "audiobook", false)
+	_, cue := svc.Reads.SetItemsKind(ctx, uc, []string{one}, "audiobook", false)
 	if KindOf(cue) != KindInvalid || !strings.Contains(cue.Error(), "is a cue track") {
 		t.Fatalf("a cue track = %v, want the cue-track refusal", cue)
 	}
 
 	var plain string
 	for _, pid := range fixtureItemPIDs(t, ctx, svc, uc) {
-		it, err := svc.getVisibleItem(ctx, uc, pid)
+		it, err := svc.Grants.getVisibleItem(ctx, uc, pid)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -41,7 +41,7 @@ func TestKindRefusalsKeepTheirWording(t *testing.T) {
 			break
 		}
 	}
-	_, err := svc.SetItemsKind(ctx, uc, []string{plain}, "audiobook", false)
+	_, err := svc.Reads.SetItemsKind(ctx, uc, []string{plain}, "audiobook", false)
 	if KindOf(err) != KindConflict || !strings.Contains(err.Error(), "is not on disk") {
 		t.Fatalf("a part not on disk = %v, want the missing-file conflict", err)
 	}
@@ -68,11 +68,11 @@ func refuseJobOriginWrites(t *testing.T, ctx context.Context, svc *Library) {
 func TestAKindChangesStarterIsAnsweredWhenTheirOriginIsNotRecorded(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "uploader", Password: "correct-horse"})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "uploader", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestAKindChangesStarterIsAnsweredWhenTheirOriginIsNotRecorded(t *testing.T)
 	}
 	refuseJobOriginWrites(t, ctx, svc)
 
-	job, err := svc.SetItemsKind(ctx, uc, []string{pid}, "audiobook", false)
+	job, err := svc.Reads.SetItemsKind(ctx, uc, []string{pid}, "audiobook", false)
 	if err != nil {
 		t.Fatalf("the starter's answer = %v, want the job they started", err)
 	}
@@ -92,7 +92,7 @@ func TestAKindChangesStarterIsAnsweredWhenTheirOriginIsNotRecorded(t *testing.T)
 		t.Fatalf("answer = %+v, want the set-kind job", job)
 	}
 	waitFor(t, func() bool {
-		j, err := svc.JobStatus(ctx, job.PID)
+		j, err := svc.Jobs.Status(ctx, job.PID)
 		return err == nil && j.State != string(model.JobRunning)
 	}, "the kind change should end")
 }
@@ -152,7 +152,7 @@ func TestAKindChangeLeavesNoColumnOnTheOldPrefix(t *testing.T) {
 	// WaxDeck's rows naming the track by its prefixed pid: a link, a tool
 	// task that ran on it and lists it among its results, a Subsonic
 	// bookmark, earlier history, and the change's own audit entry.
-	if _, err := svc.CreateShare(ctx, uc, track, 0, false, 0); err != nil {
+	if _, err := svc.Reads.CreateShare(ctx, uc, track, 0, false, 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.db.InsertToolTask(ctx, wdb.ToolTask{ID: "tk-kindwalk", Type: "cue-split", State: "done", ItemPID: track,
@@ -163,9 +163,9 @@ func TestAKindChangeLeavesNoColumnOnTheOldPrefix(t *testing.T) {
 		VALUES (?, ?, 5000, 1, 1)`, uc.ID, track); err != nil {
 		t.Fatal(err)
 	}
-	svc.Audit(ctx, uc, "item.edit", AuditTarget{Kind: "item", PID: track}, nil)
+	svc.Audit.Record(ctx, uc, "item.edit", AuditTarget{Kind: "item", PID: track}, nil)
 
-	job, err := svc.SetItemsKind(ctx, uc, []string{track}, "audiobook", false)
+	job, err := svc.Reads.SetItemsKind(ctx, uc, []string{track}, "audiobook", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,19 +213,19 @@ func TestBookOnlyEditsOnATrackPointAtTheKind(t *testing.T) {
 		err  error
 	}{
 		{"narrator field", func() error {
-			_, err := svc.EditItemMetadata(ctx, uc, track, map[string]string{"narrator": "Ann Reader"}, MetadataEditParams{})
+			_, err := svc.Editor.EditItemMetadata(ctx, uc, track, map[string]string{"narrator": "Ann Reader"}, MetadataEditParams{})
 			return err
 		}()},
 		{"narrator role", func() error {
-			_, err := svc.SetItemCredits(ctx, uc, track, "narrator", []string{"Ann Reader"}, MetadataEditParams{})
+			_, err := svc.Editor.SetItemCredits(ctx, uc, track, "narrator", []string{"Ann Reader"}, MetadataEditParams{})
 			return err
 		}()},
 		{"NARRATOR tag", func() error {
-			_, err := svc.SetItemTag(ctx, uc, track, "narrator", []string{"Ann Reader"}, MetadataEditParams{})
+			_, err := svc.Editor.SetItemTag(ctx, uc, track, "narrator", []string{"Ann Reader"}, MetadataEditParams{})
 			return err
 		}()},
 		{"MEDIATYPE tag", func() error {
-			_, err := svc.SetItemTag(ctx, uc, track, "MEDIATYPE", []string{"2"}, MetadataEditParams{})
+			_, err := svc.Editor.SetItemTag(ctx, uc, track, "MEDIATYPE", []string{"2"}, MetadataEditParams{})
 			return err
 		}()},
 	} {
@@ -247,19 +247,19 @@ func TestAFailedKindFollowUpIsRepeatedAtTheNextStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	runs := 0
-	svc.remapHook = func(context.Context, wdb.KindMoves) error {
+	svc.Reads.remapHook = func(context.Context, wdb.KindMoves) error {
 		runs++
 		if runs == 1 {
 			return errors.New("injected")
 		}
 		return nil
 	}
-	svc.settleJobOrigin(ctx, j)
+	svc.Jobs.settleJobOrigin(ctx, j)
 	if has, err := svc.db.HasJobOrigin(ctx, string(j.PID)); err != nil || !has {
 		t.Fatalf("origin after a failed follow-up = %v (%v), want it kept", has, err)
 	}
-	svc.openedAtNS = time.Now().UnixNano() + 1 // the next start
-	svc.settleJobOrigin(ctx, j)
+	svc.Jobs.openedAtNS = time.Now().UnixNano() + 1 // the next start
+	svc.Jobs.settleJobOrigin(ctx, j)
 	if has, err := svc.db.HasJobOrigin(ctx, string(j.PID)); err != nil || has || runs != 2 {
 		t.Fatalf("origin after the repeat = %v (%v), runs %d; want it settled after a second run", has, err, runs)
 	}
@@ -278,7 +278,7 @@ func TestAKindFollowUpThatCannotReadTheCatalogIsRepeated(t *testing.T) {
 		t.Fatal(err)
 	}
 	reads := 0
-	svc.kindReadHook = func(_ context.Context, pid model.PID) (*model.ItemView, error) {
+	svc.Reads.kindReadHook = func(_ context.Context, pid model.PID) (*model.ItemView, error) {
 		reads++
 		if reads == 1 {
 			return nil, errors.New("database is closed")
@@ -286,16 +286,16 @@ func TestAKindFollowUpThatCannotReadTheCatalogIsRepeated(t *testing.T) {
 		return &model.ItemView{PID: pid, Kind: model.KindBook}, nil
 	}
 	var remapped []wdb.KindMoves
-	svc.remapHook = func(_ context.Context, m wdb.KindMoves) error {
+	svc.Reads.remapHook = func(_ context.Context, m wdb.KindMoves) error {
 		remapped = append(remapped, m)
 		return nil
 	}
-	svc.settleJobOrigin(ctx, j)
+	svc.Jobs.settleJobOrigin(ctx, j)
 	if has, err := svc.db.HasJobOrigin(ctx, string(j.PID)); err != nil || !has || len(remapped) != 0 {
 		t.Fatalf("after an unreadable catalog: origin %v (%v), remaps %v; want the origin kept and nothing moved", has, err, remapped)
 	}
-	svc.openedAtNS = time.Now().UnixNano() + 1 // the next start
-	svc.settleJobOrigin(ctx, j)
+	svc.Jobs.openedAtNS = time.Now().UnixNano() + 1 // the next start
+	svc.Jobs.settleJobOrigin(ctx, j)
 	if has, err := svc.db.HasJobOrigin(ctx, string(j.PID)); err != nil || has ||
 		len(remapped) != 1 || remapped[0].Kinds[converted] != "audiobook" {
 		t.Fatalf("after the repeat: origin %v (%v), remaps %v; want the book's kind moved and the origin gone", has, err, remapped)
@@ -310,24 +310,24 @@ func TestAnUnownedKindFollowUpThatFailsIsKeptForTheNextStart(t *testing.T) {
 	j := &model.Job{PID: "01JZX5N8QW3F4V9T2B7KDKINDU", Kind: "set-kind", State: model.JobDone,
 		Result: `{"converted":["01JZX5N8QW3F4V9T2B7KDCONV01"]}`}
 	failing := true
-	svc.kindReadHook = func(_ context.Context, pid model.PID) (*model.ItemView, error) {
+	svc.Reads.kindReadHook = func(_ context.Context, pid model.PID) (*model.ItemView, error) {
 		if failing {
 			return nil, errors.New("database is closed")
 		}
 		return &model.ItemView{PID: pid, Kind: model.KindBook}, nil
 	}
 	runs := 0
-	svc.remapHook = func(context.Context, wdb.KindMoves) error {
+	svc.Reads.remapHook = func(context.Context, wdb.KindMoves) error {
 		runs++
 		return nil
 	}
-	svc.onJobFinished(ctx, j)
+	svc.Jobs.onJobFinished(ctx, j)
 	if has, err := svc.db.HasJobOrigin(ctx, string(j.PID)); err != nil || !has {
 		t.Fatalf("origin after a failed unowned follow-up = %v (%v), want one kept", has, err)
 	}
 	failing = false
-	svc.openedAtNS = time.Now().UnixNano() + 1
-	svc.settleJobOrigin(ctx, j)
+	svc.Jobs.openedAtNS = time.Now().UnixNano() + 1
+	svc.Jobs.settleJobOrigin(ctx, j)
 	if has, err := svc.db.HasJobOrigin(ctx, string(j.PID)); err != nil || has || runs != 1 {
 		t.Fatalf("after the repeat: origin %v (%v), runs %d; want it settled once", has, err, runs)
 	}
@@ -341,15 +341,15 @@ func TestAnUnownedKindFollowUpThatFailsIsTriedOncePerPass(t *testing.T) {
 	ctx, svc, _ := newCatalogFixture(t)
 	j := &model.Job{PID: "01JZX5N8QW3F4V9T2B7KDKINDO", Kind: "set-kind", State: model.JobDone,
 		Result: `{"converted":["01JZX5N8QW3F4V9T2B7KDCONV01"]}`}
-	svc.kindReadHook = func(_ context.Context, pid model.PID) (*model.ItemView, error) {
+	svc.Reads.kindReadHook = func(_ context.Context, pid model.PID) (*model.ItemView, error) {
 		return &model.ItemView{PID: pid, Kind: model.KindBook}, nil
 	}
 	runs := 0
-	svc.remapHook = func(context.Context, wdb.KindMoves) error {
+	svc.Reads.remapHook = func(context.Context, wdb.KindMoves) error {
 		runs++
 		return errors.New("disk I/O error")
 	}
-	svc.onJobFinished(ctx, j)
+	svc.Jobs.onJobFinished(ctx, j)
 	if has, err := svc.db.HasJobOrigin(ctx, string(j.PID)); err != nil || !has || runs != 1 {
 		t.Fatalf("origin %v (%v), remaps %d; want one kept and one remap", has, err, runs)
 	}
@@ -364,7 +364,7 @@ func TestASplitPartIsCreditedOnlyToTheBookItCameFrom(t *testing.T) {
 	ctx, svc, uc := newCatalogFixture(t)
 	const a, b, loose, part = "01JZX5N8QW3F4V9T2B7KDBOOKA0", "01JZX5N8QW3F4V9T2B7KDBOOKB0", "01JZX5N8QW3F4V9T2B7KDLOOSE0", "01JZX5N8QW3F4V9T2B7KDPART00"
 	albums := map[model.PID]model.PID{a: "01JZX5N8QW3F4V9T2B7KDALBA00", loose: "01JZX5N8QW3F4V9T2B7KDALBL00", part: "01JZX5N8QW3F4V9T2B7KDALBP00"}
-	svc.kindReadHook = func(_ context.Context, pid model.PID) (*model.ItemView, error) {
+	svc.Reads.kindReadHook = func(_ context.Context, pid model.PID) (*model.ItemView, error) {
 		return &model.ItemView{PID: pid, Kind: model.KindTrack, AlbumPID: albums[pid]}, nil
 	}
 	for _, c := range []struct {
@@ -375,7 +375,7 @@ func TestASplitPartIsCreditedOnlyToTheBookItCameFrom(t *testing.T) {
 		{"a second book folded", `{"converted":["` + a + `"],"absorbed":{"` + b + `":"` + loose + `"},"created":["` + part + `"]}`, map[string]string{}},
 	} {
 		var got wdb.KindMoves
-		svc.remapHook = func(_ context.Context, m wdb.KindMoves) error {
+		svc.Reads.remapHook = func(_ context.Context, m wdb.KindMoves) error {
 			got = m
 			return nil
 		}
@@ -383,7 +383,7 @@ func TestASplitPartIsCreditedOnlyToTheBookItCameFrom(t *testing.T) {
 		if err := svc.db.InsertJobOrigin(ctx, wdb.JobOrigin{PID: string(j.PID), UserID: uc.ID, CreatedAtNS: 1}); err != nil {
 			t.Fatal(err)
 		}
-		svc.settleJobOrigin(ctx, j)
+		svc.Jobs.settleJobOrigin(ctx, j)
 		if len(got.Created) != len(c.want) || (len(c.want) > 0 && got.Created[part] != c.want[part]) {
 			t.Errorf("%s: created = %v, want %v", c.name, got.Created, c.want)
 		}
@@ -398,7 +398,7 @@ func TestAJobsListReadsEachItemOnce(t *testing.T) {
 	ctx, svc, _ := newCatalogFixture(t)
 	const book = "01JZX5N8QW3F4V9T2B7KDBOOK00"
 	reads := map[model.PID]int{}
-	svc.kindReadHook = func(_ context.Context, pid model.PID) (*model.ItemView, error) {
+	svc.Reads.kindReadHook = func(_ context.Context, pid model.PID) (*model.ItemView, error) {
 		reads[pid]++
 		return &model.ItemView{PID: pid, Kind: model.KindBook}, nil
 	}
@@ -410,7 +410,7 @@ func TestAJobsListReadsEachItemOnce(t *testing.T) {
 		}
 		jobs = append(jobs, Job{Kind: "set-kind", SetKind: tally})
 	}
-	svc.nameJobTargets(ctx, jobs)
+	svc.Jobs.nameJobTargets(ctx, jobs)
 	if reads[book] != 1 {
 		t.Fatalf("the survivor was read %d times, want once", reads[book])
 	}
@@ -426,12 +426,12 @@ func TestAJobsListReadsEachItemOnce(t *testing.T) {
 func TestAnUnplacedSplitPartIsGrantedToAStarterWhoMayEditEveryBook(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newCatalogFixture(t)
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "splitter", Password: "correct-horse", UploadEnabled: true})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "splitter", Password: "correct-horse", UploadEnabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	const a, b, part = "01JZX5N8QW3F4V9T2B7KDBOOKA0", "01JZX5N8QW3F4V9T2B7KDBOOKB0", "01JZX5N8QW3F4V9T2B7KDPART00"
-	svc.kindReadHook = func(_ context.Context, pid model.PID) (*model.ItemView, error) {
+	svc.Reads.kindReadHook = func(_ context.Context, pid model.PID) (*model.ItemView, error) {
 		return &model.ItemView{PID: pid, Kind: model.KindTrack}, nil
 	}
 	for _, c := range []struct {
@@ -442,7 +442,7 @@ func TestAnUnplacedSplitPartIsGrantedToAStarterWhoMayEditEveryBook(t *testing.T)
 		{"an administrator's split", admin.ID, map[string]string{}},
 	} {
 		var got wdb.KindMoves
-		svc.remapHook = func(_ context.Context, m wdb.KindMoves) error {
+		svc.Reads.remapHook = func(_ context.Context, m wdb.KindMoves) error {
 			got = m
 			return nil
 		}
@@ -451,7 +451,7 @@ func TestAnUnplacedSplitPartIsGrantedToAStarterWhoMayEditEveryBook(t *testing.T)
 		if err := svc.db.InsertJobOrigin(ctx, wdb.JobOrigin{PID: string(j.PID), UserID: c.starter, CreatedAtNS: 1}); err != nil {
 			t.Fatal(err)
 		}
-		svc.settleJobOrigin(ctx, j)
+		svc.Jobs.settleJobOrigin(ctx, j)
 		if len(got.Created) != 0 || len(got.Grants) != len(c.want) || got.Grants[part] != c.want[part] {
 			t.Errorf("%s: created %v, grants %v; want no source and grants %v", c.name, got.Created, got.Grants, c.want)
 		}

@@ -44,9 +44,9 @@ const radioWriteDrain = 3 * time.Second
 // supersedes whatever was lost and the row lands short at worst. A
 // delta-carrying payload could not share this queue.
 type radioWrite interface {
-	// writeTo does the bookkeeping. On the Library rather than the
+	// writeTo does the bookkeeping. On the Radio rather than the
 	// payload so both stay small structs on the channel.
-	writeTo(ctx context.Context, l *Library)
+	writeTo(ctx context.Context, l *Radio)
 	// kind names the payload for the drop warning, so an operator can
 	// tell a best-effort loss from an unrecoverable one.
 	kind() string
@@ -60,7 +60,7 @@ type radioSegmentPlay struct {
 	startedAt  time.Time
 }
 
-func (p radioSegmentPlay) writeTo(ctx context.Context, l *Library) {
+func (p radioSegmentPlay) writeTo(ctx context.Context, l *Radio) {
 	l.writeRadioScrobble(ctx, p)
 }
 
@@ -80,7 +80,7 @@ func (radioSegmentPlay) kind() string { return "scrobble" }
 // It is cancelled the instant they disconnect, which is the same
 // instant the last segment is reported; the writer runs on the process
 // context instead.
-func (l *Library) ScrobbleRadioPlay(_ context.Context, userID, apiStationPID, rawTitle string, startedAt time.Time) {
+func (l *Radio) ScrobbleRadioPlay(_ context.Context, userID, apiStationPID, rawTitle string, startedAt time.Time) {
 	l.queueRadioWrite(radioSegmentPlay{
 		userID:     userID,
 		stationPID: apiStationPID,
@@ -97,7 +97,7 @@ func (l *Library) ScrobbleRadioPlay(_ context.Context, userID, apiStationPID, ra
 // the same: a dropped scrobble is one missing play on a third-party
 // profile, and a dropped closing checkpoint is listening time that no
 // later tick will restate.
-func (l *Library) queueRadioWrite(w radioWrite, apiStationPID string) {
+func (l *Radio) queueRadioWrite(w radioWrite, apiStationPID string) {
 	select {
 	case l.radioWrites <- w:
 	default:
@@ -108,7 +108,7 @@ func (l *Library) queueRadioWrite(w radioWrite, apiStationPID string) {
 
 // writeRadioBookkeeping is the queue's one drainer, started by Open and
 // ending with the process.
-func (l *Library) writeRadioBookkeeping(ctx context.Context) error {
+func (l *Radio) writeRadioBookkeeping(ctx context.Context) error {
 	for {
 		select {
 		case play := <-l.radioWrites:
@@ -147,7 +147,7 @@ func (l *Library) writeRadioBookkeeping(ctx context.Context) error {
 // it adds exactly one closing checkpoint, and the relay that sends it
 // is still running when the writer stops. [Library.Close] is the second
 // call, once nothing can be relaying any more.
-func (l *Library) drainRadioWrites(held ...radioWrite) {
+func (l *Radio) drainRadioWrites(held ...radioWrite) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(l.procCtx), radioWriteDrain)
 	defer cancel()
 	for _, play := range held {
@@ -166,7 +166,7 @@ func (l *Library) drainRadioWrites(held ...radioWrite) {
 }
 
 // noteRadioWriteDone fires the test hook if one is installed.
-func (l *Library) noteRadioWriteDone() {
+func (l *Radio) noteRadioWriteDone() {
 	if hook := l.radioWriteDone.Load(); hook != nil {
 		(*hook)()
 	}
@@ -175,7 +175,7 @@ func (l *Library) noteRadioWriteDone() {
 // writeRadioScrobble does the bookkeeping for one queued segment.
 // Failures log and are not retried: a radio scrobble nobody can
 // attribute is not worth a second attempt.
-func (l *Library) writeRadioScrobble(ctx context.Context, play radioSegmentPlay) {
+func (l *Radio) writeRadioScrobble(ctx context.Context, play radioSegmentPlay) {
 	userID, apiStationPID := play.userID, play.stationPID
 	prefix, pid, ok := parseAPIPID(apiStationPID)
 	if !ok || prefix != PrefixRadioStation {
@@ -183,7 +183,7 @@ func (l *Library) writeRadioScrobble(ctx context.Context, play radioSegmentPlay)
 	}
 	// Read before the station and the title parse, which are the two
 	// reads a listener who wants none of this should not be paying for.
-	prefs := l.PrefsForUser(ctx, userID)
+	prefs := l.Identity.PrefsForUser(ctx, userID)
 	if prefs.RadioScrobbleOptOut {
 		return
 	}

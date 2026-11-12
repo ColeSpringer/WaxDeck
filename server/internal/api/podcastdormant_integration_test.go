@@ -91,10 +91,10 @@ func (d dormantShow) publish(t *testing.T, n int) {
 	t.Helper()
 	ctx := context.Background()
 	d.feed.writeFeed(t, n)
-	d.h.svc.RefreshDueFeeds(ctx, 0)
+	d.h.svc.Podcasts.RefreshDueFeeds(ctx, 0)
 	drainFetches(t, d.h)
 	drainNotify(t, d.h)
-	d.h.svc.SweepRetention(ctx)
+	d.h.svc.Podcasts.SweepRetention(ctx)
 }
 
 // The rows of an account that cannot see the podcast library are kept for
@@ -106,7 +106,7 @@ func TestANarrowedAccountsSubscriptionIsDormant(t *testing.T) {
 	d := newDormantShow(t)
 	d.settings(t, d.h.token, map[string]any{"retentionKeep": 1})
 	d.settings(t, d.former, map[string]any{"autoDownload": true, "retentionKeep": 0})
-	d.h.svc.SweepRetention(context.Background())
+	d.h.svc.Podcasts.SweepRetention(context.Background())
 	if got := d.downloaded(t); len(got) != 2 {
 		t.Fatalf("downloads while the account keeps everything = %v, want both", got)
 	}
@@ -145,7 +145,7 @@ func TestADisabledFeedTellsNoNarrowedAccount(t *testing.T) {
 	d.failing.Store(true)
 	ctx := context.Background()
 	for range 10 {
-		d.h.svc.RefreshDueFeeds(ctx, 0)
+		d.h.svc.Podcasts.RefreshDueFeeds(ctx, 0)
 	}
 	drainNotify(t, d.h)
 	if rows := inboxRows(t, d.h, d.h.token, "feed-disabled"); len(rows) != 1 {

@@ -97,18 +97,18 @@ func TestConcurrentFlowSyncsTeachARootOnce(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _, _ := openServiceAt(t, t.TempDir(), nil)
 	flow := &slowFlowRoots{fakeFlowRoots: fakeFlowRoots{names: []string{"configured"}}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	extra := t.TempDir()
 	if _, err := svc.lib.AddRoot(ctx, config.Root{Path: extra}); err != nil {
 		t.Fatal(err)
 	}
-	svc.refreshLibraryState(ctx)
+	svc.Roots.refreshLibraryState(ctx)
 	var wg sync.WaitGroup
 	for range 2 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			svc.syncFlowRoots(ctx)
+			svc.Roots.syncFlowRoots(ctx)
 		}()
 	}
 	wg.Wait()
@@ -124,7 +124,7 @@ func TestARootAddedElsewhereReachesTheBridge(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _, _ := openServiceAt(t, t.TempDir(), nil)
 	flow := &fakeFlowRoots{names: []string{"configured"}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	extra := t.TempDir()
 	if _, err := svc.lib.AddRoot(ctx, config.Root{Path: extra}); err != nil {
 		t.Fatal(err)
@@ -143,7 +143,7 @@ func TestAnOverlappingConfiguredRootIsLeftOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, svc, uc, stop := openServiceAt(t, dataDir, nil)
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "child", Path: child}); err != nil {
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "child", Path: child}); err != nil {
 		t.Fatal(err)
 	}
 	stop()
@@ -151,7 +151,7 @@ func TestAnOverlappingConfiguredRootIsLeftOut(t *testing.T) {
 		c.Roots = append(c.Roots, Root{Name: "parent", Path: parent})
 	})
 	var paths []string
-	for _, r := range svc.libraryRoots() {
+	for _, r := range svc.Roots.libraryRoots() {
 		paths = append(paths, r.Path)
 	}
 	if !slices.Contains(paths, child) || slices.Contains(paths, parent) {
@@ -165,11 +165,11 @@ func TestAddingALibraryAtARegisteredPathIsRefused(t *testing.T) {
 	t.Parallel()
 	dataDir := t.TempDir()
 	ctx, svc, uc, _ := openServiceAt(t, dataDir, func(c *Config) { c.Roots[0].Managed = true })
-	_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "again", Path: filepath.Join(dataDir, "configured")})
+	_, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "again", Path: filepath.Join(dataDir, "configured")})
 	if KindOf(err) != KindConflict {
 		t.Fatalf("a create over the configured root = %v, want conflict", err)
 	}
-	if roots := svc.RootTable(); len(roots) != 1 || roots[0].Name != "configured" || !roots[0].Managed {
+	if roots := svc.Roots.Table(); len(roots) != 1 || roots[0].Name != "configured" || !roots[0].Managed {
 		t.Errorf("roots = %+v, want the configured root untouched", roots)
 	}
 }
@@ -193,7 +193,7 @@ func TestAddingALibraryAtARegisteredFolderByAnotherPathIsRefused(t *testing.T) {
 	}
 	for i, path := range []string{filepath.Join(parent, "configured"), self} {
 		name := fmt.Sprintf("again-%d", i)
-		_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: name, Path: path})
+		_, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: name, Path: path})
 		if KindOf(err) != KindConflict || !strings.Contains(err.Error(), "configured") {
 			t.Fatalf("a create at %s = %v, want conflict naming the library that holds the folder", path, err)
 		}
@@ -205,7 +205,7 @@ func TestAddingALibraryAtARegisteredFolderByAnotherPathIsRefused(t *testing.T) {
 			t.Errorf("stored names = %+v, want none for the refused library", stored)
 		}
 	}
-	if roots := svc.RootTable(); len(roots) != 1 || roots[0].Name != "configured" {
+	if roots := svc.Roots.Table(); len(roots) != 1 || roots[0].Name != "configured" {
 		t.Errorf("roots = %+v, want the configured root alone", roots)
 	}
 }
@@ -235,7 +235,7 @@ func TestALibraryCreatedAtASymlinkIsStoredAsItsFolder(t *testing.T) {
 		{"linked", filepath.Join(base, "link"), itself, "Already Behind The Link"},
 		{"parented", filepath.Join(base, "parent", "music"), through, "Already Through The Parent"},
 	} {
-		info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: c.name, Path: c.typed})
+		info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: c.name, Path: c.typed})
 		if err != nil {
 			t.Fatalf("a create at %s = %v", c.typed, err)
 		}
@@ -278,7 +278,7 @@ func TestALibraryAtASymlinkToAFolderNotThereYetIsStoredAsThatFolder(t *testing.T
 		{"dangling", dangling, later},
 		{"through", filepath.Join(parent, "elsewhere"), filepath.Join(base, "mnt", "elsewhere")},
 	} {
-		info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: c.name, Path: c.typed, AllowAbsent: true})
+		info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: c.name, Path: c.typed, AllowAbsent: true})
 		if err != nil {
 			t.Fatalf("a create at %s = %v", c.typed, err)
 		}
@@ -313,7 +313,7 @@ func TestADanglingRelativeLinkIsFollowedFromWhereItIs(t *testing.T) {
 	if err := os.Symlink(filepath.Join("..", "mnt", "later"), filepath.Join(sub, "d")); err != nil {
 		t.Fatal(err)
 	}
-	info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "climbing", Path: filepath.Join(base, "sp", "d"), AllowAbsent: true})
+	info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "climbing", Path: filepath.Join(base, "sp", "d"), AllowAbsent: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +321,7 @@ func TestADanglingRelativeLinkIsFollowedFromWhereItIs(t *testing.T) {
 		t.Errorf("created at %q, want %q, where the system follows the link", info.Path, want)
 	}
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the create's scan to end")
 	items, err := svc.lib.Query(ctx, query.New(query.EntityItems).Where("title", query.OpIs, "Not This Library's").Limit(1).Build(), "")
@@ -341,12 +341,12 @@ func TestALibraryUnderAFileIsRefused(t *testing.T) {
 	}
 	below := filepath.Join(file, "below")
 	for _, allowAbsent := range []bool{false, true} {
-		_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "under", Path: below, AllowAbsent: allowAbsent})
+		_, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "under", Path: below, AllowAbsent: allowAbsent})
 		if KindOf(err) != KindInvalid || err.Error() != below+" lies under a file, so it can never be a folder" {
 			t.Fatalf("a create under a file (allowAbsent %v) = %v, want it refused as under a file", allowAbsent, err)
 		}
 	}
-	if roots := svc.RootTable(); len(roots) != 1 {
+	if roots := svc.Roots.Table(); len(roots) != 1 {
 		t.Errorf("roots = %+v, want the configured root alone", roots)
 	}
 }
@@ -390,7 +390,7 @@ func TestAClimbOutOfALinkNotThereYetKeepsThePathAsGiven(t *testing.T) {
 		t.Errorf("resolveFolder(%s) = %q, want it to give up, keeping the path as given", link, got)
 	}
 	ctx, svc, uc, _ := openServiceAt(t, t.TempDir(), nil)
-	info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "climbing", Path: link, AllowAbsent: true})
+	info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "climbing", Path: link, AllowAbsent: true})
 	if err != nil || info.Path != link {
 		t.Errorf("created at %q (%v), want the path as given, %q", info.Path, err, link)
 	}
@@ -440,17 +440,17 @@ func TestAddingALibraryAtARegisteredFolderIsRefusedByItsIdentity(t *testing.T) {
 	ctx, svc, uc, _ := openServiceAt(t, dataDir, nil)
 	configured := filepath.Join(dataDir, "configured")
 	other := t.TempDir()
-	svc.creates.stat = func(path string) (fs.FileInfo, error) {
+	svc.Roots.creates.stat = func(path string) (fs.FileInfo, error) {
 		if path == configured {
 			return os.Stat(other)
 		}
 		return os.Stat(path)
 	}
-	_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "bound", Path: other})
+	_, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "bound", Path: other})
 	if KindOf(err) != KindConflict || !strings.Contains(err.Error(), "already holds that folder") {
 		t.Fatalf("a create at the configured root's folder by another path = %v, want conflict", err)
 	}
-	if roots := svc.RootTable(); len(roots) != 1 || roots[0].Name != "configured" {
+	if roots := svc.Roots.Table(); len(roots) != 1 || roots[0].Name != "configured" {
 		t.Errorf("roots = %+v, want the configured root alone", roots)
 	}
 }
@@ -475,7 +475,7 @@ func TestALinkAndItsFolderCreatedTogetherMakeOneLibrary(t *testing.T) {
 	// pass its checks waits until the other has answered.
 	both := make(chan struct{})
 	var arrived, passed atomic.Int32
-	svc.creates.look = func(path string) folderAnswer {
+	svc.Roots.creates.look = func(path string) folderAnswer {
 		if arrived.Add(1) == 2 {
 			close(both)
 		}
@@ -483,7 +483,7 @@ func TestALinkAndItsFolderCreatedTogetherMakeOneLibrary(t *testing.T) {
 		return lookAt(path)
 	}
 	first := newGate(t)
-	svc.creates.free = func() {
+	svc.Roots.creates.free = func() {
 		if passed.Add(1) == 1 {
 			first.wait()
 		}
@@ -491,7 +491,7 @@ func TestALinkAndItsFolderCreatedTogetherMakeOneLibrary(t *testing.T) {
 	errs := make(chan error, 2)
 	for i, path := range []string{link, folder} {
 		go func() {
-			_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: fmt.Sprintf("one-%d", i), Path: path})
+			_, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: fmt.Sprintf("one-%d", i), Path: path})
 			errs <- err
 		}()
 	}
@@ -505,7 +505,7 @@ func TestALinkAndItsFolderCreatedTogetherMakeOneLibrary(t *testing.T) {
 	if len(refused) != 1 || KindOf(refused[0]) != KindConflict || !strings.Contains(refused[0].Error(), "is being added") {
 		t.Fatalf("refused %v, want exactly one create refused as the same folder being added", refused)
 	}
-	if roots := svc.RootTable(); len(roots) != 2 {
+	if roots := svc.Roots.Table(); len(roots) != 2 {
 		t.Errorf("roots = %+v, want the configured root and one library on the folder", roots)
 	}
 }
@@ -519,8 +519,8 @@ func TestCreatesShareOneStatOfALibraryFolderThatHangs(t *testing.T) {
 	configured := filepath.Join(dataDir, "configured")
 	hangs := newGate(t)
 	var stats atomic.Int32
-	svc.creates.wait = 100 * time.Millisecond
-	svc.creates.stat = func(path string) (fs.FileInfo, error) {
+	svc.Roots.creates.wait = 100 * time.Millisecond
+	svc.Roots.creates.stat = func(path string) (fs.FileInfo, error) {
 		if path == configured {
 			stats.Add(1)
 			hangs.wait()
@@ -528,7 +528,7 @@ func TestCreatesShareOneStatOfALibraryFolderThatHangs(t *testing.T) {
 		return os.Stat(path)
 	}
 	for i := range 3 {
-		if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: fmt.Sprintf("beside-%d", i), Path: t.TempDir()}); err != nil {
+		if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: fmt.Sprintf("beside-%d", i), Path: t.TempDir()}); err != nil {
 			t.Fatalf("create %d beside a folder that hangs = %v, want it added", i, err)
 		}
 	}
@@ -551,9 +551,9 @@ func TestARootNamedLikeAnotherGetsItsOwnName(t *testing.T) {
 	if _, err := svc.lib.AddRoot(ctx, config.Root{Path: twin}); err != nil {
 		t.Fatal(err)
 	}
-	svc.refreshLibraryState(ctx)
+	svc.Roots.refreshLibraryState(ctx)
 	names := map[string]string{}
-	for _, r := range svc.RootTable() {
+	for _, r := range svc.Roots.Table() {
 		names[r.Path] = r.Name
 	}
 	if names[twin] != "configured-2" || names[filepath.Join(dataDir, "configured")] != "configured" {
@@ -603,7 +603,7 @@ func TestASettleLeavesConfiguredRootsAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.registerConfiguredRoots(ctx); err != nil {
+	if err := svc.Roots.registerConfiguredRoots(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if after, err := svc.lib.LatestChangeSeq(ctx); err != nil || after != before {
@@ -623,7 +623,7 @@ func TestAMediaChangeTellsEveryAccount(t *testing.T) {
 	if _, err := svc.lib.AddRoot(ctx, config.Root{Path: filepath.Join(dataDir, "configured"), Media: model.MediaAudiobook}); err != nil {
 		t.Fatal(err)
 	}
-	svc.refreshLibraryState(ctx)
+	svc.Roots.refreshLibraryState(ctx)
 	delta, err := svc.SyncServerDelta(ctx, uc, since, 100)
 	if err != nil {
 		t.Fatal(err)
@@ -638,10 +638,10 @@ func TestAMediaChangeTellsEveryAccount(t *testing.T) {
 func TestAFolderFallbackSwitchTellsEveryAccount(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	svc.refreshLibraryState(ctx)
-	lib := svc.libraryRoots()[0]
+	svc.Roots.refreshLibraryState(ctx)
+	lib := svc.Roots.libraryRoots()[0]
 	before := markers(t, ctx, svc, uc.ID, eventLibraries, "")
-	if err := svc.LibraryFolderFallbackSet(ctx, uc, apiPID(PrefixLibrary, model.PID(lib.PID)), true); err != nil {
+	if err := svc.Settings.LibraryFolderFallbackSet(ctx, uc, apiPID(PrefixLibrary, model.PID(lib.PID)), true); err != nil {
 		t.Fatal(err)
 	}
 	if n := markers(t, ctx, svc, uc.ID, eventLibraries, ""); n != before+1 {
@@ -662,9 +662,9 @@ func TestARootAddedBeforeTheBridgeStreamsOnceWired(t *testing.T) {
 	if _, err := svc.lib.AddRoot(ctx, config.Root{Path: extra}); err != nil {
 		t.Fatal(err)
 	}
-	svc.refreshLibraryState(ctx)
+	svc.Roots.refreshLibraryState(ctx)
 	flow := &fakeFlowRoots{names: []string{"configured"}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	waitFor(t, func() bool { return flow.taught(filepath.Base(extra), extra) }, "the bridge taught the earlier root")
 }
 
@@ -674,15 +674,15 @@ func TestARefusedRootWaitsForItsPathToChange(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _, _ := openServiceAt(t, t.TempDir(), nil)
 	flow := &fakeFlowRoots{names: []string{"configured"}, syncErr: errors.New("sidecar refused")}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	extra := t.TempDir()
 	if _, err := svc.lib.AddRoot(ctx, config.Root{Path: extra}); err != nil {
 		t.Fatal(err)
 	}
-	svc.refreshLibraryState(ctx)
+	svc.Roots.refreshLibraryState(ctx)
 	waitFor(t, func() bool { return flow.taught(filepath.Base(extra), extra) }, "the first offer")
-	svc.syncFlowRoots(ctx)
-	svc.syncFlowRoots(ctx)
+	svc.Roots.syncFlowRoots(ctx)
+	svc.Roots.syncFlowRoots(ctx)
 	flow.mu.Lock()
 	n := len(flow.synced)
 	flow.mu.Unlock()
@@ -699,11 +699,11 @@ func TestRootAttributionRacesNoSwap(t *testing.T) {
 	go func() {
 		defer close(done)
 		for range 50 {
-			svc.refreshLibraryState(ctx)
+			svc.Roots.refreshLibraryState(ctx)
 		}
 	}()
 	for range 50 {
-		svc.storageRootFor("/nowhere/file.flac")
+		svc.Tools.storageRootFor("/nowhere/file.flac")
 	}
 	<-done
 }
@@ -712,7 +712,7 @@ func TestRootAttributionRacesNoSwap(t *testing.T) {
 // recent library.create audit entry, empty when there is none.
 func libraryCreateDetail(t *testing.T, ctx context.Context, svc *Library) string {
 	t.Helper()
-	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "library.create"}, "", 10)
+	page, err := svc.Audit.Events(ctx, AuditFilter{Action: "library.create"}, "", 10)
 	if err != nil {
 		t.Fatalf("reading the audit log: %v", err)
 	}
@@ -730,10 +730,10 @@ func TestAddLibrarySyncsFlowRoot(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	flow := &fakeFlowRoots{names: []string{"lib"}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 
 	dir := t.TempDir()
-	lib, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: dir})
+	lib, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: dir})
 	if err != nil {
 		t.Fatalf("AddLibrary: %v", err)
 	}
@@ -755,13 +755,13 @@ func TestAddLibraryWhoseNameCannotBeStoredAddsNothing(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	flow := &fakeFlowRoots{names: []string{"lib"}}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 	if _, err := svc.db.Writer().ExecContext(ctx, `CREATE TRIGGER refuse_names BEFORE INSERT ON library_roots
 		BEGIN SELECT RAISE(ABORT, 'refused'); END`); err != nil {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: dir}); err == nil {
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: dir}); err == nil {
 		t.Fatal("AddLibrary succeeded with its name refused")
 	}
 	libs, err := svc.lib.Libraries(ctx)
@@ -785,7 +785,7 @@ func TestAddLibraryWhoseNameCannotBeStoredAddsNothing(t *testing.T) {
 func TestAddLibraryRefusedByTheCatalogLeavesNoName(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	roots := svc.RootTable()
+	roots := svc.Roots.Table()
 	if len(roots) == 0 {
 		t.Fatal("the fixture has no library root")
 	}
@@ -794,7 +794,7 @@ func TestAddLibraryRefusedByTheCatalogLeavesNoName(t *testing.T) {
 	if err := os.MkdirAll(nested, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "nested", Path: nested}); err == nil {
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "nested", Path: nested}); err == nil {
 		t.Fatal("AddLibrary inside an existing root succeeded")
 	}
 	stored, err := svc.db.LibraryRootsList(ctx)
@@ -817,7 +817,7 @@ func TestAddingALibraryTellsEveryAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()}); err != nil {
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()}); err != nil {
 		t.Fatal(err)
 	}
 	delta, err := svc.SyncServerDelta(ctx, uc, since, 100)
@@ -841,12 +841,12 @@ func TestAddLibraryDegradesOnReloadFailure(t *testing.T) {
 		names:   []string{"lib"},
 		syncErr: errors.New("roots reload refused (400 Bad Request): invalid-request: opening root books"),
 	}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()}); err != nil {
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()}); err != nil {
 		t.Fatalf("AddLibrary must succeed despite a failed reload, got %v", err)
 	}
-	libs, err := svc.Libraries(ctx)
+	libs, err := svc.Roots.Libraries(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -875,9 +875,9 @@ func TestAddLibraryWithoutReloadSupport(t *testing.T) {
 		names:   []string{"lib"},
 		syncErr: errors.New("the sidecar at http://waxflow:4418 does not serve root reloads, so it has to be restarted with this root to stream from it"),
 	}
-	svc.SetFlowRoots(flow)
+	svc.Roots.SetFlowRoots(flow)
 
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()}); err != nil {
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()}); err != nil {
 		t.Fatalf("AddLibrary: %v", err)
 	}
 	if warn := libraryCreateDetail(t, ctx, svc); !strings.Contains(warn, "restarted") {
@@ -894,9 +894,9 @@ func TestAddLibraryWithoutReloadSupport(t *testing.T) {
 func TestAddLibraryRefusesBridgeRootName(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	svc.SetFlowRoots(&fakeFlowRoots{names: []string{"lib", "podcasts"}})
+	svc.Roots.SetFlowRoots(&fakeFlowRoots{names: []string{"lib", "podcasts"}})
 
-	_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "podcasts", Path: t.TempDir()})
+	_, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "podcasts", Path: t.TempDir()})
 	if KindOf(err) != KindConflict {
 		t.Fatalf("AddLibrary(podcasts) = %v, want a conflict", err)
 	}
@@ -908,9 +908,9 @@ func TestAddLibraryRefusesBridgeRootName(t *testing.T) {
 func TestAddLibraryRefusesPodcastRootWithoutBridge(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	svc.podcastRootName = "podcasts"
+	svc.Roots.podcastRootName = "podcasts"
 
-	_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "podcasts", Path: t.TempDir()})
+	_, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "podcasts", Path: t.TempDir()})
 	if KindOf(err) != KindConflict {
 		t.Fatalf("AddLibrary(podcasts) = %v, want a conflict", err)
 	}
@@ -918,7 +918,7 @@ func TestAddLibraryRefusesPodcastRootWithoutBridge(t *testing.T) {
 
 // rootAt finds the root table's entry for path.
 func rootAt(svc *Library, path string) (Root, bool) {
-	for _, r := range svc.libraryRoots() {
+	for _, r := range svc.Roots.libraryRoots() {
 		if r.Path == path {
 			return r, true
 		}
@@ -934,7 +934,7 @@ func TestARuntimeLibraryKeepsItsNameAndPolicyAcrossARestart(t *testing.T) {
 	dataDir, books := t.TempDir(), t.TempDir()
 	watch := func(c *Config) { c.WatchLibraries, c.WatchSettle = true, 50*time.Millisecond }
 	ctx, svc, uc, stop := openServiceAt(t, dataDir, watch)
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: books, Managed: true}); err != nil {
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: books, Managed: true}); err != nil {
 		t.Fatal(err)
 	}
 	dropAndWaitForTheWatcher(t, ctx, svc, books, "Dropped Before The Restart")
@@ -946,10 +946,10 @@ func TestARuntimeLibraryKeepsItsNameAndPolicyAcrossARestart(t *testing.T) {
 	}
 	// The start's first pass arms it like every root it opens with: no
 	// catch-up scan on top of what the restart owes.
-	awaitClosed(t, svc.watchReady, "the watcher to arm after the restart")
-	svc.watchQueue.mu.Lock()
-	_, pending := svc.watchQueue.dirs[books]
-	svc.watchQueue.mu.Unlock()
+	awaitClosed(t, svc.Roots.watchReady, "the watcher to arm after the restart")
+	svc.Roots.watchQueue.mu.Lock()
+	_, pending := svc.Roots.watchQueue.dirs[books]
+	svc.Roots.watchQueue.mu.Unlock()
 	if pending {
 		t.Error("the restart owed a library it already watched a catch-up scan")
 	}
@@ -961,12 +961,12 @@ func TestARuntimeLibraryKeepsItsNameAndPolicyAcrossARestart(t *testing.T) {
 func dropAndWaitForTheWatcher(t *testing.T, ctx context.Context, svc *Library, dir, title string) {
 	t.Helper()
 	select {
-	case <-svc.watchReady:
+	case <-svc.Roots.watchReady:
 	case <-time.After(10 * time.Second):
 		t.Fatal("the watcher never armed")
 	}
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "the library's first scan to end")
 	if _, err := fixtures.Generate(dir, fixtures.Spec{
@@ -1032,14 +1032,14 @@ func TestAConfiguredAudiobookRootIsDeclaredBooks(t *testing.T) {
 		t.Fatalf("declared root media = %q, want audiobook", got)
 	}
 	root, _ := rootAt(svc, filepath.Join(dataDir, "configured"))
-	if _, err := svc.SetLibraryMedia(ctx, uc, apiPID(PrefixLibrary, model.PID(root.PID)), "music"); KindOf(err) != KindInvalid ||
+	if _, err := svc.Roots.SetLibraryMedia(ctx, uc, apiPID(PrefixLibrary, model.PID(root.PID)), "music"); KindOf(err) != KindInvalid ||
 		!strings.Contains(err.Error(), "WAXDECK_AUDIOBOOK_ROOTS") {
 		t.Fatalf("changing a declared root = %v, want it refused for the configuration", err)
 	}
 	// The listing says so before an administrator tries.
 	declaredAt := func(ctx context.Context, svc *Library) bool {
 		t.Helper()
-		libs, err := svc.Libraries(ctx)
+		libs, err := svc.Roots.Libraries(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1104,7 +1104,7 @@ func TestARootAddedInAHandOffJoinsTheTable(t *testing.T) {
 func TestThePodcastLibraryListsAsPodcasts(t *testing.T) {
 	t.Parallel()
 	_, svc, _, _ := openServiceAt(t, t.TempDir(), nil)
-	info := svc.libraryInfo(&model.Library{PID: model.NewPID(), DisplayRoot: "/srv/podcasts", Mode: model.ModePodcast})
+	info := svc.Roots.libraryInfo(&model.Library{PID: model.NewPID(), DisplayRoot: "/srv/podcasts", Mode: model.ModePodcast})
 	if info.Media != "podcast" {
 		t.Errorf("media = %q, want podcast", info.Media)
 	}
@@ -1142,7 +1142,7 @@ func TestAConfiguredRootThatIsGoneStillRegisters(t *testing.T) {
 	if len(res.Runs) != 1 || !res.Runs[0].RootUnreachable {
 		t.Errorf("the scan's runs = %+v, want one reporting the root unreachable", res.Runs)
 	}
-	if _, err := svc.SetLibraryProfile(ctx, uc, apiPID(PrefixLibrary, lib.PID), organize.DefaultProfileName); err != nil {
+	if _, err := svc.Health.SetLibraryProfile(ctx, uc, apiPID(PrefixLibrary, lib.PID), organize.DefaultProfileName); err != nil {
 		t.Errorf("a profile change on the absent library: %v", err)
 	}
 }
@@ -1162,14 +1162,14 @@ func TestALibraryNeedsAFolderThatIsThere(t *testing.T) {
 		{filepath.Join(dir, "absent"), "no folder"},
 		{file, "not a folder"},
 	} {
-		_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "new", Path: c.path})
+		_, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "new", Path: c.path})
 		if KindOf(err) != KindInvalid || !strings.Contains(err.Error(), c.want) || strings.Contains(err.Error(), "allow") {
 			t.Errorf("creating at %s = %v, want invalid saying %q", c.path, err, c.want)
 		}
 	}
 	// A taken name is the answer, whatever the folder.
-	taken := svc.libraryRoots()[0].Name
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: taken, Path: filepath.Join(dir, "absent")}); KindOf(err) != KindConflict {
+	taken := svc.Roots.libraryRoots()[0].Name
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: taken, Path: filepath.Join(dir, "absent")}); KindOf(err) != KindConflict {
 		t.Errorf("a taken name at a missing folder = %v, want a conflict", err)
 	}
 }
@@ -1205,7 +1205,7 @@ func TestThePodcastLibrarysMediaIsNotChanged(t *testing.T) {
 	if pid == "" {
 		t.Fatal("no podcast library")
 	}
-	_, err = svc.SetLibraryMedia(ctx, uc, apiPID(PrefixLibrary, pid), "music")
+	_, err = svc.Roots.SetLibraryMedia(ctx, uc, apiPID(PrefixLibrary, pid), "music")
 	if KindOf(err) != KindInvalid || err.Error() != "the podcast library holds podcasts" {
 		t.Fatalf("changing the podcast library = %v, want it refused as the podcast library", err)
 	}

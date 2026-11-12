@@ -50,8 +50,9 @@ func TestSilenceMapStale(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			l := &Library{flowJobs: tc.flow}
-			got := l.silenceMapStale(wdb.SilenceMap{DetectorVersion: tc.mapDV})
+			l := bareLibrary(&core{})
+			l.Tools.flowJobs = tc.flow
+			got := l.Tools.silenceMapStale(wdb.SilenceMap{DetectorVersion: tc.mapDV})
 			if got != tc.want {
 				t.Fatalf("silenceMapStale = %v, want %v", got, tc.want)
 			}

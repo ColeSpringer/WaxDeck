@@ -20,7 +20,7 @@ import (
 // failedAddRows is the account's inbox rows for adds that did not land.
 func failedAddRows(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) []InboxNotification {
 	t.Helper()
-	page, err := svc.Notifications(ctx, uc, "", 100)
+	page, err := svc.Integrations.Notifications(ctx, uc, "", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,15 +59,15 @@ func scriptedHost(t *testing.T, statuses ...int) (string, *atomic.Bool) {
 // sets what it is granted from then on.
 func podcastListener(t *testing.T, ctx context.Context, svc *Library, admin *UserCtx, feed string) (uc *UserCtx, grant func(podcasts bool)) {
 	t.Helper()
-	known, _, err := svc.Subscribe(ctx, admin, SubscribeRequest{URL: feed})
+	known, _, err := svc.Podcasts.Subscribe(ctx, admin, SubscribeRequest{URL: feed})
 	if err != nil {
 		t.Fatal(err)
 	}
 	fetchOneEpisode(t, ctx, svc, admin, known.Show.PID)
-	podcastLib, _ := svc.podcastLibrary(ctx)
+	podcastLib, _ := svc.Grants.podcastLibrary(ctx)
 	podcasts := apiPID(PrefixLibrary, model.PID(podcastLib))
 	var music string
-	for _, r := range svc.libraryRoots() {
+	for _, r := range svc.Roots.libraryRoots() {
 		if r.Name == "configured" {
 			music = apiPID(PrefixLibrary, model.PID(r.PID))
 		}
@@ -75,12 +75,12 @@ func podcastListener(t *testing.T, ctx context.Context, svc *Library, admin *Use
 	if podcasts == apiPID(PrefixLibrary, "") || music == "" {
 		t.Fatalf("libraries = %q and %q, want both", music, podcasts)
 	}
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "carol", Password: "correct-horse",
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "carol", Password: "correct-horse",
 		AccessMode: "granted", LibraryPIDs: []string{music, podcasts}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if uc, err = svc.UserCtx(ctx, acct.User); err != nil {
+	if uc, err = svc.Grants.UserCtxFor(ctx, acct.User); err != nil {
 		t.Fatal(err)
 	}
 	mode := "granted"
@@ -90,7 +90,7 @@ func podcastListener(t *testing.T, ctx context.Context, svc *Library, admin *Use
 		if on {
 			libs = append(libs, podcasts)
 		}
-		if _, err := svc.UpdateAccount(ctx, uc.ID, AccountUpdate{AccessMode: &mode, LibraryPIDs: libs}); err != nil {
+		if _, err := svc.Identity.UpdateAccount(ctx, uc.ID, AccountUpdate{AccessMode: &mode, LibraryPIDs: libs}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -104,12 +104,12 @@ func TestAParkWaitsOutAWithdrawnGrant(t *testing.T) {
 	ctx, svc, admin, fixture := openPodcastFixture(t)
 	uc, grant := podcastListener(t, ctx, svc, admin, fixture)
 	feed, hits := downThenUp(t, 1)
-	if out, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{feed}, nil); err != nil || out[feed] != GpodderParked {
+	if out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{feed}, nil); err != nil || out[feed] != GpodderParked {
 		t.Fatalf("outcomes = %v (%v), want the feed parked", out, err)
 	}
 	grant(false)
 	due := time.Now().Add(6 * time.Minute)
-	svc.RetryPendingGpodderAt(ctx, due)
+	svc.Podcasts.RetryPendingGpodderAt(ctx, due)
 	parks, err := svc.db.GpodderParks(ctx, uc.ID)
 	if err != nil || len(parks) != 1 || parks[0].Attempts != 0 || parks[0].NextTryNS <= due.UnixNano() {
 		t.Fatalf("parks = %+v (%v), want the park waiting, no attempt counted, its next try later", parks, err)
@@ -122,17 +122,17 @@ func TestAParkWaitsOutAWithdrawnGrant(t *testing.T) {
 	}
 
 	grant(true)
-	svc.RetryPendingGpodderAt(ctx, due.Add(15*time.Minute))
+	svc.Podcasts.RetryPendingGpodderAt(ctx, due.Add(15*time.Minute))
 	if subs, err := svc.db.SubscriptionsByUser(ctx, uc.ID); err != nil || len(subs) != 1 {
 		t.Fatalf("subscriptions once the grant is back = %+v (%v), want the parked feed landed", subs, err)
 	}
 
 	gone, _ := downThenUp(t, 100)
-	if out, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{gone}, nil); err != nil || out[gone] != GpodderParked {
+	if out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{gone}, nil); err != nil || out[gone] != GpodderParked {
 		t.Fatalf("outcomes = %v (%v), want the feed parked", out, err)
 	}
 	grant(false)
-	svc.RetryPendingGpodderAt(ctx, time.Now().Add(8*24*time.Hour))
+	svc.Podcasts.RetryPendingGpodderAt(ctx, time.Now().Add(8*24*time.Hour))
 	if parks, _ := svc.db.GpodderParks(ctx, uc.ID); len(parks) != 0 {
 		t.Errorf("parks a week on = %+v, want the waiting one given up", parks)
 	}
@@ -164,21 +164,21 @@ func TestAnAskParkedDuringAGiveUpStaysParked(t *testing.T) {
 		}
 	})
 	feed := ts.URL + "/feed.xml"
-	if out, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{feed}, nil); err != nil || out[feed] != GpodderParked {
+	if out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{feed}, nil); err != nil || out[feed] != GpodderParked {
 		t.Fatalf("outcomes = %v (%v), want the feed parked", out, err)
 	}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		svc.RetryPendingGpodderAt(ctx, time.Now().Add(8*24*time.Hour))
+		svc.Podcasts.RetryPendingGpodderAt(ctx, time.Now().Add(8*24*time.Hour))
 	}()
 	<-arrived
 	// While the week's last try is on the wire, the phone lets go of the
 	// feed and the tablet asks for it afresh.
-	if _, err := svc.GpodderReplaceDeviceList(ctx, uc, "phone", nil); err != nil {
+	if _, err := svc.Podcasts.GpodderReplaceDeviceList(ctx, uc, "phone", nil); err != nil {
 		t.Fatal(err)
 	}
-	if out, err := svc.GpodderApplyChanges(ctx, uc, "tablet", []string{feed}, nil); err != nil || out[feed] != GpodderParked {
+	if out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "tablet", []string{feed}, nil); err != nil || out[feed] != GpodderParked {
 		t.Fatalf("the tablet's outcomes = %v (%v), want the feed parked afresh", out, err)
 	}
 	close(gate)
@@ -201,7 +201,7 @@ func TestAParkThatPanicsGoesToTheBackOfTheQueue(t *testing.T) {
 	poison, served := scriptedHost(t, http.StatusServiceUnavailable)
 	other, _ := scriptedHost(t, http.StatusServiceUnavailable)
 	for _, feed := range []string{gone, poison, other} {
-		if out, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{feed}, nil); err != nil || out[feed] != GpodderParked {
+		if out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{feed}, nil); err != nil || out[feed] != GpodderParked {
 			t.Fatalf("outcomes = %v (%v), want %s parked", out, err, feed)
 		}
 		time.Sleep(time.Millisecond)
@@ -214,7 +214,7 @@ func TestAParkThatPanicsGoesToTheBackOfTheQueue(t *testing.T) {
 	t.Cleanup(func() { testHookMembership = nil })
 	pass := func(at time.Time) (panicked bool) {
 		defer func() { panicked = recover() != nil }()
-		svc.RetryPendingGpodderAt(ctx, at)
+		svc.Podcasts.RetryPendingGpodderAt(ctx, at)
 		return false
 	}
 	at := time.Now().Add(6 * time.Minute)
@@ -254,10 +254,10 @@ func TestANoticeNamesNoAddress(t *testing.T) {
 	port := ln.Addr().(*net.TCPAddr).Port
 	ln.Close()
 	hostless := fmt.Sprintf("http://user:pw@:%d/feed?token=s3cr3t", port)
-	if _, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{hostless}, nil); err != nil {
+	if _, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{hostless}, nil); err != nil {
 		t.Fatal(err)
 	}
-	svc.RetryPendingGpodderAt(ctx, time.Now().Add(8*24*time.Hour))
+	svc.Podcasts.RetryPendingGpodderAt(ctx, time.Now().Add(8*24*time.Hour))
 	rows := failedAddRows(t, ctx, svc, uc)
 	if len(rows) != 1 {
 		t.Fatalf("inbox = %+v, want the add said once", rows)
@@ -283,14 +283,14 @@ func TestAServerWithoutAPodcastDirectoryRefusesEverySubscribe(t *testing.T) {
 			t.Errorf("%s = %v (kind %q), want podcasts refused as off", door, err, KindOf(err))
 		}
 	}
-	_, _, err := svc.Subscribe(ctx, admin, SubscribeRequest{URL: feed})
+	_, _, err := svc.Podcasts.Subscribe(ctx, admin, SubscribeRequest{URL: feed})
 	refused("a subscribe", err)
-	_, err = svc.ImportOPML(ctx, admin, []byte(`<opml version="2.0"><body><outline type="rss" text="Back" xmlUrl="`+feed+`"/></body></opml>`))
+	_, err = svc.Podcasts.ImportOPML(ctx, admin, []byte(`<opml version="2.0"><body><outline type="rss" text="Back" xmlUrl="`+feed+`"/></body></opml>`))
 	refused("an OPML import", err)
-	if out, err := svc.GpodderApplyChanges(ctx, admin, "phone", []string{feed}, nil); err != nil || out[feed] != GpodderRefused {
+	if out, err := svc.Podcasts.GpodderApplyChanges(ctx, admin, "phone", []string{feed}, nil); err != nil || out[feed] != GpodderRefused {
 		t.Errorf("a gpodder add = %v (%v), want it refused", out, err)
 	}
-	if res, err := svc.GpodderReplaceDeviceList(ctx, admin, "desk", []string{feed, other}); err != nil ||
+	if res, err := svc.Podcasts.GpodderReplaceDeviceList(ctx, admin, "desk", []string{feed, other}); err != nil ||
 		res.Outcomes[feed] != GpodderRefused || res.Outcomes[other] != GpodderRefused {
 		t.Errorf("a gpodder list = %+v (%v), want its feeds refused", res, err)
 	}
@@ -299,7 +299,7 @@ func TestAServerWithoutAPodcastDirectoryRefusesEverySubscribe(t *testing.T) {
 		CreatedAtNS: now.UnixNano(), NextTryNS: now.UnixNano(), LastError: "host-error"}, gpodderPendingPerUser); err != nil {
 		t.Fatal(err)
 	}
-	svc.RetryPendingGpodderAt(ctx, now.Add(time.Minute))
+	svc.Podcasts.RetryPendingGpodderAt(ctx, now.Add(time.Minute))
 	if subs, err := svc.db.SubscriptionsByUser(ctx, admin.ID); err != nil || len(subs) != 0 {
 		t.Errorf("subscriptions = %+v (%v), want none", subs, err)
 	}
@@ -336,14 +336,14 @@ func TestADeadFeedDoesNotFreezeAList(t *testing.T) {
 	}))
 	t.Cleanup(dead.Close)
 	gone := dead.URL + "/gone.xml"
-	res, err := svc.GpodderReplaceDeviceList(ctx, uc, "desk", []string{feed, gone})
+	res, err := svc.Podcasts.GpodderReplaceDeviceList(ctx, uc, "desk", []string{feed, gone})
 	if err != nil || res.Outcomes[feed] != GpodderLanded || res.Outcomes[gone] != GpodderParked {
 		t.Fatalf("the first list = %+v (%v), want the feed landed and the dead one parked", res, err)
 	}
-	svc.RetryPendingGpodderAt(ctx, time.Now().Add(8*24*time.Hour))
+	svc.Podcasts.RetryPendingGpodderAt(ctx, time.Now().Add(8*24*time.Hour))
 	tried := hits.Load()
 	for range 2 {
-		res, err = svc.GpodderReplaceDeviceList(ctx, uc, "desk", []string{gone})
+		res, err = svc.Podcasts.GpodderReplaceDeviceList(ctx, uc, "desk", []string{gone})
 		if err != nil || res.Outcomes[gone] != GpodderRefused {
 			t.Fatalf("a list after the give-up = %+v (%v), want the dead feed refused", res, err)
 		}
@@ -392,7 +392,7 @@ func TestAParkIsAsOldAsItsAsksWhenTried(t *testing.T) {
 	if err := svc.db.DropGpodderPendingFor(ctx, uc.ID, "phone", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, notice := svc.retryGpodderPark(ctx, due[0], now); notice != nil {
+	if _, notice := svc.Podcasts.retryGpodderPark(ctx, due[0], now); notice != nil {
 		t.Errorf("the retry said %+v, want the tablet's ask waiting quietly", notice)
 	}
 	if parks, err := svc.db.GpodderParks(ctx, uc.ID); err != nil || len(parks) != 1 || strings.Join(parks[0].Devices, ",") != "tablet" ||
@@ -423,7 +423,7 @@ func TestAnAskParkedDuringARetryKeepsItsSchedule(t *testing.T) {
 		}
 	})
 	feed := host.URL + "/feed.xml"
-	if out, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{feed}, nil); err != nil || out[feed] != GpodderParked {
+	if out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{feed}, nil); err != nil || out[feed] != GpodderParked {
 		t.Fatalf("the phone's add = %v (%v), want it parked", out, err)
 	}
 	// Five tries made already: the next ones a day apart.
@@ -437,13 +437,13 @@ func TestAnAskParkedDuringARetryKeepsItsSchedule(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		svc.RetryPendingGpodderAt(ctx, time.Now().Add(time.Hour))
+		svc.Podcasts.RetryPendingGpodderAt(ctx, time.Now().Add(time.Hour))
 	}()
 	<-arrived
-	if _, err := svc.GpodderReplaceDeviceList(ctx, uc, "phone", nil); err != nil {
+	if _, err := svc.Podcasts.GpodderReplaceDeviceList(ctx, uc, "phone", nil); err != nil {
 		t.Fatal(err)
 	}
-	if out, err := svc.GpodderApplyChanges(ctx, uc, "tablet", []string{feed}, nil); err != nil || out[feed] != GpodderParked {
+	if out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "tablet", []string{feed}, nil); err != nil || out[feed] != GpodderParked {
 		t.Fatalf("the tablet's add = %v (%v), want it parked afresh", out, err)
 	}
 	close(gate)

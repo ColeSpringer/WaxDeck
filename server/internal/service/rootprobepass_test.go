@@ -24,7 +24,7 @@ func awaitClosed(t *testing.T, ch <-chan struct{}, what string) {
 func TestAProbePassStartedAsTheLastEndsKeepsItsFlags(t *testing.T) {
 	t.Parallel()
 	_, svc, _, _ := openServiceAt(t, t.TempDir(), nil)
-	p := &svc.rootProbe
+	p := &svc.Roots.rootProbe
 	waitFor(t, p.idle, "the boot probe pass to end")
 
 	held, firstGone, third := make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -46,7 +46,7 @@ func TestAProbePassStartedAsTheLastEndsKeepsItsFlags(t *testing.T) {
 			}
 		case "let-go":
 			if letGos.Add(1) == 1 {
-				svc.probeRoots()
+				svc.Roots.probeRoots()
 			}
 		case "exit":
 			if exits.Add(1) == 1 {
@@ -56,13 +56,13 @@ func TestAProbePassStartedAsTheLastEndsKeepsItsFlags(t *testing.T) {
 	}
 	p.mu.Unlock()
 
-	svc.probeRoots()
+	svc.Roots.probeRoots()
 	awaitClosed(t, held, "the second pass to start")
 	awaitClosed(t, firstGone, "the first pass's worker to end")
 	if p.idle() {
 		t.Fatal("the first pass's worker let go of the probe the second pass holds")
 	}
-	svc.probeRoots()
+	svc.Roots.probeRoots()
 	p.mu.Lock()
 	again := p.all
 	p.mu.Unlock()
@@ -82,7 +82,7 @@ func TestAProbePassStartedAsTheLastEndsKeepsItsFlags(t *testing.T) {
 func TestAProbePassThatPanicsLetsGo(t *testing.T) {
 	t.Parallel()
 	_, svc, _, _ := openServiceAt(t, t.TempDir(), nil)
-	p := &svc.rootProbe
+	p := &svc.Roots.rootProbe
 	waitFor(t, p.idle, "the boot probe pass to end")
 	var passes atomic.Int32
 	p.mu.Lock()
@@ -92,8 +92,8 @@ func TestAProbePassThatPanicsLetsGo(t *testing.T) {
 		}
 	}
 	p.mu.Unlock()
-	svc.probeRoots()
+	svc.Roots.probeRoots()
 	waitFor(t, func() bool { return passes.Load() == 1 && p.idle() }, "the broken pass to let go")
-	svc.probeRoots()
+	svc.Roots.probeRoots()
 	waitFor(t, func() bool { return passes.Load() == 2 }, "the next pass")
 }

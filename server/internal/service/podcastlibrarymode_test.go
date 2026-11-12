@@ -51,14 +51,14 @@ func TestThePodcastLibraryIsKnownByWhatItIs(t *testing.T) {
 	if _, err := svc.lib.Podcasts().ImportEpisodeFile(f.ctx, bare, paths[0], false); err != nil {
 		t.Fatal(err)
 	}
-	want, _ := svc.podcastLibrary(f.ctx)
+	want, _ := svc.Grants.podcastLibrary(f.ctx)
 	if want == "" {
 		t.Fatal("no podcast library after a fetch")
 	}
 	stop()
 
 	svc, _ = open(alias)
-	if got, _ := svc.podcastLibrary(t.Context()); got != want {
+	if got, _ := svc.Grants.podcastLibrary(t.Context()); got != want {
 		t.Errorf("the podcast library under another spelling of its directory = %q, want %q", got, want)
 	}
 }
@@ -66,11 +66,11 @@ func TestThePodcastLibraryIsKnownByWhatItIs(t *testing.T) {
 // mustAdmin answers the service's administrator.
 func mustAdmin(t *testing.T, svc *Library) *UserCtx {
 	t.Helper()
-	u, err := svc.UserByName(t.Context(), "admin")
+	u, err := svc.Grants.UserByName(t.Context(), "admin")
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(t.Context(), u)
+	uc, err := svc.Grants.UserCtxFor(t.Context(), u)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,12 +120,12 @@ func TestAPodcastLibraryAtAMovedDirectoryIsPickedUp(t *testing.T) {
 	sub := f.subscribe(t, "https://feeds.example/two", "rss")
 	episodes := showEpisodePIDs(t, f, sub.Show.PID)
 	fetch(svc, f, episodes[0])
-	old, _ := svc.podcastLibrary(f.ctx)
+	old, _ := svc.Grants.podcastLibrary(f.ctx)
 	stop()
 
 	svc, _ = open(moved)
 	f.svc = svc
-	if got, _ := svc.podcastLibrary(f.ctx); got != old {
+	if got, _ := svc.Grants.podcastLibrary(f.ctx); got != old {
 		t.Fatalf("before anything lands at the moved directory = %q, want the old library %q", got, old)
 	}
 	fetch(svc, f, episodes[1])
@@ -142,10 +142,10 @@ func TestAPodcastLibraryAtAMovedDirectoryIsPickedUp(t *testing.T) {
 	if fresh == "" {
 		t.Fatal("the fetch at the moved directory made no library of its own")
 	}
-	svc.libDirs.mu.Lock()
-	svc.libDirs.missed = time.Now().Add(-2 * time.Second)
-	svc.libDirs.mu.Unlock()
-	if got, _ := svc.podcastLibrary(f.ctx); got != fresh {
+	svc.Grants.libDirs.mu.Lock()
+	svc.Grants.libDirs.missed = time.Now().Add(-2 * time.Second)
+	svc.Grants.libDirs.mu.Unlock()
+	if got, _ := svc.Grants.podcastLibrary(f.ctx); got != fresh {
 		t.Errorf("a second after a library landed at the moved directory = %q, want it, %q", got, fresh)
 	}
 }

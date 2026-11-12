@@ -17,7 +17,7 @@ import (
 func registered(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, devices ...string) {
 	t.Helper()
 	for _, d := range devices {
-		if err := svc.GpodderUpsertDevice(ctx, uc, d, "", ""); err != nil {
+		if err := svc.Podcasts.GpodderUpsertDevice(ctx, uc, d, "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -33,36 +33,36 @@ func TestAShowFollowedAgainIsToldByItsNewURL(t *testing.T) {
 	registered(t, ctx, svc, uc, "phone", "laptop", "desk")
 	host := newGuidShowHost(t)
 	a, b := host.URL+"/a.xml", host.URL+"/b.xml"
-	if out, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{a}, nil); err != nil || out[a] != GpodderLanded {
+	if out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{a}, nil); err != nil || out[a] != GpodderLanded {
 		t.Fatalf("the phone's add = %v (%v)", out, err)
 	}
-	if urls, err := svc.GpodderFeedURLs(ctx, uc, "desk"); err != nil || !slices.Equal(urls, []string{a}) {
+	if urls, err := svc.Podcasts.GpodderFeedURLs(ctx, uc, "desk"); err != nil || !slices.Equal(urls, []string{a}) {
 		t.Fatalf("the desk's list = %v (%v), want %s", urls, err, a)
 	}
-	if err := svc.Unsubscribe(ctx, uc, apiPID(PrefixPodcast, model.PID(theOnlyShow(t, ctx, svc, uc))), false); err != nil {
+	if err := svc.Podcasts.Unsubscribe(ctx, uc, apiPID(PrefixPodcast, model.PID(theOnlyShow(t, ctx, svc, uc))), false); err != nil {
 		t.Fatal(err)
 	}
 	// The phone reads the removal, then reads again from past it.
-	evs, _, err := svc.GpodderSubChangesSince(ctx, uc, "phone", 0)
+	evs, _, err := svc.Podcasts.GpodderSubChangesSince(ctx, uc, "phone", 0)
 	if err != nil || len(evs) != 1 || evs[0].Action != "remove" || evs[0].FeedURL != a {
 		t.Fatalf("the phone's delta = %+v (%v), want the removal of %s", evs, err, a)
 	}
-	if _, _, err := svc.GpodderSubChangesSince(ctx, uc, "phone", evs[0].TsSec); err != nil {
+	if _, _, err := svc.Podcasts.GpodderSubChangesSince(ctx, uc, "phone", evs[0].TsSec); err != nil {
 		t.Fatal(err)
 	}
-	if evs, _, err := svc.GpodderSubChangesSince(ctx, uc, "laptop", 0); err != nil || len(evs) != 1 || evs[0].Action != "remove" {
+	if evs, _, err := svc.Podcasts.GpodderSubChangesSince(ctx, uc, "laptop", 0); err != nil || len(evs) != 1 || evs[0].Action != "remove" {
 		t.Fatalf("the laptop's delta = %+v (%v), want the removal", evs, err)
 	}
-	if urls, err := svc.GpodderFeedURLs(ctx, uc, "desk"); err != nil || len(urls) != 0 {
+	if urls, err := svc.Podcasts.GpodderFeedURLs(ctx, uc, "desk"); err != nil || len(urls) != 0 {
 		t.Fatalf("the desk's list after the leave = %v (%v), want none", urls, err)
 	}
 
 	host.failWith("/a.xml", http.StatusNotFound)
-	if _, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: b}); err != nil {
+	if _, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: b}); err != nil {
 		t.Fatal(err)
 	}
 	for _, d := range []string{"phone", "laptop", "desk"} {
-		if urls, err := svc.GpodderFeedURLs(ctx, uc, d); err != nil || !slices.Equal(urls, []string{b}) {
+		if urls, err := svc.Podcasts.GpodderFeedURLs(ctx, uc, d); err != nil || !slices.Equal(urls, []string{b}) {
 			t.Errorf("the %s's list after the account followed by %s = %v (%v)", d, b, urls, err)
 		}
 	}
@@ -81,13 +81,13 @@ func TestAShowFollowedAgainBeforeTheNextReadIsToldByItsNewURL(t *testing.T) {
 			registered(t, ctx, svc, uc, "phone")
 			host := newGuidShowHost(t)
 			a, b := host.URL+"/a.xml", host.URL+"/b.xml"
-			if out, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{a}, nil); err != nil || out[a] != GpodderLanded {
+			if out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{a}, nil); err != nil || out[a] != GpodderLanded {
 				t.Fatalf("the phone's add = %v (%v)", out, err)
 			}
-			if err := svc.Unsubscribe(ctx, uc, apiPID(PrefixPodcast, model.PID(theOnlyShow(t, ctx, svc, uc))), false); err != nil {
+			if err := svc.Podcasts.Unsubscribe(ctx, uc, apiPID(PrefixPodcast, model.PID(theOnlyShow(t, ctx, svc, uc))), false); err != nil {
 				t.Fatal(err)
 			}
-			evs, answer, err := svc.GpodderSubChangesSince(ctx, uc, "phone", 0)
+			evs, answer, err := svc.Podcasts.GpodderSubChangesSince(ctx, uc, "phone", 0)
 			if err != nil || len(evs) != 1 || evs[0].Action != "remove" || evs[0].FeedURL != a {
 				t.Fatalf("the phone's delta = %+v (%v), want the removal of %s", evs, err, a)
 			}
@@ -97,15 +97,15 @@ func TestAShowFollowedAgainBeforeTheNextReadIsToldByItsNewURL(t *testing.T) {
 				time.Sleep(time.Until(time.Unix(since+1, 10_000_000)))
 			}
 			host.failWith("/a.xml", http.StatusNotFound)
-			if _, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: b}); err != nil {
+			if _, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: b}); err != nil {
 				t.Fatal(err)
 			}
 			if next == "its list" {
-				if urls, err := svc.GpodderFeedURLs(ctx, uc, "phone"); err != nil || !slices.Equal(urls, []string{b}) {
+				if urls, err := svc.Podcasts.GpodderFeedURLs(ctx, uc, "phone"); err != nil || !slices.Equal(urls, []string{b}) {
 					t.Errorf("the phone's list = %v (%v), want %s", urls, err, b)
 				}
 			} else {
-				evs, _, err := svc.GpodderSubChangesSince(ctx, uc, "phone", since)
+				evs, _, err := svc.Podcasts.GpodderSubChangesSince(ctx, uc, "phone", since)
 				if err != nil || len(evs) != 1 || evs[0].Action != "add" || evs[0].FeedURL != b {
 					t.Errorf("the phone's next delta = %+v (%v), want the add of %s", evs, err, b)
 				}
@@ -114,7 +114,7 @@ func TestAShowFollowedAgainBeforeTheNextReadIsToldByItsNewURL(t *testing.T) {
 				urls[0].FeedURL != b || urls[0].RemovedSec != 0 {
 				t.Errorf("the phone calls the show %+v (%v), want %s", urls, err, b)
 			}
-			if urls, err := svc.GpodderFeedURLs(ctx, uc, "phone"); err != nil || !slices.Equal(urls, []string{b}) {
+			if urls, err := svc.Podcasts.GpodderFeedURLs(ctx, uc, "phone"); err != nil || !slices.Equal(urls, []string{b}) {
 				t.Errorf("the phone's list = %v (%v), want %s", urls, err, b)
 			}
 		})
@@ -132,22 +132,22 @@ func TestADeviceThatLeftAShowIsToldItsNewURL(t *testing.T) {
 			registered(t, ctx, svc, uc, "phone")
 			host := newGuidShowHost(t)
 			a, b := host.URL+"/a.xml", host.URL+"/b.xml"
-			if out, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{a, feed}, nil); err != nil ||
+			if out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{a, feed}, nil); err != nil ||
 				out[a] != GpodderLanded || out[feed] != GpodderLanded {
 				t.Fatalf("the phone's adds = %v (%v)", out, err)
 			}
 			if how == "a change" {
-				if _, err := svc.GpodderApplyChanges(ctx, uc, "phone", nil, []string{a}); err != nil {
+				if _, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", nil, []string{a}); err != nil {
 					t.Fatal(err)
 				}
-			} else if res, err := svc.GpodderReplaceDeviceList(ctx, uc, "phone", []string{feed}); err != nil || res.Released != 1 {
+			} else if res, err := svc.Podcasts.GpodderReplaceDeviceList(ctx, uc, "phone", []string{feed}); err != nil || res.Released != 1 {
 				t.Fatalf("the phone's list = %+v (%v), want the show of %s released", res, err, a)
 			}
 			host.failWith("/a.xml", http.StatusNotFound)
-			if _, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: b}); err != nil {
+			if _, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: b}); err != nil {
 				t.Fatal(err)
 			}
-			evs, _, err := svc.GpodderSubChangesSince(ctx, uc, "phone", 0)
+			evs, _, err := svc.Podcasts.GpodderSubChangesSince(ctx, uc, "phone", 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -158,7 +158,7 @@ func TestADeviceThatLeftAShowIsToldItsNewURL(t *testing.T) {
 			if !slices.Contains(told, "add "+b) || slices.ContainsFunc(told, func(s string) bool { return strings.HasSuffix(s, " "+a) }) {
 				t.Errorf("the phone's delta = %v, want the add of %s and nothing of %s", told, b, a)
 			}
-			if urls, err := svc.GpodderFeedURLs(ctx, uc, "phone"); err != nil || !slices.Contains(urls, b) || slices.Contains(urls, a) {
+			if urls, err := svc.Podcasts.GpodderFeedURLs(ctx, uc, "phone"); err != nil || !slices.Contains(urls, b) || slices.Contains(urls, a) {
 				t.Errorf("the phone's list = %v (%v), want %s and not %s", urls, err, b, a)
 			}
 		})
@@ -173,31 +173,31 @@ func TestARemovalNeverTakenKeepsTheDevicesURL(t *testing.T) {
 	registered(t, ctx, svc, uc, "phone")
 	host := newGuidShowHost(t)
 	a, b := host.URL+"/a.xml", host.URL+"/b.xml"
-	if out, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{a}, nil); err != nil || out[a] != GpodderLanded {
+	if out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{a}, nil); err != nil || out[a] != GpodderLanded {
 		t.Fatalf("the phone's add = %v (%v)", out, err)
 	}
 	show := apiPID(PrefixPodcast, model.PID(theOnlyShow(t, ctx, svc, uc)))
-	if err := svc.Unsubscribe(ctx, uc, show, false); err != nil {
+	if err := svc.Podcasts.Unsubscribe(ctx, uc, show, false); err != nil {
 		t.Fatal(err)
 	}
 	// The answer telling the phone of the removal never reaches it.
-	if _, _, err := svc.GpodderSubChangesSince(ctx, uc, "phone", 0); err != nil {
+	if _, _, err := svc.Podcasts.GpodderSubChangesSince(ctx, uc, "phone", 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: b}); err != nil {
+	if _, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: b}); err != nil {
 		t.Fatal(err)
 	}
-	evs, answer, err := svc.GpodderSubChangesSince(ctx, uc, "phone", 0)
+	evs, answer, err := svc.Podcasts.GpodderSubChangesSince(ctx, uc, "phone", 0)
 	if err != nil || len(evs) != 1 || evs[0].Action != "add" || evs[0].FeedURL != a {
 		t.Fatalf("the phone's read from before the removal = %+v (%v), want the add of its own %s", evs, err, a)
 	}
-	if _, answer, err = svc.GpodderSubChangesSince(ctx, uc, "phone", answer); err != nil {
+	if _, answer, err = svc.Podcasts.GpodderSubChangesSince(ctx, uc, "phone", answer); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.Unsubscribe(ctx, uc, show, false); err != nil {
+	if err := svc.Podcasts.Unsubscribe(ctx, uc, show, false); err != nil {
 		t.Fatal(err)
 	}
-	if evs, _, err := svc.GpodderSubChangesSince(ctx, uc, "phone", answer); err != nil || len(evs) != 1 || evs[0].Action != "remove" || evs[0].FeedURL != a {
+	if evs, _, err := svc.Podcasts.GpodderSubChangesSince(ctx, uc, "phone", answer); err != nil || len(evs) != 1 || evs[0].Action != "remove" || evs[0].FeedURL != a {
 		t.Errorf("the phone's delta after the account left again = %+v (%v), want the removal of its own %s", evs, err, a)
 	}
 }
@@ -211,23 +211,23 @@ func TestADeviceAddingAShowBackKeepsItsOwnURL(t *testing.T) {
 	registered(t, ctx, svc, uc, "phone")
 	host := newGuidShowHost(t)
 	a, b := host.URL+"/a.xml", host.URL+"/b.xml"
-	if out, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{a}, nil); err != nil || out[a] != GpodderLanded {
+	if out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{a}, nil); err != nil || out[a] != GpodderLanded {
 		t.Fatalf("the phone's add = %v (%v)", out, err)
 	}
-	if err := svc.Unsubscribe(ctx, uc, apiPID(PrefixPodcast, model.PID(theOnlyShow(t, ctx, svc, uc))), false); err != nil {
+	if err := svc.Podcasts.Unsubscribe(ctx, uc, apiPID(PrefixPodcast, model.PID(theOnlyShow(t, ctx, svc, uc))), false); err != nil {
 		t.Fatal(err)
 	}
-	_, answer, err := svc.GpodderSubChangesSince(ctx, uc, "phone", 0)
+	_, answer, err := svc.Podcasts.GpodderSubChangesSince(ctx, uc, "phone", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: b}); err != nil {
+	if _, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: b}); err != nil {
 		t.Fatal(err)
 	}
-	if out, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{a}, nil); err != nil || out[a] != GpodderLanded {
+	if out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{a}, nil); err != nil || out[a] != GpodderLanded {
 		t.Fatalf("the phone's add back = %v (%v)", out, err)
 	}
-	evs, _, err := svc.GpodderSubChangesSince(ctx, uc, "phone", answer)
+	evs, _, err := svc.Podcasts.GpodderSubChangesSince(ctx, uc, "phone", answer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +236,7 @@ func TestADeviceAddingAShowBackKeepsItsOwnURL(t *testing.T) {
 			t.Errorf("the phone's next delta = %+v, want nothing under any URL but its own %s", evs, a)
 		}
 	}
-	if urls, err := svc.GpodderFeedURLs(ctx, uc, "phone"); err != nil || !slices.Equal(urls, []string{a}) {
+	if urls, err := svc.Podcasts.GpodderFeedURLs(ctx, uc, "phone"); err != nil || !slices.Equal(urls, []string{a}) {
 		t.Errorf("the phone's list = %v (%v), want its own %s", urls, err, a)
 	}
 }
@@ -249,17 +249,17 @@ func TestAMoveInOneChangeKeepsTheShow(t *testing.T) {
 	registered(t, ctx, svc, uc, "phone")
 	host := newGuidShowHost(t)
 	a, b := host.URL+"/a.xml", host.URL+"/b.xml"
-	if out, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{a}, nil); err != nil || out[a] != GpodderLanded {
+	if out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{a}, nil); err != nil || out[a] != GpodderLanded {
 		t.Fatalf("the phone's add = %v (%v)", out, err)
 	}
-	out, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{b}, []string{a})
+	out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{b}, []string{a})
 	if err != nil || out[b] != GpodderLanded {
 		t.Fatalf("the move = %v (%v), want %s landed", out, err, b)
 	}
 	if subs, err := svc.db.SubscriptionsByUser(ctx, uc.ID); err != nil || len(subs) != 1 {
 		t.Fatalf("subscriptions after the move = %+v (%v), want the show still followed", subs, err)
 	}
-	if urls, err := svc.GpodderFeedURLs(ctx, uc, "phone"); err != nil || !slices.Equal(urls, []string{b}) {
+	if urls, err := svc.Podcasts.GpodderFeedURLs(ctx, uc, "phone"); err != nil || !slices.Equal(urls, []string{b}) {
 		t.Errorf("the phone's list after the move = %v (%v), want %s", urls, err, b)
 	}
 }
@@ -269,25 +269,25 @@ func TestAMoveInOneChangeKeepsTheShow(t *testing.T) {
 func TestAReadNeverOverwritesWhatADeviceSent(t *testing.T) {
 	ctx, svc, uc, feed := openPodcastFixture(t)
 	registered(t, ctx, svc, uc, "phone")
-	if _, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: feed}); err != nil {
+	if _, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: feed}); err != nil {
 		t.Fatal(err)
 	}
 	arrived, release := stallAt(t, "told")
 	read := make(chan error, 1)
 	go func() {
-		_, _, err := svc.GpodderSubChangesSince(ctx, uc, "phone", 0)
+		_, _, err := svc.Podcasts.GpodderSubChangesSince(ctx, uc, "phone", 0)
 		read <- err
 	}()
 	<-arrived
 	respelled := feed + "/"
-	if out, err := svc.GpodderApplyChanges(ctx, uc, "phone", []string{respelled}, nil); err != nil || out[respelled] != GpodderLanded {
+	if out, err := svc.Podcasts.GpodderApplyChanges(ctx, uc, "phone", []string{respelled}, nil); err != nil || out[respelled] != GpodderLanded {
 		t.Fatalf("the phone's add = %v (%v)", out, err)
 	}
 	release()
 	if err := <-read; err != nil {
 		t.Fatal(err)
 	}
-	if urls, err := svc.GpodderFeedURLs(ctx, uc, "phone"); err != nil || !slices.Equal(urls, []string{respelled}) {
+	if urls, err := svc.Podcasts.GpodderFeedURLs(ctx, uc, "phone"); err != nil || !slices.Equal(urls, []string{respelled}) {
 		t.Errorf("the phone's list = %v (%v), want the spelling it sent, %s", urls, err, respelled)
 	}
 }
@@ -296,7 +296,7 @@ func TestAReadNeverOverwritesWhatADeviceSent(t *testing.T) {
 // no turn at the writer: it answers while a backup holds the writer.
 func TestAnUnregisteredDevicesReadWritesNothing(t *testing.T) {
 	ctx, svc, uc, feed := openPodcastFixture(t)
-	if _, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: feed}); err != nil {
+	if _, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: feed}); err != nil {
 		t.Fatal(err)
 	}
 	tx, err := svc.db.Writer().BeginTx(ctx, nil)
@@ -306,11 +306,11 @@ func TestAnUnregisteredDevicesReadWritesNothing(t *testing.T) {
 	defer tx.Rollback()
 	done := make(chan error, 1)
 	go func() {
-		if _, _, err := svc.GpodderSubChangesSince(ctx, uc, "ghost", 0); err != nil {
+		if _, _, err := svc.Podcasts.GpodderSubChangesSince(ctx, uc, "ghost", 0); err != nil {
 			done <- err
 			return
 		}
-		_, err := svc.GpodderFeedURLs(ctx, uc, "ghost")
+		_, err := svc.Podcasts.GpodderFeedURLs(ctx, uc, "ghost")
 		done <- err
 	}()
 	select {
@@ -330,20 +330,20 @@ func TestAnUnregisteredDevicesReadWritesNothing(t *testing.T) {
 // catalog hand-off. Only a show gone from the catalog is left out.
 func TestAListReadFailsWhenTheCatalogCannotAnswer(t *testing.T) {
 	ctx, svc, uc, feed := openPodcastFixture(t)
-	if _, _, err := svc.Subscribe(ctx, uc, SubscribeRequest{URL: feed}); err != nil {
+	if _, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: feed}); err != nil {
 		t.Fatal(err)
 	}
-	svc.showReadHook = func(context.Context, model.PID) (*model.Podcast, error) {
+	svc.Podcasts.showReadHook = func(context.Context, model.PID) (*model.Podcast, error) {
 		return nil, errors.New("sql: database is closed")
 	}
-	t.Cleanup(func() { svc.showReadHook = nil })
-	if urls, err := svc.GpodderFeedURLs(ctx, uc, ""); KindOf(err) != KindMaintenance {
+	t.Cleanup(func() { svc.Podcasts.showReadHook = nil })
+	if urls, err := svc.Podcasts.GpodderFeedURLs(ctx, uc, ""); KindOf(err) != KindMaintenance {
 		t.Errorf("the list during a hand-off = %v (%v), want a maintenance error", urls, err)
 	}
-	svc.showReadHook = func(context.Context, model.PID) (*model.Podcast, error) {
+	svc.Podcasts.showReadHook = func(context.Context, model.PID) (*model.Podcast, error) {
 		return nil, waxerr.New(waxerr.CodeNotFound, "podcast.Get", "no such podcast")
 	}
-	if urls, err := svc.GpodderFeedURLs(ctx, uc, ""); err != nil || len(urls) != 0 {
+	if urls, err := svc.Podcasts.GpodderFeedURLs(ctx, uc, ""); err != nil || len(urls) != 0 {
 		t.Errorf("the list with its show gone = %v (%v), want empty", urls, err)
 	}
 }

@@ -3,8 +3,6 @@ package service
 import (
 	"testing"
 	"time"
-
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 func TestShareCursorRoundTrip(t *testing.T) {
@@ -48,14 +46,14 @@ func TestShareAuditsCreationAndAnAdministratorsRevoke(t *testing.T) {
 	_, owner := shareOwner(t, ctx, svc, "publisher")
 	entries := func(action string) []AuditEventDTO {
 		t.Helper()
-		page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: action}, "", 50)
+		page, err := svc.Audit.Events(ctx, AuditFilter{Action: action}, "", 50)
 		if err != nil {
 			t.Fatal(err)
 		}
 		return page.Events
 	}
 
-	mine, err := svc.CreateShare(ctx, owner, track, time.Hour, true, 0)
+	mine, err := svc.Reads.CreateShare(ctx, owner, track, time.Hour, true, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,18 +70,18 @@ func TestShareAuditsCreationAndAnAdministratorsRevoke(t *testing.T) {
 			created[0].Detail["targetKind"], created[0].Detail["expiresAt"], created[0].TargetName,
 			mine.ExpiresAt.Format(time.RFC3339), title)
 	}
-	if err := svc.RevokeShare(ctx, owner, mine.ID); err != nil {
+	if err := svc.Reads.RevokeShare(ctx, owner, mine.ID); err != nil {
 		t.Fatal(err)
 	}
 	if got := entries("share.revoke"); len(got) != 0 {
 		t.Errorf("an owner revoking their own link was audited: %+v", got)
 	}
 
-	theirs, err := svc.CreateShare(ctx, owner, track, 0, false, 0)
+	theirs, err := svc.Reads.CreateShare(ctx, owner, track, 0, false, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.RevokeShare(ctx, admin, theirs.ID); err != nil {
+	if err := svc.Reads.RevokeShare(ctx, admin, theirs.ID); err != nil {
 		t.Fatal(err)
 	}
 	revoked := entries("share.revoke")

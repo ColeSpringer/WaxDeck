@@ -337,7 +337,7 @@ func (h *Handler) annotate(r *http.Request, env *envelope) {
 	var items map[string]service.ItemMark
 	if pids := s.itemPIDs(); len(pids) > 0 {
 		var err error
-		if items, err = h.svc.ItemMarks(ctx, uc, pids); err != nil {
+		if items, err = h.svc.Reads.ItemMarks(ctx, uc, pids); err != nil {
 			h.warn("subsonic item marks", "err", err)
 		}
 	}
@@ -351,7 +351,7 @@ func (h *Handler) annotate(r *http.Request, env *envelope) {
 		}
 	}
 	if len(unread) > 0 {
-		read, err := h.svc.EntityMarks(ctx, uc, unread)
+		read, err := h.svc.Reads.EntityMarks(ctx, uc, unread)
 		if err != nil {
 			h.warn("subsonic entity marks", "err", err)
 		}
@@ -361,7 +361,7 @@ func (h *Handler) annotate(r *http.Request, env *envelope) {
 	}
 	var files map[string]service.FileFacts
 	if pids := s.filePIDs(); len(pids) > 0 {
-		files = h.svc.FileFacts(ctx, pids)
+		files = h.svc.Reads.FileFacts(ctx, pids)
 	}
 	var bookmarks map[string]int64
 	if len(s.songs) > 0 {
@@ -371,7 +371,7 @@ func (h *Handler) annotate(r *http.Request, env *envelope) {
 			pids[i], resume[c.ID] = c.ID, items[c.ID].PositionMS
 		}
 		var err error
-		if bookmarks, err = h.svc.SubsonicBookmarkPositions(ctx, uc, pids, resume); err != nil {
+		if bookmarks, err = h.svc.Playback.SubsonicBookmarkPositions(ctx, uc, pids, resume); err != nil {
 			h.warn("subsonic bookmark positions", "err", err)
 		}
 	}

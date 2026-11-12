@@ -131,7 +131,7 @@ func TestSubsonicBookmarkCapOnTheWire(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := h.svc.UserCtx(ctx, admin)
+	uc, err := h.svc.Grants.UserCtx(ctx, admin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestSubsonicBookmarkCapOnTheWire(t *testing.T) {
 	sub := decodeStatus[Subscription](t, h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.URL + "/feed.xml"}), 201, "subscribe")
 	filled := 0
 	for cursor := ""; ; {
-		eps, next, err := h.svc.Episodes(ctx, uc, sub.Show.Pid, cursor, 100)
+		eps, next, err := h.svc.Podcasts.Episodes(ctx, uc, sub.Show.Pid, cursor, 100)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -191,15 +191,15 @@ func TestSubsonicAFinishedBookIsNoBookmark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := h.svc.UserCtx(ctx, admin)
+	uc, err := h.svc.Grants.UserCtx(ctx, admin)
 	if err != nil {
 		t.Fatal(err)
 	}
-	it, err := h.svc.Item(ctx, uc, book)
+	it, err := h.svc.Reads.Item(ctx, uc, book)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.svc.Checkpoint(ctx, uc, book, it.DurationMS, nil); err != nil {
+	if _, err := h.svc.Playback.Checkpoint(ctx, uc, book, it.DurationMS, nil); err != nil {
 		t.Fatal(err)
 	}
 	if st := decode[PlayState](t, get(t, h.ts, "/api/v1/items/"+book+"/play-state", h.token)); !st.Finished {
@@ -229,7 +229,7 @@ func TestSubsonicAFinishedBookIsNoBookmark(t *testing.T) {
 	}
 	// Played to the end again: still no resume point, so the bookmark
 	// stays where it was saved.
-	if _, err := h.svc.Checkpoint(ctx, uc, book, it.DurationMS, nil); err != nil {
+	if _, err := h.svc.Playback.Checkpoint(ctx, uc, book, it.DurationMS, nil); err != nil {
 		t.Fatal(err)
 	}
 	if at, ok := bookmarked(); !ok || at != 6500 {

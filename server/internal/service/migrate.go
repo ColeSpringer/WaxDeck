@@ -25,6 +25,12 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/scrobble"
 )
 
+// Migrate is moving in from and out to other servers: imports, exports
+// and play history.
+type Migrate struct{ *core }
+
+func newMigrate(c *core, _ Config) *Migrate { return &Migrate{core: c} }
+
 // Migration assistant: pull a household's accumulated play state out of
 // the server they are leaving (Navidrome or any Subsonic server for
 // music, Audiobookshelf for books) and replay it into WaxDeck. Each
@@ -280,7 +286,7 @@ func migrateSourceNames() string {
 // StartMigration queues an import from another server. Administrators
 // only: the credential reaches out to an arbitrary host and the writes
 // land on an account the caller names.
-func (l *Library) StartMigration(ctx context.Context, uc *UserCtx, req MigrationRequest) (ToolTaskDTO, error) {
+func (l *Migrate) StartMigration(ctx context.Context, uc *UserCtx, req MigrationRequest) (ToolTaskDTO, error) {
 	if !uc.Admin {
 		return ToolTaskDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
@@ -292,7 +298,7 @@ func (l *Library) StartMigration(ctx context.Context, uc *UserCtx, req Migration
 	// Last.fm is read with this server's own API credentials, so an
 	// install that has none cannot import at all - said here, where
 	// somebody is looking at the form, rather than in a task report.
-	if source == migrateSourceLastfm && l.lastfmClient() == nil {
+	if source == migrateSourceLastfm && l.Integrations.lastfmClient() == nil {
 		return ToolTaskDTO{}, errInvalid("configure the server's Last.fm API key first")
 	}
 	target, err := l.migrationTarget(ctx, uc, req.AccountID)
@@ -392,7 +398,7 @@ func (l *Library) StartMigration(ctx context.Context, uc *UserCtx, req Migration
 	if err := l.db.InsertToolTask(ctx, t); err != nil {
 		return ToolTaskDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
-	l.notifyToolTask(ctx, t.ID)
+	l.Tools.notifyToolTask(ctx, t.ID)
 	return toolTaskDTO(t), nil
 }
 
@@ -401,7 +407,7 @@ func (l *Library) StartMigration(ctx context.Context, uc *UserCtx, req Migration
 // library; anything else has to be an account that can actually hold
 // play state, so a disabled one and a signup nobody approved are
 // refused here rather than at run time.
-func (l *Library) migrationTarget(ctx context.Context, uc *UserCtx, accountID string) (string, error) {
+func (l *Migrate) migrationTarget(ctx context.Context, uc *UserCtx, accountID string) (string, error) {
 	id := strings.TrimSpace(accountID)
 	if id == "" || id == uc.ID {
 		return uc.ID, nil
@@ -425,7 +431,7 @@ func (l *Library) migrationTarget(ctx context.Context, uc *UserCtx, accountID st
 // needs. The guard runs only where there is a URL to guard: a source
 // this server reaches on a fixed public host, or none at all, has no
 // address the caller could point anywhere.
-func (l *Library) migrationBase(ctx context.Context, source string, spec migrateSourceSpec, raw string) (string, error) {
+func (l *Migrate) migrationBase(ctx context.Context, source string, spec migrateSourceSpec, raw string) (string, error) {
 	given := strings.TrimSpace(raw)
 	if given == "" {
 		if spec.urlRequired {
@@ -443,7 +449,7 @@ func (l *Library) migrationBase(ctx context.Context, source string, spec migrate
 	// The same private-address posture every user-pointed fetch takes;
 	// the private-feed-hosts flag opts LAN servers back in, which is
 	// exactly where a household's old server usually lives.
-	if err := l.guardAcquireHost(ctx, parsed.Hostname()); err != nil {
+	if err := l.Ingest.guardAcquireHost(ctx, parsed.Hostname()); err != nil {
 		return "", err
 	}
 	return strings.TrimRight(parsed.String(), "/"), nil
@@ -456,14 +462,18 @@ func (l *Library) migrationBase(ctx context.Context, source string, spec migrate
 // drain machinery like every other runner: permanent ones retire the
 // task, transport trouble re-runs under the lease and idempotent
 // history makes the re-run safe.
-func (l *Library) runMigrationTask(ctx context.Context, t *wdb.ToolTask) error {
+func (l *Migrate) runMigrationTask(ctx context.Context, t *wdb.ToolTask) error {
 	var p migrationParams
 	if err := json.Unmarshal([]byte(t.Params), &p); err != nil {
 		return fmt.Errorf("%w: bad task params: %v", errToolPermanent, err)
 	}
 	actor, err := l.db.UserByID(ctx, t.UserID)
-	if err != nil || actor == nil {
+	if errors.Is(err, wdb.ErrNotFound) {
 		return fmt.Errorf("%w: the importing account is gone", errToolPermanent)
+	}
+	if err != nil {
+		// A failed read says nothing about the account: the task runs again.
+		return &Error{Kind: KindInternal, Err: err}
 	}
 	if actor.Disabled || !hasRole(actor.Roles, "admin") {
 		return fmt.Errorf("%w: administrator rights were revoked", errToolPermanent)
@@ -479,8 +489,11 @@ func (l *Library) runMigrationTask(ctx context.Context, t *wdb.ToolTask) error {
 	target := actor
 	if targetID != actor.ID {
 		target, err = l.db.UserByID(ctx, targetID)
-		if err != nil || target == nil {
+		if errors.Is(err, wdb.ErrNotFound) {
 			return fmt.Errorf("%w: the target account is gone", errToolPermanent)
+		}
+		if err != nil {
+			return &Error{Kind: KindInternal, Err: err}
 		}
 	}
 	if target.Disabled {
@@ -491,7 +504,7 @@ func (l *Library) runMigrationTask(ctx context.Context, t *wdb.ToolTask) error {
 		// re-read at all: an approval can be revoked while a task waits.
 		return fmt.Errorf("%w: the target signup is not approved", errToolPermanent)
 	}
-	uc, err := l.UserCtx(ctx, target)
+	uc, err := l.Grants.UserCtx(ctx, target)
 	if err != nil {
 		return err
 	}
@@ -553,13 +566,13 @@ func (l *Library) runMigrationTask(ctx context.Context, t *wdb.ToolTask) error {
 		// that an administrator wrote onto somebody else's account, and
 		// attributing it to the person written to would say the opposite
 		// of what happened.
-		ac, ctxErr := l.UserCtx(ctx, actor)
+		ac, ctxErr := l.Grants.UserCtx(ctx, actor)
 		if ctxErr != nil {
 			return &Error{Kind: KindInternal, Err: ctxErr}
 		}
 		actorCtx = ac
 	}
-	l.Audit(ctx, actorCtx, "migration.run", AuditTarget{Kind: "migration", Name: p.Source}, map[string]any{
+	l.Audit.Record(ctx, actorCtx, "migration.run", AuditTarget{Kind: "migration", Name: p.Source}, map[string]any{
 		"source": p.Source, "dryRun": p.DryRun,
 		"account": target.Username,
 		"matched": sum.Matched, "unmatched": sum.Unmatched,
@@ -570,7 +583,7 @@ func (l *Library) runMigrationTask(ctx context.Context, t *wdb.ToolTask) error {
 }
 
 // openMigrationSecret recovers the credential sealed at creation.
-func (l *Library) openMigrationSecret(sealedB64 string) (string, error) {
+func (l *Migrate) openMigrationSecret(sealedB64 string) (string, error) {
 	if l.sealer == nil {
 		return "", errors.New("no sealing key is configured")
 	}
@@ -588,7 +601,7 @@ func (l *Library) openMigrationSecret(sealedB64 string) (string, error) {
 // resolveMigrationRef walks the catalog's resolve ladder for one source
 // item, answering the match (nil for a miss) and how many copies of one
 // recording tied for it.
-func (l *Library) resolveMigrationRef(ctx context.Context, ref model.PortableRef) (*model.ItemView, int, error) {
+func (l *Migrate) resolveMigrationRef(ctx context.Context, ref model.PortableRef) (*model.ItemView, int, error) {
 	m, err := l.resolveTakingTie(ctx, ref)
 	return m.Item, m.Candidates, err
 }
@@ -599,7 +612,7 @@ func (l *Library) resolveMigrationRef(ctx context.Context, ref model.PortableRef
 // walked again without ties, and a unique match there is the answer. A tie
 // the ladder cannot prove misses either way, and one taken on the last
 // rung has no rung after it.
-func (l *Library) resolveTakingTie(ctx context.Context, ref model.PortableRef) (waxbin.RefMatch, error) {
+func (l *Migrate) resolveTakingTie(ctx context.Context, ref model.PortableRef) (waxbin.RefMatch, error) {
 	m, err := l.resolveRef(ctx, ref, waxbin.ResolveOptions{AcceptSameRecording: true})
 	if err != nil || !tieAboveLastRung(m.Rung, m.Candidates) {
 		return m, err
@@ -621,9 +634,9 @@ func tieAboveLastRung(rung model.MatchRung, candidates int) bool {
 }
 
 // resolveRef walks the catalog's resolve ladder for one ref.
-func (l *Library) resolveRef(ctx context.Context, ref model.PortableRef, opts waxbin.ResolveOptions) (waxbin.RefMatch, error) {
-	if l.refResolveHook != nil {
-		l.refResolveHook(opts, 1)
+func (l *Migrate) resolveRef(ctx context.Context, ref model.PortableRef, opts waxbin.ResolveOptions) (waxbin.RefMatch, error) {
+	if l.Playlists.refResolveHook != nil {
+		l.Playlists.refResolveHook(opts, 1)
 	}
 	return l.lib.ResolveRefWith(ctx, ref, opts)
 }
@@ -634,7 +647,7 @@ func (l *Library) resolveRef(ctx context.Context, ref model.PortableRef, opts wa
 // decides nothing. Any other tie is only a fallback: the copy decides the
 // group (a song on its album and on a compilation stars one or the
 // other), so the caller takes it only when no member of the group is sure.
-func (l *Library) resolveGroupMember(ctx context.Context, ref model.PortableRef, entity func(*model.ItemView) model.PID) (sure, fallback *model.ItemView, err error) {
+func (l *Migrate) resolveGroupMember(ctx context.Context, ref model.PortableRef, entity func(*model.ItemView) model.PID) (sure, fallback *model.ItemView, err error) {
 	m, err := l.resolveTakingTie(ctx, ref)
 	if err != nil || m.Item == nil || m.Candidates < 2 {
 		return m.Item, nil, err
@@ -652,7 +665,7 @@ func (l *Library) resolveGroupMember(ctx context.Context, ref model.PortableRef,
 // counted against the tie. The catalog keeps a recording id as tagged and
 // matches it in any case, so the copies are read the same way. A tie
 // whose copies cannot all be listed so does not agree.
-func (l *Library) copiesAgree(ctx context.Context, m waxbin.RefMatch, entity func(*model.ItemView) model.PID) (bool, error) {
+func (l *Migrate) copiesAgree(ctx context.Context, m waxbin.RefMatch, entity func(*model.ItemView) model.PID) (bool, error) {
 	want := entity(m.Item)
 	if want == "" || m.Item.MBID == "" {
 		return false, nil
@@ -701,7 +714,7 @@ func migrateSessionID(source, sourceID string, n int) string {
 // the source gave none) and earlier ones step back a week each. The
 // returned count is new rows only: a re-import's duplicates are the
 // idempotency at work.
-func (l *Library) migrateListens(ctx context.Context, uc *UserCtx, sum *migrationSummary, source, sourceID, apiItemPID string, durationMS int64, count int, lastPlayed time.Time) (int, error) {
+func (l *Migrate) migrateListens(ctx context.Context, uc *UserCtx, sum *migrationSummary, source, sourceID, apiItemPID string, durationMS int64, count int, lastPlayed time.Time) (int, error) {
 	if lastPlayed.IsZero() {
 		lastPlayed = time.Now().Add(-time.Hour)
 	}
@@ -712,7 +725,7 @@ func (l *Library) migrateListens(ctx context.Context, uc *UserCtx, sum *migratio
 		if len(sessions) == 0 {
 			return nil
 		}
-		res, err := l.ingestListens(ctx, uc, sessions, listenIngestOptions{announcedByCaller: true})
+		res, err := l.Playback.ingestListens(ctx, uc, sessions, listenIngestOptions{announcedByCaller: true})
 		accepted += res.Accepted
 		sum.noteRefusedListens(res.Rejected)
 		sessions = sessions[:0]
@@ -760,7 +773,7 @@ func migrationFailureText(msg string) string {
 // account that ordered it, naming the account it was meant to write onto.
 // Attributed by id alone: an account disabled since it ordered the import
 // still ordered it.
-func (l *Library) auditMigrationFailure(ctx context.Context, t wdb.ToolTask) {
+func (l *Migrate) auditMigrationFailure(ctx context.Context, t wdb.ToolTask) {
 	var p migrationParams
 	// Params that cannot be read still belong to an import that failed.
 	_ = json.Unmarshal([]byte(t.Params), &p)
@@ -768,9 +781,9 @@ func (l *Library) auditMigrationFailure(ctx context.Context, t wdb.ToolTask) {
 	if account == "" {
 		account = t.UserID
 	}
-	l.Audit(ctx, &UserCtx{ID: t.UserID}, "migration.run", AuditTarget{Kind: "migration", Name: p.Source}, map[string]any{
+	l.Audit.Record(ctx, &UserCtx{ID: t.UserID}, "migration.run", AuditTarget{Kind: "migration", Name: p.Source}, map[string]any{
 		"source": p.Source, "dryRun": p.DryRun, "failed": true,
-		"account": l.usernameOf(ctx, account),
+		"account": l.Audit.usernameOf(ctx, account),
 		"error":   migrationFailureText(t.Error),
 	})
 }
@@ -795,7 +808,7 @@ func (l *Library) auditMigrationFailure(ctx context.Context, t wdb.ToolTask) {
 // attempts that ran out under the lease alike, on the drain's own
 // context rather than the attempt's deadline. A migration that failed
 // for good is therefore put on the record here, once.
-func (l *Library) settleMigrationExport(ctx context.Context, taskID string) {
+func (l *Migrate) settleMigrationExport(ctx context.Context, taskID string) {
 	t, err := l.db.ToolTaskByID(ctx, taskID)
 	if err != nil || !strings.HasPrefix(t.Type, taskTypeMigratePrefix) {
 		return

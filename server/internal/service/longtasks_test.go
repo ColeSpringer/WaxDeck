@@ -8,7 +8,7 @@ import (
 // taskState reads a task's state.
 func taskState(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, id string) string {
 	t.Helper()
-	task, err := svc.GetToolTaskFor(ctx, uc, id)
+	task, err := svc.Tools.GetToolTaskFor(ctx, uc, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,12 +25,12 @@ func TestAnImportRunsWhileARepairDoes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.svc.DrainToolTasks(ctx) {
+	if f.svc.Tools.DrainToolTasks(ctx) {
 		t.Fatal("the shared tool worker took the repair")
 	}
 	ts := starredSongs(t, `{"id":"s-alpha","title":"Alpha Song","artist":"Fixture Artist",`+
 		`"album":"Fixture Album","duration":2,"starred":"2025-11-05T10:20:30.000Z"}`)
-	imp, err := f.svc.StartMigration(ctx, f.uc, MigrationRequest{
+	imp, err := f.svc.Migrate.StartMigration(ctx, f.uc, MigrationRequest{
 		Source: "navidrome", ServerURL: ts.URL, Username: "demo", Password: "demo-pass", Stars: true,
 	})
 	if err != nil {
@@ -39,13 +39,13 @@ func TestAnImportRunsWhileARepairDoes(t *testing.T) {
 	var meanwhile []string
 	f.svc.catalogRepairHook = func(step string) error {
 		if step == catalogRepairSortKeys {
-			for f.svc.DrainToolTasks(ctx) {
+			for f.svc.Tools.DrainToolTasks(ctx) {
 			}
 			meanwhile = []string{taskState(t, ctx, f.svc, f.uc, repair.ID), taskState(t, ctx, f.svc, f.uc, imp.ID)}
 		}
 		return nil
 	}
-	if !f.svc.DrainLongToolTasks(ctx) {
+	if !f.svc.Tools.DrainLongToolTasks(ctx) {
 		t.Fatal("the long-task worker did not take the repair")
 	}
 	if len(meanwhile) != 2 || meanwhile[0] != taskStateRunning || meanwhile[1] != taskStateDone {
@@ -66,11 +66,11 @@ func TestAHealthFixAndARepairRunOneAtATime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fix, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, nil)
+	fix, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if svc.DrainToolTasks(ctx) {
+	if svc.Tools.DrainToolTasks(ctx) {
 		t.Fatal("the shared tool worker took a long task")
 	}
 	var fixWhileRepairing string
@@ -80,7 +80,7 @@ func TestAHealthFixAndARepairRunOneAtATime(t *testing.T) {
 		}
 		return nil
 	}
-	if !svc.DrainLongToolTasks(ctx) {
+	if !svc.Tools.DrainLongToolTasks(ctx) {
 		t.Fatal("the long-task worker took nothing")
 	}
 	if fixWhileRepairing != taskStateQueued {
@@ -89,7 +89,7 @@ func TestAHealthFixAndARepairRunOneAtATime(t *testing.T) {
 	if repaired, fixed := taskState(t, ctx, svc, uc, repair.ID), taskState(t, ctx, svc, uc, fix.TaskID); repaired != taskStateDone || fixed != taskStateQueued {
 		t.Fatalf("after one turn of the long-task worker: repair %s, fix %s; want the repair done, the fix still queued", repaired, fixed)
 	}
-	for svc.DrainLongToolTasks(ctx) {
+	for svc.Tools.DrainLongToolTasks(ctx) {
 	}
 	if fixed := taskState(t, ctx, svc, uc, fix.TaskID); fixed != taskStateDone {
 		t.Fatalf("after the long-task worker's next turn: fix %s, want done", fixed)

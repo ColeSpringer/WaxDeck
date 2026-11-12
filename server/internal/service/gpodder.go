@@ -10,7 +10,6 @@ package service
 import (
 	"cmp"
 	"context"
-	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -30,32 +29,6 @@ import (
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
-// VerifyAppPasswordBasic authenticates the HTTP Basic scheme: username
-// plus an app password secret presented in the clear. The login
-// password never works here. It returns the account and the id of the
-// app password that matched, or nil on any failure (unknown user,
-// disabled account, no matching password), never distinguishing them;
-// the secret comparison is constant time per candidate.
-func (l *Library) VerifyAppPasswordBasic(ctx context.Context, username, password string) (*wdb.User, string, error) {
-	u, err := l.db.UserByUsername(ctx, username)
-	if err != nil {
-		if errors.Is(err, wdb.ErrNotFound) {
-			return nil, "", nil
-		}
-		return nil, "", &Error{Kind: KindInternal, Err: err}
-	}
-	if u.Disabled {
-		return nil, "", nil
-	}
-	for _, entry := range l.userAppSecrets(ctx, u.ID) {
-		if subtle.ConstantTimeCompare([]byte(entry.secret), []byte(password)) == 1 {
-			l.touchAppPassword(ctx, entry)
-			return u, entry.id, nil
-		}
-	}
-	return nil, "", nil
-}
-
 // Gpodder sessions: the sessionid cookie is an opaque token naming one
 // session row, opened by a login or by a request signed with Basic
 // credentials, which goes with the app password that opened it and with
@@ -69,18 +42,26 @@ const (
 	gpodderSessionsPerPassword = 20
 )
 
+// GpodderSession is the live session a cookie names, handed back to
+// GpodderSessionUsed. Only the service builds one: a zero or hand-built
+// GpodderSession is refused there as a session that does not exist.
+type GpodderSession struct {
+	AppPasswordID string
+	row           *wdb.GpodderSession
+}
+
 // GpodderLogin verifies Basic credentials against the account's app
 // passwords and opens a session for them, answering the account, the
 // cookie value and when the session ends (the cookie's own expiry, so
 // the two cannot drift); nil when the credentials do not verify, or
 // verify as an account other than the one the client named (compared
 // without case), which opens nothing.
-func (l *Library) GpodderLogin(ctx context.Context, account, username, secret string) (*wdb.User, string, time.Time, error) {
-	u, apID, err := l.VerifyAppPasswordBasic(ctx, username, secret)
+func (l *Podcasts) GpodderLogin(ctx context.Context, account, username, secret string) (*User, string, time.Time, error) {
+	u, apID, err := l.Identity.VerifyAppPasswordBasic(ctx, username, secret)
 	if err != nil || u == nil || !strings.EqualFold(u.Username, account) {
 		return nil, "", time.Time{}, err
 	}
-	token, expires, err := l.openGpodderSession(ctx, u, apID, false, false)
+	token, expires, err := l.openGpodderSession(ctx, u.row, apID, false, false)
 	if err != nil {
 		return nil, "", time.Time{}, err
 	}
@@ -91,11 +72,15 @@ func (l *Library) GpodderLogin(ctx context.Context, account, username, secret st
 // password signed with Basic credentials, answering its cookie and when it
 // ends, so a client that keeps cookies is not asked for the credentials
 // again. These are held apart from the logins.
-func (l *Library) GpodderOpenSession(ctx context.Context, u *wdb.User, appPasswordID string) (string, time.Time, error) {
-	return l.openGpodderSession(ctx, u, appPasswordID, true, false)
+func (l *Podcasts) GpodderOpenSession(ctx context.Context, u *User, appPasswordID string) (string, time.Time, error) {
+	row, err := u.held()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return l.openGpodderSession(ctx, row, appPasswordID, true, false)
 }
 
-func (l *Library) openGpodderSession(ctx context.Context, u *wdb.User, appPasswordID string, basic, presented bool) (string, time.Time, error) {
+func (l *Podcasts) openGpodderSession(ctx context.Context, u *wdb.User, appPasswordID string, basic, presented bool) (string, time.Time, error) {
 	token, hash, err := auth.NewOpaqueToken()
 	if err != nil {
 		return "", time.Time{}, &Error{Kind: KindInternal, Err: err}
@@ -114,13 +99,13 @@ func (l *Library) openGpodderSession(ctx context.Context, u *wdb.User, appPasswo
 // GpodderSessionUser resolves a session cookie to its account: nil when
 // the cookie names no live session, or its account can no longer sign
 // in.
-func (l *Library) GpodderSessionUser(ctx context.Context, token string) (*wdb.User, error) {
+func (l *Podcasts) GpodderSessionUser(ctx context.Context, token string) (*User, error) {
 	u, _, err := l.GpodderSession(ctx, token)
 	return u, err
 }
 
 // GpodderSession is GpodderSessionUser answering the session too.
-func (l *Library) GpodderSession(ctx context.Context, token string) (*wdb.User, *wdb.GpodderSession, error) {
+func (l *Podcasts) GpodderSession(ctx context.Context, token string) (*User, *GpodderSession, error) {
 	if token == "" {
 		return nil, nil, nil
 	}
@@ -144,7 +129,7 @@ func (l *Library) GpodderSession(ctx context.Context, token string) (*wdb.User, 
 	if u.Disabled || u.Pending {
 		return nil, nil, nil
 	}
-	return u, s, nil
+	return userOf(u), &GpodderSession{AppPasswordID: s.AppPasswordID, row: s}, nil
 }
 
 // GpodderSessionUsed records that a session's cookie authenticated a
@@ -154,7 +139,11 @@ func (l *Library) GpodderSession(ctx context.Context, token string) (*wdb.User, 
 // left is renewed: it answers a fresh cookie, presented from the start,
 // and ends, so a client that keeps syncing is never asked for its
 // password again. "" when there is nothing to renew.
-func (l *Library) GpodderSessionUsed(ctx context.Context, s *wdb.GpodderSession) (string, time.Time, error) {
+func (l *Podcasts) GpodderSessionUsed(ctx context.Context, session *GpodderSession) (string, time.Time, error) {
+	if session == nil || session.row == nil {
+		return "", time.Time{}, errNotFound("no such session")
+	}
+	s := session.row
 	if !s.Presented {
 		if err := l.db.MarkGpodderSessionPresented(ctx, s.ID); err != nil {
 			return "", time.Time{}, &Error{Kind: KindInternal, Err: err}
@@ -174,7 +163,7 @@ func (l *Library) GpodderSessionUsed(ctx context.Context, s *wdb.GpodderSession)
 }
 
 // GpodderLogout ends the session a cookie names.
-func (l *Library) GpodderLogout(ctx context.Context, token string) error {
+func (l *Podcasts) GpodderLogout(ctx context.Context, token string) error {
 	if token == "" {
 		return nil
 	}
@@ -186,7 +175,7 @@ func (l *Library) GpodderLogout(ctx context.Context, token string) error {
 
 // EndGpodderSessions ends every gpodder session of the account: a
 // disable, and signing the account out everywhere.
-func (l *Library) EndGpodderSessions(ctx context.Context, userID string) error {
+func (l *Podcasts) EndGpodderSessions(ctx context.Context, userID string) error {
 	if err := l.db.DeleteGpodderSessionsForUser(ctx, userID); err != nil {
 		return &Error{Kind: KindInternal, Err: err}
 	}
@@ -198,8 +187,8 @@ func (l *Library) EndGpodderSessions(ctx context.Context, userID string) error {
 // the show by, else the one the account subscribed it by, never the
 // catalog's, which can be another subscriber's own. A device calls a show
 // by what it was told from then on.
-func (l *Library) GpodderFeedURLs(ctx context.Context, uc *UserCtx, device string) ([]string, error) {
-	if !l.podcastsVisible(ctx, uc) {
+func (l *Podcasts) GpodderFeedURLs(ctx context.Context, uc *UserCtx, device string) ([]string, error) {
+	if !l.Grants.podcastsVisible(ctx, uc) {
 		return []string{}, nil
 	}
 	subs, err := l.db.SubscriptionURLs(ctx, uc.ID)
@@ -255,7 +244,7 @@ func (l *Library) GpodderFeedURLs(ctx context.Context, uc *UserCtx, device strin
 // each show, the removals it was told under those URLs, and whether
 // anybody registered it, without which it keeps no URLs and its reads
 // write nothing.
-func (l *Library) gpodderReader(ctx context.Context, uc *UserCtx, device string) (own map[string]string, removed map[string]int64, registered bool, err error) {
+func (l *Podcasts) gpodderReader(ctx context.Context, uc *UserCtx, device string) (own map[string]string, removed map[string]int64, registered bool, err error) {
 	if device == "" {
 		return nil, nil, false, nil
 	}
@@ -288,7 +277,7 @@ func gpodderEventURL(pod *model.Podcast, accountURL string) string {
 // gpodderDeviceURLs answers what one device calls each show, by show, and
 // the second marked on each it was told the show's removal under; nil for
 // no device.
-func (l *Library) gpodderDeviceURLs(ctx context.Context, uc *UserCtx, device string) (map[string]string, map[string]int64, error) {
+func (l *Podcasts) gpodderDeviceURLs(ctx context.Context, uc *UserCtx, device string) (map[string]string, map[string]int64, error) {
 	if device == "" {
 		return nil, nil, nil
 	}
@@ -308,7 +297,7 @@ func (l *Library) gpodderDeviceURLs(ctx context.Context, uc *UserCtx, device str
 
 // accountFeedURLs answers the URL the account subscribed each show it
 // follows by, by show.
-func (l *Library) accountFeedURLs(ctx context.Context, userID string) (map[string]string, error) {
+func (l *Podcasts) accountFeedURLs(ctx context.Context, userID string) (map[string]string, error) {
 	urls, err := l.db.SubscriptionURLs(ctx, userID)
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
@@ -418,7 +407,7 @@ type gpodderDeviceNames struct {
 	byShow map[string]string
 }
 
-func (l *Library) gpodderNames(ctx context.Context, uc *UserCtx) (*gpodderNames, error) {
+func (l *Podcasts) gpodderNames(ctx context.Context, uc *UserCtx) (*gpodderNames, error) {
 	pods, err := l.lib.Podcasts().List(ctx)
 	if err != nil {
 		return nil, classify(err)
@@ -458,7 +447,7 @@ func (n *gpodderNames) learn(pod *model.Podcast) {
 
 // device reads what a device calls each show, once per request; nil for
 // no device.
-func (n *gpodderNames) device(ctx context.Context, l *Library, uc *UserCtx, device string) (*gpodderDeviceNames, error) {
+func (n *gpodderNames) device(ctx context.Context, l *Podcasts, uc *UserCtx, device string) (*gpodderDeviceNames, error) {
 	if device == "" {
 		return nil, nil
 	}
@@ -526,7 +515,7 @@ type gpodderSettled struct {
 	show    string
 }
 
-func (l *Library) gpodderBatch(ctx context.Context, uc *UserCtx, device string) (*gpodderBatch, error) {
+func (l *Podcasts) gpodderBatch(ctx context.Context, uc *UserCtx, device string) (*gpodderBatch, error) {
 	names, err := l.gpodderNames(ctx, uc)
 	if err != nil {
 		return nil, err
@@ -538,7 +527,7 @@ func (l *Library) gpodderBatch(ctx context.Context, uc *UserCtx, device string) 
 	b := &gpodderBatch{uc: uc, device: device, names: names, own: own,
 		subscribed: make(map[string]bool, len(names.accountURLs)),
 		held:       map[string]bool{}, parked: map[string]bool{}, settled: map[string]gpodderSettled{},
-		visible: l.podcastsVisible(ctx, uc)}
+		visible: l.Grants.podcastsVisible(ctx, uc)}
 	for show := range names.accountURLs {
 		b.subscribed[show] = true
 	}
@@ -593,7 +582,7 @@ func (b *gpodderBatch) calls(show, feedURL string, account bool) {
 
 // rememberDeviceURL records the URL the batch's device sent for a show as
 // what it calls the show.
-func (l *Library) rememberDeviceURL(ctx context.Context, b *gpodderBatch, show, feedURL string) error {
+func (l *Podcasts) rememberDeviceURL(ctx context.Context, b *gpodderBatch, show, feedURL string) error {
 	if b.own == nil || b.own.byShow[show] == feedURL {
 		return nil
 	}
@@ -610,7 +599,7 @@ func (l *Library) rememberDeviceURL(ctx context.Context, b *gpodderBatch, show, 
 // forgetDeviceURL drops what the batch's device called a show it let go
 // of, so a show the account follows again by another URL is told to it by
 // that one.
-func (l *Library) forgetDeviceURL(ctx context.Context, b *gpodderBatch, show string) error {
+func (l *Podcasts) forgetDeviceURL(ctx context.Context, b *gpodderBatch, show string) error {
 	if b.own == nil || b.own.byShow[show] == "" {
 		return nil
 	}
@@ -628,7 +617,7 @@ func (l *Library) forgetDeviceURL(ctx context.Context, b *gpodderBatch, show str
 // that device's hold on the show; a remove is a deliberate unsubscribe for
 // the whole account, every hold on the show going with it. Each add's
 // outcome comes back by its URL.
-func (l *Library) GpodderApplyChanges(ctx context.Context, uc *UserCtx, device string, add, remove []string) (map[string]GpodderOutcome, error) {
+func (l *Podcasts) GpodderApplyChanges(ctx context.Context, uc *UserCtx, device string, add, remove []string) (map[string]GpodderOutcome, error) {
 	out := make(map[string]GpodderOutcome, len(add))
 	if err := requirePodcastManagement(uc); err != nil {
 		l.notifyGpodderRefusal(ctx, uc, device, err)
@@ -681,7 +670,7 @@ func (l *Library) GpodderApplyChanges(ctx context.Context, uc *UserCtx, device s
 // list removes nothing; nor does any list of an account that cannot see
 // the podcast library, or one naming a feed that parks, since which show
 // that feed is stays unknown until it lands and the next list decides.
-func (l *Library) GpodderReplaceDeviceList(ctx context.Context, uc *UserCtx, device string, urls []string) (GpodderListResult, error) {
+func (l *Podcasts) GpodderReplaceDeviceList(ctx context.Context, uc *UserCtx, device string, urls []string) (GpodderListResult, error) {
 	res := GpodderListResult{Outcomes: make(map[string]GpodderOutcome, len(urls))}
 	if err := requirePodcastManagement(uc); err != nil {
 		l.notifyGpodderRefusal(ctx, uc, device, err)
@@ -736,7 +725,7 @@ func (l *Library) GpodderReplaceDeviceList(ctx context.Context, uc *UserCtx, dev
 
 // dropPark withdraws every device's ask for one parked feed, under the
 // account lock a retry's landing reads the park under.
-func (l *Library) dropPark(ctx context.Context, userID, feedURL string) error {
+func (l *Podcasts) dropPark(ctx context.Context, userID, feedURL string) error {
 	defer l.lockMembership(userID)()
 	if err := l.db.DeleteGpodderPending(ctx, userID, feedURL); err != nil {
 		return &Error{Kind: KindInternal, Err: err}
@@ -752,7 +741,7 @@ func (l *Library) dropPark(ctx context.Context, userID, feedURL string) error {
 // the account and the device call the show by the URL they sent. A parked
 // feed is not fetched again: the device's ask joins the park, which keeps
 // its schedule.
-func (l *Library) gpodderAdd(ctx context.Context, b *gpodderBatch, feedURL string, now time.Time) (GpodderOutcome, string, error) {
+func (l *Podcasts) gpodderAdd(ctx context.Context, b *gpodderBatch, feedURL string, now time.Time) (GpodderOutcome, string, error) {
 	key := gpodderShowKey(feedURL)
 	if done, ok := b.settled[key]; ok {
 		return done.outcome, done.show, nil
@@ -837,7 +826,7 @@ func (l *Library) gpodderAdd(ctx context.Context, b *gpodderBatch, feedURL strin
 // joinGpodderPark adds the device's ask to a parked feed, under the
 // account lock a retry's landing reads the asks under; false when the
 // park is gone.
-func (l *Library) joinGpodderPark(ctx context.Context, userID, feedURL, device string, now time.Time) (bool, error) {
+func (l *Podcasts) joinGpodderPark(ctx context.Context, userID, feedURL, device string, now time.Time) (bool, error) {
 	if testHookMembership != nil {
 		testHookMembership("park")
 	}
@@ -860,7 +849,7 @@ var errParkWithdrawn = errors.New("no device asks for the parked feed any more")
 // made no later than the account last left the show went with that
 // leave, as asks for the show's known URLs did then. The caller holds the
 // account lock.
-func (l *Library) landingHolders(ctx context.Context, userID, show string, meta subChangeMeta) ([]string, error) {
+func (l *Podcasts) landingHolders(ctx context.Context, userID, show string, meta subChangeMeta) ([]string, error) {
 	if meta.park == "" {
 		return []string{meta.deviceID}, nil
 	}
@@ -902,7 +891,7 @@ func (l *Library) landingHolders(ctx context.Context, userID, show string, meta 
 // dropShowParks withdraws the account's parked asks for a show under any
 // URL it is known by: the catalog's in either spelling, the account's,
 // and its devices'. The caller holds the account lock.
-func (l *Library) dropShowParks(ctx context.Context, userID string, pod *model.Podcast, accountURL string) error {
+func (l *Podcasts) dropShowParks(ctx context.Context, userID string, pod *model.Podcast, accountURL string) error {
 	parks, err := l.db.GpodderParks(ctx, userID)
 	if err != nil {
 		return &Error{Kind: KindInternal, Err: err}
@@ -938,7 +927,7 @@ func (l *Library) dropShowParks(ctx context.Context, userID string, pod *model.P
 // keeping its downloads, and drops a park of the feed. An unknown feed is
 // a no-op: not subscribed is the state asked for. So is any feed for an
 // account that cannot see the podcast library, whose shows wait for it.
-func (l *Library) gpodderRemove(ctx context.Context, b *gpodderBatch, feedURL string) error {
+func (l *Podcasts) gpodderRemove(ctx context.Context, b *gpodderBatch, feedURL string) error {
 	if b.parked[feedURL] {
 		if err := l.dropPark(ctx, b.uc.ID, feedURL); err != nil {
 			return err
@@ -962,7 +951,7 @@ func (l *Library) gpodderRemove(ctx context.Context, b *gpodderBatch, feedURL st
 // releaseHold lets go of one device's hold on a show; with the last hold
 // gone the account leaves the show, as an unsubscribe would and keeping
 // its downloads.
-func (l *Library) releaseHold(ctx context.Context, uc *UserCtx, show, device string) (bool, error) {
+func (l *Podcasts) releaseHold(ctx context.Context, uc *UserCtx, show, device string) (bool, error) {
 	defer l.lockMembership(uc.ID)()
 	gone, feedURL, err := l.db.ReleaseGpodderHold(ctx, uc.ID, show, device)
 	if err != nil {
@@ -983,7 +972,7 @@ func (l *Library) releaseHold(ctx context.Context, uc *UserCtx, show, device str
 // parked for retries when it may; a refusal comes back with what the
 // inbox will say about it. The park is written under the account lock a
 // retry's landing reads the asks under.
-func (l *Library) gpodderAddFailed(ctx context.Context, uc *UserCtx, feedURL, device string, err error, now time.Time) (GpodderOutcome, *gpodderNotice, error) {
+func (l *Podcasts) gpodderAddFailed(ctx context.Context, uc *UserCtx, feedURL, device string, err error, now time.Time) (GpodderOutcome, *gpodderNotice, error) {
 	why, reason := subscribeFailure(err)
 	if !gpodderAddCanPass(err) {
 		// The inbox is the record of a refusal; the log keeps no line per
@@ -1023,7 +1012,7 @@ func (l *Library) gpodderAddFailed(ctx context.Context, uc *UserCtx, feedURL, de
 // notice to file for the first of them still standing, if any: an ask
 // made since stays parked, and an expiry counts from the first ask still
 // standing.
-func (l *Library) giveUpGpodderPark(ctx context.Context, uc *UserCtx, feedURL string, read []wdb.GpodderPending, now time.Time, expiry bool, n gpodderNotice) *gpodderNotice {
+func (l *Podcasts) giveUpGpodderPark(ctx context.Context, uc *UserCtx, feedURL string, read []wdb.GpodderPending, now time.Time, expiry bool, n gpodderNotice) *gpodderNotice {
 	defer l.lockMembership(uc.ID)()
 	asks, err := l.db.GpodderParkAsks(ctx, uc.ID, feedURL)
 	if err != nil {
@@ -1155,7 +1144,7 @@ const gpodderNoticesEach = 5
 // the month, whatever became of the inbox row that told it, which keeps a
 // device that lists the feed on every sync from repeating it; the
 // account's lock makes that check and the filing one step.
-func (l *Library) fileGpodderNotices(ctx context.Context, uc *UserCtx, notices []gpodderNotice) {
+func (l *Podcasts) fileGpodderNotices(ctx context.Context, uc *UserCtx, notices []gpodderNotice) {
 	if len(notices) == 0 {
 		return
 	}
@@ -1199,7 +1188,7 @@ func (l *Library) fileGpodderNotices(ctx context.Context, uc *UserCtx, notices [
 			named++
 		}
 		title, body := n.text(name(n.device))
-		l.EmitNotificationFor(ctx, "subscription-failed", title, body, "", []string{uc.ID})
+		l.Integrations.EmitNotificationFor(ctx, "subscription-failed", title, body, "", []string{uc.ID})
 		told = append(told, keys[i])
 	}
 	if len(rest) > 0 {
@@ -1213,7 +1202,7 @@ func (l *Library) fileGpodderNotices(ctx context.Context, uc *UserCtx, notices [
 		if len(rest) == 1 {
 			more = "1 more feed that was not added"
 		}
-		l.EmitNotificationFor(ctx, "subscription-failed", "Podcasts not added",
+		l.Integrations.EmitNotificationFor(ctx, "subscription-failed", "Podcasts not added",
 			fmt.Sprintf("%s asked to subscribe to %s.", asker, more), "", []string{uc.ID})
 	}
 	if err := l.db.NoteGpodderNotices(ctx, uc.ID, told, now.UnixNano()); err != nil {
@@ -1224,14 +1213,14 @@ func (l *Library) fileGpodderNotices(ctx context.Context, uc *UserCtx, notices [
 // notifyGpodderRefusal files, once per device, that the account may not
 // change its subscriptions, which every add and remove it sent would
 // otherwise each say.
-func (l *Library) notifyGpodderRefusal(ctx context.Context, uc *UserCtx, device string, err error) {
+func (l *Podcasts) notifyGpodderRefusal(ctx context.Context, uc *UserCtx, device string, err error) {
 	why, _ := subscribeFailure(err)
 	l.fileGpodderNotices(ctx, uc, []gpodderNotice{{device: device, why: why, changes: true}})
 }
 
 // gpodderDeviceName is how the inbox names a device: the caption it gave
 // itself, else its id.
-func (l *Library) gpodderDeviceName(ctx context.Context, uc *UserCtx, device string) string {
+func (l *Podcasts) gpodderDeviceName(ctx context.Context, uc *UserCtx, device string) string {
 	if devs, err := l.db.GpodderDevicesByUser(ctx, uc.ID); err == nil {
 		for _, d := range devs {
 			if d.DeviceID == device && d.Caption != "" {
@@ -1244,6 +1233,44 @@ func (l *Library) gpodderDeviceName(ctx context.Context, uc *UserCtx, device str
 
 // --- episode actions -------------------------------------------------------------
 
+// GpodderAction is one episode action as a gpodder client uploads and
+// downloads it.
+type GpodderAction struct {
+	PodcastURL  string
+	EpisodeURL  string
+	DeviceID    string
+	Action      string
+	ActionTS    string
+	StartedSec  *int64
+	PositionSec *int64
+	TotalSec    *int64
+	// GUID names the episode by its feed's guid. Only an action the
+	// service makes up carries one; none is stored.
+	GUID string
+}
+
+func gpodderActionRows(actions []GpodderAction) []wdb.GpodderAction {
+	rows := make([]wdb.GpodderAction, len(actions))
+	for i, a := range actions {
+		rows[i] = wdb.GpodderAction{
+			PodcastURL: a.PodcastURL, EpisodeURL: a.EpisodeURL, DeviceID: a.DeviceID, Action: a.Action, ActionTS: a.ActionTS,
+			StartedSec: a.StartedSec, PositionSec: a.PositionSec, TotalSec: a.TotalSec, GUID: a.GUID,
+		}
+	}
+	return rows
+}
+
+func gpodderActionsOf(rows []wdb.GpodderAction) []GpodderAction {
+	actions := make([]GpodderAction, len(rows))
+	for i, r := range rows {
+		actions[i] = GpodderAction{
+			PodcastURL: r.PodcastURL, EpisodeURL: r.EpisodeURL, DeviceID: r.DeviceID, Action: r.Action, ActionTS: r.ActionTS,
+			StartedSec: r.StartedSec, PositionSec: r.PositionSec, TotalSec: r.TotalSec, GUID: r.GUID,
+		}
+	}
+	return actions
+}
+
 // GpodderRecordActions stores one uploaded batch of episode actions,
 // stamped with the second it is stored in, and writes their play
 // positions through to WaxDeck's playback state, so a gpodder client's
@@ -1252,8 +1279,9 @@ func (l *Library) gpodderDeviceName(ctx context.Context, uc *UserCtx, device str
 // more: the write-through after it is best effort, uploads naming feeds
 // and episodes WaxDeck may not carry, and what it meets is the log's to
 // say, never the client's to retry.
-func (l *Library) GpodderRecordActions(ctx context.Context, uc *UserCtx, actions []wdb.GpodderAction) error {
+func (l *Podcasts) GpodderRecordActions(ctx context.Context, uc *UserCtx, uploaded []GpodderAction) error {
 	now := time.Now()
+	actions := gpodderActionRows(uploaded)
 	untimed := make([]bool, len(actions))
 	for i := range actions {
 		actions[i].UserID, actions[i].UploadedSec = uc.ID, now.Unix()
@@ -1285,8 +1313,8 @@ func (l *Library) GpodderRecordActions(ctx context.Context, uc *UserCtx, actions
 // land as live checkpoints. An account that cannot see the podcast library
 // moves none of its episodes; the log keeps the actions for the grant's
 // return.
-func (l *Library) gpodderWriteThrough(ctx context.Context, uc *UserCtx, actions []wdb.GpodderAction, ids []int64, untimed []bool) error {
-	if !l.podcastsVisible(ctx, uc) {
+func (l *Podcasts) gpodderWriteThrough(ctx context.Context, uc *UserCtx, actions []wdb.GpodderAction, ids []int64, untimed []bool) error {
+	if !l.Grants.podcastsVisible(ctx, uc) {
 		return nil
 	}
 	var names *gpodderNames
@@ -1318,7 +1346,7 @@ func (l *Library) gpodderWriteThrough(ctx context.Context, uc *UserCtx, actions 
 // the checkpoint an offline replay, so the per-medium reconciliation
 // applies; without one it lands as a live checkpoint. played and finished
 // derive from the catalog's own episode duration.
-func (l *Library) gpodderApplyPlay(ctx context.Context, uc *UserCtx, names *gpodderNames, episodes map[model.PID]map[string]*model.Episode, a wdb.GpodderAction, id int64) error {
+func (l *Podcasts) gpodderApplyPlay(ctx context.Context, uc *UserCtx, names *gpodderNames, episodes map[model.PID]map[string]*model.Episode, a wdb.GpodderAction, id int64) error {
 	device, err := names.device(ctx, l, uc, a.DeviceID)
 	if err != nil {
 		return err
@@ -1354,7 +1382,7 @@ func (l *Library) gpodderApplyPlay(ctx context.Context, uc *UserCtx, names *gpod
 	// success there as it is everywhere else. The change is the stored
 	// action's, so the gpodder surface does not say it again as the
 	// server's own while the log keeps that action.
-	_, err = l.checkpoint(ctx, uc, apiPID(PrefixEpisode, ep.PID), *a.PositionSec*1000, recordedAt, playChange(id))
+	_, err = l.Playback.checkpoint(ctx, uc, apiPID(PrefixEpisode, ep.PID), *a.PositionSec*1000, recordedAt, playChange(id))
 	return err
 }
 
@@ -1397,13 +1425,13 @@ const GpodderCursorLag = 5 * time.Second
 // gpodderCursor is the cursor a read of the account starting now answers:
 // the clock less the lag, and before the oldest write still in flight,
 // however long that write waits for the writer.
-func (l *Library) gpodderCursor(userID string) (cursor, clock int64) {
+func (l *Podcasts) gpodderCursor(userID string) (cursor, clock int64) {
 	return l.gpodderCursorAt(userID, time.Now())
 }
 
 // gpodderCursorAt is gpodderCursor for a read that started at at, clock
 // its answer without the writes in flight.
-func (l *Library) gpodderCursorAt(userID string, at time.Time) (cursor, clock int64) {
+func (l *Podcasts) gpodderCursorAt(userID string, at time.Time) (cursor, clock int64) {
 	clock = at.Add(-GpodderCursorLag).Unix()
 	cursor = clock
 	if sec, ok := l.db.GpodderWriteInFlight(userID); ok {
@@ -1423,7 +1451,7 @@ func (l *Library) gpodderCursorAt(userID string, at time.Time) (cursor, clock in
 // than the cursor of a read starting when the upload arrived. appPassword
 // is the app password the request signed in with, directly or through
 // the session its cookie names; "" keys the account's other reads.
-func (l *Library) GpodderEpisodesUploadCursor(uc *UserCtx, appPassword string, arrived time.Time) int64 {
+func (l *Podcasts) GpodderEpisodesUploadCursor(uc *UserCtx, appPassword string, arrived time.Time) int64 {
 	cursor, _ := l.gpodderCursorAt(uc.ID, arrived)
 	if read, ok := l.gpodderDownloads.lowest(gpodderReaderKey(uc, appPassword), time.Now()); ok {
 		cursor = min(cursor, read)
@@ -1519,10 +1547,10 @@ func (h *gpodderDownloads) expire(key string, at time.Time) []gpodderAnswer {
 // is answered sinceSec back, so it skips nothing once the grant returns.
 // The answer is remembered for the uploads of the same app password
 // (GpodderEpisodesUploadCursor).
-func (l *Library) GpodderActionsSince(ctx context.Context, uc *UserCtx, appPassword string, sinceSec int64, podcastURL, deviceID string) ([]wdb.GpodderAction, int64, error) {
+func (l *Podcasts) GpodderActionsSince(ctx context.Context, uc *UserCtx, appPassword string, sinceSec int64, podcastURL, deviceID string) ([]GpodderAction, int64, error) {
 	cursor, _ := l.gpodderCursor(uc.ID)
 	reader := gpodderReaderKey(uc, appPassword)
-	if !l.podcastsVisible(ctx, uc) {
+	if !l.Grants.podcastsVisible(ctx, uc) {
 		l.gpodderDownloads.note(reader, sinceSec, time.Now())
 		return nil, sinceSec, nil
 	}
@@ -1545,7 +1573,7 @@ func (l *Library) GpodderActionsSince(ctx context.Context, uc *UserCtx, appPassw
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].UploadedSec < rows[j].UploadedSec })
 	cursor = max(cursor, 0)
 	l.gpodderDownloads.note(reader, cursor, time.Now())
-	return rows, cursor, nil
+	return gpodderActionsOf(rows), cursor, nil
 }
 
 // gpodderFirstPartyPlays reads the positions the server saw move after
@@ -1558,7 +1586,7 @@ func (l *Library) GpodderActionsSince(ctx context.Context, uc *UserCtx, appPassw
 // WaxDeck's own surfaces make is said.
 // through is nonzero when the read stopped short of the present, the last
 // second it covers whole.
-func (l *Library) gpodderFirstPartyPlays(ctx context.Context, uc *UserCtx, sinceSec int64, podcastURL string, paging gpodderPaging) ([]wdb.GpodderAction, int64, error) {
+func (l *Podcasts) gpodderFirstPartyPlays(ctx context.Context, uc *UserCtx, sinceSec int64, podcastURL string, paging gpodderPaging) ([]wdb.GpodderAction, int64, error) {
 	r := &gpodderPlayReader{l: l, uc: uc, shows: map[model.PID]gpodderPlayShow{}}
 	if podcastURL != "" {
 		names, err := l.gpodderNames(ctx, uc)
@@ -1605,7 +1633,7 @@ func (l *Library) gpodderFirstPartyPlays(ctx context.Context, uc *UserCtx, since
 // gpodderPlayReader turns pages of stamps into first-party play actions,
 // keeping what it looked up across the pages of one download.
 type gpodderPlayReader struct {
-	l        *Library
+	l        *Podcasts
 	uc       *UserCtx
 	wantShow model.PID
 	// followed is the account's URL for each show it follows.
@@ -1757,7 +1785,7 @@ func gpodderPlayPosition(durationMS int64, st *model.PlayState) (position, total
 // the least recently seen that holds nothing; when all of them hold
 // something, of the least recently seen of all, whose shows stay followed,
 // and the inbox says which device went (the first few in a day by name).
-func (l *Library) GpodderUpsertDevice(ctx context.Context, uc *UserCtx, deviceID, caption, devType string) error {
+func (l *Podcasts) GpodderUpsertDevice(ctx context.Context, uc *UserCtx, deviceID, caption, devType string) error {
 	if len(deviceID) > GpodderMaxDeviceIDLen {
 		return errInvalid(fmt.Sprintf("a device id is at most %d bytes", GpodderMaxDeviceIDLen))
 	}
@@ -1787,7 +1815,7 @@ func (l *Library) GpodderUpsertDevice(ctx context.Context, uc *UserCtx, deviceID
 // something made room for another: by name for the first few in a day,
 // then once that more are going, so a client minting a device per launch
 // files a handful of rows rather than one each.
-func (l *Library) noteGpodderEviction(ctx context.Context, uc *UserCtx, newcomer string, evicted *wdb.GpodderEviction) {
+func (l *Podcasts) noteGpodderEviction(ctx context.Context, uc *UserCtx, newcomer string, evicted *wdb.GpodderEviction) {
 	defer l.lockMembership(uc.ID)()
 	filed, err := l.db.CountNotificationsSince(ctx, uc.ID, "gpodder-device-removed",
 		time.Now().Add(-gpodderEvictionWindow).UnixNano())
@@ -1798,11 +1826,11 @@ func (l *Library) noteGpodderEviction(ctx context.Context, uc *UserCtx, newcomer
 	switch {
 	case filed < gpodderEvictionsNamed:
 		removed := cmp.Or(evicted.Caption, evicted.DeviceID)
-		l.EmitNotificationFor(ctx, "gpodder-device-removed", "Podcast app removed: "+removed, fmt.Sprintf(
+		l.Integrations.EmitNotificationFor(ctx, "gpodder-device-removed", "Podcast app removed: "+removed, fmt.Sprintf(
 			"To make room for %s, %s, the least recently seen of this account's %d podcast app devices, was removed. What it kept followed stays followed.",
 			newcomer, removed, gpodderMaxDevices), "", []string{uc.ID})
 	case filed == gpodderEvictionsNamed:
-		l.EmitNotificationFor(ctx, "gpodder-device-removed", "Podcast apps removed", fmt.Sprintf(
+		l.Integrations.EmitNotificationFor(ctx, "gpodder-device-removed", "Podcast apps removed", fmt.Sprintf(
 			"More of this account's %d podcast app devices are being removed, each to make room for a new one; what they kept followed stays followed. A day's first %d are named here, the rest are not.",
 			gpodderMaxDevices, gpodderEvictionsNamed), "", []string{uc.ID})
 	}
@@ -1811,29 +1839,50 @@ func (l *Library) noteGpodderEviction(ctx context.Context, uc *UserCtx, newcomer
 // GpodderSeeDevice stamps a registered device as seen, for a device that
 // reads without uploading: least recently seen is what decides which
 // device makes room for a new one.
-func (l *Library) GpodderSeeDevice(ctx context.Context, uc *UserCtx, deviceID string) {
+func (l *Podcasts) GpodderSeeDevice(ctx context.Context, uc *UserCtx, deviceID string) {
 	if err := l.db.SeeGpodderDevice(ctx, uc.ID, deviceID, time.Now().UnixNano()); err != nil {
 		l.log.Warn("stamping a gpodder device seen", "err", err)
 	}
 }
 
+// GpodderDevice is one device an account registered.
+type GpodderDevice struct {
+	DeviceID string
+	Caption  string
+	Type     string
+}
+
 // GpodderDevices lists the user's devices.
-func (l *Library) GpodderDevices(ctx context.Context, uc *UserCtx) ([]wdb.GpodderDevice, error) {
-	devs, err := l.db.GpodderDevicesByUser(ctx, uc.ID)
+func (l *Podcasts) GpodderDevices(ctx context.Context, uc *UserCtx) ([]GpodderDevice, error) {
+	rows, err := l.db.GpodderDevicesByUser(ctx, uc.ID)
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
+	}
+	devs := make([]GpodderDevice, len(rows))
+	for i, d := range rows {
+		devs[i] = GpodderDevice{DeviceID: d.DeviceID, Caption: d.Caption, Type: d.Type}
 	}
 	return devs, nil
 }
 
 // GpodderDeviceExists reports whether the user has registered the
 // device (explicitly or through an upload's auto-create).
-func (l *Library) GpodderDeviceExists(ctx context.Context, uc *UserCtx, deviceID string) (bool, error) {
+func (l *Podcasts) GpodderDeviceExists(ctx context.Context, uc *UserCtx, deviceID string) (bool, error) {
 	ok, err := l.db.GpodderDeviceExists(ctx, uc.ID, deviceID)
 	if err != nil {
 		return false, &Error{Kind: KindInternal, Err: err}
 	}
 	return ok, nil
+}
+
+// GpodderSubEvent is one change a subscription delta says: ID and TsSec
+// are the change log's, FeedURL the URL the device is told.
+type GpodderSubEvent struct {
+	ID      int64
+	ShowPID string
+	FeedURL string
+	Action  string
+	TsSec   int64
 }
 
 // GpodderSubChangesSince lists the user's subscription changes strictly
@@ -1847,9 +1896,9 @@ func (l *Library) GpodderDeviceExists(ctx context.Context, uc *UserCtx, deviceID
 // in that answer's lag, whatever the log says of the show by then. An
 // account that cannot see the podcast library reads none and is answered
 // sinceSec back, so it skips nothing once the grant returns.
-func (l *Library) GpodderSubChangesSince(ctx context.Context, uc *UserCtx, device string, sinceSec int64) ([]wdb.GpodderSubEvent, int64, error) {
+func (l *Podcasts) GpodderSubChangesSince(ctx context.Context, uc *UserCtx, device string, sinceSec int64) ([]GpodderSubEvent, int64, error) {
 	cursor, _ := l.gpodderCursor(uc.ID)
-	if !l.podcastsVisible(ctx, uc) {
+	if !l.Grants.podcastsVisible(ctx, uc) {
 		return nil, sinceSec, nil
 	}
 	cursor = max(cursor, 0)
@@ -1875,7 +1924,7 @@ func (l *Library) GpodderSubChangesSince(ctx context.Context, uc *UserCtx, devic
 		return nil, 0, &Error{Kind: KindInternal, Err: err}
 	}
 	if len(evs) == 0 {
-		return evs, cursor, nil
+		return nil, cursor, nil
 	}
 	account, err := l.accountFeedURLs(ctx, uc.ID)
 	if err != nil {
@@ -1909,10 +1958,10 @@ func (l *Library) GpodderSubChangesSince(ctx context.Context, uc *UserCtx, devic
 			say[u] = i
 		}
 	}
-	out := make([]wdb.GpodderSubEvent, 0, len(evs))
+	out := make([]GpodderSubEvent, 0, len(evs))
 	for i, ev := range evs {
 		if say[ev.FeedURL] == i {
-			out = append(out, ev)
+			out = append(out, GpodderSubEvent{ID: ev.ID, ShowPID: ev.ShowPID, FeedURL: ev.FeedURL, Action: ev.Action, TsSec: ev.TsSec})
 		}
 	}
 	if !registered {
@@ -1933,7 +1982,7 @@ func (l *Library) GpodderSubChangesSince(ctx context.Context, uc *UserCtx, devic
 // GpodderRememberRead keeps the cursor a device's subscription delta was
 // answered, which GpodderUploadCursor gives back. A device nobody registered
 // keeps none.
-func (l *Library) GpodderRememberRead(ctx context.Context, uc *UserCtx, deviceID string, cursorSec int64) error {
+func (l *Podcasts) GpodderRememberRead(ctx context.Context, uc *UserCtx, deviceID string, cursorSec int64) error {
 	if err := l.db.SetGpodderDeviceCursor(ctx, uc.ID, deviceID, cursorSec); err != nil {
 		return &Error{Kind: KindInternal, Err: err}
 	}
@@ -1946,7 +1995,7 @@ func (l *Library) GpodderRememberRead(ctx context.Context, uc *UserCtx, deviceID
 // what the device has read: the cursor its last delta answered (0 before
 // it has read), no later than that of a read starting when the upload
 // arrived.
-func (l *Library) GpodderUploadCursor(ctx context.Context, uc *UserCtx, deviceID string, arrived time.Time) (int64, error) {
+func (l *Podcasts) GpodderUploadCursor(ctx context.Context, uc *UserCtx, deviceID string, arrived time.Time) (int64, error) {
 	read, err := l.db.GpodderDeviceCursor(ctx, uc.ID, deviceID)
 	if err != nil {
 		return 0, &Error{Kind: KindInternal, Err: err}

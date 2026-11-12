@@ -37,7 +37,7 @@ func coverPNG(t *testing.T, shade uint8) []byte {
 // order, which is the order a playlist built from them holds.
 func fixtureItemPIDs(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) []string {
 	t.Helper()
-	page, err := svc.Items(ctx, uc, ItemFilter{}, "", 50)
+	page, err := svc.Reads.Items(ctx, uc, ItemFilter{}, "", 50)
 	if err != nil {
 		t.Fatalf("listing items: %v", err)
 	}
@@ -57,7 +57,7 @@ func giveCovers(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, pi
 	t.Helper()
 	for i, apiPID := range pids {
 		raw := covers[i%len(covers)]
-		it, err := svc.getVisibleItem(ctx, uc, apiPID)
+		it, err := svc.Grants.getVisibleItem(ctx, uc, apiPID)
 		if err != nil {
 			t.Fatalf("resolving %s: %v", apiPID, err)
 		}
@@ -73,7 +73,7 @@ func giveCovers(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, pi
 // returns its API pid.
 func playlistWith(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, name string, pids []string) string {
 	t.Helper()
-	pl, err := svc.CreatePlaylist(ctx, uc, PlaylistCreate{
+	pl, err := svc.Playlists.CreatePlaylist(ctx, uc, PlaylistCreate{
 		Name: name, Kind: "static", Visibility: "private", ItemPIDs: pids,
 	})
 	if err != nil {
@@ -86,7 +86,7 @@ func playlistWith(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, 
 // path a client uses.
 func playlistArt(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, plPID string) ArtBlob {
 	t.Helper()
-	blob, err := svc.Art(ctx, uc, plPID, "", 0)
+	blob, err := svc.Reads.Art(ctx, uc, plPID, "", 0)
 	if err != nil {
 		t.Fatalf("reading playlist art: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestPlaylistMosaicFromDistinctCovers(t *testing.T) {
 			format, cfg.Width, cfg.Height, coverMosaicSize)
 	}
 	// The playlist reports the cover, so a grid knows to fetch it.
-	got, err := svc.PlaylistByPID(ctx, uc, plPID)
+	got, err := svc.Playlists.ByPID(ctx, uc, plPID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestPlaylistCoverFollowsMembership(t *testing.T) {
 	before := playlistArt(t, ctx, svc, uc, plPID)
 
 	// A read that changes nothing leaves the cover alone.
-	if _, err := svc.PlaylistItems(ctx, uc, plPID, "", 50); err != nil {
+	if _, err := svc.Playlists.Items(ctx, uc, plPID, "", 50); err != nil {
 		t.Fatal(err)
 	}
 	steady := playlistArt(t, ctx, svc, uc, plPID)
@@ -168,7 +168,7 @@ func TestPlaylistCoverFollowsMembership(t *testing.T) {
 	}
 
 	// A fourth distinct cover crosses the threshold and tiles.
-	if err := svc.AddPlaylistItems(ctx, uc, plPID, pids[3:4]); err != nil {
+	if err := svc.Playlists.AddPlaylistItems(ctx, uc, plPID, pids[3:4]); err != nil {
 		t.Fatal(err)
 	}
 	after := playlistArt(t, ctx, svc, uc, plPID)
@@ -197,7 +197,7 @@ func TestPlaylistCustomCoverWinsAndClearsBack(t *testing.T) {
 	mosaic := playlistArt(t, ctx, svc, uc, plPID)
 
 	custom := coverPNG(t, 200)
-	if _, err := svc.SetEntityArtwork(ctx, uc, "playlist", plPID, "", custom, false); err != nil {
+	if _, err := svc.Editor.SetEntityArtwork(ctx, uc, "playlist", plPID, "", custom, false); err != nil {
 		t.Fatalf("uploading a playlist cover: %v", err)
 	}
 	if got := playlistArt(t, ctx, svc, uc, plPID); !bytes.Equal(got.Bytes, custom) {
@@ -205,7 +205,7 @@ func TestPlaylistCustomCoverWinsAndClearsBack(t *testing.T) {
 	}
 
 	// A membership change must not take the owner's cover away.
-	if err := svc.RemovePlaylistItemAt(ctx, uc, plPID, len(pids)-1, ""); err != nil {
+	if err := svc.Playlists.RemovePlaylistItemAt(ctx, uc, plPID, len(pids)-1, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := playlistArt(t, ctx, svc, uc, plPID); !bytes.Equal(got.Bytes, custom) {
@@ -213,12 +213,12 @@ func TestPlaylistCustomCoverWinsAndClearsBack(t *testing.T) {
 	}
 	// Put the fourth member back, so the regenerated cover is the mosaic
 	// again rather than the single-cover fallback three members give.
-	if err := svc.AddPlaylistItems(ctx, uc, plPID, pids[3:4]); err != nil {
+	if err := svc.Playlists.AddPlaylistItems(ctx, uc, plPID, pids[3:4]); err != nil {
 		t.Fatal(err)
 	}
 
 	// Clearing hands the slot back to the generated cover.
-	if err := svc.ClearEntityArtwork(ctx, uc, "playlist", plPID, ""); err != nil {
+	if err := svc.Editor.ClearEntityArtwork(ctx, uc, "playlist", plPID, ""); err != nil {
 		t.Fatalf("clearing the playlist cover: %v", err)
 	}
 	back := playlistArt(t, ctx, svc, uc, plPID)
@@ -248,31 +248,31 @@ func TestPlaylistArtHonorsVisibility(t *testing.T) {
 	plPID := playlistWith(t, ctx, svc, uc, "Private", pids)
 	playlistArt(t, ctx, svc, uc, plPID)
 
-	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "listener", Password: "correct-horse"})
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{Username: "listener", Password: "correct-horse"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := svc.UserCtx(ctx, acct.User)
+	other, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Art(ctx, other, plPID, "", 0); KindOf(err) != KindNotFound {
+	if _, err := svc.Reads.Art(ctx, other, plPID, "", 0); KindOf(err) != KindNotFound {
 		t.Fatalf("another user's read of a private playlist's cover = %v, want not-found", err)
 	}
 	// Editing it is refused too, not merely hidden.
-	if _, err := svc.SetEntityArtwork(ctx, other, "playlist", plPID, "", coverPNG(t, 10), false); err == nil {
+	if _, err := svc.Editor.SetEntityArtwork(ctx, other, "playlist", plPID, "", coverPNG(t, 10), false); err == nil {
 		t.Error("a non-owner uploaded a cover onto someone else's playlist")
 	}
 
 	// Sharing it opens the read, and still not the write.
 	shared := "shared"
-	if _, err := svc.UpdatePlaylist(ctx, uc, plPID, PlaylistUpdate{Visibility: &shared}); err != nil {
+	if _, err := svc.Playlists.UpdatePlaylist(ctx, uc, plPID, PlaylistUpdate{Visibility: &shared}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Art(ctx, other, plPID, "", 0); err != nil {
+	if _, err := svc.Reads.Art(ctx, other, plPID, "", 0); err != nil {
 		t.Errorf("a shared playlist's cover should read for everyone: %v", err)
 	}
-	if err := svc.ClearEntityArtwork(ctx, other, "playlist", plPID, ""); KindOf(err) != KindForbidden {
+	if err := svc.Editor.ClearEntityArtwork(ctx, other, "playlist", plPID, ""); KindOf(err) != KindForbidden {
 		t.Errorf("a non-owner clearing a shared playlist's cover = %v, want forbidden", err)
 	}
 }
@@ -294,7 +294,7 @@ func TestPlaylistDeleteDropsCover(t *testing.T) {
 	if _, err := svc.db.PlaylistCoverFor(ctx, string(catalogPID)); err != nil {
 		t.Fatalf("no cover state recorded before the delete: %v", err)
 	}
-	if err := svc.DeletePlaylist(ctx, uc, plPID); err != nil {
+	if err := svc.Playlists.DeletePlaylist(ctx, uc, plPID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.db.PlaylistCoverFor(ctx, string(catalogPID)); !errors.Is(err, wdb.ErrNotFound) {
@@ -316,17 +316,17 @@ func TestPlaylistWithoutCoveredMembers(t *testing.T) {
 	ctx, svc, uc := newCatalogFixture(t)
 	pids := fixtureItemPIDs(t, ctx, svc, uc)[:2]
 	plPID := playlistWith(t, ctx, svc, uc, "Bare", pids)
-	if _, err := svc.PlaylistItems(ctx, uc, plPID, "", 50); err != nil {
+	if _, err := svc.Playlists.Items(ctx, uc, plPID, "", 50); err != nil {
 		t.Fatal(err)
 	}
-	got, err := svc.PlaylistByPID(ctx, uc, plPID)
+	got, err := svc.Playlists.ByPID(ctx, uc, plPID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.HasArt {
 		t.Error("hasArt = true for a playlist whose members carry no art")
 	}
-	if _, err := svc.Art(ctx, uc, plPID, "", 0); err == nil {
+	if _, err := svc.Reads.Art(ctx, uc, plPID, "", 0); err == nil {
 		t.Error("the art endpoint answered for a playlist with no cover")
 	}
 
@@ -335,7 +335,7 @@ func TestPlaylistWithoutCoveredMembers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no cover state recorded for an art-less playlist: %v", err)
 	}
-	if _, err := svc.PlaylistItems(ctx, uc, plPID, "", 50); err != nil {
+	if _, err := svc.Playlists.Items(ctx, uc, plPID, "", 50); err != nil {
 		t.Fatal(err)
 	}
 	second, err := svc.db.PlaylistCoverFor(ctx, string(catalogPID))
@@ -363,10 +363,10 @@ func TestPlaylistCoverFollowsMemberArtwork(t *testing.T) {
 
 	// Swap one member's cover through the editor, which is what bumps the
 	// epoch. The membership is untouched.
-	if _, err := svc.SetItemArtwork(ctx, uc, pids[0], "", coverPNG(t, 250), false, false); err != nil {
+	if _, err := svc.Editor.SetItemArtwork(ctx, uc, pids[0], "", coverPNG(t, 250), false, false); err != nil {
 		t.Fatalf("replacing a member cover: %v", err)
 	}
-	if _, err := svc.PlaylistItems(ctx, uc, plPID, "", 50); err != nil {
+	if _, err := svc.Playlists.Items(ctx, uc, plPID, "", 50); err != nil {
 		t.Fatal(err)
 	}
 	after := playlistArt(t, ctx, svc, uc, plPID)
@@ -381,7 +381,7 @@ func TestPlaylistCoverFollowsMemberArtwork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.PlaylistItems(ctx, uc, plPID, "", 50); err != nil {
+	if _, err := svc.Playlists.Items(ctx, uc, plPID, "", 50); err != nil {
 		t.Fatal(err)
 	}
 	second, err := svc.db.PlaylistCoverFor(ctx, string(catalogPID))
@@ -405,13 +405,13 @@ func TestPlaylistCustomCoverIgnoresMemberArtwork(t *testing.T) {
 	plPID := playlistWith(t, ctx, svc, uc, "Mine only", pids)
 
 	custom := coverPNG(t, 200)
-	if _, err := svc.SetEntityArtwork(ctx, uc, "playlist", plPID, "", custom, false); err != nil {
+	if _, err := svc.Editor.SetEntityArtwork(ctx, uc, "playlist", plPID, "", custom, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SetItemArtwork(ctx, uc, pids[0], "", coverPNG(t, 250), false, false); err != nil {
+	if _, err := svc.Editor.SetItemArtwork(ctx, uc, pids[0], "", coverPNG(t, 250), false, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.PlaylistItems(ctx, uc, plPID, "", 50); err != nil {
+	if _, err := svc.Playlists.Items(ctx, uc, plPID, "", 50); err != nil {
 		t.Fatal(err)
 	}
 	if got := playlistArt(t, ctx, svc, uc, plPID); !bytes.Equal(got.Bytes, custom) {
@@ -435,13 +435,13 @@ func TestSmartPlaylistRuleChangeRefreshesCover(t *testing.T) {
 		Root:  RuleNode{Type: "condition", Field: "mediaType", Op: "is", Value: "music"},
 		Sorts: []RuleSort{{Field: "title"}},
 	}
-	pl, err := svc.CreatePlaylist(ctx, uc, PlaylistCreate{
+	pl, err := svc.Playlists.CreatePlaylist(ctx, uc, PlaylistCreate{
 		Name: "Smart cover", Kind: "smart", Visibility: "private", Rule: &wide,
 	})
 	if err != nil {
 		t.Fatalf("creating a smart playlist: %v", err)
 	}
-	if _, err := svc.PlaylistItems(ctx, uc, pl.PID, "", 50); err != nil {
+	if _, err := svc.Playlists.Items(ctx, uc, pl.PID, "", 50); err != nil {
 		t.Fatal(err)
 	}
 	before := playlistArt(t, ctx, svc, uc, pl.PID)
@@ -452,7 +452,7 @@ func TestSmartPlaylistRuleChangeRefreshesCover(t *testing.T) {
 		Root:  RuleNode{Type: "condition", Field: "artist", Op: "is", Value: "Brass Nine"},
 		Sorts: []RuleSort{{Field: "title"}},
 	}
-	got, err := svc.UpdatePlaylist(ctx, uc, pl.PID, PlaylistUpdate{Rule: &narrow})
+	got, err := svc.Playlists.UpdatePlaylist(ctx, uc, pl.PID, PlaylistUpdate{Rule: &narrow})
 	if err != nil {
 		t.Fatalf("replacing the rule: %v", err)
 	}
@@ -506,7 +506,7 @@ func TestPlaylistCoverSkipsUnusableMemberArt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no cover state recorded: %v", err)
 	}
-	if _, err := svc.PlaylistItems(ctx, uc, plPID, "", 50); err != nil {
+	if _, err := svc.Playlists.Items(ctx, uc, plPID, "", 50); err != nil {
 		t.Fatal(err)
 	}
 	second, err := svc.db.PlaylistCoverFor(ctx, string(catalogPID))

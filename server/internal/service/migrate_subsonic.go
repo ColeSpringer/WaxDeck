@@ -383,10 +383,10 @@ type subsonicSongState struct {
 // one getAlbum per album, O(albums), plus one per starred album and up
 // to one per album of a starred artist, with progress and lease renewal
 // as the walk goes.
-func (l *Library) runSubsonicImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, secret string) (migrationSummary, error) {
+func (l *Migrate) runSubsonicImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, secret string) (migrationSummary, error) {
 	sum := migrationSummary{Source: p.Source, DryRun: p.DryRun, Samples: migrationSamples{Unmatched: []string{}}}
 	client := newSubsonicClient(p.ServerURL, p.Username, secret)
-	prog := newToolProgress(l, t)
+	prog := newToolProgress(l.Tools, t)
 
 	cache := newAlbumSongCache(client)
 
@@ -523,7 +523,7 @@ func (l *Library) runSubsonicImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 			// user set here more recently.
 			starredAt := recordedTime(parseSubsonicTime(s.Starred))
 			ok, err := write(func() error {
-				_, err := l.SetStar(ctx, uc, pid, true, starredAt)
+				_, err := l.Playback.SetStar(ctx, uc, pid, true, starredAt)
 				return err
 			})
 			if err != nil {
@@ -540,7 +540,7 @@ func (l *Library) runSubsonicImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 			}
 			scaled := r * 20
 			ok, err := write(func() error {
-				_, err := l.SetRating(ctx, uc, pid, &scaled, nil)
+				_, err := l.Playback.SetRating(ctx, uc, pid, &scaled, nil)
 				return err
 			})
 			if err != nil {
@@ -571,7 +571,7 @@ func (l *Library) runSubsonicImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 			ok, err := write(func() error {
 				// A live replay (no recorded time) always applies, so
 				// there is no skipped case to account for here.
-				_, err := l.Checkpoint(ctx, uc, pid, st.bookmarkMS, nil)
+				_, err := l.Playback.Checkpoint(ctx, uc, pid, st.bookmarkMS, nil)
 				return err
 			})
 			if err != nil {
@@ -597,7 +597,7 @@ func (l *Library) runSubsonicImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 // which the resolve ladder already matches, and the matched item's own
 // entity handles name the album or artist to star. The extra requests
 // are per starred group, not per library item.
-func (l *Library) importSubsonicEntityStars(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, client *subsonicClient, prog *toolProgress, starred subsonicStarred, sum *migrationSummary, cache *albumSongCache) error {
+func (l *Migrate) importSubsonicEntityStars(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, client *subsonicClient, prog *toolProgress, starred subsonicStarred, sum *migrationSummary, cache *albumSongCache) error {
 	// resolveMember walks candidate source albums, and every song
 	// within one, until the resolve ladder matches a local item for sure
 	// (see resolveGroupMember), which is the item whose entity handles
@@ -668,7 +668,7 @@ func (l *Library) importSubsonicEntityStars(ctx context.Context, t *wdb.ToolTask
 			*count++
 			return nil
 		}
-		if _, err := l.SetEntityStar(ctx, uc, apiPID(prefix, pid), true, recordedTime(parseSubsonicTime(at))); err != nil {
+		if _, err := l.Identity.SetEntityStar(ctx, uc, apiPID(prefix, pid), true, recordedTime(parseSubsonicTime(at))); err != nil {
 			if migrateWriteSkippable(err) {
 				l.log.Warn("migration entity star skipped", "task", t.ID, "entity", label, "err", err)
 				return nil

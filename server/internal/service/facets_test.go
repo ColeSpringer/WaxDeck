@@ -36,7 +36,7 @@ func settleCatalogFeed(t *testing.T, svc *Library) int64 {
 // facetsOf reads every bucket of a dimension in one page.
 func facetsOf(t *testing.T, f genreFixture, dimension string) []FacetBucket {
 	t.Helper()
-	page, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: dimension, Limit: 500})
+	page, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: dimension, Limit: 500})
 	if err != nil {
 		t.Fatalf("enumerating %s: %v", dimension, err)
 	}
@@ -71,7 +71,7 @@ func TestFacetDimensionsDrillToTheirCount(t *testing.T) {
 			total := 0
 			for _, b := range buckets {
 				total += b.Count
-				page, err := f.svc.Items(f.ctx, f.uc,
+				page, err := f.svc.Reads.Items(f.ctx, f.uc,
 					ItemFilter{Facet: dimension, FacetKey: b.Key}, "", 500)
 				if err != nil {
 					t.Fatalf("drilling %s bucket %q: %v", dimension, b.Label, err)
@@ -102,7 +102,7 @@ func TestFacetUnknownBucketIsDrillable(t *testing.T) {
 	if !strings.HasPrefix(buckets[0].Label, "[") {
 		t.Fatalf("the unknown bucket's label is %q; it should be the catalog's sentinel", buckets[0].Label)
 	}
-	page, err := f.svc.Items(f.ctx, f.uc, ItemFilter{Facet: "year", FacetKey: ""}, "", 100)
+	page, err := f.svc.Reads.Items(f.ctx, f.uc, ItemFilter{Facet: "year", FacetKey: ""}, "", 100)
 	if err != nil {
 		t.Fatalf("drilling the unknown year bucket: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestFacetPagingIsStableAcrossTheCache(t *testing.T) {
 		if i > len(want)+2 {
 			t.Fatal("paging never reached the last page")
 		}
-		page, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Cursor: cursor, Limit: 1})
+		page, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Cursor: cursor, Limit: 1})
 		if err != nil {
 			t.Fatalf("paging genres: %v", err)
 		}
@@ -182,7 +182,7 @@ func TestFacetPagingIsStableAcrossTheCache(t *testing.T) {
 		}
 	}
 
-	if _, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Cursor: "not-a-cursor", Limit: 10}); err == nil {
+	if _, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Cursor: "not-a-cursor", Limit: 10}); err == nil {
 		t.Fatal("a malformed cursor was accepted")
 	} else if KindOf(err) != KindInvalid {
 		t.Fatalf("a malformed cursor answered %v", KindOf(err))
@@ -205,7 +205,7 @@ func TestRestrictedFacetsAreComputedLive(t *testing.T) {
 		t.Fatal("the full-visibility enumeration is empty")
 	}
 
-	empty, err := f.svc.AddLibrary(f.ctx, f.uc, AddLibraryInput{Name: "empty", Path: t.TempDir()})
+	empty, err := f.svc.Roots.AddLibrary(f.ctx, f.uc, AddLibraryInput{Name: "empty", Path: t.TempDir()})
 	if err != nil {
 		t.Fatalf("adding a second library: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestRestrictedFacetsAreComputedLive(t *testing.T) {
 		ID: f.uc.ID, CatalogPID: f.uc.CatalogPID,
 		Libraries: map[string]bool{strings.TrimPrefix(empty.PID, PrefixLibrary+"-"): true},
 	}
-	page, err := f.svc.Facets(f.ctx, restricted, FacetQuery{Dimension: "artist", Limit: 100})
+	page, err := f.svc.Reads.Facets(f.ctx, restricted, FacetQuery{Dimension: "artist", Limit: 100})
 	if err != nil {
 		t.Fatalf("restricted enumeration: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestRestrictedFacetsAreComputedLive(t *testing.T) {
 	}
 
 	// A caller with no grant at all short-circuits to the same answer.
-	page, err = f.svc.Facets(f.ctx, &UserCtx{ID: f.uc.ID, CatalogPID: f.uc.CatalogPID},
+	page, err = f.svc.Reads.Facets(f.ctx, &UserCtx{ID: f.uc.ID, CatalogPID: f.uc.CatalogPID},
 		FacetQuery{Dimension: "artist", Limit: 100})
 	if err != nil {
 		t.Fatalf("ungranted enumeration: %v", err)
@@ -241,13 +241,13 @@ func TestRestrictedFacetsAreComputedLive(t *testing.T) {
 // this dimension right now: the entry has to exist *and* belong to the
 // generation the cache is currently valid for.
 func servesFromCache(l *Library, dimension string) bool {
-	gen := l.facetGeneration(context.Background())
-	l.facets.mu.Lock()
-	defer l.facets.mu.Unlock()
-	if l.facets.gen != gen {
+	gen := l.Reads.facetGeneration(context.Background())
+	l.Reads.facets.mu.Lock()
+	defer l.Reads.facets.mu.Unlock()
+	if l.Reads.facets.gen != gen {
 		return false
 	}
-	_, ok := l.facets.byDimension[facetCacheKey{dimension: dimension, sort: FacetSortCount}]
+	_, ok := l.Reads.facets.byDimension[facetCacheKey{dimension: dimension, sort: FacetSortCount}]
 	return ok
 }
 
@@ -284,7 +284,7 @@ func TestVocabularyEditInvalidatesTheEnumerationCache(t *testing.T) {
 	// edit itself writes only to waxdeck.db. The feed position must stay
 	// exactly where it was -- which is the whole reason the cache cannot
 	// notice this by watching the catalog.
-	if _, err := f.svc.PutGenreTree(f.ctx, f.uc, []GenreNodeDTO{
+	if _, err := f.svc.Reads.PutGenreTree(f.ctx, f.uc, []GenreNodeDTO{
 		{Name: "Hip-Hop", Aliases: []string{"Rap", "HipHop"}},
 	}); err != nil {
 		t.Fatalf("storing a vocabulary: %v", err)
@@ -328,12 +328,12 @@ func TestStaleEnumerationCannotEvictACurrentOne(t *testing.T) {
 	settleCatalogFeed(t, f.svc)
 
 	// The slow reader's work: computed and held, not yet published.
-	stale := f.svc.facetGeneration(f.ctx)
+	stale := f.svc.Reads.facetGeneration(f.ctx)
 	staleBuckets := facetsOf(t, f, "genre")
 
 	// The generation moves under it, and a second dimension publishes
 	// against the new one.
-	if _, err := f.svc.PutGenreTree(f.ctx, f.uc, []GenreNodeDTO{
+	if _, err := f.svc.Reads.PutGenreTree(f.ctx, f.uc, []GenreNodeDTO{
 		{Name: "Hip-Hop", Aliases: []string{"Rap", "HipHop"}},
 	}); err != nil {
 		t.Fatalf("storing a vocabulary: %v", err)
@@ -344,7 +344,7 @@ func TestStaleEnumerationCannotEvictACurrentOne(t *testing.T) {
 	}
 
 	// Now the slow reader publishes. It must be dropped on the floor.
-	f.svc.publishFacetBuckets(f.ctx, stale, facetCacheKey{dimension: "genre", sort: FacetSortCount}, staleBuckets)
+	f.svc.Reads.publishFacetBuckets(f.ctx, stale, facetCacheKey{dimension: "genre", sort: FacetSortCount}, staleBuckets)
 	if !servesFromCache(f.svc, "artist") {
 		t.Fatal("a superseded enumeration rolled the cache back and evicted a current one")
 	}
@@ -367,7 +367,7 @@ func TestFacetPagingSurvivesACountChange(t *testing.T) {
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
-	first, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Limit: 1})
+	first, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Limit: 1})
 	if err != nil {
 		t.Fatalf("first page: %v", err)
 	}
@@ -384,7 +384,7 @@ func TestFacetPagingSurvivesACountChange(t *testing.T) {
 		t.Fatalf("retagging: %v", err)
 	}
 
-	next, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Cursor: first.Next, Limit: 50})
+	next, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Cursor: first.Next, Limit: 50})
 	if err != nil {
 		t.Fatalf("second page: %v", err)
 	}
@@ -416,7 +416,7 @@ func TestFacetDimensionsWithoutAnUnknownBucket(t *testing.T) {
 	t.Parallel()
 	f := newGenreFixture(t)
 	it := f.itemNamed(t, "Canonical")
-	if _, err := f.svc.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
+	if _, err := f.svc.Editor.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
 		t.Fatalf("setting a custom tag: %v", err)
 	}
 
@@ -426,7 +426,7 @@ func TestFacetDimensionsWithoutAnUnknownBucket(t *testing.T) {
 				t.Fatalf("%s enumerated an unknown bucket: %+v", dimension, b)
 			}
 		}
-		if _, err := f.svc.Items(f.ctx, f.uc, ItemFilter{Facet: dimension, FacetKey: ""}, "", 10); err == nil {
+		if _, err := f.svc.Reads.Items(f.ctx, f.uc, ItemFilter{Facet: dimension, FacetKey: ""}, "", 10); err == nil {
 			t.Fatalf("%s accepted an unknown-bucket drill", dimension)
 		} else if KindOf(err) != KindInvalid {
 			t.Fatalf("%s answered %v", dimension, KindOf(err))
@@ -442,7 +442,7 @@ func TestTagDimensionsCanonicalize(t *testing.T) {
 	t.Parallel()
 	f := newGenreFixture(t)
 	it := f.itemNamed(t, "Canonical")
-	if _, err := f.svc.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
+	if _, err := f.svc.Editor.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
 		t.Fatalf("setting a custom tag: %v", err)
 	}
 	// The tag write moves the catalog feed; let it land before asserting
@@ -450,7 +450,7 @@ func TestTagDimensionsCanonicalize(t *testing.T) {
 	settleCatalogFeed(t, f.svc)
 
 	for _, spelling := range []string{"tag.MOOD", "tag.mood", "tag.MoOd", "tag. mood "} {
-		page, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: spelling, Limit: 10})
+		page, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: spelling, Limit: 10})
 		if err != nil {
 			t.Fatalf("enumerating %q: %v", spelling, err)
 		}
@@ -469,12 +469,12 @@ func TestTagDimensionsCanonicalize(t *testing.T) {
 	// both come out of the one aggregation - so the thing to count is the
 	// dimensions, which is what a client could otherwise mint without
 	// bound.
-	f.svc.facets.mu.Lock()
+	f.svc.Reads.facets.mu.Lock()
 	dimensions := map[string]bool{}
-	for key := range f.svc.facets.byDimension {
+	for key := range f.svc.Reads.facets.byDimension {
 		dimensions[key.dimension] = true
 	}
-	f.svc.facets.mu.Unlock()
+	f.svc.Reads.facets.mu.Unlock()
 	if len(dimensions) != 1 {
 		t.Fatalf("four spellings of one tag key minted %d cached dimensions: %v",
 			len(dimensions), dimensions)
@@ -490,7 +490,7 @@ func TestFacetRejectsUnknownDimensions(t *testing.T) {
 	f := newGenreFixture(t)
 
 	for _, dimension := range []string{"", "artists", "tag.", "tag.BAD=KEY", "genre_pid"} {
-		if _, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: dimension, Limit: 10}); err == nil {
+		if _, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: dimension, Limit: 10}); err == nil {
 			t.Fatalf("dimension %q was enumerated", dimension)
 		} else if KindOf(err) != KindInvalid {
 			t.Fatalf("dimension %q answered %v", dimension, KindOf(err))
@@ -499,7 +499,7 @@ func TestFacetRejectsUnknownDimensions(t *testing.T) {
 			// An empty facet on a listing means "no filter", not a bad one.
 			continue
 		}
-		if _, err := f.svc.Items(f.ctx, f.uc, ItemFilter{Facet: dimension, FacetKey: "x"}, "", 10); err == nil {
+		if _, err := f.svc.Reads.Items(f.ctx, f.uc, ItemFilter{Facet: dimension, FacetKey: "x"}, "", 10); err == nil {
 			t.Fatalf("dimension %q was accepted as a listing filter", dimension)
 		}
 	}
@@ -512,7 +512,7 @@ func TestTagFacetDimension(t *testing.T) {
 	t.Parallel()
 	f := newGenreFixture(t)
 	it := f.itemNamed(t, "Canonical")
-	if _, err := f.svc.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
+	if _, err := f.svc.Editor.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
 		t.Fatalf("setting a custom tag: %v", err)
 	}
 
@@ -520,14 +520,14 @@ func TestTagFacetDimension(t *testing.T) {
 	if len(buckets) != 1 || buckets[0].Key != "calm" || buckets[0].Count != 1 {
 		t.Fatalf("tag.MOOD buckets = %+v", buckets)
 	}
-	page, err := f.svc.Items(f.ctx, f.uc, ItemFilter{Facet: "tag.MOOD", FacetKey: "calm"}, "", 10)
+	page, err := f.svc.Reads.Items(f.ctx, f.uc, ItemFilter{Facet: "tag.MOOD", FacetKey: "calm"}, "", 10)
 	if err != nil {
 		t.Fatalf("drilling tag.MOOD: %v", err)
 	}
 	if len(page.Items) != 1 || page.Items[0].Title != "Canonical" {
 		t.Fatalf("tag.MOOD drill returned %+v", page.Items)
 	}
-	if _, err := f.svc.Items(f.ctx, f.uc, ItemFilter{Facet: "tag.MOOD", FacetKey: ""}, "", 10); err == nil {
+	if _, err := f.svc.Reads.Items(f.ctx, f.uc, ItemFilter{Facet: "tag.MOOD", FacetKey: ""}, "", 10); err == nil {
 		t.Fatal("a custom tag dimension accepted an unknown-bucket drill")
 	}
 }
@@ -543,7 +543,7 @@ func TestFacetComposesWithMediaType(t *testing.T) {
 	if len(buckets) != 1 || buckets[0].Key != "track" {
 		t.Fatalf("kind buckets = %+v; the fixture is all music", buckets)
 	}
-	page, err := f.svc.Items(f.ctx, f.uc,
+	page, err := f.svc.Reads.Items(f.ctx, f.uc,
 		ItemFilter{MediaType: "audiobook", Facet: "kind", FacetKey: "track"}, "", 10)
 	if err != nil {
 		t.Fatalf("composed filter: %v", err)
@@ -609,7 +609,7 @@ func TestFacetLabelOrderPagesTheWholeDimension(t *testing.T) {
 		if pages > len(byCount)+1 {
 			t.Fatal("label paging never reached the last page")
 		}
-		page, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, Cursor: cursor, Limit: 1})
+		page, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, Cursor: cursor, Limit: 1})
 		if err != nil {
 			t.Fatalf("label page %d: %v", pages, err)
 		}
@@ -646,31 +646,31 @@ func TestFacetCursorBelongsToItsOrder(t *testing.T) {
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
-	byCount, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Limit: 1})
+	byCount, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Limit: 1})
 	if err != nil {
 		t.Fatalf("first count page: %v", err)
 	}
 	if byCount.Next == "" {
 		t.Fatal("the fixture fits one page; this test needs two")
 	}
-	if _, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, Cursor: byCount.Next, Limit: 10}); err == nil {
+	if _, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, Cursor: byCount.Next, Limit: 10}); err == nil {
 		t.Fatal("a count cursor was accepted under the label order")
 	} else if KindOf(err) != KindInvalid {
 		t.Fatalf("a mismatched cursor answered %v", KindOf(err))
 	}
 
-	byLabel, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, Limit: 1})
+	byLabel, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, Limit: 1})
 	if err != nil {
 		t.Fatalf("first label page: %v", err)
 	}
-	if _, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Cursor: byLabel.Next, Limit: 10}); err == nil {
+	if _, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Cursor: byLabel.Next, Limit: 10}); err == nil {
 		t.Fatal("a label cursor was accepted under the default order")
 	}
 
 	// An order nobody serves is a request error, not a silent default:
 	// answering biggest-first to a caller who asked for A to Z would put
 	// the wrong letters under the rail.
-	if _, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSort("popularity"), Limit: 10}); err == nil {
+	if _, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSort("popularity"), Limit: 10}); err == nil {
 		t.Fatal("an unknown sort was accepted")
 	} else if KindOf(err) != KindInvalid {
 		t.Fatalf("an unknown sort answered %v", KindOf(err))
@@ -817,7 +817,7 @@ func TestFacetStartsAtOverTheCatalog(t *testing.T) {
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
-	all, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, Limit: 500})
+	all, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, Limit: 500})
 	if err != nil {
 		t.Fatalf("whole dimension: %v", err)
 	}
@@ -828,7 +828,7 @@ func TestFacetStartsAtOverTheCatalog(t *testing.T) {
 	// The same place paging from the head would have reached.
 	target := all.Buckets[len(all.Buckets)/2]
 	letter := strings.ToLower(strings.TrimLeft(target.Label, " "))[:1]
-	page, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, StartsAt: letter, Limit: 500})
+	page, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, StartsAt: letter, Limit: 500})
 	if err != nil {
 		t.Fatalf("startsAt=%q: %v", letter, err)
 	}
@@ -840,7 +840,7 @@ func TestFacetStartsAtOverTheCatalog(t *testing.T) {
 	}
 
 	// Past the end: empty, no cursor, not an error.
-	past, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, StartsAt: "zzzz", Limit: 500})
+	past, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, StartsAt: "zzzz", Limit: 500})
 	if err != nil {
 		t.Fatalf("startsAt past the end: %v", err)
 	}
@@ -849,19 +849,19 @@ func TestFacetStartsAtOverTheCatalog(t *testing.T) {
 	}
 
 	// Refused rather than silently implying sort=label.
-	if _, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", StartsAt: "a", Limit: 10}); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", StartsAt: "a", Limit: 10}); KindOf(err) != KindInvalid {
 		t.Errorf("startsAt without sort=label answered %v, want invalid-request", KindOf(err))
 	}
 
 	// A cursor already names a position.
-	first, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, Limit: 1})
+	first, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, Limit: 1})
 	if err != nil {
 		t.Fatalf("first label page: %v", err)
 	}
 	if first.Next == "" {
 		t.Fatal("the fixture fits one page; this test needs two")
 	}
-	if _, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, Cursor: first.Next, StartsAt: "a", Limit: 10}); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Order: FacetSortLabel, Cursor: first.Next, StartsAt: "a", Limit: 10}); KindOf(err) != KindInvalid {
 		t.Errorf("startsAt with a cursor answered %v, want invalid-request", KindOf(err))
 	}
 }
@@ -873,7 +873,7 @@ func TestBrowseCursorScopeUsesTheCanonicalDimension(t *testing.T) {
 	f := newGenreFixture(t)
 	for _, title := range []string{"Canonical", "Synonym", "Lowercase"} {
 		it := f.itemNamed(t, title)
-		if _, err := f.svc.SetItemTag(
+		if _, err := f.svc.Editor.SetItemTag(
 			f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, MetadataEditParams{},
 		); err != nil {
 			t.Fatalf("setting a custom tag: %v", err)
@@ -881,7 +881,7 @@ func TestBrowseCursorScopeUsesTheCanonicalDimension(t *testing.T) {
 	}
 
 	scoped := ItemFilter{Facet: "tag.MOOD", FacetKey: "calm"}
-	first, err := f.svc.Browse(f.ctx, f.uc, "alphabetical", scoped, 0, "", 1)
+	first, err := f.svc.Reads.Browse(f.ctx, f.uc, "alphabetical", scoped, 0, "", 1)
 	if err != nil {
 		t.Fatalf("first page: %v", err)
 	}
@@ -890,14 +890,14 @@ func TestBrowseCursorScopeUsesTheCanonicalDimension(t *testing.T) {
 	}
 	for _, spelling := range []string{"tag.MOOD", "tag.mood", "tag.MoOd"} {
 		filter := ItemFilter{Facet: spelling, FacetKey: "calm"}
-		if _, err := f.svc.Browse(f.ctx, f.uc, "alphabetical", filter, 0, first.Next, 10); err != nil {
+		if _, err := f.svc.Reads.Browse(f.ctx, f.uc, "alphabetical", filter, 0, first.Next, 10); err != nil {
 			t.Errorf("a cursor from tag.MOOD reused under %s: %v", spelling, err)
 		}
 	}
 
 	// A different bucket is still a different scope.
 	other := ItemFilter{Facet: "tag.mood", FacetKey: "restless"}
-	if _, err := f.svc.Browse(f.ctx, f.uc, "alphabetical", other, 0, first.Next, 10); KindOf(err) != KindInvalid {
+	if _, err := f.svc.Reads.Browse(f.ctx, f.uc, "alphabetical", other, 0, first.Next, 10); KindOf(err) != KindInvalid {
 		t.Errorf("a cursor reused under another bucket answered %v, want invalid-request", KindOf(err))
 	}
 }
@@ -909,18 +909,18 @@ func TestFacetCursorBelongsToItsDimension(t *testing.T) {
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
-	page, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Limit: 1})
+	page, err := f.svc.Reads.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Limit: 1})
 	if err != nil {
 		t.Fatalf("first genre page: %v", err)
 	}
 	if page.Next == "" {
 		t.Fatal("the fixture fits one page; this test needs two")
 	}
-	if _, err := f.svc.Facets(f.ctx, f.uc,
+	if _, err := f.svc.Reads.Facets(f.ctx, f.uc,
 		FacetQuery{Dimension: "artist", Cursor: page.Next, Limit: 10}); KindOf(err) != KindInvalid {
 		t.Errorf("a genre cursor under artist answered %v, want invalid-request", KindOf(err))
 	}
-	if _, err := f.svc.Facets(f.ctx, f.uc,
+	if _, err := f.svc.Reads.Facets(f.ctx, f.uc,
 		FacetQuery{Dimension: "genre", Cursor: page.Next, Limit: 10}); err != nil {
 		t.Errorf("its own dimension still pages: %v", err)
 	}
@@ -941,14 +941,14 @@ func TestBrowseRejectsAStaleUserOnEveryList(t *testing.T) {
 	stale := &UserCtx{ID: f.uc.ID, CatalogPID: "us-01JZXNOTAUSERATALL0000000", AllLibraries: true}
 
 	for _, filter := range []ItemFilter{{}, {MediaType: "music"}} {
-		if _, err := f.svc.Browse(f.ctx, stale, "alphabetical", filter, 0, "", 10); err == nil {
+		if _, err := f.svc.Reads.Browse(f.ctx, stale, "alphabetical", filter, 0, "", 10); err == nil {
 			t.Errorf("browse with filter %+v resolved a user that does not exist", filter)
 		}
 	}
 	// The live user still pages both ways, so the rejection is about the
 	// pid rather than about the predicate the query now always carries.
 	for _, filter := range []ItemFilter{{}, {MediaType: "music"}} {
-		if _, err := f.svc.Browse(f.ctx, f.uc, "alphabetical", filter, 0, "", 10); err != nil {
+		if _, err := f.svc.Reads.Browse(f.ctx, f.uc, "alphabetical", filter, 0, "", 10); err != nil {
 			t.Errorf("browse with filter %+v: %v", filter, err)
 		}
 	}

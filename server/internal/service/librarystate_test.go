@@ -15,7 +15,7 @@ import (
 // libraryAt is the listing's entry for the library at path.
 func libraryAt(t *testing.T, ctx context.Context, svc *Library, path string) LibraryInfo {
 	t.Helper()
-	libs, err := svc.Libraries(ctx)
+	libs, err := svc.Roots.Libraries(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func libraryAt(t *testing.T, ctx context.Context, svc *Library, path string) Lib
 func scanAndSettle(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) Job {
 	t.Helper()
 	waitFor(t, func() bool {
-		running, err := svc.catalogJobRunning(ctx)
+		running, err := svc.Jobs.catalogJobRunning(ctx)
 		return err == nil && !running
 	}, "no catalog job running before the scan")
 	job, err := svc.RescanFor(ctx, uc, false)
@@ -42,13 +42,13 @@ func scanAndSettle(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx)
 	}
 	_, pid, _ := parseAPIPID(job.PID)
 	waitFor(t, func() bool {
-		svc.jobs.mu.Lock()
-		defer svc.jobs.mu.Unlock()
-		_, running := svc.jobs.running[pid]
+		svc.Jobs.jobs.mu.Lock()
+		defer svc.Jobs.jobs.mu.Unlock()
+		_, running := svc.Jobs.jobs.running[pid]
 		j, err := svc.lib.Job(ctx, pid)
 		return err == nil && j.State != model.JobRunning && !running
 	}, "the scan to end")
-	ended, err := svc.JobStatus(ctx, job.PID)
+	ended, err := svc.Jobs.Status(ctx, job.PID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestALibraryListsWhetherTheConfigurationNamesIt(t *testing.T) {
 	dataDir := t.TempDir()
 	ctx, svc, uc, _ := openServiceAt(t, dataDir, nil)
 	runtimeDir := t.TempDir()
-	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "runtime", Path: runtimeDir}); err != nil {
+	if _, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "runtime", Path: runtimeDir}); err != nil {
 		t.Fatal(err)
 	}
 	if lib := libraryAt(t, ctx, svc, filepath.Join(dataDir, "configured")); !lib.Configured {
@@ -164,8 +164,8 @@ func TestAnUnwritableManagedRootIsFlaggedAtBoot(t *testing.T) {
 		w := libraryAt(t, ctx, svc, locked).Writable
 		return w != nil && !*w
 	}, "the locked root to list not writable")
-	svc.refreshLibraryState(ctx)
-	waitFor(t, func() bool { return svc.rootProbe.idle() }, "the probe after a refresh")
+	svc.Roots.refreshLibraryState(ctx)
+	waitFor(t, func() bool { return svc.Roots.rootProbe.idle() }, "the probe after a refresh")
 	if n := strings.Count(logged.String(), said); n != 1 {
 		t.Errorf("the log warns %d times, want once:\n%s", n, logged.String())
 	}

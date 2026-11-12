@@ -58,7 +58,7 @@ func cueSplitFixtureWith(t *testing.T, mutate func(*Config)) (context.Context, *
 		t.Fatalf("carved tracks titled Rip One = %v, want one", one)
 	}
 	engine := newFakeBookEngine(t)
-	svc.SetFlowJobs(engine)
+	svc.Tools.SetFlowJobs(engine)
 	return ctx, svc, uc, apiPID(PrefixTrack, one[0]), ripDir, engine
 }
 
@@ -89,15 +89,15 @@ func TestACueSplitStoppedAfterAnyStepFinishesWithoutDuplicates(t *testing.T) {
 		t.Run(step, func(t *testing.T) {
 			t.Parallel()
 			ctx, svc, uc, one, ripDir, engine := cueSplitFixture(t)
-			task, err := svc.StartCueSplit(ctx, uc, one, false)
+			task, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 			if err != nil {
 				t.Fatal(err)
 			}
-			svc.toolStepHook = stopAt(step, nil)
+			svc.Tools.toolStepHook = stopAt(step, nil)
 			if err := attempt(t, ctx, svc, 1); !errors.Is(err, errStopped) {
 				t.Fatalf("first attempt = %v, want it stopped after %s", err, step)
 			}
-			svc.toolStepHook = nil
+			svc.Tools.toolStepHook = nil
 			if err := attempt(t, ctx, svc, 2); err != nil {
 				t.Fatalf("the rerun = %v, want it finished", err)
 			}
@@ -134,12 +134,12 @@ func TestACueSplitStoppedAfterAnyStepFinishesWithoutDuplicates(t *testing.T) {
 func TestASecondCueSplitOfARipIsRefusedWhileTheFirstIsLive(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, one, _, _ := cueSplitFixture(t)
-	first, err := svc.StartCueSplit(ctx, uc, one, false)
+	first, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	two := tracksTitled(t, ctx, svc, "Rip Two", true)
-	_, err = svc.StartCueSplit(ctx, uc, apiPID(PrefixTrack, two[0]), false)
+	_, err = svc.Tools.StartCueSplit(ctx, uc, apiPID(PrefixTrack, two[0]), false)
 	if p := RefusalParams(err); KindOf(err) != KindConflict || p["reason"] != refusalTaskRunning || p["task"] != first.ID {
 		t.Fatalf("a second split of the rip = %v (params %v), want it refused naming %s", err, p, first.ID)
 	}
@@ -150,11 +150,11 @@ func TestASecondCueSplitOfARipIsRefusedWhileTheFirstIsLive(t *testing.T) {
 func TestABusyCatalogAtTheCueImportIsWaitedOut(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, one, _, engine := cueSplitFixture(t)
-	task, err := svc.StartCueSplit(ctx, uc, one, false)
+	task, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.mutateHook = busyOnce("import")
+	svc.Tools.mutateHook = busyOnce("import")
 	err = attempt(t, ctx, svc, 1)
 	var wait *toolRetry
 	if !errors.As(err, &wait) {
@@ -182,12 +182,12 @@ func TestABusyCatalogAtTheCueImportIsWaitedOut(t *testing.T) {
 func TestACueSplitWithAPieceThatFailedKeepsTheRip(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, one, _, _ := cueSplitFixture(t)
-	task, err := svc.StartCueSplit(ctx, uc, one, false)
+	task, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var blocker string
-	svc.toolStepHook = func(step string) error {
+	svc.Tools.toolStepHook = func(step string) error {
 		if step != "importing" {
 			return nil
 		}
@@ -215,7 +215,7 @@ func TestACueSplitWithAPieceThatFailedKeepsTheRip(t *testing.T) {
 	if trash := activeTrash(t, ctx, svc); len(trash) != 0 {
 		t.Fatalf("trash = %q, want the rip kept", trash)
 	}
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	if err := os.Remove(blocker); err != nil {
 		t.Fatal(err)
 	}
@@ -237,15 +237,15 @@ func TestACueSplitWithAPieceThatFailedKeepsTheRip(t *testing.T) {
 func TestACueSplitWaitsOutAReadOnlyRip(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, one, _, _ := cueSplitFixture(t)
-	task, err := svc.StartCueSplit(ctx, uc, one, false)
+	task, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.toolStepHook = stopAt("trashing", nil)
+	svc.Tools.toolStepHook = stopAt("trashing", nil)
 	if err := attempt(t, ctx, svc, 1); !errors.Is(err, errStopped) {
 		t.Fatalf("first attempt = %v, want it stopped at the rip's trash", err)
 	}
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	flagReadOnly(t, ctx, svc, true)
 	err = attempt(t, ctx, svc, 2)
 	var wait *toolRetry
@@ -266,21 +266,21 @@ func TestACueSplitWaitsOutAReadOnlyRip(t *testing.T) {
 func TestACueSplitWhoseRipWasDeletedSinceFinishes(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, one, _, _ := cueSplitFixture(t)
-	task, err := svc.StartCueSplit(ctx, uc, one, false)
+	task, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.toolStepHook = stopAt("imported", nil)
+	svc.Tools.toolStepHook = stopAt("imported", nil)
 	if err := attempt(t, ctx, svc, 1); !errors.Is(err, errStopped) {
 		t.Fatalf("first attempt = %v, want it stopped once imported", err)
 	}
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	carved := append(tracksTitled(t, ctx, svc, "Rip One", true), tracksTitled(t, ctx, svc, "Rip Two", true)...)
 	pids := make([]string, len(carved))
 	for i, pid := range carved {
 		pids[i] = apiPID(PrefixTrack, pid)
 	}
-	if _, err := svc.DeleteItems(ctx, uc, pids, "trash", false); err != nil {
+	if _, err := svc.Tools.DeleteItems(ctx, uc, pids, "trash", false); err != nil {
 		t.Fatal(err)
 	}
 	if err := attempt(t, ctx, svc, 2); err != nil {
@@ -297,15 +297,15 @@ func TestACueSplitWhoseRipWasDeletedSinceFinishes(t *testing.T) {
 func TestACueSplitParkedAfterItsRipTrashSaysWhereEverythingIs(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, one, _, _ := cueSplitFixture(t)
-	task, err := svc.StartCueSplit(ctx, uc, one, false)
+	task, err := svc.Tools.StartCueSplit(ctx, uc, one, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.toolStepHook = stopAt("trashed", nil)
+	svc.Tools.toolStepHook = stopAt("trashed", nil)
 	if err := attempt(t, ctx, svc, 1); !errors.Is(err, errStopped) {
 		t.Fatalf("first attempt = %v, want it stopped once the rip is in the trash", err)
 	}
-	svc.toolStepHook = nil
+	svc.Tools.toolStepHook = nil
 	setParams(t, ctx, svc, task.ID, func(p *toolTaskParams) { p.RunsStarted, p.RunsEnded = 4, 1 })
 	if !drainAt(ctx, svc, 2) {
 		t.Fatal("the worker found no task")
@@ -316,7 +316,7 @@ func TestACueSplitParkedAfterItsRipTrashSaysWhereEverythingIs(t *testing.T) {
 		strings.Contains(parked.Error, "the rip stays") || !strings.Contains(parked.Error, folder) {
 		t.Fatalf("task = %s (error %q), want it parked, the rip said to be in the trash and the tracks in %s", parked.State, parked.Error, folder)
 	}
-	if _, err := os.Stat(filepath.Join(svc.stagingDir, "tools", task.ID)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(svc.Ingest.stagingDir, "tools", task.ID)); !os.IsNotExist(err) {
 		t.Errorf("the parked split's workspace = %v, want it gone", err)
 	}
 }

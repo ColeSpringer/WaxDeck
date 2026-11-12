@@ -27,24 +27,24 @@ func TestTheEngineStateMarksEveryAccountOnAChange(t *testing.T) {
 	ctx, svc, uc := newCatalogFixture(t)
 	count := func() int { return markers(t, ctx, svc, uc.ID, eventServer, "") }
 
-	svc.SetEngineState(ctx, EngineState{Configured: true})
+	svc.Roots.SetEngineState(ctx, EngineState{Configured: true})
 	if n := count(); n != 0 {
 		t.Fatalf("markers after the startup word = %d, want 0", n)
 	}
 	up := EngineState{Configured: true, Connected: true, Timelines: true, VoiceBoost: true, FileTools: true}
-	svc.SetEngineState(ctx, up)
+	svc.Roots.SetEngineState(ctx, up)
 	if n := count(); n != 1 {
 		t.Fatalf("markers after the engine answered = %d, want 1", n)
 	}
-	svc.SetEngineState(ctx, up)
+	svc.Roots.SetEngineState(ctx, up)
 	if n := count(); n != 1 {
 		t.Fatalf("markers after the same state again = %d, want 1", n)
 	}
-	svc.SetEngineState(ctx, EngineState{Configured: true})
+	svc.Roots.SetEngineState(ctx, EngineState{Configured: true})
 	if n := count(); n != 2 {
 		t.Fatalf("markers after the engine went away = %d, want 2", n)
 	}
-	if st := svc.EngineState(); st != (EngineState{Configured: true}) {
+	if st := svc.Roots.EngineState(); st != (EngineState{Configured: true}) {
 		t.Fatalf("state = %+v, want configured and away", st)
 	}
 }
@@ -54,12 +54,12 @@ func TestTheEngineStateMarksEveryAccountOnAChange(t *testing.T) {
 func TestTheServerMarkerRidesTheSyncDelta(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
-	svc.SetEngineState(ctx, EngineState{Configured: true})
+	svc.Roots.SetEngineState(ctx, EngineState{Configured: true})
 	since, err := svc.MintServerCursor(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.SetEngineState(ctx, EngineState{Configured: true, Connected: true})
+	svc.Roots.SetEngineState(ctx, EngineState{Configured: true, Connected: true})
 	delta, err := svc.SyncServerDelta(ctx, uc, since, 100)
 	if err != nil {
 		t.Fatal(err)
@@ -77,11 +77,11 @@ func TestALibraryCreatedWhileTheEngineIsAwayIsTakenAndWaitsForIt(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	bridge := &fakeFlowRoots{names: []string{"lib"}}
-	svc.SetEngineState(ctx, EngineState{Configured: true})
-	svc.SetFlowRoots(bridge)
+	svc.Roots.SetEngineState(ctx, EngineState{Configured: true})
+	svc.Roots.SetFlowRoots(bridge)
 
 	dir := t.TempDir()
-	info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: dir})
+	info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,9 +91,9 @@ func TestALibraryCreatedWhileTheEngineIsAwayIsTakenAndWaitsForIt(t *testing.T) {
 	if !bridge.taught("books", dir) {
 		t.Fatal("the root did not reach the bridge while the engine was away")
 	}
-	svc.flowSyncMu.Lock()
-	refused := svc.flowRefused["books"].path
-	svc.flowSyncMu.Unlock()
+	svc.Roots.flowSyncMu.Lock()
+	refused := svc.Roots.flowRefused["books"].path
+	svc.Roots.flowSyncMu.Unlock()
 	if refused != "" {
 		t.Fatal("a root taken while the engine was away was remembered as refused")
 	}
@@ -106,10 +106,10 @@ func TestALibraryTheBridgeRefusesWhileTheEngineIsAwaySaysWhy(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	bridge := &fakeFlowRoots{names: []string{"lib"}, syncErr: errors.New("not a directory this server can see")}
-	svc.SetEngineState(ctx, EngineState{Configured: true})
-	svc.SetFlowRoots(bridge)
+	svc.Roots.SetEngineState(ctx, EngineState{Configured: true})
+	svc.Roots.SetFlowRoots(bridge)
 
-	info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()})
+	info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,12 +127,12 @@ func TestBookMergingSaysTheEngineIsAway(t *testing.T) {
 	admin := *uc
 	admin.Admin = true
 
-	_, err := svc.StartBookMerge(ctx, &admin, "bk-none", nil, true)
+	_, err := svc.Tools.StartBookMerge(ctx, &admin, "bk-none", nil, true)
 	if err == nil || err.Error() != "book merging needs the streaming engine" {
 		t.Fatalf("without an engine: %v", err)
 	}
-	svc.SetEngineState(ctx, EngineState{Configured: true})
-	_, err = svc.StartBookMerge(ctx, &admin, "bk-none", nil, true)
+	svc.Roots.SetEngineState(ctx, EngineState{Configured: true})
+	_, err = svc.Tools.StartBookMerge(ctx, &admin, "bk-none", nil, true)
 	if KindOf(err) != KindFeature || err.Error() != "book merging needs the streaming engine, which is not reachable right now" {
 		t.Fatalf("with the engine away: %v", err)
 	}
@@ -150,11 +150,11 @@ func TestSplittingSaysTheEngineIsAway(t *testing.T) {
 		start func() error
 	}{
 		{"book splitting", func() error {
-			_, err := svc.StartBookSplit(ctx, &admin, "bk-none", true)
+			_, err := svc.Tools.StartBookSplit(ctx, &admin, "bk-none", true)
 			return err
 		}},
 		{"cue splitting", func() error {
-			_, err := svc.StartCueSplit(ctx, &admin, "tr-none", true)
+			_, err := svc.Tools.StartCueSplit(ctx, &admin, "tr-none", true)
 			return err
 		}},
 	}
@@ -163,7 +163,7 @@ func TestSplittingSaysTheEngineIsAway(t *testing.T) {
 			t.Errorf("%s without an engine: %v", s.what, err)
 		}
 	}
-	svc.SetEngineState(ctx, EngineState{Configured: true})
+	svc.Roots.SetEngineState(ctx, EngineState{Configured: true})
 	for _, s := range splits {
 		if err := s.start(); KindOf(err) != KindFeature || err.Error() != s.what+" needs the streaming engine, which is not reachable right now" {
 			t.Errorf("%s with the engine away: %v", s.what, err)
@@ -219,15 +219,15 @@ func TestTheServiceFollowsTheEngineAcrossABlip(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	bridge := &hookedFlowRoots{fakeFlowRoots: fakeFlowRoots{names: []string{"lib"}}}
-	svc.FollowEngine(ctx, bridge)
-	if svc.flowRootSync() == nil {
+	svc.Roots.FollowEngine(ctx, bridge)
+	if svc.Roots.flowRootSync() == nil {
 		t.Fatal("the root surface waits for the engine's first answer")
 	}
 
 	addWaiting := func(name string) string {
 		t.Helper()
 		dir := t.TempDir()
-		info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: name, Path: dir})
+		info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: name, Path: dir})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -242,11 +242,11 @@ func TestTheServiceFollowsTheEngineAcrossABlip(t *testing.T) {
 	addWaiting("books")
 
 	bridge.up(ctx)
-	if !svc.EngineState().Connected {
+	if !svc.Roots.EngineState().Connected {
 		t.Fatal("the service missed the engine's answer")
 	}
 	bridge.down()
-	if svc.EngineState().Connected {
+	if svc.Roots.EngineState().Connected {
 		t.Fatal("the service missed the loss")
 	}
 	addWaiting("talks")
@@ -256,13 +256,13 @@ func TestTheServiceFollowsTheEngineAcrossABlip(t *testing.T) {
 	bridge.up(ctx)
 	bridge.refuse(errors.New("opening root: no such file or directory"))
 	refused := t.TempDir()
-	if info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "comedy", Path: refused}); err != nil || info.StreamingWarning == "" {
+	if info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "comedy", Path: refused}); err != nil || info.StreamingWarning == "" {
 		t.Fatalf("a refused root: %+v %v, want a warning", info, err)
 	}
 	bridge.refuse(nil)
 	bridge.down()
 	bridge.up(ctx)
-	if st := svc.EngineState(); !st.Connected || !st.VoiceBoost {
+	if st := svc.Roots.EngineState(); !st.Connected || !st.VoiceBoost {
 		t.Fatalf("state after the return = %+v, want connected with what it offers", st)
 	}
 	waitFor(t, func() bool { return slices.Contains(bridge.RootNames(), "comedy") }, "the refused root offered again at the return")
@@ -344,13 +344,13 @@ func bridgeOverFakeSidecar(t *testing.T, ctx context.Context, svc *Library, cann
 		APIKey:     "key",
 		ConfigPath: configPath,
 		Tokens:     auth.NewMediaTokens([]byte("test-secret-test-secret-test-sec"), 0),
-		Resolver:   svc,
+		Resolver:   svc.Playback,
 		Logger:     slog.New(slog.NewTextHandler(logs, nil)),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.FollowEngine(ctx, bridge)
+	svc.Roots.FollowEngine(ctx, bridge)
 	if bridge.Connect(ctx) == nil {
 		t.Fatal("an engine that is away answered")
 	}
@@ -423,11 +423,11 @@ func TestARootTheSidecarRefusesNeverReachesTheConfigItBootsFrom(t *testing.T) {
 	if err := bridge.Connect(ctx); err != nil {
 		t.Fatal(err)
 	}
-	libDir := svc.RootTable()[0].Path
+	libDir := svc.Roots.Table()[0].Path
 	waitFor(t, func() bool {
-		svc.flowSyncMu.Lock()
-		defer svc.flowSyncMu.Unlock()
-		return svc.flowRefused["lib"].path == libDir
+		svc.Roots.flowSyncMu.Lock()
+		defer svc.Roots.flowSyncMu.Unlock()
+		return svc.Roots.flowRefused["lib"].path == libDir
 	}, "the refusal remembered as a refused offer is")
 	if got := sidecarConfigNames(t, configPath); len(got) != 0 {
 		t.Fatalf("config after the refusal = %v, want no roots", got)
@@ -457,8 +457,8 @@ func TestARootHeldWhileTheEngineIsAwayGoesInAtItsAnswer(t *testing.T) {
 	// The bridge maps a root before its reload writes the file, and the
 	// offer holds this lock to its end.
 	waitFor(t, func() bool {
-		svc.flowSyncMu.Lock()
-		defer svc.flowSyncMu.Unlock()
+		svc.Roots.flowSyncMu.Lock()
+		defer svc.Roots.flowSyncMu.Unlock()
 		return slices.Contains(bridge.RootNames(), "lib")
 	}, "the held root taken at the answer")
 	if got := sidecarConfigNames(t, configPath); !slices.Equal(got, []string{"lib"}) {
@@ -477,12 +477,12 @@ func TestALibraryWhoseReloadGetsNoAnswerIsOfferedAgainAtTheNextAnswer(t *testing
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
 	bridge := &hookedFlowRoots{fakeFlowRoots: fakeFlowRoots{names: []string{"lib"}}}
-	svc.FollowEngine(ctx, bridge)
+	svc.Roots.FollowEngine(ctx, bridge)
 	bridge.up(ctx)
 	bridge.refuse(flow.ErrRootHeld)
 
 	dir := t.TempDir()
-	info, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: dir})
+	info, err := svc.Roots.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: dir})
 	if err != nil {
 		t.Fatal(err)
 	}

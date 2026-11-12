@@ -46,19 +46,19 @@ func newJournalReach(t *testing.T) journalReach {
 		t.Fatal(err)
 	}
 	var seenLib string
-	for _, r := range svc.libraryRoots() {
+	for _, r := range svc.Roots.libraryRoots() {
 		if r.Name == "seen" {
 			seenLib = r.PID
 		}
 	}
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: "reader", Password: "correct-horse", AccessMode: "granted",
 		LibraryPIDs: []string{apiPID(PrefixLibrary, model.PID(seenLib))},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader, err := svc.UserCtx(ctx, acct.User)
+	reader, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func newJournalReach(t *testing.T) journalReach {
 func (r journalReach) item(t *testing.T, title string) string {
 	t.Helper()
 	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(25 * time.Millisecond) {
-		page, err := r.svc.Items(r.ctx, r.admin, ItemFilter{}, "", 200)
+		page, err := r.svc.Reads.Items(r.ctx, r.admin, ItemFilter{}, "", 200)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -89,14 +89,14 @@ func (r journalReach) item(t *testing.T, title string) string {
 // context.
 func grantedReader(t *testing.T, ctx context.Context, svc *Library, name, libPID string) *UserCtx {
 	t.Helper()
-	acct, err := svc.CreateAccount(ctx, AccountCreate{
+	acct, err := svc.Identity.CreateAccount(ctx, AccountCreate{
 		Username: name, Password: "correct-horse", AccessMode: "granted",
 		LibraryPIDs: []string{apiPID(PrefixLibrary, model.PID(libPID))},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := svc.UserCtx(ctx, acct.User)
+	uc, err := svc.Grants.UserCtxFor(ctx, acct.User)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,17 +200,17 @@ func TestTheJournalPlacesWhatTheTrashHoldsWhenItStartsOver(t *testing.T) {
 	t.Parallel()
 	r := newJournalReach(t)
 	unseen, seen := r.item(t, "Unseen Song"), r.item(t, "Seen Song")
-	if _, err := r.svc.DeleteItems(r.ctx, r.admin, []string{unseen, seen}, "trash", false); err != nil {
+	if _, err := r.svc.Tools.DeleteItems(r.ctx, r.admin, []string{unseen, seen}, "trash", false); err != nil {
 		t.Fatal(err)
 	}
 	r.startJournalOver(t)
 	since := r.snapshot(t)
-	entries, err := r.svc.TrashEntries(r.ctx, r.admin, false, 0)
+	entries, err := r.svc.Tools.TrashEntries(r.ctx, r.admin, false, 0)
 	if err != nil || len(entries) != 2 {
 		t.Fatalf("trash = %+v, %v; want both tracks", entries, err)
 	}
 	for _, e := range entries {
-		if _, err := r.svc.PurgeTrashEntry(r.ctx, r.admin, e.ID); err != nil {
+		if _, err := r.svc.Tools.PurgeTrashEntry(r.ctx, r.admin, e.ID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -233,14 +233,14 @@ func TestTheJournalPlacesAnItemItsLibraryTookAwayNowhere(t *testing.T) {
 	if _, err := fixtures.Generate(spareDir, journalSong("spare", "Spare Song")); err != nil {
 		t.Fatal(err)
 	}
-	info, err := r.svc.AddLibrary(r.ctx, r.admin, AddLibraryInput{Name: "spare", Path: spareDir})
+	info, err := r.svc.Roots.AddLibrary(r.ctx, r.admin, AddLibraryInput{Name: "spare", Path: spareDir})
 	if err != nil {
 		t.Fatal(err)
 	}
 	spare := r.item(t, "Spare Song")
 	var job Job
 	for deadline := time.Now().Add(time.Minute); ; time.Sleep(20 * time.Millisecond) {
-		if job, err = r.svc.RemoveLibrary(r.ctx, r.admin, info.PID); err == nil {
+		if job, err = r.svc.Roots.RemoveLibrary(r.ctx, r.admin, info.PID); err == nil {
 			break
 		}
 		if KindOf(err) != KindCatalogBusy || time.Now().After(deadline) {
@@ -250,7 +250,7 @@ func TestTheJournalPlacesAnItemItsLibraryTookAwayNowhere(t *testing.T) {
 	waitForJob(t, r.ctx, r.svc, bareOf(t, job.PID))
 	r.startJournalOver(t)
 	since := r.snapshot(t)
-	if _, err := r.svc.AddLibrary(r.ctx, r.admin, AddLibraryInput{Name: "spare", Path: spareDir}); err != nil {
+	if _, err := r.svc.Roots.AddLibrary(r.ctx, r.admin, AddLibraryInput{Name: "spare", Path: spareDir}); err != nil {
 		t.Fatal(err)
 	}
 	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(25 * time.Millisecond) {
@@ -316,7 +316,7 @@ func TestARealReHomeIsTombstonedOnlyToTheLibraryItLeft(t *testing.T) {
 		t.Fatal(err)
 	}
 	libs := map[string]string{}
-	for _, root := range svc.libraryRoots() {
+	for _, root := range svc.Roots.libraryRoots() {
 		libs[root.Name] = root.PID
 	}
 	r := journalReach{ctx: ctx, svc: svc, admin: admin}
@@ -589,7 +589,7 @@ func TestARestoreAtTheJournalsPlaceStartsItOver(t *testing.T) {
 	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	page, err := svc.Items(ctx, uc, ItemFilter{}, "", 10)
+	page, err := svc.Reads.Items(ctx, uc, ItemFilter{}, "", 10)
 	if err != nil || len(page.Items) != 1 {
 		t.Fatalf("items = %+v, %v; want the one track", page.Items, err)
 	}
@@ -606,7 +606,7 @@ func TestARestoreAtTheJournalsPlaceStartsItOver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SetStar(ctx, uc, kept, true, nil); err != nil {
+	if _, err := svc.Playback.SetStar(ctx, uc, kept, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	head, err := svc.lib.LatestChangeSeq(ctx)

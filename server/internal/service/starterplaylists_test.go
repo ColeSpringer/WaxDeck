@@ -9,7 +9,7 @@ import (
 // zero value when there is none.
 func starterOf(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) Playlist {
 	t.Helper()
-	page, err := svc.Playlists(ctx, uc, "", "", 50)
+	page, err := svc.Playlists.List(ctx, uc, "", "", 50)
 	if err != nil {
 		t.Fatalf("listing playlists: %v", err)
 	}
@@ -85,10 +85,10 @@ func TestStarterPlaylistDeletionSticks(t *testing.T) {
 	if pl.PID == "" {
 		t.Fatal("a created account holds no starter playlist")
 	}
-	if err := svc.DeletePlaylist(ctx, uc, pl.PID); err != nil {
+	if err := svc.Playlists.DeletePlaylist(ctx, uc, pl.PID); err != nil {
 		t.Fatalf("deleting the starter: %v", err)
 	}
-	if err := svc.reconcileStarterPlaylists(ctx); err != nil {
+	if err := svc.Playlists.reconcileStarterPlaylists(ctx); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	if again := starterOf(t, ctx, svc, uc); again.PID != "" {
@@ -109,14 +109,14 @@ func TestStarterPlaylistReconcileFillsGaps(t *testing.T) {
 	}
 
 	// An account from before the starters existed: no row, no playlist.
-	if err := svc.DeletePlaylist(ctx, uc, seeded.PID); err != nil {
+	if err := svc.Playlists.DeletePlaylist(ctx, uc, seeded.PID); err != nil {
 		t.Fatalf("deleting the starter: %v", err)
 	}
 	if _, err := svc.db.Writer().ExecContext(ctx,
 		`DELETE FROM starter_playlists WHERE user_id = ?`, uc.ID); err != nil {
 		t.Fatalf("clearing the starter row: %v", err)
 	}
-	if err := svc.reconcileStarterPlaylists(ctx); err != nil {
+	if err := svc.Playlists.reconcileStarterPlaylists(ctx); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	reseeded := starterOf(t, ctx, svc, uc)
@@ -132,10 +132,10 @@ func TestStarterPlaylistReconcileFillsGaps(t *testing.T) {
 		 WHERE user_id = ?`, uc.ID); err != nil {
 		t.Fatalf("pointing the row at a missing playlist: %v", err)
 	}
-	if err := svc.DeletePlaylist(ctx, uc, reseeded.PID); err != nil {
+	if err := svc.Playlists.DeletePlaylist(ctx, uc, reseeded.PID); err != nil {
 		t.Fatalf("deleting the re-seeded starter: %v", err)
 	}
-	if err := svc.reconcileStarterPlaylists(ctx); err != nil {
+	if err := svc.Playlists.reconcileStarterPlaylists(ctx); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	if rebuilt := starterOf(t, ctx, svc, uc); rebuilt.PID == "" {
@@ -155,14 +155,14 @@ func TestStarterPlaylistIsOrdinary(t *testing.T) {
 		t.Fatal("a created account holds no starter playlist")
 	}
 	name := "On repeat"
-	renamed, err := svc.UpdatePlaylist(ctx, uc, pl.PID, PlaylistUpdate{Name: &name})
+	renamed, err := svc.Playlists.UpdatePlaylist(ctx, uc, pl.PID, PlaylistUpdate{Name: &name})
 	if err != nil {
 		t.Fatalf("renaming the starter: %v", err)
 	}
 	if renamed.Name != name || renamed.PID != pl.PID {
 		t.Fatalf("rename = %+v, want %s under the same pid", renamed, name)
 	}
-	if err := svc.reconcileStarterPlaylists(ctx); err != nil {
+	if err := svc.Playlists.reconcileStarterPlaylists(ctx); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	if again := starterOf(t, ctx, svc, uc); again.PID != "" {
@@ -178,10 +178,10 @@ func TestStarterPlaylistFollowsApproval(t *testing.T) {
 	t.Parallel()
 	ctx, svc, admin := newAdminFixture(t)
 
-	if _, err := svc.AdminSettingsPut(ctx, admin, everySetting(AdminSettings{SignupEnabled: true})); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, admin, everySetting(AdminSettings{SignupEnabled: true})); err != nil {
 		t.Fatal(err)
 	}
-	pending, _, err := svc.Signup(ctx, "sam", "password123", "Sam", "")
+	pending, _, err := svc.Identity.Signup(ctx, "sam", "password123", "Sam", "")
 	if err != nil {
 		t.Fatalf("signup: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestStarterPlaylistFollowsApproval(t *testing.T) {
 	if pl := starterOf(t, ctx, svc, sam); pl.PID != "" {
 		t.Fatalf("a pending signup holds a starter (%s)", pl.PID)
 	}
-	if _, err := svc.ApproveSignup(ctx, admin, pending.User.ID, SignupApproval{}); err != nil {
+	if _, err := svc.Identity.ApproveSignup(ctx, admin, pending.User.ID, SignupApproval{}); err != nil {
 		t.Fatalf("approving: %v", err)
 	}
 	if pl := starterOf(t, ctx, svc, sam); pl.PID == "" {
@@ -198,18 +198,18 @@ func TestStarterPlaylistFollowsApproval(t *testing.T) {
 
 	// Disabled before approval: still not an account anybody signs into,
 	// so it gets no starter, on this path or the boot pass.
-	blocked, _, err := svc.Signup(ctx, "kim", "password123", "Kim", "")
+	blocked, _, err := svc.Identity.Signup(ctx, "kim", "password123", "Kim", "")
 	if err != nil {
 		t.Fatalf("signup: %v", err)
 	}
 	disabled := true
-	if _, err := svc.UpdateAccount(ctx, blocked.User.ID, AccountUpdate{Disabled: &disabled}); err != nil {
+	if _, err := svc.Identity.UpdateAccount(ctx, blocked.User.ID, AccountUpdate{Disabled: &disabled}); err != nil {
 		t.Fatalf("disabling: %v", err)
 	}
-	if _, err := svc.ApproveSignup(ctx, admin, blocked.User.ID, SignupApproval{}); err != nil {
+	if _, err := svc.Identity.ApproveSignup(ctx, admin, blocked.User.ID, SignupApproval{}); err != nil {
 		t.Fatalf("approving: %v", err)
 	}
-	if err := svc.reconcileStarterPlaylists(ctx); err != nil {
+	if err := svc.Playlists.reconcileStarterPlaylists(ctx); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	kim := starterUserCtx(t, ctx, svc, blocked.User.ID)
@@ -228,7 +228,7 @@ func starterUserCtx(t *testing.T, ctx context.Context, svc *Library, userID stri
 	if err != nil {
 		t.Fatalf("reading account %s: %v", userID, err)
 	}
-	uc, err := svc.UserCtx(ctx, u)
+	uc, err := svc.Grants.UserCtx(ctx, u)
 	if err != nil {
 		t.Fatalf("user context for %s: %v", userID, err)
 	}

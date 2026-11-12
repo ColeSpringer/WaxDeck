@@ -33,7 +33,7 @@ func strandListen(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, 
 // TestSweepListenMarksLeavesFreshClaimsAlone covers.
 func sweepNow(t *testing.T, ctx context.Context, svc *Library) ListenMarkSweep {
 	t.Helper()
-	rep, err := svc.sweepListenMarks(ctx, time.Now().Add(time.Minute).UnixNano())
+	rep, err := svc.Playback.sweepListenMarks(ctx, time.Now().Add(time.Minute).UnixNano())
 	if err != nil {
 		t.Fatalf("sweepListenMarks: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestSweepListenMarksCountsAStrandedClaimOnce(t *testing.T) {
 	if rep.Scanned != 1 || rep.Marked != 1 {
 		t.Fatalf("sweep = %+v, want one row scanned and marked", rep)
 	}
-	st, err := svc.PlayState(ctx, uc, pid)
+	st, err := svc.Playback.PlayState(ctx, uc, pid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestSweepListenMarksCountsAStrandedClaimOnce(t *testing.T) {
 	if rep.Scanned != 0 {
 		t.Fatalf("second sweep = %+v, want nothing left to do", rep)
 	}
-	st, err = svc.PlayState(ctx, uc, pid)
+	st, err = svc.Playback.PlayState(ctx, uc, pid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,14 +93,14 @@ func TestSweepListenMarksLeavesFreshClaimsAlone(t *testing.T) {
 	strandListen(t, ctx, svc, uc, "fresh-1", string(catalogPID),
 		time.Now().UTC().AddDate(-1, 0, 0))
 
-	rep, err := svc.SweepListenMarks(ctx)
+	rep, err := svc.Playback.SweepListenMarks(ctx)
 	if err != nil {
 		t.Fatalf("SweepListenMarks: %v", err)
 	}
 	if rep.Scanned != 0 {
 		t.Fatalf("sweep = %+v, want the just-arrived claim left alone", rep)
 	}
-	st, err := svc.PlayState(ctx, uc, pid)
+	st, err := svc.Playback.PlayState(ctx, uc, pid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,10 +127,9 @@ func TestSweepListenMarksSettlesAVanishedItem(t *testing.T) {
 }
 
 // An account that is gone settles its rows; one the sweep could not
-// read leaves them standing. Collapsing the two - which is what
-// userCtxByID does, since it answers not-found for every failure -
-// would write the play off permanently on a busy database, which is
-// the loss this whole safety net exists to prevent.
+// read leaves them standing. Collapsing the two would write the play
+// off permanently on a busy database, which is the loss this whole
+// safety net exists to prevent.
 func TestSweepListenMarksKeepsClaimsWhenAnAccountCannotBeRead(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCatalogFixture(t)
@@ -141,7 +140,7 @@ func TestSweepListenMarksKeepsClaimsWhenAnAccountCannotBeRead(t *testing.T) {
 	// A cancelled context is a read failure, not a missing account.
 	dead, cancel := context.WithCancel(ctx)
 	cancel()
-	if _, err := svc.sweepListenMarks(dead, time.Now().Add(time.Minute).UnixNano()); err == nil {
+	if _, err := svc.Playback.sweepListenMarks(dead, time.Now().Add(time.Minute).UnixNano()); err == nil {
 		// The page read itself may fail first, which is also fine: the
 		// claim has to survive either way.
 		t.Log("the pending read answered under a cancelled context")
@@ -151,6 +150,27 @@ func TestSweepListenMarksKeepsClaimsWhenAnAccountCannotBeRead(t *testing.T) {
 	rep := sweepNow(t, ctx, svc)
 	if rep.Scanned != 1 || rep.Marked != 1 {
 		t.Fatalf("sweep = %+v, want the claim still standing and then marked", rep)
+	}
+}
+
+// A disabled account's play is still marked: the listen happened, and
+// the account switched back on finds it counted. It is why the sweep
+// reads the account itself, where UserCtxByID answers a disabled one as
+// gone and would settle the row unmarked.
+func TestSweepListenMarksMarksADisabledAccountsPlay(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin := newCatalogFixture(t)
+	_, catalogPID := fixtureTrackPID(t, ctx, svc, admin, "Amber Waves")
+	_, sam := playlistMember(t, ctx, svc, "sam")
+	strandListen(t, ctx, svc, sam, "disabled-1", string(catalogPID),
+		time.Now().UTC().Add(-time.Hour))
+	off := true
+	if _, err := svc.Identity.UpdateAccount(ctx, sam.ID, AccountUpdate{Disabled: &off}); err != nil {
+		t.Fatal(err)
+	}
+
+	if rep := sweepNow(t, ctx, svc); rep.Scanned != 1 || rep.Marked != 1 || rep.Settled != 0 {
+		t.Fatalf("sweep = %+v, want the disabled account's play marked", rep)
 	}
 }
 
@@ -164,7 +184,7 @@ func TestIngestListensLeavesNothingForTheSweep(t *testing.T) {
 	short, _ := fixtureTrackPID(t, ctx, svc, uc, "Delta Groove")
 
 	at := time.Now().UTC().Add(-time.Hour)
-	res, err := svc.IngestListens(ctx, uc, []ListenSession{
+	res, err := svc.Playback.IngestListens(ctx, uc, []ListenSession{
 		{SessionID: "ok-1", PID: crossed, StartedAt: at, MsPlayed: 3000, Finished: true},
 		{SessionID: "ok-2", PID: short, StartedAt: at, MsPlayed: 10},
 	})

@@ -31,7 +31,7 @@ func TestTrashingATrackKeepsItsEmbedding(t *testing.T) {
 		storeEmbedding(t, ctx, svc, essence, string(bare))
 	}
 
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatalf("first sweep: %v", err)
 	}
 	if got := embeddingCount(t, ctx, svc); got != len(pids) {
@@ -39,10 +39,10 @@ func TestTrashingATrackKeepsItsEmbedding(t *testing.T) {
 	}
 
 	doomed := pids[0]
-	if _, err := svc.DeleteItems(ctx, uc, []string{doomed}, "trash", false); err != nil {
+	if _, err := svc.Tools.DeleteItems(ctx, uc, []string{doomed}, "trash", false); err != nil {
 		t.Fatalf("trashing: %v", err)
 	}
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatalf("sweep after trashing: %v", err)
 	}
 	if got := embeddingCount(t, ctx, svc); got != len(pids) {
@@ -54,17 +54,17 @@ func TestTrashingATrackKeepsItsEmbedding(t *testing.T) {
 		t.Errorf("analysis queue depth after trashing = %d, want 0", depth)
 	}
 
-	entries, err := svc.TrashEntries(ctx, uc, false, 50)
+	entries, err := svc.Tools.TrashEntries(ctx, uc, false, 50)
 	if err != nil {
 		t.Fatalf("listing trash: %v", err)
 	}
 	if len(entries) != 1 {
 		t.Fatalf("trash holds %d entries, want 1", len(entries))
 	}
-	if err := svc.RestoreTrashEntry(ctx, uc, entries[0].ID); err != nil {
+	if err := svc.Tools.RestoreTrashEntry(ctx, uc, entries[0].ID); err != nil {
 		t.Fatalf("restoring: %v", err)
 	}
-	if _, err := svc.SimilaritySweep(ctx); err != nil {
+	if _, err := svc.Similarity.Sweep(ctx); err != nil {
 		t.Fatalf("sweep after restoring: %v", err)
 	}
 	if got := embeddingCount(t, ctx, svc); got != len(pids) {
@@ -77,12 +77,12 @@ func TestTrashingATrackKeepsItsEmbedding(t *testing.T) {
 
 func enableSonicAnalysis(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) {
 	t.Helper()
-	cur, err := svc.AdminSettingsGet(ctx)
+	cur, err := svc.Settings.AdminSettingsGet(ctx)
 	if err != nil {
 		t.Fatalf("reading settings: %v", err)
 	}
 	cur.SonicAnalysis = true
-	if _, err := svc.AdminSettingsPut(ctx, uc, everySetting(cur)); err != nil {
+	if _, err := svc.Settings.AdminSettingsPut(ctx, uc, everySetting(cur)); err != nil {
 		t.Fatalf("enabling sonic analysis: %v", err)
 	}
 }
@@ -91,7 +91,7 @@ func enableSonicAnalysis(t *testing.T, ctx context.Context, svc *Library, uc *Us
 // what an embedding is keyed by, plus the item's bare catalog pid.
 func essenceFor(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, apiPID string) (string, model.PID) {
 	t.Helper()
-	it, err := svc.getVisibleItem(ctx, uc, apiPID)
+	it, err := svc.Grants.getVisibleItem(ctx, uc, apiPID)
 	if err != nil {
 		t.Fatalf("resolving %s: %v", apiPID, err)
 	}
@@ -119,7 +119,7 @@ func storeEmbedding(t *testing.T, ctx context.Context, svc *Library, essence, it
 	}); err != nil {
 		t.Fatalf("storing an embedding: %v", err)
 	}
-	svc.sim.Load(essence, vec)
+	svc.Similarity.sim.Load(essence, vec)
 }
 
 func embeddingCount(t *testing.T, ctx context.Context, svc *Library) int {

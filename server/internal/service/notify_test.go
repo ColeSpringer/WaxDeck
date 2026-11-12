@@ -46,7 +46,7 @@ func TestMutedTargetTakesTestsAndNothingElse(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newAdminFixture(t)
 
-	target, err := svc.CreateMyNotificationTarget(ctx, uc, NotificationTargetInput{
+	target, err := svc.Integrations.CreateMyNotificationTarget(ctx, uc, NotificationTargetInput{
 		Kind:          "webhook",
 		Config:        []byte(`{"url":"https://hook.example.com/x"}`),
 		EnabledEvents: []string{"review-ready"},
@@ -59,12 +59,12 @@ func TestMutedTargetTakesTestsAndNothingElse(t *testing.T) {
 		t.Fatalf("target = %+v, want muted", target)
 	}
 
-	svc.EmitNotification(ctx, "review-ready", "Ready", "entry", []string{uc.ID})
+	svc.Integrations.EmitNotification(ctx, "review-ready", "Ready", "entry", []string{uc.ID})
 	if n := takeQueuedNotifies(t, ctx, svc); n != 0 {
 		t.Fatalf("a muted target queued %d deliveries, want none", n)
 	}
 
-	if err := svc.TestMyNotificationTarget(ctx, uc, target.PID); err != nil {
+	if err := svc.Integrations.TestMyNotificationTarget(ctx, uc, target.PID); err != nil {
 		t.Fatalf("testing the target: %v", err)
 	}
 	if n := takeQueuedNotifies(t, ctx, svc); n != 1 {
@@ -73,28 +73,28 @@ func TestMutedTargetTakesTestsAndNothingElse(t *testing.T) {
 
 	// An update that says nothing about mute keeps it: a client written
 	// before the flag existed renames a target, it does not wake it.
-	if _, err := svc.UpdateMyNotificationTarget(ctx, uc, target.PID, NotificationTargetInput{
+	if _, err := svc.Integrations.UpdateMyNotificationTarget(ctx, uc, target.PID, NotificationTargetInput{
 		Config:        []byte(`{"url":"https://hook.example.com/x"}`),
 		EnabledEvents: []string{"review-ready"},
 		Label:         "renamed",
 	}); err != nil {
 		t.Fatalf("renaming: %v", err)
 	}
-	svc.EmitNotification(ctx, "review-ready", "Ready", "entry", []string{uc.ID})
+	svc.Integrations.EmitNotification(ctx, "review-ready", "Ready", "entry", []string{uc.ID})
 	if n := takeQueuedNotifies(t, ctx, svc); n != 0 {
 		t.Fatalf("a rename woke a muted target: %d deliveries queued", n)
 	}
 
 	// Unmuted on purpose, the same event goes through: nothing about the
 	// selection changed while it was paused.
-	if _, err := svc.UpdateMyNotificationTarget(ctx, uc, target.PID, NotificationTargetInput{
+	if _, err := svc.Integrations.UpdateMyNotificationTarget(ctx, uc, target.PID, NotificationTargetInput{
 		Config:        []byte(`{"url":"https://hook.example.com/x"}`),
 		EnabledEvents: []string{"review-ready"},
 		Muted:         ptrTo(false),
 	}); err != nil {
 		t.Fatalf("unmuting: %v", err)
 	}
-	svc.EmitNotification(ctx, "review-ready", "Ready", "entry", []string{uc.ID})
+	svc.Integrations.EmitNotification(ctx, "review-ready", "Ready", "entry", []string{uc.ID})
 	if n := takeQueuedNotifies(t, ctx, svc); n != 1 {
 		t.Fatalf("after unmuting the emit queued %d deliveries, want one", n)
 	}
@@ -141,7 +141,7 @@ func ptrTo[T any](v T) *T { return &v }
 func TestPacingIntervalIsBounded(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newAdminFixture(t)
-	_, err := svc.CreateMyNotificationTarget(ctx, uc, NotificationTargetInput{
+	_, err := svc.Integrations.CreateMyNotificationTarget(ctx, uc, NotificationTargetInput{
 		Kind:               "webhook",
 		Config:             []byte(`{"url":"https://hook.example.com/x"}`),
 		EnabledEvents:      []string{},
@@ -157,10 +157,10 @@ func TestNotificationLinks(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := newAdminFixture(t)
 
-	if got := svc.notificationLink("review-ready", ""); got != "" {
+	if got := svc.Integrations.notificationLink("review-ready", ""); got != "" {
 		t.Fatalf("link with no public base = %q, want none", got)
 	}
-	svc.publicBase = "https://wax.example.com"
+	svc.Integrations.publicBase = "https://wax.example.com"
 	for _, c := range []struct{ event, pid, want string }{
 		{"review-ready", "", "https://wax.example.com/review"},
 		{"signup-requested", "", "https://wax.example.com/admin/users?view=requests"},
@@ -179,7 +179,7 @@ func TestNotificationLinks(t *testing.T) {
 		{notifyTestEvent, "", ""},
 		{"invented-by-a-newer-server", "", ""},
 	} {
-		if got := svc.notificationLink(c.event, c.pid); got != c.want {
+		if got := svc.Integrations.notificationLink(c.event, c.pid); got != c.want {
 			t.Errorf("link(%s, %s) = %q, want %q", c.event, c.pid, got, c.want)
 		}
 	}
@@ -219,7 +219,7 @@ func TestMuteDropsWhatIsAlreadyQueued(t *testing.T) {
 	// does not stand between the test and a port nothing answers on: a
 	// delivery that is attempted fails and records why, which is what
 	// tells an attempt from a drop.
-	target, err := svc.CreateServerNotificationTarget(ctx, NotificationTargetInput{
+	target, err := svc.Integrations.CreateServerNotificationTarget(ctx, NotificationTargetInput{
 		Kind:          "webhook",
 		Config:        []byte(`{"url":"http://127.0.0.1:1/hook"}`),
 		EnabledEvents: []string{"backup-completed"},
@@ -227,9 +227,9 @@ func TestMuteDropsWhatIsAlreadyQueued(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating the target: %v", err)
 	}
-	svc.EmitServerNotification(ctx, "backup-completed", "Backup finished", "12 MB")
+	svc.Integrations.EmitServerNotification(ctx, "backup-completed", "Backup finished", "12 MB")
 
-	if _, err := svc.UpdateServerNotificationTarget(ctx, target.PID, NotificationTargetInput{
+	if _, err := svc.Integrations.UpdateServerNotificationTarget(ctx, target.PID, NotificationTargetInput{
 		Config:        []byte(`{"url":"http://127.0.0.1:1/hook"}`),
 		EnabledEvents: []string{"backup-completed"},
 		Muted:         ptrTo(true),
@@ -237,13 +237,13 @@ func TestMuteDropsWhatIsAlreadyQueued(t *testing.T) {
 		t.Fatalf("muting: %v", err)
 	}
 
-	if !svc.DrainNotifyOutbox(ctx) {
+	if !svc.Integrations.DrainNotifyOutbox(ctx) {
 		t.Fatal("the drain found nothing to do")
 	}
 	if n := takeQueuedNotifies(t, ctx, svc); n != 0 {
 		t.Fatalf("the muted target still holds %d queued deliveries", n)
 	}
-	rows, err := svc.ListServerNotificationTargets(ctx)
+	rows, err := svc.Integrations.ListServerNotificationTargets(ctx)
 	if err != nil {
 		t.Fatalf("re-reading the target: %v", err)
 	}
@@ -259,7 +259,7 @@ func TestPacedRowPastTheHorizonIsShed(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newAdminFixture(t)
 
-	target, err := svc.CreateServerNotificationTarget(ctx, NotificationTargetInput{
+	target, err := svc.Integrations.CreateServerNotificationTarget(ctx, NotificationTargetInput{
 		Kind:               "webhook",
 		Config:             []byte(`{"url":"http://127.0.0.1:1/hook"}`),
 		EnabledEvents:      []string{"backup-completed"},
@@ -268,7 +268,7 @@ func TestPacedRowPastTheHorizonIsShed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating the target: %v", err)
 	}
-	row, err := svc.notificationTargetRow(ctx, target.PID)
+	row, err := svc.Integrations.notificationTargetRow(ctx, target.PID)
 	if err != nil {
 		t.Fatalf("reading the row: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestPacedRowPastTheHorizonIsShed(t *testing.T) {
 		t.Fatalf("queuing: %v", err)
 	}
 
-	if !svc.DrainNotifyOutbox(ctx) {
+	if !svc.Integrations.DrainNotifyOutbox(ctx) {
 		t.Fatal("the drain found nothing to do")
 	}
 	if n := takeQueuedNotifies(t, ctx, svc); n != 0 {

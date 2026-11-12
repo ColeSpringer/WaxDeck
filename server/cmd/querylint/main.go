@@ -68,14 +68,14 @@ var allowed = map[string]map[string]bool{
 	"matching.go": {"albumUnit": true},
 	// Coverage counts answer "of everything in the catalog, how much is
 	// enriched"; filtering would flatter the number.
-	"enrichment.go": {"enrichmentProgress": true},
+	"enrichment.go": {"progress": true},
 	// Organize plans move files on disk, not listings.
 	"organize.go": {"organizePlanFor": true},
 	// The sync reconciler must see a trashed member as "the owner
 	// removed this" - never as "vanished, download it again".
-	"playlistsync.go": {"itemViewsByPID": true},
+	"core.go": {"itemViewsByPID": true},
 	// The admin library row counts what a root holds.
-	"visibility.go": {"libraryItemCount": true},
+	"rootadmin.go": {"libraryItemCount": true},
 }
 
 func run(pass *analysis.Pass) (any, error) {
