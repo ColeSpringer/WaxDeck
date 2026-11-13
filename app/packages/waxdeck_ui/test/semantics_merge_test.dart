@@ -1087,7 +1087,7 @@ const _nonInteractive = <String>{
 /// The public widget classes `lib/src/components/` declares, render
 /// object widgets included.
 Set<String> _declaredComponents() => _publicWidgets(<String>[
-  for (final file in Directory('lib/src/components').listSync())
+  for (final file in Directory('lib/src/components').listSync(recursive: true))
     if (file is File && file.path.endsWith('.dart')) file.readAsStringSync(),
 ]);
 

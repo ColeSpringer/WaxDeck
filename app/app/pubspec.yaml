@@ -85,6 +85,9 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  # Resolves lib/ for the audits in test/lib_audit_test.dart. build_runner and
+  # test bring it in too: bump it in the same change as theirs.
+  analyzer: 13.3.0
   integration_test:
     sdk: flutter
   msix: ^3.16.8
