@@ -43,3 +43,7 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 [11-04-26] In listening stats under top we should include small images next to the list items. At least for artists and albums. Also, what the hell is shows supposed to be? Where are books and podcasts?
 
 [11-04-26] "Treat as audiobook" seems to only be an option for music files but the option is not given to all of them? If its an audiobook users should just be selecting that on import or download. Probably get rid of this
+
+[11-13-26] Going to genre, clicking on the "No genre" genre, editing a track to give it a genre, then hitting the in app back button, you will still see the track you gave a genre to in the no genre category.
+
+[11-13-26] clicking on a radio station now gives you menu options instead of playing the station. NOTE: this seems to be only if you click in the upper half of the station icon. if you click near the bottom it plays. this indicates some sort of overlap between the menu settings that you can click on and the play button / play portion of the radio station.
