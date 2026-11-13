@@ -37,7 +37,7 @@ final motion = WaxMotion.of(context);   // reduced-motion aware durations
 ## The catalogue
 
 ```sh
-cd example && flutter run -d chrome
+cd example && flutter pub get && flutter run -d chrome
 ```
 
 Every component in all three themes, at both densities and two text
@@ -52,7 +52,7 @@ Nothing here is hand-drawn or hand-copied:
 
 | Command | Produces |
 |---|---|
-| `make fonts` | `fonts/*-Variable.ttf`: Archivo, Inter, Spline Sans Mono, and the Noto fallbacks, subset from a pinned upstream revision |
+| `make fonts` | `fonts/*-Variable.ttf`: Archivo, Inter, Spline Sans Mono; in `assets/fonts/` the Noto fallbacks (a variable face per script, `NotoSansCJK.otf`, `NotoColorEmoji.ttf`); their licenses in `fonts/licenses/`; and in `app/app/web/vendor/wax-font-fallback/` the web engine's default face with its license. Each face is pinned to an upstream revision or checksum, and subset except the CJK face and the web engine's |
 | `make icons` | `fonts/Phosphor*-Subset.ttf`: the two icon weights, subset to the codepoints `WaxIcons` names |
 | `make brand` | the mark, the app icons for every platform, the wordmark SVG, and the player backdrop's grain |
 
@@ -79,5 +79,8 @@ disagree.
   classified: give a new one a scenario in that file, or add it to the
   test's non-interactive list if it handles no tap.
 
-Regenerate goldens with `flutter test --update-goldens` in this package
-and in `example/`.
+Regenerate the CI goldens with `flutter test --update-goldens` in this
+package and in `example/`, on any host, and the readable ones with
+`make goldens-linux` at the repo root, which renders them for this
+package and `example/` in a container (Docker is the only
+prerequisite). A design-system change wants both.

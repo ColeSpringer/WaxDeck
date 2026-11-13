@@ -30,7 +30,7 @@ The everyday loop:
 make generate   # api/spec/ fragments to api/openapi.yaml, Go server stubs, Dart client
 make lint test  # the gate for every change
 make run        # build and serve on http://localhost:4420
-make e2e        # Playwright suite against the compose stack
+make e2e        # Playwright suite against a local fixture stack
 ```
 
 `make lint` also checks the workflows and shell scripts, with the same

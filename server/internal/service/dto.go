@@ -3,8 +3,8 @@ package service
 import "time"
 
 // The service returns plain DTOs so the API layer never touches WaxBin
-// types: the ownership boundary (only service and below import waxbin)
-// is enforced by cmd/importlint, and these types are what cross it.
+// types: the API layer may not import waxbin (cmd/importlint holds the
+// rule), and these types are what cross that boundary.
 
 // ItemSummary is the compact list-row shape. Virtual marks a track
 // carved out of a shared source file by a cue sheet: it plays a

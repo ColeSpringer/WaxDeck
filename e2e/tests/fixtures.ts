@@ -32,14 +32,14 @@ export * from '@playwright/test';
 // heartbeat and buffered console/error listeners from birth, and a test
 // that fails or times out dumps hang evidence (thread states, worker
 // responsiveness, compositor liveness) next to its trace before the
-// context closes. Purpose and format: tests/hangprobe.ts and the
-// renderer-hang entry in docs/deferred-work.md.
-// The app ships skwasm single-threaded until flutter/flutter#190039 is
-// fixed (see web/index.html). WAXDECK_E2E_MT_SKWASM=1 rewrites the
-// served page to turn multi-threading back on for the run, which is
-// how a new engine gets re-tested against the heap race without
-// touching the app; expect the old hang rate if the bug is still
-// there.
+// context closes. Purpose and format: tests/support/hangprobe.ts and the
+// skwasm entry in docs/deferred-work.md.
+// The app ships skwasm single-threaded until the pinned Flutter carries
+// the fix for flutter/flutter#190039 (see web/index.html).
+// WAXDECK_E2E_MT_SKWASM=1 rewrites the served page to turn
+// multi-threading back on for the run, which is how a new engine gets
+// re-tested against the heap race without touching the app; expect the
+// old hang rate from an engine that does not carry the fix.
 const forceMtSkwasm = !!process.env.WAXDECK_E2E_MT_SKWASM;
 
 const isPerfSpec = (file: string) =>

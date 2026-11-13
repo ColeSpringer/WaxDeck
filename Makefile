@@ -293,8 +293,8 @@ web: app-deps
 	rm -rf $(WEB_DIST) && mkdir -p $(WEB_DIST)
 	cp -r $(APP_WEB_OUT)/. $(WEB_DIST)/
 
-# A real file target, so the web bundle rebuilds only when a Dart source
-# is newer: no stale UI, no Flutter compile on Go-only iterations.
+# A real file target, so the web bundle rebuilds only when one of its
+# inputs is newer: no stale UI, no Flutter compile on Go-only iterations.
 WEB_STAMP := $(WEB_DIST)/flutter_bootstrap.js
 # Everything the web build reads, so that none of it can change under a
 # bundle that stays: the Dart and the l10n bundles beside it, every font

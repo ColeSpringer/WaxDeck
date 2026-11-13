@@ -326,7 +326,7 @@ Every entry carries a gate tag saying what actually blocks it:
   repo yet.
 - `[in-repo]` **Outbound notification prose leaves the app in
   English.** Titles and bodies are composed in Go ("Backup failed";
-  "Backup completed" with its size and duration,
+  "Backup completed" with its file name and size,
   `server/internal/service/backups.go`) and delivered through
   `EmitServerNotification` to ntfy, Discord, and webhooks - read
   outside the app, where no client table can follow. If it ever

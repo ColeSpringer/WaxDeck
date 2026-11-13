@@ -1,6 +1,7 @@
 // Package service is the application core: everything between the API
 // surface and the WaxBin facade. Handlers call services; services call
-// the facade; nothing above this package imports waxbin.
+// the facade, which belongs to this package alone (cmd/importlint holds
+// the whole waxbin import rule).
 package service
 
 import (

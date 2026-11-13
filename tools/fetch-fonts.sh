@@ -6,10 +6,11 @@
 # third-party CDN at runtime (Flutter web's default Noto fallback does
 # exactly that, which a LAN-only instance cannot reach).
 #
-# The output lands in app/packages/waxdeck_ui/fonts/ and is committed,
-# as does the web engine's own default face, in app/app/web/vendor/.
+# The output lands in app/packages/waxdeck_ui/fonts/ and
+# app/packages/waxdeck_ui/assets/fonts/ and is committed, as does the web
+# engine's own default face, in app/app/web/vendor/.
 # Re-run this only to refresh or re-scope a family; the pinned upstream
-# revision below makes the output reproducible.
+# revisions below make the output reproducible.
 #
 #   tools/fetch-fonts.sh            # the bundled chain
 #   tools/fetch-fonts.sh --report   # sizes only, no download

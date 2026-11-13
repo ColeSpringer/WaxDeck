@@ -12,9 +12,9 @@ import waxart "github.com/colespringer/waxbin/art"
 // this server picks.
 //
 // Here rather than beside each caller because the callers cannot see
-// the ladder: only `internal/service` and below may import waxbin, so
-// the HTTP layer and the Subsonic adapter had a copy of the number
-// each, with the ladder named in a comment and read by nothing.
+// the ladder: the HTTP layer and the Subsonic adapter may not import
+// waxbin (cmd/importlint), so each would hold its own copy of the
+// number, with the ladder named in a comment and read by nothing.
 // [ArtSizeOnLadder] is what reads it, and `artsizes_test.go` is what
 // fails when the two disagree.
 const (

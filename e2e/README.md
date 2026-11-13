@@ -36,7 +36,7 @@ Everything else is `app`:
 | `app.nav` | `enter(dest)` (by URL), `to(dest)` (through the chrome), `expectAt`, `back`, `reload`, `open(url)`, `location()` |
 | `app.api` | the server, typed against `api/openapi.yaml` (`tests/api-types.ts`, minted by `npm run typecheck`, not committed); `as(token)` for another credential |
 | `app.seed` | preconditions, set through the API rather than driven |
-| `app.admin` `app.auth` `app.books` `app.cast` `app.discovery` `app.home` `app.music` `app.player` `app.playlists` `app.podcasts` `app.queue` `app.radio` `app.review` `app.search` `app.settings` `app.sharing` `app.shell` `app.sso` `app.stats` `app.uploads` | one surface per area of the app |
+| `app.<area>` | one surface per area of the app: the other surface fields of `App` in `tests/driver/index.ts` |
 
 `nav.enter` is the default way to start. `nav.to` walks the sidebar and
 belongs to the specs where navigation itself is under test;
@@ -174,8 +174,10 @@ containers are up (`FEISHIN_BASE_URL`, `WAXDECK_DEX_SSO`).
 ## Running
 
 `make e2e` brings the thing under test up to date itself: the Flutter web
-build when a Dart source is newer than the embedded bundle, and the
-server binary always, since it embeds that bundle at link time.
+build when anything it reads is newer than the embedded bundle (Dart,
+l10n bundles and config, declared fonts and assets, pubspecs and the
+lockfile, the licenses, `app/app/web/`), and the server binary always,
+since it embeds that bundle at link time.
 Forgetting used to mean driving the *previous* build, which reads exactly
 like a missing feature.
 

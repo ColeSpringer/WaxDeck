@@ -21,6 +21,7 @@ func TestImportBoundary(t *testing.T) {
 		{"allowlisted package: subpackage passes, facade reports", module + "internal/providers"},
 		{"service: facade and subpackage pass, store/sqlite reports", module + "internal/service"},
 		{"unlisted package inside the module", module + "internal/api"},
+		{"composition root: source and enrich pass, another subpackage, the facade and store/sqlite report", module + "cmd/waxdeck"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			analysistest.Run(t, analysistest.TestData(), analyzer, tc.pkg)
