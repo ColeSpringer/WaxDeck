@@ -9,7 +9,8 @@ import (
 
 // An origin stays while its job is settled, so a fix still reads as
 // running through its re-check, and one process settles it once. A
-// settle cut short by a stop is taken over by the next process.
+// settle cut short by a stop is taken over by the next process, even one
+// whose clock reads earlier than the claim.
 func TestJobOriginClaimHoldsUntilSettled(t *testing.T) {
 	ctx := context.Background()
 	d := openTest(t)
@@ -21,17 +22,19 @@ func TestJobOriginClaimHoldsUntilSettled(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	const opened = 50
-	if o, err := d.ClaimJobOrigin(ctx, "fix", 100, opened); err != nil || o.Rule != "missing-lyrics" || o.UserID != "u1" {
+	if o, err := d.ClaimJobOrigin(ctx, "fix", 100); err != nil || o.Rule != "missing-lyrics" || o.UserID != "u1" {
 		t.Fatalf("claim = %+v (%v), want the fix's origin", o, err)
 	}
-	if _, err := d.ClaimJobOrigin(ctx, "fix", 101, opened); !errors.Is(err, ErrNotFound) {
+	if _, err := d.ClaimJobOrigin(ctx, "fix", 101); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("a second claim in the same process = %v, want ErrNotFound", err)
 	}
 	if rules, err := d.JobOriginRules(ctx); err != nil || !slices.Equal(rules, []string{"missing-lyrics"}) {
 		t.Fatalf("rules while settling = %v (%v), want the fix's", rules, err)
 	}
-	if o, err := d.ClaimJobOrigin(ctx, "fix", 300, 200); err != nil || o.PID != "fix" {
+	if err := d.ReleaseJobOriginClaims(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if o, err := d.ClaimJobOrigin(ctx, "fix", 50); err != nil || o.PID != "fix" {
 		t.Fatalf("claim by the next process = %+v (%v), want it taken over", o, err)
 	}
 	if rule, err := d.DeleteJobOrigin(ctx, "fix"); err != nil || rule != "missing-lyrics" {
@@ -86,7 +89,7 @@ func TestJobOriginGetDoesNotClaim(t *testing.T) {
 	if o, err := d.JobOriginGet(ctx, "jb"); err != nil || o.UserID != "us-1" || o.CreatedAtNS != 5 {
 		t.Fatalf("origin = %+v (%v), want us-1's", o, err)
 	}
-	if _, err := d.ClaimJobOrigin(ctx, "jb", 10, 1); err != nil {
+	if _, err := d.ClaimJobOrigin(ctx, "jb", 10); err != nil {
 		t.Fatalf("claiming after a read: %v", err)
 	}
 }

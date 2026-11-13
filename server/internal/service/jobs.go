@@ -39,8 +39,8 @@ type Jobs struct {
 	// jobFinishedHook runs as a job's end is taken in (false) and once it
 	// has been (true), in a test; nothing in the server sets it.
 	jobFinishedHook atomic.Pointer[func(j *model.Job, done bool)]
-	// openedAtNS is when this process opened the library: a job's end
-	// taken in hand before it was cut short by a stop.
+	// openedAtNS is when this process opened the library: a job that
+	// ended earlier ended under another process.
 	openedAtNS int64
 }
 
@@ -531,7 +531,7 @@ func (l *Jobs) adoptJobWith(ctx context.Context, o wdb.JobOrigin) error {
 // for the next start, and an organize run's audit row goes in with that
 // drop, so a settle repeated then records the run once.
 func (l *Jobs) settleJobOrigin(ctx context.Context, j *model.Job) {
-	o, err := l.db.ClaimJobOrigin(context.WithoutCancel(ctx), string(j.PID), time.Now().UnixNano(), l.openedAtNS)
+	o, err := l.db.ClaimJobOrigin(context.WithoutCancel(ctx), string(j.PID), time.Now().UnixNano())
 	if err != nil {
 		if !errors.Is(err, wdb.ErrNotFound) {
 			l.log.Warn("claiming a job's origin", "job", string(j.PID), "err", err)

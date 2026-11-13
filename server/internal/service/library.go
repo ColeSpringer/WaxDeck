@@ -448,6 +448,11 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	l.Enrichment.sources = sources
 	l.Health.cursorSealer = cursorSealer
 	l.Jobs.openedAtNS = time.Now().UnixNano()
+	// Before anything settles a job: an end still in hand was cut short
+	// by the stop before this start.
+	if err := store.ReleaseJobOriginClaims(ctx); err != nil {
+		log.Warn("releasing job ends cut short by a stop", "err", err)
+	}
 	if reset != nil {
 		l.recordCatalogReset(ctx, reset)
 	}

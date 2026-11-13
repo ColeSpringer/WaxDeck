@@ -20,7 +20,7 @@ func TestJobOriginKeepsItsDetail(t *testing.T) {
 	if all, err := d.JobOrigins(ctx); err != nil || len(all) != 1 || all[0].Detail != detail {
 		t.Fatalf("listing = %+v (%v), want the detail", all, err)
 	}
-	if o, err := d.ClaimJobOrigin(ctx, "jb-1", 10, 5); err != nil || o.Detail != detail {
+	if o, err := d.ClaimJobOrigin(ctx, "jb-1", 10); err != nil || o.Detail != detail {
 		t.Fatalf("claim = %+v (%v), want the detail", o, err)
 	}
 }

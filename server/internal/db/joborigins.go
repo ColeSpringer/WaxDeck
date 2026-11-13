@@ -30,14 +30,14 @@ func (d *DB) InsertJobOrigin(ctx context.Context, o JobOrigin) error {
 }
 
 // ClaimJobOrigin takes a job's end in hand at nowNS and returns its
-// origin, so of two callers settling the same job only one gets it. A
-// claim made before heldBeforeNS, the process's start, was cut short by
-// a stop and is taken over. ErrNotFound when there is none to take.
-func (d *DB) ClaimJobOrigin(ctx context.Context, pid string, nowNS, heldBeforeNS int64) (JobOrigin, error) {
+// origin, so of two callers settling the same job only one gets it. The
+// claim holds until the origin is dropped or a start releases it.
+// ErrNotFound when there is none to take.
+func (d *DB) ClaimJobOrigin(ctx context.Context, pid string, nowNS int64) (JobOrigin, error) {
 	var o JobOrigin
 	err := d.w.QueryRowContext(ctx, `
-		UPDATE job_origins SET settling_at_ns = ? WHERE pid = ? AND settling_at_ns < ?
-		RETURNING pid, user_id, rule, detail, created_at_ns`, nowNS, pid, heldBeforeNS).Scan(
+		UPDATE job_origins SET settling_at_ns = ? WHERE pid = ? AND settling_at_ns = 0
+		RETURNING pid, user_id, rule, detail, created_at_ns`, nowNS, pid).Scan(
 		&o.PID, &o.UserID, &o.Rule, &o.Detail, &o.CreatedAtNS)
 	if errors.Is(err, sql.ErrNoRows) {
 		return JobOrigin{}, ErrNotFound
@@ -46,6 +46,17 @@ func (d *DB) ClaimJobOrigin(ctx context.Context, pid string, nowNS, heldBeforeNS
 		return JobOrigin{}, fmt.Errorf("db: claiming job origin: %w", err)
 	}
 	return o, nil
+}
+
+// ReleaseJobOriginClaims lets go of every job end taken in hand. A start
+// calls it before anything settles: each claim it finds was cut short by
+// the stop before it, whatever the clock read then or reads now.
+func (d *DB) ReleaseJobOriginClaims(ctx context.Context) error {
+	if _, err := d.w.ExecContext(ctx, `
+		UPDATE job_origins SET settling_at_ns = 0 WHERE settling_at_ns <> 0`); err != nil {
+		return fmt.Errorf("db: releasing job origin claims: %w", err)
+	}
+	return nil
 }
 
 // DeleteJobOrigin drops a job's origin and answers the rule it carried;

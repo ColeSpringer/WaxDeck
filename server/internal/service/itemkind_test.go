@@ -258,7 +258,7 @@ func TestAFailedKindFollowUpIsRepeatedAtTheNextStart(t *testing.T) {
 	if has, err := svc.db.HasJobOrigin(ctx, string(j.PID)); err != nil || !has {
 		t.Fatalf("origin after a failed follow-up = %v (%v), want it kept", has, err)
 	}
-	svc.Jobs.openedAtNS = time.Now().UnixNano() + 1 // the next start
+	nextStart(t, ctx, svc)
 	svc.Jobs.settleJobOrigin(ctx, j)
 	if has, err := svc.db.HasJobOrigin(ctx, string(j.PID)); err != nil || has || runs != 2 {
 		t.Fatalf("origin after the repeat = %v (%v), runs %d; want it settled after a second run", has, err, runs)
@@ -294,7 +294,7 @@ func TestAKindFollowUpThatCannotReadTheCatalogIsRepeated(t *testing.T) {
 	if has, err := svc.db.HasJobOrigin(ctx, string(j.PID)); err != nil || !has || len(remapped) != 0 {
 		t.Fatalf("after an unreadable catalog: origin %v (%v), remaps %v; want the origin kept and nothing moved", has, err, remapped)
 	}
-	svc.Jobs.openedAtNS = time.Now().UnixNano() + 1 // the next start
+	nextStart(t, ctx, svc)
 	svc.Jobs.settleJobOrigin(ctx, j)
 	if has, err := svc.db.HasJobOrigin(ctx, string(j.PID)); err != nil || has ||
 		len(remapped) != 1 || remapped[0].Kinds[converted] != "audiobook" {
@@ -326,7 +326,7 @@ func TestAnUnownedKindFollowUpThatFailsIsKeptForTheNextStart(t *testing.T) {
 		t.Fatalf("origin after a failed unowned follow-up = %v (%v), want one kept", has, err)
 	}
 	failing = false
-	svc.Jobs.openedAtNS = time.Now().UnixNano() + 1
+	nextStart(t, ctx, svc)
 	svc.Jobs.settleJobOrigin(ctx, j)
 	if has, err := svc.db.HasJobOrigin(ctx, string(j.PID)); err != nil || has || runs != 1 {
 		t.Fatalf("after the repeat: origin %v (%v), runs %d; want it settled once", has, err, runs)

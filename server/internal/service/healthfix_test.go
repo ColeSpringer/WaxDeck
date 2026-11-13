@@ -284,11 +284,12 @@ func TestAFixSettleCutShortIsTakenOver(t *testing.T) {
 	if err := svc.db.InsertJobOrigin(ctx, wdb.JobOrigin{PID: string(pid), UserID: uc.ID, Rule: ruleMissingLyrics, CreatedAtNS: 1}); err != nil {
 		t.Fatal(err)
 	}
-	// Taken in hand by a process that stopped before telling anyone:
-	// nothing settles a job while it runs, so the claim holds till then.
-	if _, err := svc.db.ClaimJobOrigin(ctx, string(pid), 1, 2); err != nil {
+	// Taken in hand by a process that stopped before telling anyone, and
+	// let go the way this one's start does.
+	if _, err := svc.db.ClaimJobOrigin(ctx, string(pid), 1); err != nil {
 		t.Fatal(err)
 	}
+	nextStart(t, ctx, svc)
 	gate()
 	if row := waitForInbox(t, ctx, svc, uc, "health-fix-finished"); row.TargetPID != apiPID(PrefixJob, pid) {
 		t.Fatalf("row = %+v, want the cut-short fix's", row)

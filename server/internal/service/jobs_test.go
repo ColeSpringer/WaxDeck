@@ -162,6 +162,15 @@ func TestAJobWhoseStarterCouldNotBeRecordedIsStillFollowed(t *testing.T) {
 	waitFor(t, followed, "a starter that could not be recorded should still hand the job to the follower")
 }
 
+// nextStart leaves the job ends taken in hand as the start after a stop
+// does: let go, for that start's settle to take.
+func nextStart(t *testing.T, ctx context.Context, svc *Library) {
+	t.Helper()
+	if err := svc.db.ReleaseJobOriginClaims(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // waitFor polls cond until it holds, failing with what it waited for.
 func waitFor(t *testing.T, cond func() bool, what string) {
 	t.Helper()
@@ -812,4 +821,36 @@ func TestClearingFinishedJobsStampsTheNewestEnd(t *testing.T) {
 	if got, err := svc.db.JobsClearedAt(ctx, uc.ID); err != nil || got != newest {
 		t.Fatalf("watermark = (%d, %v), want the newest end %d", got, err, newest)
 	}
+}
+
+// A job's end a stopped process took in hand is told at the next start
+// wherever the clock stands by then: one set back behind the claim makes
+// the claim look newer than the start.
+func TestASettleCutShortIsTakenOverAfterTheClockSteppedBack(t *testing.T) {
+	t.Parallel()
+	dataDir := t.TempDir()
+	ctx, svc, uc, stop := openServiceAt(t, dataDir, nil)
+	scan, err := svc.lib.Scan(ctx, waxbin.ScanRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Once the follower has read the scan's end and found no one to tell,
+	// nothing here settles the origin recorded after it.
+	jobFollowerSettled(t, svc, scan.JobPID)
+	if err := svc.db.InsertJobOrigin(ctx, wdb.JobOrigin{PID: string(scan.JobPID), UserID: uc.ID, CreatedAtNS: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.db.ClaimJobOrigin(ctx, string(scan.JobPID), time.Now().Add(time.Hour).UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	stop()
+
+	ctx, svc, uc, _ = openServiceAt(t, dataDir, nil)
+	if row := waitForInbox(t, ctx, svc, uc, "job-finished"); row.TargetPID != apiPID(PrefixJob, scan.JobPID) {
+		t.Fatalf("row = %+v, want the scan's end", row)
+	}
+	waitFor(t, func() bool {
+		has, err := svc.db.HasJobOrigin(ctx, string(scan.JobPID))
+		return err == nil && !has
+	}, "the settled origin should be gone")
 }
