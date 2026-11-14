@@ -40,6 +40,20 @@ final signupEnabledProvider = FutureProvider<bool>(
       (await ref.watch(bootstrapStatusProvider.future)).signupEnabled,
 );
 
+/// What a session read made of the account the client held when it was
+/// asked.
+enum SessionRecheck {
+  /// The server answered for that account: it stands.
+  stands,
+
+  /// That account is gone: the server answered for nobody or for another
+  /// account, or the client moved on before the answer came.
+  left,
+
+  /// No answer came: the session is as much in doubt as it was.
+  unanswered,
+}
+
 /// Session state for the whole app.
 ///
 /// Builds by probing the server session. On native the persisted bearer
@@ -48,12 +62,23 @@ final signupEnabledProvider = FutureProvider<bool>(
 /// friends flip the state on success and rethrow the structured API error
 /// on failure so forms can show it.
 class AuthController extends AsyncNotifier<SessionState> {
-  /// Moves at every sign-in and sign-out: a session read asked before one
-  /// answers for the account it was asked about, and is dropped.
+  /// Moves at every sign-in, sign-out and build: a session read asked
+  /// before one answers for the account, or the build, it was asked of,
+  /// and is dropped. `ref.mounted` cannot say so: the notifier outlives a
+  /// build, and its `ref` is always the newest one's.
   var _account = 0;
+
+  /// Above zero while an account is on its way out: from the first step of
+  /// a sign-out or a swap until the session stops naming it.
+  var _leaving = 0;
+
+  /// The sign-out under way, which another joins rather than cleaning up
+  /// again; null once it is over.
+  Future<void>? _signingOut;
 
   @override
   Future<SessionState> build() async {
+    _account++;
     // No server, no probe: an unconfigured native build answers signed
     // out at once and the router's redirect owns the connect screen.
     if (!ref.watch(serverConfiguredProvider)) {
@@ -85,6 +110,12 @@ class AuthController extends AsyncNotifier<SessionState> {
         await _forgetAccount();
       }
     }
+    // An account arriving lets go of what the last one's leaving held, as
+    // a sign-in does: a build can land in the middle of a swap and drop
+    // the tail that would have.
+    if (session.authenticated) {
+      ref.read(playbackHeldProvider.notifier).release();
+    }
     return session;
   }
 
@@ -96,53 +127,109 @@ class AuthController extends AsyncNotifier<SessionState> {
       final rotated = await repo.refreshToken();
       await store.writeToken(rotated.token);
     } on WaxDeckApiException catch (e) {
-      if (e.statusCode == 401) {
+      if (e.code == 'unauthenticated') {
         // The session died between the probe and the rotation (revoked
         // server side). Clearing just the token would leave the UI
         // signed in over a dead credential, failing on its next call,
         // so drop the whole local session and land on the login screen.
         await signOutLocally();
       }
-      // Any other failure keeps the current token; it still works.
+      // Any other failure keeps the current token; it still works. A 401
+      // in no words of the server's is something in front of it.
     }
   }
 
   /// Re-reads the session after the server said this account's rights
-  /// moved.
+  /// moved or its session ended, or, in a browser, the event socket came
+  /// back from a drop across which another account may have signed in.
   ///
-  /// The previous session stands while the read is in flight, and a
-  /// failed read leaves it standing too. Load-bearing: the router's
+  /// The previous session stands while the read is in flight, and a read
+  /// that never reached the server leaves it standing too: only the
+  /// server's answer signs anybody out. Load-bearing: the router's
   /// redirect reads `authenticated`, so a bare loading frame here would
   /// bounce a signed-in visitor to the login screen for the length of
   /// one request.
-  Future<void> refreshSession() async {
+  ///
+  /// A session that turns out to be another account's is a sign-out and a
+  /// sign-in: the screens still up read what they show as the last
+  /// account, so the router takes them down, and what only they read goes
+  /// with them, before the next account's session shows.
+  ///
+  /// Answers what the read made of the account the client held when it
+  /// was asked; one the client moved on from meanwhile (a sign-in, a
+  /// sign-out, a new build) answers for what the client holds now. While
+  /// an account is leaving, it has left, and nothing is read: a read then
+  /// could start its leaving a second time.
+  Future<SessionRecheck> refreshSession() async {
+    if (_leaving > 0) return SessionRecheck.left;
     final repo = ref.read(repositoryProvider);
     final asked = _account;
+    final askedFor = state.value;
     try {
       final session = await repo.getSession();
-      // A sign-out or a new account can end this controller mid-read, or
-      // land while it is out: either way the answer is not this account's.
-      if (!ref.mounted || asked != _account) return;
+      // A sign-out, a new account or a new build can end this controller
+      // mid-read, or land while it is out: either way the answer is stale.
+      if (!ref.mounted || asked != _account) return _holding(askedFor);
       if (!session.authenticated) {
         // The server ended the session (the account was disabled, or this
         // device revoked), which is a sign-out like any other.
         await signOutLocally();
-        return;
+        return SessionRecheck.left;
       }
       if (session.user?.id != state.value?.user?.id) {
         // Another account's session in this one's place: a tab that signed
         // in over this browser's cookie. Its leftovers go before it shows.
         final adopting = ++_account;
-        await _forgetAccount();
-        if (!ref.mounted || adopting != _account) return;
+        _leaving++;
+        try {
+          await _forgetAccount();
+        } finally {
+          _leaving--;
+        }
+        if (!ref.mounted || adopting != _account) return _holding(askedFor);
+        final screens = ref.exists(signedInScreensProvider)
+            ? ref.read(signedInScreensProvider).gone
+            : null;
+        state = const AsyncData(SessionState(authenticated: false));
+        // No timeout, though a hidden tab holds this until shown: the next
+        // session must not land on screens holding the last account's reads.
+        if (screens != null) await screens;
+        if (!ref.mounted || adopting != _account) return _holding(askedFor);
         ref.read(playbackHeldProvider.notifier).release();
+        state = AsyncData(session);
+        return SessionRecheck.left;
       }
       state = AsyncData(session);
-    } on WaxDeckApiException {
-      // Nothing to show and nothing to unwind: the 401 path is the
-      // session layer's own, and any other failure just means the
-      // client keeps believing what it last read.
+      return SessionRecheck.stands;
+    } on WaxDeckApiException catch (error) {
+      if (!ref.mounted || asked != _account) return _holding(askedFor);
+      // The server answers this read `authenticated: false` for a dead
+      // session; a refusal in its own words (`unauthenticated`) says the
+      // same, and signs out too. A 401 in no words of its own is something
+      // in front of the server, a proxy's sign-in, and like any other
+      // failure keeps what the client last read.
+      if (error.code != 'unauthenticated') return SessionRecheck.unanswered;
+      await signOutLocally();
+      return SessionRecheck.left;
     }
+  }
+
+  /// Whether the client still holds the session it held when it [asked],
+  /// signed in as the same user, or as none when it named none: what a read
+  /// it moved on from answers. An account leaving is not held; while a new
+  /// build reads the session itself, that is not known yet.
+  SessionRecheck _holding(SessionState? asked) {
+    if (!ref.mounted || _leaving > 0) return SessionRecheck.left;
+    final held = state;
+    if (held.isLoading) return SessionRecheck.unanswered;
+    final session = held.value;
+    return asked != null &&
+            asked.authenticated &&
+            session != null &&
+            session.authenticated &&
+            session.user?.id == asked.user?.id
+        ? SessionRecheck.stands
+        : SessionRecheck.left;
   }
 
   Future<void> _adopt(LoginResult result) async {
@@ -229,15 +316,25 @@ class AuthController extends AsyncNotifier<SessionState> {
   }
 
   /// Drops the local session without calling the server, for when the
-  /// server side is already gone (the current session was revoked).
-  Future<void> signOutLocally() async {
+  /// server side is already gone (the current session was revoked). Asked
+  /// while one is under way, it is that one, and fails if that one does.
+  Future<void> signOutLocally() => _signingOut ??= _signOut().whenComplete(() {
+    _signingOut = null;
+  });
+
+  Future<void> _signOut() async {
     _account++;
-    ref.read(repositoryProvider).authToken = null;
-    if (!kIsWeb) {
-      await ref.read(credentialStoreProvider).clearToken();
+    _leaving++;
+    try {
+      ref.read(repositoryProvider).authToken = null;
+      if (!kIsWeb) {
+        await ref.read(credentialStoreProvider).clearToken();
+      }
+      await _forgetAccount();
+      state = const AsyncData(SessionState(authenticated: false));
+    } finally {
+      _leaving--;
     }
-    await _forgetAccount();
-    state = const AsyncData(SessionState(authenticated: false));
   }
 
   /// What an account leaves on this client, dropped on every road out of
@@ -303,6 +400,24 @@ final authControllerProvider =
       AuthController.new,
       retry: retryUnlessRefused,
     );
+
+/// Alive while the signed-in screens are mounted: the scope the router
+/// builds over them watches it.
+final signedInScreensProvider = Provider.autoDispose<SignedInScreens>((ref) {
+  final screens = SignedInScreens._();
+  ref.onDispose(screens._gone.complete);
+  return screens;
+});
+
+class SignedInScreens {
+  SignedInScreens._();
+
+  final _gone = Completer<void>();
+
+  /// Completes once the screens are unmounted and the providers only they
+  /// listened to are disposed: Riverpod disposes those in the same pass.
+  Future<void> get gone => _gone.future;
+}
 
 /// Who is signed in, as a value that changes exactly when the account
 /// does.

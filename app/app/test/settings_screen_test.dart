@@ -758,6 +758,36 @@ void main() {
       expect(container.read(themeModeProvider), ThemeMode.light);
     });
 
+    testWidgets('every theme option publishes an id by its value', (
+      tester,
+    ) async {
+      _tallWindow(tester);
+      await _pumpSection(tester, _signedInRepo(), SettingsSection.appearance);
+
+      final picker = find.bySemanticsIdentifier(SemanticsIds.themeSelect);
+      await _show(tester, picker);
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      for (final theme in ThemePref.values) {
+        expect(
+          find.bySemanticsIdentifier(
+            SemanticsIds.settingOption('theme', theme.name),
+          ),
+          findsOneWidget,
+          reason: theme.name,
+        );
+      }
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.settingOption('theme', 'dark')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        _container(tester, SettingsSectionScreen).read(themeSettingProvider),
+        ThemePref.dark,
+      );
+    });
+
     testWidgets('the theme sits under the This device heading', (tester) async {
       _tallWindow(tester);
       await _pumpSection(tester, _signedInRepo(), SettingsSection.appearance);

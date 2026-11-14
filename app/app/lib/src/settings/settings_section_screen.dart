@@ -1186,6 +1186,8 @@ class _AppearanceBody extends ConsumerWidget {
                   labelFor: (theme) => _themeLabel(l10n, theme),
                   label: l10n.settingsThemeTitle,
                   semanticsId: SemanticsIds.themeSelect,
+                  optionSemanticsIdFor: (theme) =>
+                      SemanticsIds.settingOption('theme', theme.name),
                   onChanged: (theme) =>
                       ref.read(themeSettingProvider.notifier).set(theme),
                 ),

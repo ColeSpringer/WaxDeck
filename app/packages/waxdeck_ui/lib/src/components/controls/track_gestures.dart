@@ -19,6 +19,15 @@ class _PreciseVerticalDragRecognizer extends VerticalDragGestureRecognizer {
   bool isPointerPanZoomAllowed(PointerPanZoomStartEvent event) => false;
 }
 
+/// A dead track's claim on a press: a tap that does nothing, so a greyed
+/// track is never a way into what holds it. A tap loses to any drag past
+/// its slop, so a scroll started on the track still scrolls. Its own type,
+/// so enabling the track disposes it rather than handing the live tap a
+/// recogniser with this one's callback still set.
+class _SpentTapRecognizer extends TapGestureRecognizer {}
+
+void _spend() {}
+
 /// The pointer pipeline the slider and the seek bar share.
 ///
 /// One recogniser set, three rules. A tap previews on press and commits
@@ -250,7 +259,13 @@ class _TrackGesturesState extends State<_TrackGestures> {
     return RawGestureDetector(
       behavior: HitTestBehavior.opaque,
       gestures: !widget.enabled
-          ? const <Type, GestureRecognizerFactory>{}
+          ? <Type, GestureRecognizerFactory>{
+              _SpentTapRecognizer:
+                  GestureRecognizerFactoryWithHandlers<_SpentTapRecognizer>(
+                    _SpentTapRecognizer.new,
+                    (recognizer) => recognizer.onTap = _spend,
+                  ),
+            }
           : <Type, GestureRecognizerFactory>{
               TapGestureRecognizer:
                   GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
@@ -293,10 +308,12 @@ class _TrackGesturesState extends State<_TrackGestures> {
         // Both halves of "this is a control", in the one place every
         // track already goes through: the cursor says so before the
         // click, and the flag lets the painter say so too. A dead
-        // track claims neither - a pointing hand over something that
-        // does nothing is a worse lie than no cursor at all.
+        // track claims the arrow, over its holder's hand too - a
+        // pointing hand over something that does nothing is a lie.
         child: MouseRegion(
-          cursor: widget.enabled ? SystemMouseCursors.click : MouseCursor.defer,
+          cursor: widget.enabled
+              ? SystemMouseCursors.click
+              : SystemMouseCursors.basic,
           onEnter: widget.enabled ? (_) => widget.onHover?.call(true) : null,
           onExit: (_) => widget.onHover?.call(false),
           child: widget.child,

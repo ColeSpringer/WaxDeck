@@ -157,6 +157,12 @@ class _ArtworkAccentState extends ConsumerState<ArtworkAccent> {
   /// cold one should start there.
   WaxPalette? _held;
 
+  /// What the last build was drawn for, and whether that was the theme's
+  /// fallback rather than a colour read off a cover. A fallback that
+  /// changes under the same cover and domain was moved by the theme.
+  (String?, WaxDomain)? _drawnFor;
+  bool _drewFallback = false;
+
   @override
   Widget build(BuildContext context) {
     final url = widget.artUrl;
@@ -194,9 +200,19 @@ class _ArtworkAccentState extends ConsumerState<ArtworkAccent> {
     }
     final palette =
         extracted ?? WaxPalette.forDomain(WaxColors.of(context), widget.domain);
+    // A new cover or domain is a palette to ease towards. The theme moving
+    // the fallback is not: it lands with the theme, and tweening it would
+    // trail the rest of the app by a whole crossfade.
+    final fallback = extracted == null;
+    final drawnFor = (url, widget.domain);
+    final themeMoved = fallback && _drewFallback && _drawnFor == drawnFor;
+    _drawnFor = drawnFor;
+    _drewFallback = fallback;
     return TweenAnimationBuilder<WaxPalette>(
       tween: WaxPaletteTween(end: palette),
-      duration: WaxMotion.of(context).artworkCrossfade,
+      duration: themeMoved
+          ? Duration.zero
+          : WaxMotion.of(context).artworkCrossfade,
       curve: WaxMotion.emphasized,
       builder: (context, tweened, child) =>
           WaxAccent(palette: tweened, domain: widget.domain, child: child!),

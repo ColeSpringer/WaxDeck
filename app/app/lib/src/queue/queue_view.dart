@@ -571,6 +571,7 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
           final lifted = upNextRow(index, seam: false);
           return Material(
             color: colors.surface2,
+            animationDuration: Duration.zero,
             child: SizedBox(
               width: sliverConstraints.crossAxisExtent,
               child: carrying > 1

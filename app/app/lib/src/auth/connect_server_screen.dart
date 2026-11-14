@@ -129,60 +129,62 @@ class _ConnectServerScreenState extends ConsumerState<ConnectServerScreen> {
     final l10n = context.l10n;
     final stored = ref.watch(serverAddressProvider);
     return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(WaxSpace.s24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                WaxBrandBlock(tagline: l10n.authServerConnectTagline),
-                const SizedBox(height: WaxSpace.s32),
-                WaxTextField(
-                  semanticsId: SemanticsIds.connectServerAddress,
-                  controller: _address,
-                  label: l10n.authServerAddressLabel,
-                  hint: l10n.authServerAddressHint,
-                  autofocus: true,
-                  keyboardType: TextInputType.url,
-                  autocorrect: false,
-                  onSubmitted: (_) => _connect(),
-                ),
-                const SizedBox(height: WaxSpace.s24),
-                if (_error != null) ...[
-                  Semantics(
-                    identifier: SemanticsIds.connectServerError,
-                    child: Text(
-                      _error!,
-                      key: const Key(SemanticsIds.connectServerError),
-                      style: WaxType.body.copyWith(color: colors.error),
-                      textAlign: TextAlign.center,
+      body: WaxPlainTextStyle(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(WaxSpace.s24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 360),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  WaxBrandBlock(tagline: l10n.authServerConnectTagline),
+                  const SizedBox(height: WaxSpace.s32),
+                  WaxTextField(
+                    semanticsId: SemanticsIds.connectServerAddress,
+                    controller: _address,
+                    label: l10n.authServerAddressLabel,
+                    hint: l10n.authServerAddressHint,
+                    autofocus: true,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    onSubmitted: (_) => _connect(),
+                  ),
+                  const SizedBox(height: WaxSpace.s24),
+                  if (_error != null) ...[
+                    Semantics(
+                      identifier: SemanticsIds.connectServerError,
+                      child: Text(
+                        _error!,
+                        key: const Key(SemanticsIds.connectServerError),
+                        style: WaxType.body.copyWith(color: colors.error),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: WaxSpace.s16),
-                ],
-                WaxButton(
-                  semanticsId: SemanticsIds.connectServerSubmit,
-                  label: l10n.authServerConnect,
-                  expand: true,
-                  busy: _probing,
-                  onPressed: _probing || _forgetting ? null : _connect,
-                ),
-                if (stored != null) ...[
-                  const SizedBox(height: WaxSpace.s8),
+                    const SizedBox(height: WaxSpace.s16),
+                  ],
                   WaxButton(
-                    key: const Key(SemanticsIds.connectServerForget),
-                    semanticsId: SemanticsIds.connectServerForget,
-                    label: l10n.authServerForget,
-                    kind: WaxButtonKind.destructive,
-                    onPressed: _probing || _forgetting
-                        ? null
-                        : () => _forget(stored),
+                    semanticsId: SemanticsIds.connectServerSubmit,
+                    label: l10n.authServerConnect,
+                    expand: true,
+                    busy: _probing,
+                    onPressed: _probing || _forgetting ? null : _connect,
                   ),
+                  if (stored != null) ...[
+                    const SizedBox(height: WaxSpace.s8),
+                    WaxButton(
+                      key: const Key(SemanticsIds.connectServerForget),
+                      semanticsId: SemanticsIds.connectServerForget,
+                      label: l10n.authServerForget,
+                      kind: WaxButtonKind.destructive,
+                      onPressed: _probing || _forgetting
+                          ? null
+                          : () => _forget(stored),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),

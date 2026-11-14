@@ -60,7 +60,9 @@ class MediaTileData {
     this.trailingSpoken,
     this.trailingDetail,
     this.trailingDetailSpoken,
-    this.trailingDetailSemanticsId,
+    this.playCount,
+    this.playCountLabel,
+    this.playCountSemanticsId,
     this.badge,
     this.starred = false,
     this.downloaded = false,
@@ -95,12 +97,11 @@ class MediaTileData {
   /// `spellDuration` is what belongs here. Defaults to the drawn text.
   final String? trailingSpoken;
 
-  /// A second right-aligned readout beside [trailingText]: a play count
-  /// on an album row is the one so far. A bare number carries nothing
-  /// aloud, so [trailingDetailSpoken] words it, and it is announced as
-  /// its own node rather than folded into the row's name - the row's
-  /// label excludes everything under it, which is what keeps a control
-  /// inside a row reachable.
+  /// A second right-aligned readout after [trailingText]: why a transfer
+  /// on the downloads screen is held. It is announced as its own node
+  /// rather than folded into the row's name - the row's label excludes
+  /// everything under it, which is what keeps a control inside a row
+  /// reachable. A play count is [playCount], not this.
   ///
   /// Rows only. A card has no trailing column to put it in, so
   /// [MediaCard] ignores this and the same view data drawn as a grid
@@ -109,12 +110,31 @@ class MediaTileData {
   final String? trailingDetail;
 
   /// What a screen reader hears in place of [trailingDetail]. Defaults
-  /// to the drawn text, which for a bare count is a number on its own.
+  /// to the drawn text.
   final String? trailingDetailSpoken;
 
-  /// The identifier the detail's own node carries, for the surfaces the
-  /// e2e suite reads a count off.
-  final String? trailingDetailSemanticsId;
+  /// How many times the listener has played this track through, drawn
+  /// behind a play glyph just before [trailingText]. The row formats it,
+  /// compact from a thousand. Rows only, for [trailingDetail]'s reason.
+  ///
+  /// Zero is a row that counts plays and has none yet: it draws nothing
+  /// and keeps no room, so an unplayed list is a clean column rather than
+  /// a stripe of zeroes, and a first play arriving changes the count and
+  /// nothing else. Null is a row that never carries one: a queue entry, a
+  /// download, an episode, a book part.
+  ///
+  /// A row with a count, zero included, measures the width it is given to
+  /// decide whether the count fits, so nothing above it may ask for its
+  /// intrinsic size: not a Table, nor an IntrinsicWidth.
+  final int? playCount;
+
+  /// The count in words, for its tooltip and its own semantics node: a
+  /// bare number read aloud says nothing. Defaults to the drawn number.
+  final String? playCountLabel;
+
+  /// The identifier the count's node carries, for the surfaces the e2e
+  /// suite reads a count off.
+  final String? playCountSemanticsId;
 
   /// A word over the artwork naming what kind of thing this is, where the
   /// kind changes what the item does rather than only what it holds: a

@@ -236,7 +236,7 @@ mixin FakePlayback on FakeRepositoryState implements PlaybackApi {
     positionMs: playPositions[pid] ?? 0,
     played: finishedPids.contains(pid) || playedPids.contains(pid),
     finished: finishedPids.contains(pid),
-    playCount: finishedPids.contains(pid) ? 1 : 0,
+    playCount: playCounts[pid] ?? (finishedPids.contains(pid) ? 1 : 0),
     starred: starredByPid[pid] ?? false,
     rating: ratingByPid[pid],
     lastPlayedAt: playStateLastPlayedAt[pid],
@@ -349,9 +349,13 @@ mixin FakePlayback on FakeRepositoryState implements PlaybackApi {
   /// so a test can see what a page cost.
   final List<List<String>> playStateBatches = [];
 
+  /// Holds every batched read until completed, with the batch recorded.
+  Completer<void>? playStatesGate;
+
   @override
   Future<List<PlayState>> listPlayStates(List<String> pids) async {
     playStateBatches.add(List<String>.of(pids));
+    await playStatesGate?.future;
     final error = playStatesError;
     if (error != null) throw error;
     return [for (final pid in pids) _playStateOf(pid)];

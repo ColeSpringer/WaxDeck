@@ -9,7 +9,7 @@
 // listener. The driver uses text of its own only where a control
 // carries no identifier, and says so where it does.
 
-import { Locator, Page, expect } from '@playwright/test';
+import { Locator, Page, WebSocketRoute, expect } from '@playwright/test';
 import { Account } from '../accounts';
 import { SemanticsIds, sem } from '../semantics-ids';
 import { Api } from './api';
@@ -115,6 +115,59 @@ export class App {
   on(page: Page): App {
     return new App({ ...this.ctx, page });
   }
+
+  /// This page's network, in the test's hand. Asked before the page opens
+  /// a socket (its first navigation), so every socket it opens goes
+  /// through a route the handle holds: `off()` then fails the page's
+  /// requests and refuses its upgrades (a CDP session on the page alone,
+  /// because the context's `setOffline` takes the other tab of a two-tab
+  /// scenario down too) and drops the sockets it holds, which network
+  /// emulation leaves open; `on()` puts it back. `sockets` says, per
+  /// socket in the order they were opened, when the server took it (the
+  /// page's first frame, which it sends once it is open), if it did.
+  async network(): Promise<PageNetwork> {
+    const page = this.page;
+    const open = new Set<WebSocketRoute>();
+    const sockets: { acceptedAt?: number }[] = [];
+    // A routed socket is still the browser's own, opened by the page, so
+    // the cookie and the emulated network apply to it as to any other.
+    await page.routeWebSocket(
+      () => true,
+      (ws) => {
+        const socket: { acceptedAt?: number } = {};
+        sockets.push(socket);
+        open.add(ws);
+        const server = ws.connectToServer();
+        // The page speaks first (its subscribe frame) only once the server
+        // has taken the upgrade.
+        ws.onMessage((message) => {
+          socket.acceptedAt ??= Date.now();
+          server.send(message);
+        });
+      },
+    );
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Network.enable');
+    const link = { latency: 0, downloadThroughput: -1, uploadThroughput: -1 };
+    return {
+      sockets,
+      off: async () => {
+        await cdp.send('Network.emulateNetworkConditions', { offline: true, ...link });
+        for (const ws of open) await ws.close({ code: 1001, reason: 'offline' }).catch(() => {});
+        open.clear();
+      },
+      on: async () => {
+        await cdp.send('Network.emulateNetworkConditions', { offline: false, ...link });
+      },
+    };
+  }
+}
+
+/// A page's network in a test's hand; see `App.network`.
+export interface PageNetwork {
+  readonly sockets: readonly { readonly acceptedAt?: number }[];
+  off(): Promise<void>;
+  on(): Promise<void>;
 }
 
 export function createApp(ctx: Ctx): App {

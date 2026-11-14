@@ -3,6 +3,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:waxdeck/src/downloads/downloads_controller.dart';
 import 'package:waxdeck/src/home/home_shelves.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_es.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/player/play_progress.dart';
 import 'package:waxdeck/src/podcasts/podcast_shelves.dart';
@@ -82,11 +83,13 @@ void main() {
     test('trackRowTile hides the artist the album header names', () {
       final same = trackRowTile(
         testItem('tr-1', artist: 'The Bree Trio', durationMs: 214000),
+        l10n: _l10n,
         albumArtist: 'The Bree Trio',
         semanticsId: 'row-0',
       );
       final other = trackRowTile(
         testItem('tr-2', artist: 'A Guest'),
+        l10n: _l10n,
         albumArtist: 'The Bree Trio',
         semanticsId: 'row-1',
       );
@@ -98,21 +101,45 @@ void main() {
       expect(other.subtitle, 'A Guest');
     });
 
-    test('trackRowTile passes the play-count readout through', () {
+    test('trackRowTile carries the play count with its words and its '
+        'handle, and nothing at zero', () {
       final tile = trackRowTile(
         testItem('tr-1'),
+        l10n: _l10n,
         albumArtist: null,
-        trailingDetail: '4',
-        trailingDetailSpoken: '4 plays',
-        trailingDetailSemanticsId: 'plays-0',
+        playCount: 4,
+        playCountSemanticsId: 'plays-0',
         semanticsId: 'row-0',
       );
+      final unplayed = trackRowTile(
+        testItem('tr-2'),
+        l10n: _l10n,
+        albumArtist: null,
+        playCount: 0,
+        playCountSemanticsId: 'plays-1',
+        semanticsId: 'row-1',
+      );
+      final uncounted = trackRowTile(
+        testItem('tr-3'),
+        l10n: _l10n,
+        albumArtist: null,
+        semanticsId: 'row-2',
+      );
 
-      expect(tile.trailingDetail, '4');
-      expect(tile.trailingDetailSpoken, '4 plays');
-      expect(tile.trailingDetailSemanticsId, 'plays-0');
+      expect(tile.playCount, 4);
+      expect(tile.playCountLabel, 'played 4 times');
+      expect(tile.playCountSemanticsId, 'plays-0');
+      // The count's own fields, never the downloads detail column.
+      expect(tile.trailingDetail, isNull);
       expect(artworkUrl(tile), isNull);
       expect(tile.domain, WaxDomain.music);
+      // Zero is a counted row with nothing to draw yet, so the row keeps
+      // its shape when the first play lands; no count at all is a row
+      // that never counts.
+      expect(unplayed.playCount, 0);
+      expect(unplayed.playCountLabel, isNull);
+      expect(unplayed.playCountSemanticsId, isNull);
+      expect(uncounted.playCount, isNull);
     });
 
     test('topTrackRowTile names the album under the title', () {
@@ -126,14 +153,50 @@ void main() {
           album: 'Record',
           artUrl: '/art/2',
         ),
+        l10n: _l10n,
         store: store,
         semanticsId: 'index-0',
+        playCount: 1,
+        playCountSemanticsId: 'plays-0',
       );
 
       expect(tile.subtitle, 'Record');
       expect(tile.trailingText, '0:05');
       expect(artworkUrl(tile), '/art/2');
       expect(tile.semanticsId, 'index-0');
+      expect(tile.playCount, 1);
+      expect(tile.playCountLabel, 'played once');
+      expect(tile.playCountSemanticsId, 'plays-0');
+    });
+
+    test('a count is a music track\'s only: an episode or a book part in a '
+        'mixed list draws none', () {
+      for (final type in <MediaType>[MediaType.podcast, MediaType.audiobook]) {
+        final tile = itemRowTile(
+          testItem('x-1', mediaType: type),
+          l10n: _l10n,
+          store: store,
+          semanticsId: 'row-0',
+          playCount: 3,
+        );
+        expect(tile.playCount, isNull, reason: type.name);
+        expect(tile.playCountLabel, isNull, reason: type.name);
+      }
+      final track = itemRowTile(
+        testItem('tr-1'),
+        l10n: _l10n,
+        store: store,
+        semanticsId: 'row-0',
+        playCount: 1500,
+      );
+      // The number crosses as a number: the row formats it.
+      expect(track.playCount, 1500);
+      expect(track.playCountLabel, 'played 1,500 times');
+      // Grouped as each locale groups, the drawn count's words in full.
+      expect(
+        AppLocalizationsEs().musicTrackPlaysSpoken(12345),
+        'reproducida 12.345 veces',
+      );
     });
 
     test('queueRowTile holds a placeholder until the item resolves', () {
@@ -159,6 +222,7 @@ void main() {
       expect(resolved.trailingText, isNull);
       expect(resolved.domain, WaxDomain.audiobooks);
       expect(resolved.shape, ArtworkShape.portrait);
+      expect(resolved.playCount, isNull, reason: 'a queue carries no count');
     });
 
     test('itemRowTile names the artist, draws the cover and the length', () {
@@ -171,6 +235,7 @@ void main() {
           artist: 'Show',
           artUrl: '/art/ep',
         ),
+        l10n: _l10n,
         store: store,
         semanticsId: 'mix-0',
       );
@@ -234,11 +299,11 @@ void main() {
   group('every row that draws an item', () {
     final rows = <String, MediaTileData Function(ItemSummary)>{
       'trackRowTile': (item) =>
-          trackRowTile(item, albumArtist: null, semanticsId: 'a'),
+          trackRowTile(item, l10n: _l10n, albumArtist: null, semanticsId: 'a'),
       'topTrackRowTile': (item) =>
-          topTrackRowTile(item, store: store, semanticsId: 'a'),
+          topTrackRowTile(item, l10n: _l10n, store: store, semanticsId: 'a'),
       'itemRowTile': (item) =>
-          itemRowTile(item, store: store, semanticsId: 'a'),
+          itemRowTile(item, l10n: _l10n, store: store, semanticsId: 'a'),
       'queueRowTile': (item) =>
           queueRowTile(item, l10n: _l10n, store: store, semanticsId: 'a'),
       'rulePreviewTile': rulePreviewTile,
@@ -1165,21 +1230,25 @@ void main() {
       final artist = searchHitTile(
         hit,
         SearchHitKind.artists,
+        l10n: _l10n,
         semanticsId: 'hit-0',
       );
       final episode = searchHitTile(
         hit,
         SearchHitKind.episodes,
+        l10n: _l10n,
         semanticsId: 'hit-1',
       );
       final book = searchHitTile(
         hit,
         SearchHitKind.books,
+        l10n: _l10n,
         semanticsId: 'hit-2',
       );
       final track = searchHitTile(
         hit,
         SearchHitKind.tracks,
+        l10n: _l10n,
         semanticsId: 'hit-3',
       );
 
@@ -1193,6 +1262,39 @@ void main() {
       expect(book.semanticsId, 'hit-2');
       expect(track.domain, WaxDomain.music);
       expect(track.semanticsId, 'hit-3');
+    });
+
+    test('searchHitTile counts a track hit and no other', () {
+      const hit = SearchHit(pid: 'tr-1', kind: 'track', title: 'Gullwing');
+
+      final track = searchHitTile(
+        hit,
+        SearchHitKind.tracks,
+        l10n: _l10n,
+        semanticsId: 'hit-0',
+        playCount: 2,
+      );
+      final episode = searchHitTile(
+        hit,
+        SearchHitKind.episodes,
+        l10n: _l10n,
+        semanticsId: 'hit-1',
+        playCount: 2,
+      );
+
+      final unplayed = searchHitTile(
+        hit,
+        SearchHitKind.tracks,
+        l10n: _l10n,
+        semanticsId: 'hit-2',
+        playCount: 0,
+      );
+
+      expect(track.playCount, 2);
+      expect(track.playCountLabel, 'played 2 times');
+      expect(episode.playCount, isNull);
+      expect(unplayed.playCount, 0);
+      expect(unplayed.playCountLabel, isNull);
     });
   });
 

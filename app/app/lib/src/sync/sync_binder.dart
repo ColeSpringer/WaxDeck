@@ -34,8 +34,10 @@ import '../shell/server_health.dart';
 import '../tools/tool_tasks_provider.dart';
 import '../uploads/uploads_controller.dart';
 import 'live_invalidations.dart';
+import 'network_back/network_back.dart';
 import 'refresh_pacing.dart';
 import 'server_event_bus.dart';
+import 'session_doubt.dart';
 import 'streamed_play_states.dart';
 import 'sync_providers.dart';
 
@@ -389,6 +391,25 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     }
   }
 
+  // A transport says the session may have ended or changed hands: the
+  // socket closed as ended or its reconnect was refused (in a browser,
+  // which cannot tell a refusal from a dead network, any failed reconnect,
+  // and a return, across which the cookie may have changed hands); or the
+  // server refused a request for want of one. The session is read again
+  // until the server answers, and the controller acts on the answer.
+  final doubt = SessionDoubt(
+    read: () {
+      // Only a session the client holds can be in doubt, whether or not it
+      // names a user.
+      if (!ref.mounted ||
+          ref.read(authControllerProvider).value?.authenticated != true) {
+        return Future.value(SessionRecheck.left);
+      }
+      return ref.read(authControllerProvider.notifier).refreshSession();
+    },
+  );
+  ref.onDispose(doubt.dispose);
+
   final engine = ref.watch(syncEngineProvider);
   // Every server event this session observes, by kind, from whichever
   // transport it came over. On native the mirror stores play states,
@@ -542,6 +563,28 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       routeControl: (handler) => engine.onControlFrame = handler,
     );
     engine.onConnected = connect.onConnected;
+    engine.onAuthExpired = () => doubt.ask().ignore();
+    engine.onSessionInDoubt = () => doubt.ask().ignore();
+    // A refused request stops the engine. Once the session is seen to
+    // stand it starts again, after the refused walk has run out: at once,
+    // then a second later, doubling to a minute, so a server that refuses
+    // the sync while it vouches for the session is not asked in a loop.
+    final restartAfter = Backoff(startsAtOnce: true);
+    var restarting = false;
+    Timer? restart;
+    ref.onDispose(() => restart?.cancel());
+    doubt.onStands = () {
+      if (engine.started || restarting) return;
+      restarting = true;
+      restart = Timer(restartAfter.take(), () async {
+        await engine.beforeSync(() async {});
+        restarting = false;
+        if (ref.mounted && !engine.started) unawaited(engine.start());
+      });
+    };
+    // The waits start over once a whole walk has run out with nothing
+    // refusing it, the questions it puts last included.
+    engine.onReconciled = restartAfter.reset;
     engine.onPlayerInvalidate = connect.onPlayerInvalidate;
     engine.onRadioInvalidate = radio.hint;
     // The account whose queued writes a flush sends; each waits for the
@@ -585,6 +628,10 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       routeControl: (handler) => live.onControlFrame = handler,
     );
     live.onConnected = connect.onConnected;
+    // Whether a socket that came back may catch up: not for an account
+    // that left, whose screens go.
+    live.onSessionInDoubt = () async =>
+        await doubt.ask() != SessionRecheck.left;
     live.onPlayer = connect.onPlayerInvalidate;
     live.onRadio = radio.hint;
     // The web listener has no status of its own to read, so it reports
@@ -597,8 +644,10 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     // silently never happen and the banner would stand over the login
     // screen of the next session.
     final link = ref.read(liveLinkProvider.notifier);
+    final returns = networkReturns().listen((_) => live.networkBack());
     live.start();
     ref.onDispose(() {
+      unawaited(returns.cancel());
       live.stop();
       // A session that ended is not a client with a broken connection.
       link.forget();

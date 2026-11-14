@@ -210,6 +210,129 @@ void main() {
       await tester.pumpAndSettle();
       expect(seen.isFallback, isTrue);
     });
+
+    testWidgets('a theme change under the same cover lands at once', (
+      tester,
+    ) async {
+      // The fallback is read off the theme, so a theme change moves it.
+      // That is not a new palette to ease towards: the whole app has just
+      // changed colour, and this one subtree gliding after it is the
+      // chase the crossfade exists to avoid.
+      final theme = ValueNotifier(
+        buildWaxTheme(variant: WaxThemeVariant.light),
+      );
+      addTearDown(theme.dispose);
+      late WaxPalette seen;
+      await mountApp(
+        tester,
+        ValueListenableBuilder<ThemeData>(
+          valueListenable: theme,
+          builder: (context, data, _) => Theme(
+            data: data,
+            child: ArtworkAccent(
+              artUrl: null,
+              domain: WaxDomain.music,
+              child: Builder(
+                builder: (context) {
+                  seen = WaxAccent.of(context);
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
+          ),
+        ),
+        routed: false,
+      );
+      await tester.pumpAndSettle();
+      final light = WaxPalette.forDomain(WaxColors.light, WaxDomain.music);
+      final dark = WaxPalette.forDomain(WaxColors.dark, WaxDomain.music);
+      expect(seen, light);
+      expect(light, isNot(dark), reason: 'the two themes must differ');
+
+      theme.value = buildWaxTheme(variant: WaxThemeVariant.dark);
+      await tester.pump();
+
+      expect(seen, dark);
+      expect(tester.binding.hasScheduledFrame, isFalse);
+    });
+
+    testWidgets('a different domain under no cover still crossfades', (
+      tester,
+    ) async {
+      // No cover to either side, so both ends are the theme's fallback and
+      // only the identity tells a new domain from a theme change: a music
+      // item with no art followed by radio is a hop, not a theme flip.
+      final container = appContainer();
+      final theme = buildWaxTheme(variant: WaxThemeVariant.light);
+      late WaxPalette seen;
+      Future<void> host(WaxDomain domain) => mountApp(
+        tester,
+        ArtworkAccent(
+          artUrl: null,
+          domain: domain,
+          child: Builder(
+            builder: (context) {
+              seen = WaxAccent.of(context);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+        container: container,
+        routed: false,
+        theme: theme,
+      );
+
+      final music = WaxPalette.forDomain(WaxColors.light, WaxDomain.music);
+      final radio = WaxPalette.forDomain(WaxColors.light, WaxDomain.radio);
+      expect(music, isNot(radio), reason: 'the two domains must differ');
+
+      await host(WaxDomain.music);
+      await tester.pumpAndSettle();
+      expect(seen, music);
+
+      await host(WaxDomain.radio);
+      await tester.pump();
+      expect(seen, music);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(seen, isNot(anyOf(music, radio)));
+      await tester.pumpAndSettle();
+      expect(seen, radio);
+    });
+
+    testWidgets('a different cover still crossfades', (tester) async {
+      final cache = ArtworkPaletteCache()
+        ..remember('/art/a', _red)
+        ..remember('/art/b', _blue);
+      final container = appContainer(
+        extra: [paletteCacheProvider.overrideWithValue(cache)],
+      );
+      late WaxPalette seen;
+      Future<void> host(String artUrl) => mountApp(
+        tester,
+        ArtworkAccent(
+          artUrl: artUrl,
+          domain: WaxDomain.music,
+          child: Builder(
+            builder: (context) {
+              seen = WaxAccent.of(context);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+        container: container,
+        routed: false,
+      );
+
+      await host('/art/a');
+      expect(seen, _red);
+      await host('/art/b');
+      await tester.pump();
+      expect(seen, _red);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(seen, isNot(anyOf(_red, _blue)));
+      await tester.pumpAndSettle();
+      expect(seen, _blue);
+    });
   });
 
   group('decoding for extraction', () {

@@ -131,6 +131,25 @@ void main() {
     });
   });
 
+  group('formatCount', () {
+    final en = lookupWaxLocalizations(const Locale('en'));
+    final es = lookupWaxLocalizations(const Locale('es'));
+
+    test('is plain digits below a thousand and compact from there', () {
+      expect(en.formatCount(1), '1');
+      expect(en.formatCount(999), '999');
+      expect(en.formatCount(1000), '1K');
+      expect(en.formatCount(1234), '1.2K');
+      expect(en.formatCount(98765), '99K');
+      expect(en.formatCount(1250000), '1.3M');
+    });
+
+    test('takes the separator and the unit from the language', () {
+      expect(es.formatCount(999), '999');
+      expect(es.formatCount(1234), '1,2\u00a0mil');
+    });
+  });
+
   group('formatTimecode', () {
     test('draws digits, which no language changes', () {
       expect(formatTimecode(const Duration(minutes: 4, seconds: 5)), '4:05');

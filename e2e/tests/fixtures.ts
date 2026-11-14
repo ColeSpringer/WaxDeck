@@ -11,7 +11,13 @@ import {
   TestInfo,
   TestType,
 } from '@playwright/test';
-import { attachBuffers, captureHangEvidence, HEARTBEAT_INIT } from './support/hangprobe';
+import {
+  attachBuffers,
+  captureHangEvidence,
+  enrolHangEvidence,
+  HEARTBEAT_INIT,
+  takeHangEvidence,
+} from './support/hangprobe';
 import {
   Account,
   accountName,
@@ -77,12 +83,12 @@ async function checkMotionMode(page: Page, testInfo: TestInfo) {
     .toBe(declared);
 }
 
-/// The page fixture every test gets, migrated or not.
-const instrumentedPage = async (
-  { page }: { page: Page },
-  use: (page: Page) => Promise<void>,
-  testInfo: TestInfo,
-) => {
+/// What every page a test drives is given, the `page` fixture's and each
+/// `tab()`'s alike: the heartbeat, the engine the run asked for, buffered
+/// console and errors, and, once the test failed or timed out, the hang
+/// evidence under [name]. The evidence of all of a test's pages is taken
+/// together by `takeHangEvidence` at the first teardown, in one budget.
+async function instrument(page: Page, testInfo: TestInfo, name = 'hang'): Promise<void> {
   // Not in the perf specs: a self-rescheduling rAF loop requests a
   // frame every frame, defeating idle throttling and adding a
   // callback to each frame whose pacing those specs exist to measure.
@@ -107,19 +113,23 @@ const instrumentedPage = async (
       await route.fulfill({ response: resp, body });
     });
   }
-  await checkMotionMode(page, testInfo);
   const buffers = attachBuffers(page);
+  // Bounded per test rather than per page: teardown shares the test's
+  // grace budget, and wedged probes must not eat the trace teardown
+  // behind them.
+  enrolHangEvidence(testInfo, name, () => captureHangEvidence(page, testInfo, buffers, name));
+}
+
+/// The page fixture every test gets, migrated or not.
+const instrumentedPage = async (
+  { page }: { page: Page },
+  use: (page: Page) => Promise<void>,
+  testInfo: TestInfo,
+) => {
+  await instrument(page, testInfo);
+  await checkMotionMode(page, testInfo);
   await use(page);
-  if (testInfo.status === 'timedOut' || testInfo.status === 'failed') {
-    // Bounded as a whole: teardown shares the test's grace budget,
-    // and a wedged probe must not eat the trace teardown behind it.
-    await Promise.race([
-      captureHangEvidence(page, testInfo, buffers).catch((e) =>
-        console.log(`hangprobe failed: ${e}`),
-      ),
-      new Promise((resolve) => setTimeout(resolve, 25_000)),
-    ]);
-  }
+  await takeHangEvidence(testInfo);
 };
 
 /// What a spec may do with the page directly.
@@ -190,6 +200,12 @@ interface SpecFixtures {
   /// of its own with the same session planted, and its own `App` to
   /// drive; all of them close at teardown.
   device: (options?: { as?: Account; name?: string }) => Promise<App>;
+  /// Another tab in this test's own browser, on demand: the same cookie
+  /// jar, so a sign-out or a sign-in in one is the other's too, which a
+  /// `device` never shares. Set up as the `page` fixture's page is, with
+  /// its own hang evidence; its `App` drives this test's account; it
+  /// closes with the browser.
+  tab: () => Promise<App>;
   /// The server side, typed against the contract and authenticated as
   /// `account`.
   api: Api;
@@ -390,6 +406,16 @@ const extended = base.extend<SpecFixtures & SpecOptions, SpecWorkerFixtures>({
     });
     for (const context of opened) await context.close();
     for (const request of requests) await request.dispose();
+  },
+
+  tab: async ({ context, api, account }, use, testInfo) => {
+    let opened = 0;
+    await use(async () => {
+      const page = await context.newPage();
+      await instrument(page, testInfo, `hang-tab${++opened}`);
+      return createApp({ page, api, account });
+    });
+    await takeHangEvidence(testInfo);
   },
 
   api: async ({ playwright, baseURL, account }, use) => {

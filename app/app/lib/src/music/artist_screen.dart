@@ -362,16 +362,12 @@ class _Body extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sizeClass = WaxSizeClass.of(context);
     final albums = albumsOf(items);
     final store = ref.watch(artworkStoreProvider);
     final repository = ref.watch(repositoryProvider);
     final l10n = context.l10n;
     final tracks = playableOf(items);
     final books = booksOf(items);
-    final top = tracks.take(_topTracks).toList();
-    // Past the page read, the rest may hold tracks too.
-    final moreTracks = tracks.length > top.length || (state?.hasMore ?? false);
     final tiles = <MediaTileData>[
       for (final album in albums)
         releaseTile(
@@ -448,50 +444,14 @@ class _Body extends ConsumerWidget {
           ),
         ],
         _AppearsOn(pid: pid),
-        if (top.isNotEmpty) ...<Widget>[
+        if (tracks.isNotEmpty) ...<Widget>[
           const SizedBox(height: WaxSpace.s16),
-          Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: sizeClass.gutter.horizontal / 2,
-            ),
-            child: SectionHeader(
-              title: l10n.musicArtistTracksSection,
-              actionLabel: moreTracks ? l10n.musicArtistShowAll : null,
-              // Pushed rather than gone to, like a release: `go` rebuilds
-              // the artists-index ancestry, which throws away a search
-              // that pushed this artist. The location stays declared, so
-              // a stranger opening it still gets the list.
-              onAction: moreTracks
-                  // The artist's own name, never the localized fallback:
-                  // the listing stores what it is given as the queue's
-                  // source label.
-                  ? () => context.push(
-                      WaxRoute.artistTracks(pid),
-                      extra: sourceName.isEmpty ? null : sourceName,
-                    )
-                  : null,
-              semanticsId: SemanticsIds.entityAllTracks,
-            ),
+          _TopTracks(
+            pid: pid,
+            sourceName: sourceName,
+            tracks: tracks,
+            state: state,
           ),
-          for (var i = 0; i < top.length; i++)
-            Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: sizeClass.gutter.horizontal / 2,
-              ),
-              child: QueueDraggable(
-                drop: QueueDrop.item(top[i]),
-                child: MediaListRow(
-                  data: topTrackRowTile(
-                    top[i],
-                    store: store,
-                    semanticsId: SemanticsIds.indexItem(i),
-                  ),
-                  onTap: () => _play(ref, tracks, i),
-                  onMore: () =>
-                      unawaited(showItemMenuForSummary(context, ref, top[i])),
-                ),
-              ),
-            ),
         ],
         if (books.isNotEmpty) ...<Widget>[
           const SizedBox(height: WaxSpace.s16),
@@ -501,8 +461,86 @@ class _Body extends ConsumerWidget {
       ],
     );
   }
+}
 
-  void _play(WidgetRef ref, List<ItemSummary> tracks, int index) {
+/// The artist's first tracks, holding their play counts' read: a count
+/// moving, or a position checkpoint while one plays, rebuilds this and
+/// not the releases around it.
+class _TopTracks extends ConsumerWidget {
+  const _TopTracks({
+    required this.pid,
+    required this.sourceName,
+    required this.tracks,
+    required this.state,
+  });
+
+  final String pid;
+  final String sourceName;
+  final List<ItemSummary> tracks;
+  final MusicItemsState? state;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sizeClass = WaxSizeClass.of(context);
+    final store = ref.watch(artworkStoreProvider);
+    final l10n = context.l10n;
+    final top = tracks.take(_topTracks).toList();
+    final plays = playCountsOf(ref, top);
+    // Past the page read, the rest may hold tracks too.
+    final moreTracks = tracks.length > top.length || (state?.hasMore ?? false);
+    final gutter = EdgeInsets.symmetric(
+      horizontal: sizeClass.gutter.horizontal / 2,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Padding(
+          padding: gutter,
+          child: SectionHeader(
+            title: l10n.musicArtistTracksSection,
+            actionLabel: moreTracks ? l10n.musicArtistShowAll : null,
+            // Pushed rather than gone to, like a release: `go` rebuilds
+            // the artists-index ancestry, which throws away a search
+            // that pushed this artist. The location stays declared, so
+            // a stranger opening it still gets the list.
+            onAction: moreTracks
+                // The artist's own name, never the localized fallback:
+                // the listing stores what it is given as the queue's
+                // source label.
+                ? () => context.push(
+                    WaxRoute.artistTracks(pid),
+                    extra: sourceName.isEmpty ? null : sourceName,
+                  )
+                : null,
+            semanticsId: SemanticsIds.entityAllTracks,
+          ),
+        ),
+        for (var i = 0; i < top.length; i++)
+          Padding(
+            padding: gutter,
+            child: QueueDraggable(
+              drop: QueueDrop.item(top[i]),
+              child: MediaListRow(
+                data: topTrackRowTile(
+                  top[i],
+                  l10n: l10n,
+                  store: store,
+                  semanticsId: SemanticsIds.indexItem(i),
+                  playCount: plays[top[i].pid] ?? 0,
+                  playCountSemanticsId: SemanticsIds.trackPlays(i),
+                ),
+                onTap: () => _play(ref, i),
+                onMore: () =>
+                    unawaited(showItemMenuForSummary(context, ref, top[i])),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _play(WidgetRef ref, int index) {
     ref
         .read(nowPlayingProvider.notifier)
         .play(

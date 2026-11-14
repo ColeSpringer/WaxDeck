@@ -2,6 +2,7 @@ import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/wax_l10n.dart';
+import '../theme/theme_landing.dart';
 import '../tokens/colors.dart';
 import '../tokens/motion.dart';
 import '../tokens/radii.dart';
@@ -228,13 +229,16 @@ class _WaxSplitterState extends State<WaxSplitter> {
             width: WaxSplitter.hitWidth,
             height: double.infinity,
             child: Center(
-              child: AnimatedContainer(
+              child: WaxThemeLanding(
                 duration: motion.quick,
-                curve: WaxMotion.emphasized,
-                width: live ? 3 : 1,
-                decoration: BoxDecoration(
-                  color: live ? colors.accent : colors.hairline,
-                  borderRadius: WaxRadius.pill,
+                builder: (context, duration) => AnimatedContainer(
+                  duration: duration,
+                  curve: WaxMotion.emphasized,
+                  width: live ? 3 : 1,
+                  decoration: BoxDecoration(
+                    color: live ? colors.accent : colors.hairline,
+                    borderRadius: WaxRadius.pill,
+                  ),
                 ),
               ),
             ),

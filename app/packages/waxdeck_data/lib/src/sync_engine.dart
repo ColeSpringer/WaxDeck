@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:drift/drift.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'backoff.dart';
 import 'database.dart';
 import 'events_channel.dart';
 import 'mirror_pages.dart';
@@ -51,6 +52,8 @@ class SyncStatus {
   const SyncStatus({required this.connection, this.lastSyncAt});
 
   final SyncConnection connection;
+
+  /// When a walk last caught the mirror up; an upgrade alone is no sync.
   final DateTime? lastSyncAt;
 
   bool get online => connection == SyncConnection.connected;
@@ -80,9 +83,18 @@ class SyncEngine {
   final WaxDeckRepository repository;
   final EventsChannelFactory _channelFactory;
 
-  /// Called when the server answers 401: credentials are gone and the
-  /// engine stops; the auth layer owns what happens next.
-  final void Function()? onAuthExpired;
+  /// Called when the server refuses a request for want of a session
+  /// (`unauthenticated`): credentials are gone and the engine stops; the
+  /// auth layer owns what happens next. Settable, so the session that
+  /// starts the engine can say where it goes.
+  void Function()? onAuthExpired;
+
+  /// Called when the session the socket rides may have ended: the server
+  /// closed it as ended, or refused a reconnect for want of one (401). The
+  /// engine keeps reconnecting; the auth layer reads the session and
+  /// decides. A drop and a return say nothing: a bearer token cannot change
+  /// hands across one.
+  void Function()? onSessionInDoubt;
 
   final _status = StreamController<SyncStatus>.broadcast();
   final _catalogChanged = StreamController<void>.broadcast();
@@ -94,7 +106,11 @@ class SyncEngine {
   EventsChannel? _channel;
   Timer? _reconnect;
   bool _running = false;
-  int _backoffSeconds = 1;
+
+  /// The waits between reconnects, started over by a walk that goes
+  /// through ([reconcile]), and by [stop].
+  final _backoff = Backoff();
+
   Future<void> _work = Future.value();
 
   /// Engine status, replayed to new listeners via [current].
@@ -221,9 +237,14 @@ class SyncEngine {
   Future<void> stop() async {
     _running = false;
     _reconnect?.cancel();
-    await _channel?.close();
+    // A start after this connects from the first wait.
+    _backoff.reset();
+    // Let go of the socket before waiting on it: a start() meanwhile opens
+    // its own, which this must not drop.
+    final channel = _channel;
     _channel = null;
-    _setStatus(SyncConnection.offline);
+    await channel?.close();
+    if (!_running) _setStatus(SyncConnection.offline);
   }
 
   void dispose() {
@@ -239,12 +260,10 @@ class SyncEngine {
     _bookmarksChanged.close();
   }
 
-  void _setStatus(SyncConnection c) {
+  void _setStatus(SyncConnection c, {bool synced = false}) {
     _current = SyncStatus(
       connection: c,
-      lastSyncAt: c == SyncConnection.connected
-          ? DateTime.now()
-          : _current.lastSyncAt,
+      lastSyncAt: synced ? DateTime.now() : _current.lastSyncAt,
     );
     if (!_status.isClosed) _status.add(_current);
   }
@@ -276,6 +295,11 @@ class SyncEngine {
   /// re-watches here.
   void Function()? onConnected;
 
+  /// Fires when a walk ([reconcile]) has run out, its last questions
+  /// included, with the engine still running on the link it began on:
+  /// nothing dropped or refused it.
+  void Function()? onReconciled;
+
   /// Sends one control frame on the live socket. False when offline.
   bool sendControl(Map<String, Object?> frame) {
     final channel = _channel;
@@ -286,7 +310,7 @@ class SyncEngine {
   void _connect() {
     if (!_running) return;
     _setStatus(SyncConnection.connecting);
-    _channel = _channelFactory(
+    final channel = _channel = _channelFactory(
       onFrame: _onFrame,
       onDone: _onChannelDown,
       subscribe: () async {
@@ -298,27 +322,43 @@ class SyncEngine {
         });
       },
     );
-    _channel!
+    var up = false;
+    channel
         .connect()
         .then((_) async {
-          _backoffSeconds = 1;
+          // Resolved after stop(), or after a newer attempt took its
+          // place: nobody listens to this socket, so it goes.
+          if (!_running || !identical(_channel, channel)) {
+            unawaited(channel.close());
+            return;
+          }
+          up = true;
           _setStatus(SyncConnection.connected);
           onConnected?.call();
           await _serialized(reconcile);
         })
         .catchError((Object e) {
-          _onChannelDown();
+          if (!identical(_channel, channel)) return;
+          // Only a connect that failed is a word about the session, and only
+          // the server's refusal for want of one; a throw from the body
+          // above is not. A socket given up on after it came up is closed,
+          // or its frames and its own close would still arrive beside the
+          // next one's.
+          if (up) unawaited(channel.close());
+          _down(inDoubt: !up && e is UpgradeRefused && e.status == 401);
         });
   }
 
-  void _onChannelDown() {
+  void _onChannelDown() =>
+      _down(inDoubt: _channel?.closeCode == sessionEndedCloseCode);
+
+  void _down({required bool inDoubt}) {
     if (!_running) return;
     _channel = null;
     _setStatus(SyncConnection.offline);
     _reconnect?.cancel();
-    final delay = Duration(seconds: _backoffSeconds);
-    _backoffSeconds = math.min(_backoffSeconds * 2, 60);
-    _reconnect = Timer(delay, _connect);
+    _reconnect = Timer(_backoff.take(), _connect);
+    if (inDoubt) onSessionInDoubt?.call();
   }
 
   void _onFrame(String data) {
@@ -362,16 +402,26 @@ class SyncEngine {
   /// the server could not answer (see [_askAgainRemoved] and
   /// [_checkKindsAgain]).
   Future<void> reconcile() async {
+    // The link this walk runs over. An upgrade alone proves nothing: a
+    // server can take the socket and fail every pull.
+    final link = _channel;
+    // No failure on the way dropped the link or stopped the engine.
+    bool held() => _running && link != null && identical(_channel, link);
     try {
       _askedRemoved = false;
       _kindsAsked.clear();
       await flushOutbox();
       await _ensureCatalogMirror();
       await pullServer();
-      _setStatus(SyncConnection.connected);
+      if (held()) _setStatus(SyncConnection.connected, synced: true);
       // Last, so a question the server sits on holds up nothing else.
       if (!_askedRemoved) await _askAgainRemoved();
       await _checkKindsAgain();
+      // Through, those questions too: the reconnect waits start over.
+      if (held()) {
+        _backoff.reset();
+        onReconciled?.call();
+      }
     } on WaxDeckApiException catch (e) {
       _handleApiFailure(e);
     }
@@ -547,7 +597,7 @@ class SyncEngine {
         final named = await repository.syncCatalogRemoved(page);
         gone.addAll(named.where(pageSet.contains));
       } on WaxDeckApiException catch (e) {
-        if (e.statusCode == 401) rethrow;
+        if (e.code == 'unauthenticated') rethrow;
         return (gone: gone, unanswered: pids.sublist(i));
       }
     }
@@ -1712,7 +1762,9 @@ class SyncEngine {
   }
 
   void _handleApiFailure(WaxDeckApiException e) {
-    if (e.statusCode == 401) {
+    // The server words every 401 of its own so; one in no words of its own
+    // is something in front of it, and as transient as any other failure.
+    if (e.code == 'unauthenticated') {
       onAuthExpired?.call();
       stop();
       return;
@@ -1722,7 +1774,7 @@ class SyncEngine {
     final channel = _channel;
     if (channel == null) return;
     unawaited(channel.close());
-    _onChannelDown();
+    _down(inDoubt: false);
   }
 
   MirrorItemsCompanion _itemRow(ItemSummary item) {
@@ -1893,7 +1945,7 @@ class SyncEngine {
     try {
       info = await repository.getDownloadInfo(to);
     } on WaxDeckApiException catch (e) {
-      if (e.statusCode == 401) rethrow;
+      if (e.code == 'unauthenticated') rethrow;
       return e.isRefusal ? none : (answered: false, essence: null);
     }
     final file = info.files.singleOrNull;

@@ -8,6 +8,7 @@ import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
 import '../player/now_playing_controller.dart';
+import '../player/play_progress.dart';
 import '../presenters/media_tiles.dart';
 import '../queue/queue_state.dart';
 import '../shell/routes.dart';
@@ -45,6 +46,7 @@ class TrackListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final store = ref.watch(artworkStoreProvider);
     final l10n = context.l10n;
+    final windows = PlayWindows.ofItems(items);
     return WaxScaffold(
       title: title,
       largeTitle: false,
@@ -93,30 +95,37 @@ class TrackListScreen extends ConsumerWidget {
             itemCount: items.length,
             itemBuilder: (context, index) {
               final item = items[index];
-              return MediaListRow(
-                data: itemRowTile(
-                  item,
-                  store: store,
-                  // Addressed by position: this is a running order, and
-                  // the same item can answer more than one mix.
-                  semanticsId: SemanticsIds.scopedItem(idPrefix, index),
+              return PlayCountBuilder(
+                windows: windows,
+                index: index,
+                pid: item.pid,
+                builder: (context, plays) => MediaListRow(
+                  data: itemRowTile(
+                    item,
+                    l10n: l10n,
+                    store: store,
+                    // Addressed by position: this is a running order, and
+                    // the same item can answer more than one mix.
+                    semanticsId: SemanticsIds.scopedItem(idPrefix, index),
+                    playCount: plays,
+                  ),
+                  // Tapping a row plays the answer from there, so the rest
+                  // of the list is the queue.
+                  onTap: () {
+                    ref
+                        .read(nowPlayingProvider.notifier)
+                        .play(
+                          items,
+                          source: QueueSource(
+                            kind: QueueSourceKind.mix,
+                            label: sourceLabel,
+                          ),
+                          startIndex: index,
+                        );
+                  },
+                  onMore: () =>
+                      unawaited(showItemMenuForSummary(context, ref, item)),
                 ),
-                // Tapping a row plays the answer from there, so the rest
-                // of the list is the queue.
-                onTap: () {
-                  ref
-                      .read(nowPlayingProvider.notifier)
-                      .play(
-                        items,
-                        source: QueueSource(
-                          kind: QueueSourceKind.mix,
-                          label: sourceLabel,
-                        ),
-                        startIndex: index,
-                      );
-                },
-                onMore: () =>
-                    unawaited(showItemMenuForSummary(context, ref, item)),
               );
             },
           ),

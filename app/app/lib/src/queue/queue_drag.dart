@@ -143,6 +143,7 @@ class _DragChip extends StatelessWidget {
     final colors = WaxColors.of(context);
     return Material(
       color: Colors.transparent,
+      animationDuration: Duration.zero,
       child: Opacity(
         opacity: 0.9,
         child: Container(

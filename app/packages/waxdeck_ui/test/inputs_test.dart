@@ -1,5 +1,7 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -1238,6 +1240,255 @@ void main() {
     }
   });
 
+  group('MediaListRow play count', () {
+    Future<void> pumpRow(
+      WidgetTester tester,
+      MediaTileData data, {
+      double width = 420,
+    }) => tester.pumpWidget(
+      MaterialApp(
+        theme: buildWaxTheme(variant: WaxThemeVariant.dark),
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: width,
+              child: MediaListRow(data: data, onTap: () {}, onMore: () {}),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    const bare = MediaTileData(
+      title: 'Harbour Lights',
+      subtitle: 'Nightjar',
+      trailingText: '4:18',
+    );
+    const counted = MediaTileData(
+      title: 'Harbour Lights',
+      subtitle: 'Nightjar',
+      trailingText: '4:18',
+      playCount: 12,
+      playCountLabel: 'played 12 times',
+      playCountSemanticsId: 'plays-0',
+    );
+    final playGlyph = find.byWidgetPredicate(
+      (widget) => widget is WaxIcon && widget.glyph == WaxIcons.play,
+    );
+
+    testWidgets('sits left of the duration behind a play glyph, as one node '
+        'that says it in words', (tester) async {
+      final semantics = tester.ensureSemantics();
+      await pumpRow(tester, bare);
+      final durationAlone = tester.getTopLeft(find.text('4:18')).dx;
+
+      await pumpRow(tester, counted);
+      final count = find.text('12');
+      final duration = find.text('4:18');
+      // The duration keeps its column; the count takes the room before it.
+      expect(tester.getTopLeft(duration).dx, durationAlone);
+      expect(
+        tester.getTopRight(count).dx + WaxSpace.s12,
+        tester.getTopLeft(duration).dx,
+      );
+      expect(
+        tester.getTopRight(playGlyph).dx + WaxSpace.s4,
+        tester.getTopLeft(count).dx,
+      );
+      expect(tester.widget<WaxIcon>(playGlyph).size, 12);
+
+      final colors = WaxColors.of(tester.element(count));
+      final style = tester.widget<Text>(count).style!;
+      expect(style.fontFamily, WaxType.monoData.fontFamily);
+      expect(style.fontSize, WaxType.monoData.fontSize);
+      expect(style.color, colors.textSecondary);
+      expect(tester.widget<WaxIcon>(playGlyph).color, isNot(colors.accent));
+
+      // One node in words, beside the row's own rather than inside it.
+      expect(
+        tester.getSemantics(find.bySemanticsIdentifier('plays-0')).label,
+        'played 12 times',
+      );
+      expect(
+        find.bySemanticsLabel('Harbour Lights, Nightjar, 4:18'),
+        findsOneWidget,
+      );
+      final tooltip = find.ancestor(
+        of: count,
+        matching: find.byType(WaxTooltip),
+      );
+      expect(tooltip, findsOneWidget);
+      expect(tester.widget<WaxTooltip>(tooltip).excludeFromSemantics, isTrue);
+
+      // And the same words on hover.
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(count));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('played 12 times'), findsOneWidget);
+      semantics.dispose();
+    });
+
+    testWidgets('draws nothing and keeps no room at zero or with no count', (
+      tester,
+    ) async {
+      await pumpRow(tester, bare);
+      final durationAlone = tester.getTopLeft(find.text('4:18')).dx;
+
+      for (final plays in <int?>[0, null]) {
+        await pumpRow(
+          tester,
+          MediaTileData(
+            title: 'Harbour Lights',
+            subtitle: 'Nightjar',
+            trailingText: '4:18',
+            playCount: plays,
+            playCountLabel: 'never played',
+            playCountSemanticsId: 'plays-0',
+          ),
+        );
+        expect(playGlyph, findsNothing, reason: '$plays');
+        expect(find.text('0'), findsNothing, reason: '$plays');
+        expect(find.bySemanticsIdentifier('plays-0'), findsNothing);
+        expect(tester.getTopLeft(find.text('4:18')).dx, durationAlone);
+      }
+    });
+
+    testWidgets('an ellipsized title stops eight pixels short of the duration, '
+        'which keeps its column', (tester) async {
+      await pumpRow(tester, bare, width: 270);
+      final column = tester.getTopLeft(find.text('4:18')).dx;
+      const long = 'Harbour Lights over the Long Water';
+      for (final starred in <bool>[false, true]) {
+        await pumpRow(
+          tester,
+          MediaTileData(
+            title: long,
+            subtitle: 'Nightjar',
+            trailingText: '4:18',
+            starred: starred,
+          ),
+          width: 270,
+        );
+        final title = find.text(long);
+        expect(
+          tester.renderObject<RenderParagraph>(title).didExceedMaxLines,
+          isTrue,
+          reason: 'the title is cut',
+        );
+        expect(tester.getTopLeft(find.text('4:18')).dx, column);
+        // A star brings its own gap, and the duration adds none to it.
+        final before = starred
+            ? tester
+                  .getTopRight(
+                    find.byWidgetPredicate(
+                      (widget) =>
+                          widget is WaxIcon && widget.glyph == WaxIcons.star,
+                    ),
+                  )
+                  .dx
+            : tester.getTopRight(title).dx;
+        expect(before + WaxSpace.s8, column, reason: 'starred: $starred');
+      }
+    });
+
+    testWidgets('from a thousand the count is compact', (tester) async {
+      await pumpRow(
+        tester,
+        const MediaTileData(
+          title: 'Harbour Lights',
+          trailingText: '4:18',
+          playCount: 1234,
+          playCountLabel: 'played 1234 times',
+        ),
+      );
+      expect(find.text('1.2K'), findsOneWidget);
+      expect(find.text('1234'), findsNothing);
+    });
+
+    // The glyph and the number are one readout: a bare number beside the
+    // duration reads as a second timestamp.
+    for (final (width, drawn) in <(double, bool)>[
+      (360, true),
+      (320, true),
+      (280, true),
+      (279, false),
+    ]) {
+      testWidgets('at $width px the row draws '
+          '${drawn ? 'the glyph and the number together' : 'no count'}, '
+          'and always the duration and the overflow', (tester) async {
+        await pumpRow(tester, counted, width: width);
+        expect(playGlyph, drawn ? findsOneWidget : findsNothing);
+        expect(find.text('12'), drawn ? findsOneWidget : findsNothing);
+        expect(
+          find.bySemanticsIdentifier('plays-0'),
+          drawn ? findsOneWidget : findsNothing,
+        );
+        expect(find.text('4:18'), findsOneWidget);
+        expect(find.byType(WaxIconButton), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('a count arriving and going keeps the row, its element and '
+        'its keyboard focus', (tester) async {
+      MediaTileData plays(int count) => MediaTileData(
+        title: 'Harbour Lights',
+        trailingText: '4:18',
+        playCount: count,
+        playCountLabel: count > 0 ? 'played $count times' : null,
+      );
+      await pumpRow(tester, plays(0));
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      final focused = FocusManager.instance.primaryFocus;
+      final ink = tester.element(find.byType(InkWell));
+      expect(
+        focused?.context,
+        isNotNull,
+        reason: 'Tab focuses the row to begin with',
+      );
+
+      for (final count in <int>[1, 0]) {
+        await pumpRow(tester, plays(count));
+        expect(playGlyph, count > 0 ? findsOneWidget : findsNothing);
+        expect(
+          identical(tester.element(find.byType(InkWell)), ink),
+          isTrue,
+          reason: 'the row element survives a count of $count',
+        );
+        expect(FocusManager.instance.primaryFocus, same(focused));
+      }
+    });
+
+    testWidgets('a row that never carries a count measures nothing', (
+      tester,
+    ) async {
+      // Null is the plain row, which may sit under an intrinsic pass; a
+      // row that can carry a count reads its width at any count.
+      await pumpRow(tester, bare);
+      expect(
+        find.descendant(
+          of: find.byType(MediaListRow),
+          matching: find.byType(LayoutBuilder),
+        ),
+        findsNothing,
+      );
+      await pumpRow(
+        tester,
+        const MediaTileData(title: 'Harbour Lights', playCount: 0),
+      );
+      expect(
+        find.descendant(
+          of: find.byType(MediaListRow),
+          matching: find.byType(LayoutBuilder),
+        ),
+        findsOneWidget,
+      );
+    });
+  });
+
   group('MediaCard.heightFor', () {
     for (final scale in <double>[1, 1.5]) {
       testWidgets('a long trailing readout stays inside the cell at '
@@ -1278,9 +1529,8 @@ void main() {
       shape: ArtworkShape.circle,
     );
 
-    testWidgets('the pin and the overflow share one corner and one row', (
-      tester,
-    ) async {
+    testWidgets('the pin and the overflow share a row and leave the middle '
+        'clear', (tester) async {
       // A station tile hand-rolled these over the card: a star and a
       // menu button stacked at its (0, 0) while the card drew its own
       // overflow at (8, 8) - two of the same glyph eight pixels apart.
@@ -1320,10 +1570,7 @@ void main() {
         matching: find.byType(WaxIconButton),
       );
       // And the pin sits in the corner, not a chip's width inboard of
-      // it. A faded-out overflow still occupies its whole 44px box, so
-      // on a phone - where nothing ever hovers - the pin was pushed a
-      // third of the way across the card with dead space beside it,
-      // which is the misalignment this row was meant to fix.
+      // it, with no pointer in the room to reveal anything beside it.
       final atRest = tester.getRect(chip(WaxIcons.star));
       final card = tester.getRect(find.byType(MediaCard));
       expect(
@@ -1344,15 +1591,21 @@ void main() {
       expect(
         starBox.top,
         moreOrLessEquals(moreBox.top, epsilon: 0.5),
-        reason: 'one row, not two corners',
+        reason: 'level with each other',
+      );
+      expect(
+        moreBox.left - card.left,
+        moreOrLessEquals(WaxSpace.s8, epsilon: 0.5),
+        reason: 'the overflow has the opposite corner',
       );
       expect(
         moreBox.right,
-        moreOrLessEquals(starBox.left, epsilon: 0.5),
-        reason: 'flush, so the two discs read as one capsule',
+        lessThanOrEqualTo(card.center.dx),
+        reason: 'and neither chip reaches the middle, where the disc is',
       );
-      // The pin has not moved: the overflow grows inward from it, so
-      // nothing shifts under the pointer that revealed it.
+      expect(starBox.left, greaterThanOrEqualTo(card.center.dx));
+      // The pin has not moved: the overflow appears in the other
+      // corner, so nothing shifts under the pointer that revealed it.
       expect(starBox.right, moreOrLessEquals(atRest.right, epsilon: 0.5));
 
       // Resting on a chip keeps them drawn. The chips are a sibling of

@@ -2,7 +2,6 @@
   "doc": "The music hub, its indexes, and the buckets they drill.",
   "ids": {
     "albumTrackMore": "album-track-more-{index}",
-    "albumTrackPlays": "album-track-plays-{index}",
     "entityAlbum": "entity-album-{pid}",
     "entityAllBooks": "entity-all-books",
     "entityAllTracks": "entity-all-tracks",
@@ -25,6 +24,7 @@
     "listingRowMore": "listing-row-more-{pid}",
     "listingShuffle": "listing-shuffle",
     "musicAdd": "music-add",
-    "musicTile": "music-tile-{name}"
+    "musicTile": "music-tile-{name}",
+    "trackPlays": "track-plays-{index}"
   }
 }

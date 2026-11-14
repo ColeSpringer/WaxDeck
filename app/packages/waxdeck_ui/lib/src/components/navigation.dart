@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../icons/wax_icon.dart';
 import '../l10n/wax_l10n.dart';
+import '../theme/theme_landing.dart';
 import '../theme/wax_layout.dart';
 import '../tokens/breakpoints.dart';
 import '../tokens/colors.dart';
@@ -12,6 +13,7 @@ import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'artwork.dart';
 import 'controls.dart';
+import 'controls/menu_entry.dart';
 import 'tooltip.dart';
 
 /// One place the shell can send a visitor, as plain data.
@@ -313,84 +315,87 @@ class _NavItemState extends State<_NavItem> {
       );
     }
 
-    final Widget content = switch (widget.form) {
-      // Centred inside whatever height the bar gives it, so the whole
-      // cell is the target rather than just the glyph and its label.
-      _NavForm.tab => Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          // The pill is what carries selection on a tab: a filled shape
-          // reads as selected in greyscale, where amber alone would not.
-          AnimatedContainer(
-            duration: motion.quick,
-            curve: WaxMotion.emphasized,
-            padding: const EdgeInsets.symmetric(
-              horizontal: WaxSpace.s16,
-              vertical: WaxSpace.s4,
+    final Widget content = WaxThemeLanding(
+      duration: motion.quick,
+      builder: (context, duration) => switch (widget.form) {
+        // Centred inside whatever height the bar gives it, so the whole
+        // cell is the target rather than just the glyph and its label.
+        _NavForm.tab => Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            // The pill is what carries selection on a tab: a filled shape
+            // reads as selected in greyscale, where amber alone would not.
+            AnimatedContainer(
+              duration: duration,
+              curve: WaxMotion.emphasized,
+              padding: const EdgeInsets.symmetric(
+                horizontal: WaxSpace.s16,
+                vertical: WaxSpace.s4,
+              ),
+              decoration: BoxDecoration(
+                color: background,
+                borderRadius: WaxRadius.pill,
+              ),
+              child: glyph,
             ),
+            if (_tabLabelsFit(context)) ...<Widget>[
+              const SizedBox(height: 2),
+              Text(
+                widget.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: WaxType.caption.copyWith(
+                  color: widget.selected ? colors.accent : colors.textSecondary,
+                ),
+              ),
+            ],
+          ],
+        ),
+        _NavForm.rail => Center(
+          child: AnimatedContainer(
+            duration: duration,
+            curve: WaxMotion.emphasized,
+            width: WaxSpace.s48,
+            height: WaxSpace.touchTarget,
             decoration: BoxDecoration(
               color: background,
               borderRadius: WaxRadius.pill,
             ),
-            child: glyph,
+            child: Center(child: glyph),
           ),
-          if (_tabLabelsFit(context)) ...<Widget>[
-            const SizedBox(height: 2),
-            Text(
-              widget.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: WaxType.caption.copyWith(
-                color: widget.selected ? colors.accent : colors.textSecondary,
-              ),
-            ),
-          ],
-        ],
-      ),
-      _NavForm.rail => Center(
-        child: AnimatedContainer(
-          duration: motion.quick,
+        ),
+        _NavForm.row => AnimatedContainer(
+          duration: duration,
           curve: WaxMotion.emphasized,
-          width: WaxSpace.s48,
-          height: WaxSpace.touchTarget,
+          constraints: const BoxConstraints(minHeight: WaxSpace.touchTarget),
+          padding: EdgeInsetsDirectional.only(
+            start: widget.indent ? WaxSpace.s32 : WaxSpace.s12,
+            end: WaxSpace.s12,
+          ),
           decoration: BoxDecoration(
             color: background,
-            borderRadius: WaxRadius.pill,
+            borderRadius: WaxRadius.thumb,
           ),
-          child: Center(child: glyph),
-        ),
-      ),
-      _NavForm.row => AnimatedContainer(
-        duration: motion.quick,
-        curve: WaxMotion.emphasized,
-        constraints: const BoxConstraints(minHeight: WaxSpace.touchTarget),
-        padding: EdgeInsetsDirectional.only(
-          start: widget.indent ? WaxSpace.s32 : WaxSpace.s12,
-          end: WaxSpace.s12,
-        ),
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: WaxRadius.thumb,
-        ),
-        child: Row(
-          children: <Widget>[
-            glyph,
-            const SizedBox(width: WaxSpace.s12),
-            Expanded(
-              child: Text(
-                widget.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: WaxType.label.copyWith(
-                  color: widget.selected ? foreground : colors.textPrimary,
+          child: Row(
+            children: <Widget>[
+              glyph,
+              const SizedBox(width: WaxSpace.s12),
+              Expanded(
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: WaxType.label.copyWith(
+                    color: widget.selected ? foreground : colors.textPrimary,
+                  ),
                 ),
               ),
-            ),
-            ?widget.trailing,
-          ],
+              ?widget.trailing,
+            ],
+          ),
         ),
-      ),
-    };
+      },
+    );
 
     return Semantics(
       identifier: widget.semanticsId,
@@ -669,15 +674,13 @@ Future<_MenuChoice?> _openMenu(
 /// flattened, because a menu inside a menu is a worse answer than a
 /// labelled run.
 List<PopupMenuEntry<_MenuChoice>> _entryItems(
-  BuildContext context,
   List<WaxNavEntry> entries,
   String? selected,
 ) {
-  final colors = WaxColors.of(context);
   PopupMenuItem<_MenuChoice> item(WaxDestination destination) =>
-      PopupMenuItem<_MenuChoice>(
+      waxMenuEntry<_MenuChoice>(
         value: _GoTo(destination.name),
-        child: Semantics(
+        builder: (_) => Semantics(
           identifier: destination.semanticsId,
           selected: destination.name == selected,
           child: Text(destination.label),
@@ -690,12 +693,14 @@ List<PopupMenuEntry<_MenuChoice>> _entryItems(
           item(destination),
         ],
         WaxNavGroup() => <PopupMenuEntry<_MenuChoice>>[
-          PopupMenuItem<_MenuChoice>(
+          waxMenuEntry<_MenuChoice>(
             enabled: false,
             height: WaxSpace.s32,
-            child: Text(
+            builder: (context) => Text(
               entry.label,
-              style: WaxType.overline.copyWith(color: colors.textTertiary),
+              style: WaxType.overline.copyWith(
+                color: WaxColors.of(context).textTertiary,
+              ),
             ),
           ),
           for (final destination in entry.children) item(destination),
@@ -725,10 +730,7 @@ class WaxNavOverflowButton extends StatelessWidget {
   final String? semanticsId;
 
   Future<void> _open(BuildContext context) async {
-    final chosen = await _openMenu(
-      context,
-      _entryItems(context, entries, selected),
-    );
+    final chosen = await _openMenu(context, _entryItems(entries, selected));
     if (chosen is _GoTo) onSelect(chosen.name);
   }
 
@@ -781,30 +783,35 @@ class WaxAccountButton extends StatelessWidget {
   final String? label;
 
   Future<void> _open(BuildContext context) async {
-    final colors = WaxColors.of(context);
     final items = <PopupMenuEntry<_MenuChoice>>[
       // A session can be authenticated with no user payload, and an
       // empty row at the head of the menu says less than no row at all.
       if (account.name.trim().isNotEmpty)
-        PopupMenuItem<_MenuChoice>(
+        waxMenuEntry<_MenuChoice>(
           enabled: false,
           height: WaxSpace.s32,
-          child: Text(
+          builder: (context) => Text(
             account.name,
-            style: WaxType.label.copyWith(color: colors.textPrimary),
+            style: WaxType.label.copyWith(
+              color: WaxColors.of(context).textPrimary,
+            ),
           ),
         ),
-      ..._entryItems(context, entries, selected),
+      ..._entryItems(entries, selected),
       if (account.actions.isNotEmpty) const PopupMenuDivider(),
       for (final action in account.actions)
-        PopupMenuItem<_MenuChoice>(
+        waxMenuEntry<_MenuChoice>(
           value: _Run(action.name),
-          child: Semantics(
+          builder: (context) => Semantics(
             identifier: action.semanticsId,
             child: Row(
               children: <Widget>[
                 if (action.glyph != null) ...<Widget>[
-                  WaxIcon(action.glyph!, size: 18, color: colors.textSecondary),
+                  WaxIcon(
+                    action.glyph!,
+                    size: 18,
+                    color: WaxColors.of(context).textSecondary,
+                  ),
                   const SizedBox(width: WaxSpace.s12),
                 ],
                 Text(action.label),
@@ -1183,8 +1190,14 @@ class _NavRegion extends StatelessWidget {
     label: context.waxL10n.navMain,
     // Its own Material, so each piece of chrome stands alone: the ink and
     // menu machinery underneath the house controls needs one, and the
-    // caller's content pane is not it.
-    child: Material(type: MaterialType.transparency, child: child),
+    // caller's content pane is not it. A transparent Material's one
+    // animation is its default text style easing into a new theme, which
+    // lands at once instead.
+    child: Material(
+      type: MaterialType.transparency,
+      animationDuration: Duration.zero,
+      child: child,
+    ),
   );
 }
 

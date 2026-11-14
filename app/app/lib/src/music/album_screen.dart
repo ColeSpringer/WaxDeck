@@ -484,19 +484,16 @@ class _TrackList extends ConsumerWidget {
     // number that appears nowhere on the record.
     int discOf(ItemSummary track) => track.discNumber ?? 1;
     final multiDisc = tracks.any((t) => discOf(t) > 1);
-    // One batch read for the whole release rather than one per row: a
-    // release is a page's worth of tracks, which is what the batch
-    // endpoint is sized for. A pid the server holds no state for reads
-    // as the zero state, so an unplayed release simply shows nothing.
-    final plays =
-        ref.watch(playProgressProvider(playProgressKey(tracks))).value ??
-        const <String, PlayProgress>{};
+    // One batch read per window of the release that has a row built,
+    // rather than one per row, so an ordinary release is a single read. A
+    // pid the server holds no state for counts zero, so an unplayed
+    // release simply shows nothing.
+    final windows = PlayWindows.ofItems(tracks);
     return SliverList.builder(
       itemCount: tracks.length,
       itemBuilder: (context, index) {
         final track = tracks[index];
         final disc = discOf(track);
-        final playCount = plays[track.pid]?.playCount ?? 0;
         final startsDisc =
             multiDisc && (index == 0 || discOf(tracks[index - 1]) != disc);
         final row = Padding(
@@ -505,44 +502,40 @@ class _TrackList extends ConsumerWidget {
           ),
           child: QueueDraggable(
             drop: QueueDrop.item(track),
-            child: MediaListRow(
-              data: trackRowTile(
-                track,
-                albumArtist: albumArtist,
-                // Nothing at all on a track nobody has finished, so an
-                // unplayed release is a clean column rather than a
-                // stripe of zeroes - which is also why the spoken form
-                // and the handle are conditional: there is no node to
-                // carry them.
-                trailingDetail: playCount > 0 ? '$playCount' : null,
-                trailingDetailSpoken: playCount > 0
-                    ? context.l10n.musicTrackPlaysSpoken(playCount)
-                    : null,
-                trailingDetailSemanticsId: playCount > 0
-                    ? SemanticsIds.albumTrackPlays(index)
-                    : null,
-                semanticsId: SemanticsIds.indexItem(index),
+            child: PlayCountBuilder(
+              windows: windows,
+              index: index,
+              pid: track.pid,
+              builder: (context, plays) => MediaListRow(
+                data: trackRowTile(
+                  track,
+                  l10n: context.l10n,
+                  albumArtist: albumArtist,
+                  playCount: plays,
+                  playCountSemanticsId: SemanticsIds.trackPlays(index),
+                  semanticsId: SemanticsIds.indexItem(index),
+                ),
+                leadingIndex: track.trackNumber ?? index + 1,
+                onTap: () => _play(ref, index),
+                // "Go to album" would open the screen the row is on, so
+                // the menu keeps only what leads somewhere else. The
+                // album handle is the list's own, not the row's, for the
+                // reason the class doc gives: a row with no handle of its
+                // own would lose the release the screen stands on.
+                onMore: () => showItemMenuSheet(
+                  context,
+                  ref,
+                  pid: track.pid,
+                  title: track.title,
+                  mediaType: track.mediaType,
+                  artist: track.artist,
+                  artistPid: track.artistPid,
+                  album: albumTitle,
+                  albumPid: albumPid,
+                  withGoToAlbum: false,
+                ),
+                moreSemanticsId: SemanticsIds.albumTrackMore(index),
               ),
-              leadingIndex: track.trackNumber ?? index + 1,
-              onTap: () => _play(ref, index),
-              // "Go to album" would open the screen the row is on, so
-              // the menu keeps only what leads somewhere else. The
-              // album handle is the list's own, not the row's, for the
-              // reason the class doc gives: a row with no handle of its
-              // own would lose the release the screen stands on.
-              onMore: () => showItemMenuSheet(
-                context,
-                ref,
-                pid: track.pid,
-                title: track.title,
-                mediaType: track.mediaType,
-                artist: track.artist,
-                artistPid: track.artistPid,
-                album: albumTitle,
-                albumPid: albumPid,
-                withGoToAlbum: false,
-              ),
-              moreSemanticsId: SemanticsIds.albumTrackMore(index),
             ),
           ),
         );

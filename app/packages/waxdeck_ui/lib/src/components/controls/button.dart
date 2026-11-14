@@ -322,6 +322,7 @@ class WaxButton extends StatelessWidget {
       child: Material(
         color: ground,
         borderRadius: radius,
+        animationDuration: Duration.zero,
         child: InkWell(onTap: onPressed, borderRadius: radius, child: body),
       ),
     );

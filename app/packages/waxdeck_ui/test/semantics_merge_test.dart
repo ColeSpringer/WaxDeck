@@ -529,7 +529,6 @@ final List<_Scenario> _scenarios = <_Scenario>[
         data: const MediaTileData(
           title: 'Salt Harbour',
           subtitle: 'Nightjar',
-          badge: 'New',
           unplayed: true,
           downloaded: true,
           progress: 0.4,
@@ -622,7 +621,9 @@ final List<_Scenario> _scenarios = <_Scenario>[
           data: const MediaTileData(
             title: 'Harbour Lights',
             trailingText: '4:18',
-            trailingDetail: '12',
+            playCount: 12,
+            playCountLabel: 'played 12 times',
+            trailingDetail: 'Held',
             progress: 0.3,
           ),
           leadingIndex: 5,

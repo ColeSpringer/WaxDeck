@@ -181,7 +181,7 @@ class PlayerScreen extends ConsumerWidget {
       // paints the canvas, hence transparent.
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        body: _body(context, ref),
+        body: WaxPlainTextStyle(child: _body(context, ref)),
       ),
     );
   }

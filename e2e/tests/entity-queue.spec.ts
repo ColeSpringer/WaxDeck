@@ -1,5 +1,6 @@
+import type { Request } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { App, clickUntilRequested } from './driver';
+import { App, T, clickUntilRequested, wheelIntoView } from './driver';
 import { SemanticsIds } from './semantics-ids';
 import { MediaTraffic } from './support/media';
 
@@ -44,6 +45,18 @@ test('an album row wears its play count, and the row menu opens the facts', asyn
   });
   const tracks = page.items ?? [];
   expect(tracks.length).toBeGreaterThan(0);
+  // And the track the artist's own page leads its tracks with, which is
+  // the first one that is not a book in the artist's listing - the same
+  // read the page makes - so the artist page's first row has a count
+  // too. Catalog state: whichever track that is, it is there.
+  const artistPid = tracks[0].artistPid;
+  expect(artistPid, 'the album names its artist').toBeTruthy();
+  const byArtist = await app.api.get('/library/items', {
+    query: { facet: 'artist', facetKey: artistPid!.slice(3), limit: 100 },
+  });
+  const leading = (byArtist.items ?? []).find((item) => item.mediaType !== 'audiobook');
+  expect(leading, 'the artist has a track').toBeTruthy();
+  const heard = new Set([...tracks.map((track) => track.pid), leading!.pid]);
   await app.api.post('/listens', {
     data: {
       // Keyed on the track's own pid, not on where it sat in this
@@ -51,9 +64,9 @@ test('an album row wears its play count, and the row menu opens the facts', asyn
       // run, and an album whose stable order moved under a re-scan
       // would then have one row's listen dropped as a duplicate of
       // another row's.
-      sessions: tracks.map((track) => ({
-        sessionId: `facts-${track.pid}`,
-        pid: track.pid,
+      sessions: [...heard].map((pid) => ({
+        sessionId: `facts-${pid}`,
+        pid,
         startedAt: new Date().toISOString(),
         msPlayed: 1000,
         finished: true,
@@ -73,6 +86,23 @@ test('an album row wears its play count, and the row menu opens the facts', asyn
   // is where the rest of what the catalog holds about a track lives.
   await app.music.openTrackFacts(0);
   await expect(app.music.control(SemanticsIds.itemFactsRow('plays'))).toContainText('1');
+
+  // The artist's page draws the same count on its tracks: one treatment
+  // wherever a track is listed. Its tracks sit under the releases, so a
+  // short window may need a wheel to draw the first of them. The page
+  // asks for their play states from the frame that builds their rows, so
+  // once that read is answered a first row missing from the tree is one
+  // below the fold, and a present one draws its count from the answer.
+  const isTrackPlays = (r: Request) =>
+    r.method() === 'POST' &&
+    r.url().endsWith('/play-states') &&
+    (r.postData() ?? '').includes(leading!.pid);
+  const answered = app.page.waitForResponse((r) => isTrackPlays(r.request()), { timeout: T.nav });
+  await app.nav.open(`/music/artists/${artistPid}`, app.music.entityShuffle());
+  await answered;
+  const artistPlays = app.music.trackPlays(0);
+  if ((await app.music.entry(0).count()) === 0) await wheelIntoView(app.page, artistPlays);
+  await expect(artistPlays).toHaveText('played once');
 });
 
 test('an artist bucket opens the artist, not a filtered list', async ({ app }) => {

@@ -10,8 +10,6 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 [10-31-26] For 1 url download from youtube, there were a total of 5 notifications (3 of which were the same "Review queue: Waiting for a review"). Thats too many. Need to polish the notification system.
 
-[10-31-26] When you looking at the album page, the number of plays for a track is in an awkward place and it is not visually distinct/obvious enough for what it is. It can kind of seen as blending in with the track time.
-
 [10-31-26] When downloading track from youtube, if there is no match or the user just wants to mark as unofficial, the " - Topic" should always be removed. There is no reason to ever keep that as its something youtube adds to the end of a page name for music artists.
 
 [10-31-26] The tools tasks can have a bunch of the same task completed showing even though each was for something different. For example, the same completed tool task will show under tool tasks under tasks for 2 separate tracks that were download and there is no way to tell they were for different things. Either simplify this to just show a number of those tasks completed (maybe allowing to click on to see more information about each of the related tasks) or for the tool tasks to always show their unique information.
@@ -19,10 +17,6 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 [10-31-26] The notifications page will show notifications that are completed (with the check mark showing so) but you can still click them and it will take you to where the noticiation would have taken you if the task still needed to be completed. For example, if you complete the waiting for review tasks, go to the notifications section, click on the notification, it will take you to the pending queue but the tasks it was for is not actually there. (side note: we need to make a proper back system. the situtation as explainted in this item does not have an obvious way to get back to where you just were even though you clicked a notification from 1 page to bring you there.)
 
 [10-31-26] When listening to music, you can get audiobooks as part of your queue. When listening to music, you should get music (same with the others).
-
-[10-31-26] The mouse on web (probably desktop too) doesn't change to the hand selection when you run it over parts of the minimized dock to bring it to full screen. In full screen it correctly does this when you run your mouse over blank areas that allow you to click to minimize full screen to just the dock. On a related note, the area that you are allowed to click when minimized to go full screen only appears to be from the very far left up until the current time in the song you are playing. Any blank area beyond that to the far right you cant click to full screen.
-
-[10-31-26] Switching theme appearances is very laggy. Or maybe it just doesn't update at a high frame rate so it just looks laggy? Either way the transition is not pleasant visually.
 
 [11-04-26] When editing artist and using the rename feature, the save does not fully work. It updates in the edit screen but when you go back to the specific artist screen it has not updated the name. It does seem to work for the actual files associated with the artist, just not within the UI? Maybe it's a cache problem? UPDATE: It was updated after i went to different screens and came back to the artist section under music. It probably is a cache issue.
 
@@ -38,12 +32,8 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 [11-04-26] When approving a track from the review queue, the screen stays at the track you approved. The track you approved is removed from the queue list but it highlights another track without going to it. I don't think we need to stay on a track after a decision has been made for it.
 
-[11-04-26] The tracks section under an artist page does not have the track play total like you see when you go to the album page.
-
 [11-04-26] In listening stats under top we should include small images next to the list items. At least for artists and albums. Also, what the hell is shows supposed to be? Where are books and podcasts?
 
 [11-04-26] "Treat as audiobook" seems to only be an option for music files but the option is not given to all of them? If its an audiobook users should just be selecting that on import or download. Probably get rid of this
 
 [11-13-26] Going to genre, clicking on the "No genre" genre, editing a track to give it a genre, then hitting the in app back button, you will still see the track you gave a genre to in the no genre category.
-
-[11-13-26] clicking on a radio station now gives you menu options instead of playing the station. NOTE: this seems to be only if you click in the upper half of the station icon. if you click near the bottom it plays. this indicates some sort of overlap between the menu settings that you can click on and the play button / play portion of the radio station.

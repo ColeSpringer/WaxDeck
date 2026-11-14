@@ -10,6 +10,7 @@ import 'account_scoping_audit.dart';
 import 'account_scoping_cases.dart';
 import 'analysis_host.dart';
 import 'extension_tear_off_audit.dart';
+import 'theme_landing_audit.dart';
 
 void main() {
   AnalysisHost? host;
@@ -23,4 +24,5 @@ void main() {
   accountScopingAudit(shared);
   accountScopingCases(shared);
   extensionTearOffAudit(shared);
+  themeLandingAudit(shared);
 }

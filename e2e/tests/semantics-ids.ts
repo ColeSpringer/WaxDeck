@@ -530,7 +530,6 @@ export const SemanticsIds = {
 
   // music: The music hub, its indexes, and the buckets they drill.
   albumTrackMore: (index: string | number) => `album-track-more-${index}`,
-  albumTrackPlays: (index: string | number) => `album-track-plays-${index}`,
   entityAlbum: (pid: string | number) => `entity-album-${pid}`,
   entityAllBooks: 'entity-all-books',
   entityAllTracks: 'entity-all-tracks',
@@ -554,6 +553,7 @@ export const SemanticsIds = {
   listingShuffle: 'listing-shuffle',
   musicAdd: 'music-add',
   musicTile: (name: string | number) => `music-tile-${name}`,
+  trackPlays: (index: string | number) => `track-plays-${index}`,
 
   // organize: Organize: previews, duplicates, and upgrade groups.
   adminOrganize: 'admin-organize',
@@ -1189,7 +1189,6 @@ export const SemanticsIdPrefixes = {
 
   // music: The music hub, its indexes, and the buckets they drill.
   albumTrackMore: 'album-track-more-',
-  albumTrackPlays: 'album-track-plays-',
   entityAlbum: 'entity-album-',
   indexBucket: 'index-bucket-',
   indexBucketMore: 'index-bucket-more-',
@@ -1197,6 +1196,7 @@ export const SemanticsIdPrefixes = {
   indexRailLetter: 'index-rail-',
   listingRowMore: 'listing-row-more-',
   musicTile: 'music-tile-',
+  trackPlays: 'track-plays-',
 
   // organize: Organize: previews, duplicates, and upgrade groups.
   organizeHistoryRow: 'organize-history-row-',

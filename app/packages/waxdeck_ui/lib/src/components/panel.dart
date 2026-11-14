@@ -71,6 +71,7 @@ class WaxSidePanel extends StatelessWidget {
         // one that is not the content pane's.
         child: Material(
           type: MaterialType.transparency,
+          animationDuration: Duration.zero,
           child: SafeArea(
             left: false,
             child: Column(

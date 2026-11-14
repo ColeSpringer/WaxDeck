@@ -8,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
+import '../player/play_progress.dart';
 import '../podcasts/add_podcast.dart';
 import '../presenters/media_tiles.dart';
 import '../radio/add_station.dart';
@@ -543,6 +544,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // The artist or album named as the query leads, above everything. It
     // stays in its group too, so the rows below keep their places and ids.
     final top = topSearchHit(results, scope);
+    // Over every track hit rather than the ones a capped group shows, so
+    // opening the group reads nothing a drawn row has not.
+    final trackWindows = PlayWindows(
+      results.tracks.length,
+      (index) => results.tracks[index].pid,
+    );
     final slivers = <Widget>[...?_topResult(top), ...stations];
     var found = 0;
     for (final kind in SearchHitKind.values) {
@@ -570,12 +577,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       slivers.add(
         SliverList.builder(
           itemCount: shown.length,
-          itemBuilder: (context, index) => _hitRow(
-            shown[index],
-            kind,
-            semanticsId: SemanticsIds.searchHit(kind.name, index),
-            moreSemanticsId: SemanticsIds.searchHitMore(kind.name, index),
-          ),
+          itemBuilder: (context, index) {
+            Widget row({int? plays}) => _hitRow(
+              shown[index],
+              kind,
+              semanticsId: SemanticsIds.searchHit(kind.name, index),
+              moreSemanticsId: SemanticsIds.searchHitMore(kind.name, index),
+              playCount: plays,
+            );
+            if (kind != SearchHitKind.tracks) return row();
+            // The group is the head of the hits, so the row's index is
+            // its place among them.
+            return PlayCountBuilder(
+              key: ValueKey(shown[index].pid),
+              windows: trackWindows,
+              index: index,
+              pid: shown[index].pid,
+              builder: (context, plays) => row(plays: plays),
+            );
+          },
         ),
       );
     }
@@ -650,6 +670,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     SearchHitKind kind, {
     required String semanticsId,
     required String moreSemanticsId,
+    int? playCount,
   }) {
     // What the row's overflow holds follows the kind. An album gets the
     // release menu (pin, mix, share); an artist or a book pins, which is
@@ -687,7 +708,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     };
     return MediaListRow(
       key: ValueKey(hit.pid),
-      data: searchHitTile(hit, kind, semanticsId: semanticsId),
+      data: searchHitTile(
+        hit,
+        kind,
+        l10n: context.l10n,
+        semanticsId: semanticsId,
+        playCount: playCount,
+      ),
       onTap: () => _open(hit),
       onMore: onMore,
       moreSemanticsId: moreSemanticsId,

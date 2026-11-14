@@ -12,6 +12,7 @@ import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/entity_facts.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
+import 'package:waxdeck/src/player/play_progress.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
@@ -80,6 +81,96 @@ List<String> _rowTitles(WidgetTester tester) => tester
     .widgetList<MediaListRow>(find.byType(MediaListRow))
     .map((row) => row.data.title)
     .toList();
+
+/// Asserts the rows' play counts in order, by title: the number, its words
+/// on the count's own node at the row's position, and at zero no words and
+/// no node. All of them from one read.
+void _expectPlayCounts(
+  WidgetTester tester,
+  FakeRepository repository,
+  Map<String, int> byTitle,
+) {
+  final words = AppLocalizationsEn();
+  final rows = tester.widgetList<MediaListRow>(find.byType(MediaListRow));
+  for (final (index, MapEntry(key: title, value: count))
+      in byTitle.entries.indexed) {
+    final row = rows.singleWhere((row) => row.data.title == title);
+    final node = _byId(SemanticsIds.trackPlays(index));
+    expect(row.data.playCount, count, reason: title);
+    if (count == 0) {
+      expect(row.data.playCountLabel, isNull, reason: title);
+      expect(node, findsNothing, reason: title);
+    } else {
+      expect(row.data.playCountLabel, words.musicTrackPlaysSpoken(count));
+      expect(tester.getSemantics(node).label, row.data.playCountLabel);
+    }
+  }
+  expect(repository.playStateBatches, hasLength(1), reason: 'one read');
+}
+
+/// The windows of [kPlayProgressWindow] rows that a list's built rows sit
+/// in, the cache extent's included, for rows titled `T` and their index.
+Set<int> _builtWindows(WidgetTester tester) => <int>{
+  for (final row in tester.widgetList<MediaListRow>(
+    find.byType(MediaListRow, skipOffstage: false),
+  ))
+    int.parse(row.data.title.substring(1)) ~/ kPlayProgressWindow,
+};
+
+/// The windows a key was made for in the windows value a list's built rows
+/// were given.
+Set<int> _windowsAsked(WidgetTester tester) => <int>{
+  for (final row in tester.widgetList<PlayCountBuilder>(
+    find.byType(PlayCountBuilder, skipOffstage: false),
+  ))
+    ...row.windows.windowsAsked,
+};
+
+/// The windows [repository]'s play-state reads covered, from batch [from] on,
+/// for rows titled `T` and their index.
+Set<int> _windowsRead(FakeRepository repository, {int from = 0}) => <int>{
+  for (final batch in repository.playStateBatches.skip(from))
+    int.parse(batch.first.substring(4)) ~/ kPlayProgressWindow,
+};
+
+/// Hands [state] to every live progress window, as the user stream's echo
+/// of a play report does.
+void _echo(ProviderContainer container, PlayState state) {
+  for (final window in container.read(liveProgressWindowsProvider).toList()) {
+    window.apply(state);
+  }
+}
+
+/// A report for a track finished [count] times, at [positionMs], stamped
+/// [second] seconds into a fixed minute so each one is newer.
+PlayState _report(
+  String pid, {
+  required int count,
+  required int positionMs,
+  required int second,
+}) => PlayState(
+  pid: pid,
+  positionMs: positionMs,
+  played: true,
+  finished: true,
+  playCount: count,
+  starred: false,
+  updatedAt: DateTime.utc(2026, 11, 1, 12, 0, second),
+);
+
+/// Records every element rebuilt from here on, until the test ends.
+List<Element> _recordRebuilds() {
+  final rebuilt = <Element>[];
+  debugOnRebuildDirtyWidget = (element, _) => rebuilt.add(element);
+  addTearDown(() => debugOnRebuildDirtyWidget = null);
+  return rebuilt;
+}
+
+/// The titles of the rows among [rebuilt].
+List<String> _rowsIn(List<Element> rebuilt) => <String>[
+  for (final element in rebuilt)
+    if (element.widget case MediaListRow(:final data)) data.title,
+];
 
 /// Holds a reload in flight and asserts the screen keeps drawing the
 /// rows it already has, through the shared face rather than a switch on
@@ -445,11 +536,54 @@ void main() {
 
       await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
 
-      final rows = tester
-          .widgetList<MediaListRow>(find.byType(MediaListRow))
-          .toList();
-      expect(rows[0].data.trailingDetail, '1');
-      expect(rows[1].data.trailingDetail, isNull);
+      _expectPlayCounts(tester, repository, <String, int>{'One': 1, 'Two': 0});
+    });
+
+    testWidgets('a count from a thousand is drawn compact and spoken whole', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)]
+        ..playCounts['tr-One'] = 1234;
+
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      expect(find.text('1.2K'), findsOneWidget);
+      expect(
+        tester.getSemantics(_byId(SemanticsIds.trackPlays(0))).label,
+        'played 1,234 times',
+      );
+    });
+
+    testWidgets('a long release reads only the windows its drawn rows sit '
+        'in', (tester) async {
+      final tracks = <ItemSummary>[
+        for (var i = 0; i < 120; i++)
+          _track('T${i.toString().padLeft(3, '0')}', track: i + 1),
+      ];
+      final repository = FakeRepository()
+        ..facetItems['album 1'] = tracks
+        ..finishedPids.add('tr-T002');
+
+      await _pump(
+        tester,
+        const AlbumScreen(pid: 'al-1'),
+        repository,
+        size: const Size(800, 600),
+      );
+
+      expect(_builtWindows(tester), <int>{0});
+      expect(repository.playStateBatches, <List<String>>[
+        <String>[for (final track in tracks.take(50)) track.pid],
+      ]);
+      expect(
+        tester
+            .widgetList<MediaListRow>(find.byType(MediaListRow))
+            .singleWhere((row) => row.data.title == 'T002')
+            .data
+            .playCount,
+        1,
+      );
     });
 
     testWidgets('a track row menu opens the facts sheet', (tester) async {
@@ -904,6 +1038,275 @@ void main() {
         domain: BrowseDomain.music,
       ));
     });
+
+    testWidgets('counts are read for the windows of fifty rows the listing '
+        'draws, never for every window it holds', (tester) async {
+      // A page of the listing is five hundred rows, ten windows of them,
+      // and a screen draws a dozen.
+      const listing = (
+        dimension: MusicDimension.genres,
+        segment: 'ge-1',
+        domain: BrowseDomain.music,
+      );
+      final tracks = <ItemSummary>[
+        for (var i = 0; i < MusicItemsController.pageSize + 20; i++)
+          _track('T${i.toString().padLeft(3, '0')}'),
+      ];
+      List<String> window(int n) => <String>[
+        for (final track in tracks.skip(n * 50).take(50)) track.pid,
+      ];
+      final repository = FakeRepository()
+        ..facetItems['genre ge-1'] = tracks
+        ..finishedPids.addAll(<String>['tr-T001', 'tr-T070']);
+      final container = await _pump(
+        tester,
+        const MusicListingScreen(
+          dimension: MusicDimension.genres,
+          segment: 'ge-1',
+        ),
+        repository,
+        size: const Size(800, 600),
+      );
+      MediaTileData row(String title) => tester
+          .widgetList<MediaListRow>(find.byType(MediaListRow))
+          .singleWhere((r) => r.data.title == title)
+          .data;
+      final scroll = tester.state<ScrollableState>(
+        find
+            .ancestor(
+              of: find.byType(MediaListRow).first,
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      final pitch = tester.getSize(find.byType(MediaListRow).first).height;
+
+      expect(_builtWindows(tester), <int>{
+        0,
+      }, reason: 'the top of the page is all window 0');
+      expect(repository.playStateBatches, <List<String>>[window(0)]);
+      expect(row('T001').playCount, 1);
+      expect(row('T000').playCount, 0);
+
+      // A page arriving out of sight is not drawn, so it reads nothing.
+      await container.read(musicItemsProvider(listing).notifier).loadMore();
+      await tester.pumpAndSettle();
+      expect(repository.playStateBatches, hasLength(1));
+
+      // Past row fifty: the rows built there read their window, once.
+      scroll.position.jumpTo(70 * pitch);
+      await tester.pumpAndSettle();
+      expect(_builtWindows(tester), <int>{1});
+      expect(repository.playStateBatches.skip(1), <List<String>>[window(1)]);
+      expect(row('T070').playCount, 1);
+
+      // A play-state change reads again only what is drawn.
+      container.invalidate(playProgressProvider);
+      await tester.pumpAndSettle();
+      expect(repository.playStateBatches.skip(2), <List<String>>[window(1)]);
+
+      // Back at the top. A window is held only while a row of it is
+      // built, so the first one is read again, and only it.
+      scroll.position.jumpTo(0);
+      await tester.pumpAndSettle();
+      expect(_builtWindows(tester), <int>{0});
+      expect(repository.playStateBatches.skip(3), <List<String>>[window(0)]);
+      expect(row('T001').playCount, 1);
+    });
+
+    testWidgets('a listing of two thousand rows makes keys only for the '
+        'windows it builds', (tester) async {
+      const listing = (
+        dimension: MusicDimension.genres,
+        segment: 'ge-1',
+        domain: BrowseDomain.music,
+      );
+      final repository = FakeRepository()
+        ..facetItems['genre ge-1'] = <ItemSummary>[
+          for (var i = 0; i < 4 * MusicItemsController.pageSize; i++)
+            _track('T${i.toString().padLeft(4, '0')}'),
+        ];
+      final container = await _pump(
+        tester,
+        const MusicListingScreen(
+          dimension: MusicDimension.genres,
+          segment: 'ge-1',
+        ),
+        repository,
+        size: const Size(800, 600),
+      );
+      final notifier = container.read(musicItemsProvider(listing).notifier);
+      for (var page = 1; page < 4; page++) {
+        await notifier.loadMore();
+        await tester.pumpAndSettle();
+      }
+      expect(
+        container.read(musicItemsProvider(listing)).value!.items,
+        hasLength(2000),
+      );
+
+      expect(_builtWindows(tester), <int>{0});
+      expect(_windowsAsked(tester), <int>{
+        0,
+      }, reason: 'the other thirty-nine are idle');
+
+      final scroll = tester.state<ScrollableState>(
+        find
+            .ancestor(
+              of: find.byType(MediaListRow).first,
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(_windowsRead(repository), <int>{0});
+
+      // A jump to the far end lays out every row on the way, and none of
+      // them reads: only the rows that are still there afterwards do.
+      final before = repository.playStateBatches.length;
+      scroll.position.jumpTo(
+        1900 * tester.getSize(find.byType(MediaListRow).first).height,
+      );
+      await tester.pumpAndSettle();
+      expect(_builtWindows(tester), contains(38));
+      expect(_windowsAsked(tester), <int>{0, ..._builtWindows(tester)});
+      expect(
+        _windowsRead(repository, from: before),
+        _builtWindows(tester),
+        reason: 'the windows on screen, and not the ones passed over',
+      );
+    });
+
+    testWidgets('a listing flung fast reads nothing for the windows it passes '
+        'and reads the one it settles in', (tester) async {
+      final repository = FakeRepository()
+        ..facetItems['genre ge-1'] = <ItemSummary>[
+          for (var i = 0; i < MusicItemsController.pageSize; i++)
+            _track('T${i.toString().padLeft(4, '0')}'),
+        ];
+      await _pump(
+        tester,
+        const MusicListingScreen(
+          dimension: MusicDimension.genres,
+          segment: 'ge-1',
+        ),
+        repository,
+        size: const Size(800, 600),
+      );
+      expect(_windowsRead(repository), <int>{0});
+
+      final before = repository.playStateBatches.length;
+      // Faster than the screen is long a second: the framework's own
+      // signal that nobody is reading what goes by.
+      await tester.fling(
+        find.byType(MediaListRow).first,
+        const Offset(0, -300),
+        8000,
+      );
+      await tester.pumpAndSettle();
+      final settled = _builtWindows(tester);
+      expect(
+        settled.first,
+        greaterThan(1),
+        reason: 'the fling passed over at least one whole window',
+      );
+      expect(_windowsRead(repository, from: before), settled);
+    });
+
+    testWidgets('a report that moves only a position rebuilds no row, and a '
+        'new count rebuilds only its own', (tester) async {
+      final repository = FakeRepository()
+        ..facetItems['genre ge-1'] = <ItemSummary>[
+          for (var i = 0; i < 20; i++)
+            _track('T${i.toString().padLeft(3, '0')}'),
+        ]
+        ..finishedPids.add('tr-T001');
+      final container = await _pump(
+        tester,
+        const MusicListingScreen(
+          dimension: MusicDimension.genres,
+          segment: 'ge-1',
+        ),
+        repository,
+        size: const Size(800, 600),
+      );
+      final rebuilt = _recordRebuilds();
+
+      // A player checkpoints every few seconds while the track plays.
+      _echo(
+        container,
+        _report('tr-T001', count: 1, positionMs: 30000, second: 5),
+      );
+      await tester.pump();
+      expect(_rowsIn(rebuilt), isEmpty);
+
+      _echo(container, _report('tr-T001', count: 2, positionMs: 0, second: 10));
+      await tester.pump();
+      expect(_rowsIn(rebuilt), <String>['T001']);
+      expect(
+        tester
+            .widgetList<MediaListRow>(find.byType(MediaListRow))
+            .singleWhere((row) => row.data.title == 'T001')
+            .data
+            .playCount,
+        2,
+      );
+    });
+
+    testWidgets('rows scrolled back to draw the counts their window last '
+        'answered while it is read again', (tester) async {
+      final tracks = <ItemSummary>[
+        for (var i = 0; i < 120; i++)
+          _track('T${i.toString().padLeft(3, '0')}'),
+      ];
+      final repository = FakeRepository()
+        ..facetItems['genre ge-1'] = tracks
+        ..finishedPids.add('tr-T001');
+      await _pump(
+        tester,
+        const MusicListingScreen(
+          dimension: MusicDimension.genres,
+          segment: 'ge-1',
+        ),
+        repository,
+        size: const Size(800, 600),
+      );
+      MediaTileData row(String title) => tester
+          .widgetList<MediaListRow>(find.byType(MediaListRow))
+          .singleWhere((r) => r.data.title == title)
+          .data;
+      final scroll = tester.state<ScrollableState>(
+        find
+            .ancestor(
+              of: find.byType(MediaListRow).first,
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      final pitch = tester.getSize(find.byType(MediaListRow).first).height;
+      expect(row('T001').playCount, 1);
+
+      // Far enough that no row of the first window is built, so it goes.
+      scroll.position.jumpTo(70 * pitch);
+      await tester.pumpAndSettle();
+      expect(_builtWindows(tester), <int>{1});
+
+      final gate = Completer<void>();
+      repository.playStatesGate = gate;
+      scroll.position.jumpTo(0);
+      await tester.pump();
+      expect(row('T001').playCount, 1, reason: 'drawn on the first frame');
+      // A row asks for its window the frame after it is built.
+      await tester.pump();
+      expect(repository.playStateBatches.last, <String>[
+        for (final track in tracks.take(50)) track.pid,
+      ], reason: 'the first window is being read again');
+      expect(row('T001').playCount, 1, reason: 'and kept while it is read');
+
+      gate.complete();
+      repository.playStatesGate = null;
+      await tester.pumpAndSettle();
+      expect(row('T001').playCount, 1);
+    });
   });
 
   group('the artist screen', () {
@@ -921,6 +1324,99 @@ void main() {
         segment: 'ar-1',
         domain: BrowseDomain.wholeLibrary,
       ));
+    });
+
+    testWidgets('a top track wears its play count as an album row does', (
+      tester,
+    ) async {
+      // The same component as the album page's rows, fed the same read:
+      // a count where the listener finished the track, nothing where they
+      // never did.
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[
+          _track('One', track: 1),
+          _track('Two', track: 2),
+        ]
+        ..finishedPids.add('tr-One');
+
+      await _pump(
+        tester,
+        const ArtistScreen(pid: 'ar-1', label: 'Nightjar'),
+        repository,
+      );
+
+      _expectPlayCounts(tester, repository, <String, int>{'One': 1, 'Two': 0});
+    });
+
+    testWidgets('a top track never played draws no count at all', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[_track('One', track: 1)];
+
+      await _pump(
+        tester,
+        const ArtistScreen(pid: 'ar-1', label: 'Nightjar'),
+        repository,
+      );
+
+      _expectPlayCounts(tester, repository, <String, int>{'One': 0});
+      expect(find.text('0'), findsNothing);
+    });
+
+    testWidgets('a report that moves only a position rebuilds nothing of the '
+        'page outside its top tracks', (tester) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[
+          _track('One', track: 1),
+          _track('Two', track: 2),
+        ]
+        ..finishedPids.add('tr-One');
+      final container = await _pump(
+        tester,
+        const ArtistScreen(pid: 'ar-1', label: 'Nightjar'),
+        repository,
+      );
+      final releases = tester.element(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ShelfRow &&
+              widget.title == AppLocalizationsEn().musicArtistReleases,
+        ),
+      );
+      final rebuilt = _recordRebuilds();
+
+      _echo(
+        container,
+        _report('tr-One', count: 1, positionMs: 30000, second: 5),
+      );
+      await tester.pump();
+      expect(
+        container
+            .read(
+              playProgressProvider(playPidsKey(<String>['tr-One', 'tr-Two'])),
+            )
+            .value!['tr-One']!
+            .positionMs,
+        30000,
+        reason: 'the window the page reads took the report',
+      );
+      // The release shelf and what holds it, up to the page. The provider
+      // scope above rebuilds on any provider change and passes it down to
+      // no one.
+      final page = tester.element(find.byType(ArtistScreen));
+      bool holdsReleases(Element element) {
+        var held = identical(element, releases);
+        if (!held) {
+          releases.visitAncestorElements((above) {
+            held = identical(above, element);
+            return !held && !identical(above, page);
+          });
+        }
+        return held;
+      }
+
+      expect(rebuilt.where(holdsReleases), isEmpty);
     });
 
     testWidgets('the header row is one action bar with the menu', (

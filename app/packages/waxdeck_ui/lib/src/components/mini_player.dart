@@ -95,6 +95,7 @@ class MiniPlayer extends StatelessWidget {
         ),
         child: Material(
           type: MaterialType.transparency,
+          animationDuration: Duration.zero,
           child: SizedBox(
             width: kMiniPlayerWidth,
             height: kMiniPlayerHeight,

@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../icons/wax_icon.dart';
 import '../l10n/wax_l10n.dart';
+import '../theme/theme_landing.dart';
 import '../tokens/colors.dart';
 import '../tokens/motion.dart';
 import '../tokens/radii.dart';
@@ -403,127 +404,130 @@ class _WaxTextFieldState extends State<WaxTextField> {
       focused: _focused,
       borderRadius: radius,
       surface: colors.canvas,
-      child: AnimatedContainer(
+      child: WaxThemeLanding(
         duration: motion.quick,
-        curve: WaxMotion.emphasized,
-        constraints: const BoxConstraints(minHeight: WaxSpace.touchTarget),
-        padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s12),
-        decoration: BoxDecoration(
-          color: enabled ? colors.surface2 : Colors.transparent,
-          borderRadius: radius,
-          border: Border.all(
-            color: error != null
-                ? colors.error
-                : (_focused ? colors.accent : colors.hairline),
+        builder: (context, duration) => AnimatedContainer(
+          duration: duration,
+          curve: WaxMotion.emphasized,
+          constraints: const BoxConstraints(minHeight: WaxSpace.touchTarget),
+          padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s12),
+          decoration: BoxDecoration(
+            color: enabled ? colors.surface2 : Colors.transparent,
+            borderRadius: radius,
+            border: Border.all(
+              color: error != null
+                  ? colors.error
+                  : (_focused ? colors.accent : colors.hairline),
+            ),
           ),
-        ),
-        child: Row(
-          crossAxisAlignment: multiline
-              ? CrossAxisAlignment.start
-              : CrossAxisAlignment.center,
-          children: <Widget>[
-            if (widget.glyph != null) ...<Widget>[
-              WaxIcon(
-                widget.glyph!,
-                size: 18,
-                color: dimmed(colors.textTertiary),
-              ),
-              const SizedBox(width: WaxSpace.s8),
-            ],
-            Expanded(
-              // Annotating rather than containing, and around the field
-              // alone: the identifier and the name land on the input's
-              // own node, so there is one node per control - the role,
-              // the name, and the e2e handle on the thing that is
-              // actually the text box, with the clear button beside it
-              // keeping a node of its own.
-              child: Semantics(
-                identifier: widget.semanticsId,
-                label: widget.label,
-                // A refusal is one state however it was reached: a
-                // validator's message or an explicit error.
-                validationResult: error != null
-                    ? SemanticsValidationResult.invalid
-                    : SemanticsValidationResult.none,
-                // The lines under the box belong to the box: drawn as
-                // siblings they are separate nodes a screen reader
-                // reaches after the field, if at all, so "0 keeps all"
-                // and "That is not a URL" would be spoken by nothing
-                // the caret is in. Material puts both inside the
-                // field's own subtree, which is what the raw
-                // `InputDecoration` this component replaced was doing.
-                hint: error ?? widget.helperText,
-                child: TextField(
-                  controller: _controller,
-                  focusNode: _focus,
-                  enabled: widget.enabled,
-                  autofocus: widget.autofocus,
-                  textInputAction: widget.textInputAction,
-                  keyboardType: widget.digitsOnly
-                      ? TextInputType.number
-                      : widget.keyboardType,
-                  inputFormatters: <TextInputFormatter>[
-                    if (widget.digitsOnly) const _InsertedDigitsOnly(),
-                    if (widget.maxCharacters case final max?)
-                      _CodePointLimit(max),
-                  ],
-                  autofillHints: widget.autofillHints,
-                  autocorrect: widget.autocorrect,
-                  obscureText: widget.obscureText,
-                  maxLines: widget.maxLines,
-                  onChanged: _form == null ? widget.onChanged : _changed,
-                  onSubmitted: widget.onSubmitted,
-                  style: WaxType.body.copyWith(
-                    color: dimmed(colors.textPrimary),
-                  ),
-                  cursorColor: colors.accent,
-                  // This component draws the field's own surface, border,
-                  // and focus ring, so Material's are cleared rather than
-                  // left to show through: the theme sets an outline and a
-                  // fill for the bare TextField, and both would render as
-                  // a second box inside this one.
-                  decoration: InputDecoration(
-                    isDense: true,
-                    filled: false,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    disabledBorder: InputBorder.none,
-                    errorBorder: InputBorder.none,
-                    focusedErrorBorder: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: WaxSpace.s12,
+          child: Row(
+            crossAxisAlignment: multiline
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.center,
+            children: <Widget>[
+              if (widget.glyph != null) ...<Widget>[
+                WaxIcon(
+                  widget.glyph!,
+                  size: 18,
+                  color: dimmed(colors.textTertiary),
+                ),
+                const SizedBox(width: WaxSpace.s8),
+              ],
+              Expanded(
+                // Annotating rather than containing, and around the field
+                // alone: the identifier and the name land on the input's
+                // own node, so there is one node per control - the role,
+                // the name, and the e2e handle on the thing that is
+                // actually the text box, with the clear button beside it
+                // keeping a node of its own.
+                child: Semantics(
+                  identifier: widget.semanticsId,
+                  label: widget.label,
+                  // A refusal is one state however it was reached: a
+                  // validator's message or an explicit error.
+                  validationResult: error != null
+                      ? SemanticsValidationResult.invalid
+                      : SemanticsValidationResult.none,
+                  // The lines under the box belong to the box: drawn as
+                  // siblings they are separate nodes a screen reader
+                  // reaches after the field, if at all, so "0 keeps all"
+                  // and "That is not a URL" would be spoken by nothing
+                  // the caret is in. Material puts both inside the
+                  // field's own subtree, which is what the raw
+                  // `InputDecoration` this component replaced was doing.
+                  hint: error ?? widget.helperText,
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focus,
+                    enabled: widget.enabled,
+                    autofocus: widget.autofocus,
+                    textInputAction: widget.textInputAction,
+                    keyboardType: widget.digitsOnly
+                        ? TextInputType.number
+                        : widget.keyboardType,
+                    inputFormatters: <TextInputFormatter>[
+                      if (widget.digitsOnly) const _InsertedDigitsOnly(),
+                      if (widget.maxCharacters case final max?)
+                        _CodePointLimit(max),
+                    ],
+                    autofillHints: widget.autofillHints,
+                    autocorrect: widget.autocorrect,
+                    obscureText: widget.obscureText,
+                    maxLines: widget.maxLines,
+                    onChanged: _form == null ? widget.onChanged : _changed,
+                    onSubmitted: widget.onSubmitted,
+                    style: WaxType.body.copyWith(
+                      color: dimmed(colors.textPrimary),
                     ),
-                    hintText: widget.hint,
-                    hintStyle: WaxType.body.copyWith(
-                      color: dimmed(colors.textTertiary),
+                    cursorColor: colors.accent,
+                    // This component draws the field's own surface, border,
+                    // and focus ring, so Material's are cleared rather than
+                    // left to show through: the theme sets an outline and a
+                    // fill for the bare TextField, and both would render as
+                    // a second box inside this one.
+                    decoration: InputDecoration(
+                      isDense: true,
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      disabledBorder: InputBorder.none,
+                      errorBorder: InputBorder.none,
+                      focusedErrorBorder: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: WaxSpace.s12,
+                      ),
+                      hintText: widget.hint,
+                      hintStyle: WaxType.body.copyWith(
+                        color: dimmed(colors.textTertiary),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            // Built off the controller so it appears with the first
-            // character and leaves with the last, without the field
-            // rebuilding its ancestors on every keystroke.
-            if (!widget.obscureText && !multiline && widget.enabled)
-              ValueListenableBuilder<TextEditingValue>(
-                valueListenable: _controller,
-                builder: (context, value, _) => value.text.isEmpty
-                    ? const SizedBox.shrink()
-                    // Its own node, so a group around the field never
-                    // folds the button into itself and the input under it.
-                    : Semantics(
-                        container: true,
-                        child: WaxIconButton(
-                          glyph: WaxIcons.close,
-                          label: context.waxL10n.inputsClear(widget.label),
-                          size: 16,
-                          semanticsId: widget.clearSemanticsId,
-                          onPressed: _clear,
+              // Built off the controller so it appears with the first
+              // character and leaves with the last, without the field
+              // rebuilding its ancestors on every keystroke.
+              if (!widget.obscureText && !multiline && widget.enabled)
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _controller,
+                  builder: (context, value, _) => value.text.isEmpty
+                      ? const SizedBox.shrink()
+                      // Its own node, so a group around the field never
+                      // folds the button into itself and the input under it.
+                      : Semantics(
+                          container: true,
+                          child: WaxIconButton(
+                            glyph: WaxIcons.close,
+                            label: context.waxL10n.inputsClear(widget.label),
+                            size: 16,
+                            semanticsId: widget.clearSemanticsId,
+                            onPressed: _clear,
+                          ),
                         ),
-                      ),
-              ),
-          ],
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -783,27 +787,30 @@ class _Segment extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: AnimatedContainer(
+        child: WaxThemeLanding(
           duration: motion.quick,
-          curve: WaxMotion.emphasized,
-          constraints: const BoxConstraints(
-            minHeight: WaxSpace.pointerTarget,
-            minWidth: WaxSpace.s64,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected ? colors.accentContainer : Colors.transparent,
-            borderRadius: WaxRadius.pill,
-          ),
-          child: Text(
-            segment.label,
-            style: WaxType.label.copyWith(
-              color: !enabled
-                  ? colors.textDisabled
-                  : selected
-                  ? colors.onAccentContainer
-                  : colors.textSecondary,
+          builder: (context, duration) => AnimatedContainer(
+            duration: duration,
+            curve: WaxMotion.emphasized,
+            constraints: const BoxConstraints(
+              minHeight: WaxSpace.pointerTarget,
+              minWidth: WaxSpace.s64,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected ? colors.accentContainer : Colors.transparent,
+              borderRadius: WaxRadius.pill,
+            ),
+            child: Text(
+              segment.label,
+              style: WaxType.label.copyWith(
+                color: !enabled
+                    ? colors.textDisabled
+                    : selected
+                    ? colors.onAccentContainer
+                    : colors.textSecondary,
+              ),
             ),
           ),
         ),
@@ -920,37 +927,42 @@ class _ChipState extends State<_Chip> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
-        child: AnimatedContainer(
+        child: WaxThemeLanding(
           duration: motion.quick,
-          curve: WaxMotion.emphasized,
-          constraints: const BoxConstraints(minHeight: WaxSpace.pointerTarget),
-          padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
-          decoration: BoxDecoration(
-            color: widget.selected
-                ? colors.accentContainer
-                : Colors.transparent,
-            borderRadius: WaxRadius.pill,
-            border: Border.all(
-              color: widget.selected ? colors.accent : colors.hairline,
+          builder: (context, duration) => AnimatedContainer(
+            duration: duration,
+            curve: WaxMotion.emphasized,
+            constraints: const BoxConstraints(
+              minHeight: WaxSpace.pointerTarget,
             ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              if (widget.chip.glyph != null) ...<Widget>[
-                WaxIcon(
-                  widget.chip.glyph!,
-                  size: 14,
-                  color: foreground,
-                  active: widget.selected,
-                ),
-                const SizedBox(width: WaxSpace.s4),
-              ],
-              Text(
-                widget.chip.label,
-                style: WaxType.label.copyWith(color: foreground),
+            padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
+            decoration: BoxDecoration(
+              color: widget.selected
+                  ? colors.accentContainer
+                  : Colors.transparent,
+              borderRadius: WaxRadius.pill,
+              border: Border.all(
+                color: widget.selected ? colors.accent : colors.hairline,
               ),
-            ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (widget.chip.glyph != null) ...<Widget>[
+                  WaxIcon(
+                    widget.chip.glyph!,
+                    size: 14,
+                    color: foreground,
+                    active: widget.selected,
+                  ),
+                  const SizedBox(width: WaxSpace.s4),
+                ],
+                Text(
+                  widget.chip.label,
+                  style: WaxType.label.copyWith(color: foreground),
+                ),
+              ],
+            ),
           ),
         ),
       ),

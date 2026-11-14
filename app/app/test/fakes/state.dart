@@ -45,6 +45,9 @@ class FakeRepositoryState {
   /// Pids whose saved play state reports the item finished.
   final Set<String> finishedPids = {};
 
+  /// Play counts by pid, for a count past the one a finished pid reports.
+  final Map<String, int> playCounts = {};
+
   /// Stored preferences, served and replaced by the prefs endpoints.
   Prefs prefs = const Prefs();
 

@@ -43,7 +43,7 @@ belongs to the specs where navigation itself is under test;
 `driver-smoke.spec.ts` walks the whole table so the other specs do not
 have to.
 
-Two more fixtures, both lazy - ask and you pay, otherwise you do not:
+Three more fixtures, all lazy - ask and you pay, otherwise you do not:
 
 - `otherAccount(suffix?)` mints a second listener off this test's title.
   Talk to them with `app.api.as(their.token)`.
@@ -52,6 +52,13 @@ Two more fixtures, both lazy - ask and you pay, otherwise you do not:
   load-bearing: a client endpoint's id comes from the session it
   registered over, so two browsers on one cookie are one device and the
   picker will not show them each other.
+- `tab()` opens a second tab in this test's own browser, on the same
+  cookie, so a sign-out or a sign-in there is one here too, set up as
+  the `page` fixture's page is. For the scenarios about that shared
+  cookie; `app.network()`, asked before the tab's first navigation, puts
+  one tab's network in the test's hand: `off()` fails its requests,
+  refuses its upgrades and drops the sockets it holds, which network
+  emulation alone leaves open, without touching the other tab.
 
 **No numbers.** Timeouts are the tiers in `driver/budgets.ts` - `T.step`,
 `T.action`, `T.nav`, `T.assert`, `T.fetch`, `T.analyze`, and `J.long` /
@@ -139,12 +146,15 @@ as loud as a new violation - so the file stays as the seam for the next
 rule rather than as a tolerance. `--write-baseline` re-seeds it, and is
 only for the commit that adds a rule.
 
-Three spec files are exempt, each with its reason stated in
-`lint/conformance.mjs`, and they are exactly the three that ask for
-`rawPage`: the accessibility walk (roles and names only, by contract),
-the perf specs, and the desktop loopback (it drives the IdP's own HTML
-form). If you need the real `Page`, the question to answer first is
-whether your subject is really the app.
+Four spec files are exempt, each with its reason stated in
+`lint/conformance.mjs`, and they are exactly the four that step outside
+the driver's page: the accessibility walk (`rawPage`; roles and names
+only, by contract), the desktop loopback (`rawPage`; it drives the IdP's
+own HTML form), and the two perf specs, which open contexts of their
+own: the web perf gate against its corpus stack, and the theme switch
+probe on the fixture stack, waived only the forced click and the
+numeric timeout. If you need the real `Page`, the question to answer
+first is whether your subject is really the app.
 
 ## Projects
 

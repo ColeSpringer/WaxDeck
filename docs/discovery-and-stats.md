@@ -121,9 +121,11 @@ In the app, Details in any item's overflow menu opens a sheet holding
 both, alongside what the catalog knows about the file: tempo, length,
 year, genres, codec, container, sample rate, bitrate, when it entered
 the library, and the recording's MusicBrainz ID and ISRC where it
-carries them. An album's track rows show the play count beside the
-running time, so a release reads as a listening history without
-opening anything.
+carries them. Every music track list but the queue shows each row's
+play count just before its running time, behind a play glyph, and
+nothing for a track never played, so an album, an artist's tracks, a
+playlist or a search reads as a listening history without opening
+anything.
 
 ## Year in review
 

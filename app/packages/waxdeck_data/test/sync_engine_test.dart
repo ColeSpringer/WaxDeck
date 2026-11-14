@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
@@ -20,6 +21,10 @@ class ScriptedRepository implements WaxDeckRepository {
   final serverPages = <ServerSyncPage>[];
   int catalogCalls = 0;
   bool resetCatalogOnce = false;
+
+  /// Thrown by every catalog walk while set: a failure that is not the
+  /// server's answer.
+  Object? catalogFault;
 
   final replayed = <String>[];
   final reportedSessions = <String>{};
@@ -49,6 +54,7 @@ class ScriptedRepository implements WaxDeckRepository {
     String? cursor,
     int? limit,
   }) async {
+    if (catalogFault case final fault?) throw fault;
     if (since != null && resetCatalogOnce) {
       resetCatalogOnce = false;
       throw const WaxDeckApiException(
@@ -69,7 +75,7 @@ class ScriptedRepository implements WaxDeckRepository {
   /// set.
   final removedForGood = <String>{};
   final removedAsked = <List<String>>[];
-  WaxDeckApiException? removedError;
+  Object? removedError;
 
   /// With [removedError] set, the only question (counting from 1) it
   /// fails; every question when null.
@@ -376,6 +382,90 @@ class _QuietChannel extends EventsChannel {
 
   @override
   Future<void> close() async {}
+}
+
+/// A socket that comes up while its [_Link] can be reached and goes down
+/// when the test says so, closed with the code it names.
+class _LinkedChannel extends EventsChannel {
+  _LinkedChannel(
+    this.link, {
+    required super.onFrame,
+    required super.onDone,
+    required super.subscribe,
+  }) : super(url: 'ws://linked', authToken: null);
+
+  final _Link link;
+  int? _code;
+  bool _up = false;
+
+  @override
+  int? get closeCode => _code;
+
+  @override
+  Future<void> connect() async {
+    await link.gate?.future;
+    if (link.refusal case final refusal?) throw refusal;
+    if (!link.reachable) throw Exception('unreachable');
+    _up = true;
+    final subscribed = jsonDecode(await subscribe()) as Map<String, Object?>;
+    final topics = [
+      if (subscribed['catalogSince'] != null) 'catalog',
+      if (subscribed['serverSince'] != null) 'user',
+    ];
+    // Over the wire, so after the connect has resolved.
+    if (topics.isEmpty) return;
+    Timer.run(() {
+      for (final topic in topics) {
+        if (_up) onFrame(jsonEncode({'type': 'invalidate', 'topic': topic}));
+      }
+    });
+  }
+
+  @override
+  bool send(String frame) => _up;
+
+  @override
+  Future<void> close() async {
+    await link.closeGate?.future;
+    _up = false;
+  }
+
+  void drop(int? code) {
+    _code = code;
+    _up = false;
+    onDone();
+  }
+}
+
+/// The network under an engine: each connect attempt opens a channel over
+/// it. The server behind it answers a subscribe that presents a cursor as
+/// WaxDeck's does, with an invalidation of each topic it presents one for.
+class _Link {
+  bool reachable = true;
+
+  /// What each attempt fails with while set, as a server that answers the
+  /// upgrade without taking it.
+  Object? refusal;
+
+  /// Holds each attempt until completed, when set.
+  Completer<void>? gate;
+
+  /// Holds each close until completed, when set.
+  Completer<void>? closeGate;
+
+  final attempts = <_LinkedChannel>[];
+
+  EventsChannelFactory get factory =>
+      ({required onFrame, required onDone, required subscribe}) {
+        final channel = _LinkedChannel(
+          this,
+          onFrame: onFrame,
+          onDone: onDone,
+          subscribe: subscribe,
+        );
+        attempts.add(channel);
+        return channel;
+      };
 }
 
 /// Counts what reaches the database, for what a sync costs rather than
@@ -1210,6 +1300,28 @@ void main() {
       await engine.reconcile();
       expect(await pidsIn(db.downloadRecords), ['bk-XXX']);
       expect(await pidsIn(db.queueEntries), ['bk-XXX']);
+    });
+
+    test('goes past a 401 in no words of the server\'s, as past any other '
+        'failure', () async {
+      // A proxy's own sign-in in front of the server.
+      await holding(
+        const WaxDeckApiException(
+          code: 'transport',
+          message: 'Unauthorized',
+          statusCode: 401,
+        ),
+      );
+
+      expect(
+        (await mirror()).map((r) => r.pid),
+        unorderedEquals(['bk-XXX', 'tr-AAA']),
+      );
+      expect(
+        (await db.select(db.syncCursors).getSingle()).catalogSince,
+        'cur-2',
+      );
+      expect(await pidsIn(db.downloadRecords), ['tr-XXX']);
     });
 
     test('stops at a lapsed session, writing nothing for it', () async {
@@ -2768,6 +2880,36 @@ void main() {
         expect(reclaimed, isEmpty);
       });
 
+      test('when refused with a 401 in no words of the server\'s, waits as '
+          'it does for any other failure', () async {
+        // A proxy's own sign-in in front of the server.
+        final freed = await remirror(
+          [up('tr-AAA', 'Alpha'), up('tr-BBB', 'Bravo')],
+          [up('tr-AAA', 'Alpha')],
+          away: () async {
+            await keepFor('tr-AAA');
+            await keepFor('tr-BBB');
+            repo
+              ..removedForGood.add('tr-BBB')
+              ..removedError = const WaxDeckApiException(
+                code: 'transport',
+                message: 'Unauthorized',
+                statusCode: 401,
+              );
+          },
+        );
+        expect(freed, isEmpty);
+        expect((await mirror()).map((r) => r.pid), ['tr-AAA']);
+
+        repo
+          ..removedError = null
+          ..removedAsked.clear();
+        expect(await syncAgain(relaunch()), ['tr-BBB']);
+        expect(repo.removedAsked, [
+          ['tr-BBB'],
+        ]);
+      });
+
       test('survives a lapsed session, which writes nothing', () async {
         await failedQuestion();
         var expired = 0;
@@ -3794,6 +3936,392 @@ void main() {
     await engine.flushOutbox();
     expect(repo.replayed, ['position:tr-A:1000:true']);
     expect(repo.reportedSessions, {'s-1'});
+  });
+
+  group('the session the socket rides', () {
+    late _Link link;
+    late SyncEngine live;
+    late int doubts;
+
+    setUp(() {
+      link = _Link();
+      doubts = 0;
+      live = SyncEngine(db: db, repository: repo, channelFactory: link.factory)
+        ..account = _owner
+        ..onSessionInDoubt = (() => doubts++);
+    });
+
+    tearDown(() => live.dispose());
+
+    Future<void> connected() async {
+      await live.start();
+      await pumpEventQueue();
+      expect(live.current.online, isTrue);
+    }
+
+    /// What an earlier sync could not get answered, and every walk asks
+    /// again at its end: whether the server can put back [pid], whose
+    /// download the device holds and the mirror does not list.
+    Future<void> questionWaits(String pid) async {
+      await keepFor(pid);
+      await db
+          .into(db.clientSettings)
+          .insert(
+            ClientSettingsCompanion.insert(
+              key: 'waxdeck.sync.removedUnanswered',
+              value: jsonEncode([pid]),
+            ),
+          );
+    }
+
+    test('a socket the server closes as ended puts it in doubt at once, and '
+        'the engine keeps reconnecting', () async {
+      await connected();
+      expect(doubts, 0, reason: 'a first connect rides the session just read');
+
+      link.reachable = false;
+      link.attempts.last.drop(sessionEndedCloseCode);
+
+      expect(doubts, 1, reason: 'the server said the session ended');
+      expect(live.started, isTrue, reason: 'the auth layer decides that');
+    });
+
+    test('a drop and a return put nothing in doubt: the connect is reported '
+        'and the walk runs at once', () async {
+      var connects = 0;
+      live.onConnected = () => connects++;
+      await connected();
+      await live.beforeSync(() async {});
+      final (catalog, server) = (repo.catalogCalls, repo.serverSinces.length);
+
+      link.attempts.last.drop(null);
+      await pumpEventQueue();
+      expect(live.current.online, isFalse);
+      // The first reconnect is a second away.
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      await live.beforeSync(() async {});
+
+      expect(link.attempts, hasLength(2));
+      expect(
+        doubts,
+        0,
+        reason: 'a bearer token cannot change hands across a drop',
+      );
+      expect(connects, 2);
+      expect(live.current.online, isTrue);
+      // The walk, and the pulls of what the server invalidates on the
+      // resubscribe.
+      expect(repo.catalogCalls, catalog + 2);
+      expect(repo.serverSinces, hasLength(server + 2));
+    });
+
+    test('a reconnect the server refuses for want of a session puts it in '
+        'doubt at once', () async {
+      await connected();
+
+      link.refusal = const UpgradeRefused(401);
+      link.attempts.last.drop(null);
+      await pumpEventQueue();
+      expect(doubts, 0, reason: 'a drop says nothing about the session');
+
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(link.attempts, hasLength(2));
+      expect(doubts, 1, reason: 'the server said there is no session');
+      expect(live.started, isTrue, reason: 'the auth layer decides that');
+    });
+
+    for (final (failure, why) in <(Object, String)>[
+      (
+        const SocketException('connection refused'),
+        'a link that reached nobody',
+      ),
+      (
+        TimeoutException('the sync channel did not finish connecting'),
+        'an upgrade that never finished',
+      ),
+      (const UpgradeRefused(403), 'a refusal that is not about the session'),
+      (const UpgradeRefused(502), 'a proxy whose server is down'),
+    ]) {
+      test('a reconnect that fails with $failure says nothing of the '
+          'session', () async {
+        await connected();
+
+        link.refusal = failure;
+        link.attempts.last.drop(null);
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
+        expect(link.attempts, hasLength(2));
+        await Future<void>.delayed(const Duration(milliseconds: 2200));
+        expect(link.attempts, hasLength(3));
+
+        expect(doubts, 0, reason: why);
+        expect(live.started, isTrue);
+      });
+    }
+
+    for (final failure in const [
+      WaxDeckApiException(
+        code: 'internal',
+        message: 'the database is locked',
+        statusCode: 500,
+      ),
+      // A proxy's own sign-in in front of the server.
+      WaxDeckApiException(
+        code: 'transport',
+        message: 'Unauthorized',
+        statusCode: 401,
+      ),
+    ]) {
+      test('a server that takes the socket and fails every pull with '
+          '${failure.statusCode} is tried again after 1, 2 and 4 seconds, '
+          'not every second', () async {
+        await connected();
+        await live.beforeSync(() async {});
+
+        repo.catalogFault = failure;
+        link.attempts.last.drop(null);
+        // The link had carried a whole walk, so the first wait is a second.
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
+        expect(link.attempts, hasLength(2));
+        await Future<void>.delayed(const Duration(milliseconds: 2200));
+        expect(link.attempts, hasLength(3), reason: 'two seconds on');
+        await Future<void>.delayed(const Duration(milliseconds: 3200));
+        expect(link.attempts, hasLength(3), reason: 'not yet four seconds on');
+        await Future<void>.delayed(const Duration(milliseconds: 800));
+        expect(link.attempts, hasLength(4));
+        expect(live.started, isTrue);
+      });
+    }
+
+    test('a walk that goes through starts the waits over: the next drop is '
+        'tried again a second later', () async {
+      await connected();
+      await live.beforeSync(() async {});
+
+      // A link whose walk fails, so the next wait is two seconds; the walk
+      // over the one after goes through.
+      repo.catalogFault = const WaxDeckApiException(
+        code: 'internal',
+        message: 'the database is locked',
+        statusCode: 500,
+      );
+      link.attempts.last.drop(null);
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(link.attempts, hasLength(2));
+      repo.catalogFault = null;
+      await Future<void>.delayed(const Duration(milliseconds: 2200));
+      expect(link.attempts, hasLength(3));
+      await live.beforeSync(() async {});
+      expect(live.current.online, isTrue);
+
+      link.attempts.last.drop(null);
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(link.attempts, hasLength(4), reason: 'a second on, not four');
+      expect(live.current.online, isTrue);
+    });
+
+    test('a walk that breaks on the question it puts last is tried again '
+        'after 1, 2 and 4 seconds, not every second', () async {
+      await connected();
+      await live.beforeSync(() async {});
+      await questionWaits('tr-BBB');
+
+      repo.removedError = StateError('a reply that does not parse');
+      link.attempts.last.drop(null);
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(link.attempts, hasLength(2));
+      expect(repo.removedAsked, hasLength(1), reason: 'the walk reached it');
+      await Future<void>.delayed(const Duration(milliseconds: 2200));
+      expect(link.attempts, hasLength(3), reason: 'two seconds on');
+      await Future<void>.delayed(const Duration(milliseconds: 3200));
+      expect(link.attempts, hasLength(3), reason: 'not yet four seconds on');
+      await Future<void>.delayed(const Duration(milliseconds: 800));
+      expect(link.attempts, hasLength(4));
+      expect(live.started, isTrue);
+    });
+
+    test('a walk is reported through once the question it puts last is '
+        'answered, and not when that question is refused', () async {
+      // How many questions the server had when each walk was reported.
+      final through = <int>[];
+      live.onReconciled = () => through.add(repo.removedAsked.length);
+      await connected();
+      await live.beforeSync(() async {});
+      expect(through, [0], reason: 'nothing waited to be asked');
+
+      await questionWaits('tr-BBB');
+      // The server cannot say yet, so the question waits for the next walk.
+      repo.removedError = const WaxDeckApiException(
+        code: 'catalog-maintenance',
+        message: 'busy',
+        statusCode: 503,
+      );
+      await live.beforeSync(live.reconcile);
+      expect(through, [0, 1], reason: 'once it was put, not before');
+
+      repo.removedError = const WaxDeckApiException(
+        code: 'unauthenticated',
+        message: 'no valid session or token was presented',
+        statusCode: 401,
+      );
+      await live.beforeSync(live.reconcile);
+      expect(repo.removedAsked, hasLength(2));
+      expect(live.started, isFalse);
+      expect(through, [0, 1]);
+    });
+
+    test('a walk whose pull fails leaves the engine offline until the next '
+        'attempt, and its last sync time where it was', () async {
+      await connected();
+      await live.beforeSync(() async {});
+      final synced = live.current.lastSyncAt;
+      expect(synced, isA<DateTime>());
+
+      repo.catalogFault = const WaxDeckApiException(
+        code: 'internal',
+        message: 'the database is locked',
+        statusCode: 500,
+      );
+      link.attempts.last.drop(null);
+      // The reconnect a second on comes up, and its walk fails.
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      await live.beforeSync(() async {});
+      await pumpEventQueue();
+      expect(link.attempts, hasLength(2));
+      expect((live.current.online, live.current.lastSyncAt), (false, synced));
+
+      // The attempt after it, two seconds on, goes through.
+      repo.catalogFault = null;
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      expect(link.attempts, hasLength(2));
+      expect(live.current.online, isFalse, reason: 'until that attempt');
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await live.beforeSync(() async {});
+      expect(link.attempts, hasLength(3));
+      expect(live.current.online, isTrue);
+      expect(live.current.lastSyncAt!.isAfter(synced!), isTrue);
+    });
+
+    test('started again after a stop, its first failed connect waits a '
+        'second, not the delay the outage had grown to', () async {
+      link.reachable = false;
+      await live.start();
+      await pumpEventQueue();
+      // Down a while: the waits between attempts grow to four seconds, and
+      // the one after the third failure would be eight.
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      await Future<void>.delayed(const Duration(milliseconds: 2200));
+      expect(link.attempts, hasLength(3));
+
+      await live.stop();
+      await live.start();
+      await pumpEventQueue();
+      expect(link.attempts, hasLength(4));
+
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(link.attempts, hasLength(5), reason: 'a second after, not eight');
+    });
+
+    test('a pull the server refuses for want of a session says so, and '
+        'stops', () async {
+      var expired = 0;
+      live.onAuthExpired = () => expired++;
+      await connected();
+      await live.beforeSync(() async {});
+
+      repo.catalogFault = const WaxDeckApiException(
+        code: 'unauthenticated',
+        message: 'no valid session or token was presented',
+        statusCode: 401,
+      );
+      await live.pullCatalog();
+      await pumpEventQueue();
+
+      expect(expired, 1);
+      expect(live.started, isFalse);
+    });
+
+    test('a pull refused with a 401 in no words of the server\'s is a '
+        'failure like any other: offline, and connecting again', () async {
+      var expired = 0;
+      live.onAuthExpired = () => expired++;
+      await connected();
+      await live.beforeSync(() async {});
+
+      // A proxy's own sign-in in front of the server.
+      repo.catalogFault = const WaxDeckApiException(
+        code: 'transport',
+        message: 'Unauthorized',
+        statusCode: 401,
+      );
+      await live.pullCatalog();
+      await pumpEventQueue();
+      expect(expired, 0);
+      expect(live.started, isTrue);
+      expect(live.current.online, isFalse);
+
+      repo.catalogFault = null;
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(link.attempts, hasLength(2));
+      expect(live.current.online, isTrue);
+    });
+
+    test('a sync that breaks on connect gives up the socket it came up on, '
+        'and comes back on another', () async {
+      repo.catalogFault = StateError('the disk is full');
+
+      await live.start();
+      await pumpEventQueue();
+      expect(live.current.online, isFalse);
+      expect(
+        link.attempts.single.send('{}'),
+        isFalse,
+        reason: 'a socket given up on is closed, not left to deliver frames',
+      );
+
+      repo.catalogFault = null;
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(link.attempts, hasLength(2));
+      expect(live.current.online, isTrue);
+    });
+
+    test('a connect that resolves after stop() reports nothing', () async {
+      final gate = link.gate = Completer<void>();
+      var connects = 0;
+      live.onConnected = () => connects++;
+
+      await live.start();
+      await live.stop();
+      gate.complete();
+      await pumpEventQueue();
+
+      expect(live.current.online, isFalse);
+      expect(connects, 0);
+      expect(repo.serverSinces, isEmpty, reason: 'and syncs nothing');
+      expect(
+        link.attempts.single.send('{}'),
+        isFalse,
+        reason: 'the socket that came up for nobody is closed',
+      );
+    });
+
+    test('an engine started again while its stop still closes the socket '
+        'keeps the new one', () async {
+      await connected();
+      final closing = link.closeGate = Completer<void>();
+
+      final stopped = live.stop();
+      // The session stood after all.
+      link.closeGate = null;
+      await live.start();
+      closing.complete();
+      await stopped;
+      await pumpEventQueue();
+
+      expect(live.started, isTrue);
+      expect(link.attempts, hasLength(2));
+      expect(live.current.online, isTrue);
+      expect(live.sendControl(const {'type': 'ping'}), isTrue);
+    });
   });
 
   test('mirrors open at once still warn after the tests that flag it off', () {

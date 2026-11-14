@@ -17,6 +17,7 @@ import 'controls.dart';
 import 'indicators.dart';
 import 'reserved_size.dart';
 import 'semantics_slots.dart';
+import 'swipe_devices.dart';
 import 'view_data.dart';
 
 /// What the deck bar can do, wired by the shell.
@@ -225,6 +226,7 @@ class DeckBar extends StatelessWidget {
           // it.
           child: Material(
             type: MaterialType.transparency,
+            animationDuration: Duration.zero,
             child: compact
                 ? _compact(context, colors)
                 : _expanded(context, colors),
@@ -234,8 +236,54 @@ class DeckBar extends StatelessWidget {
     );
   }
 
+  /// The whole bar as the pointer's way into the player, with the hand
+  /// to say so, the way [PlayerScaffold]'s dismiss surface is the way
+  /// out. Opaque, so padding, gaps and loose text open it too; controls
+  /// hit-test first and keep their presses and cursors. Excluded from
+  /// semantics: the artwork is the expand node, and a bar-sized tap node
+  /// is the merge the bar's explicitChildNodes exists to prevent.
+  Widget _expandSurface({
+    required Widget child,
+    GestureLongPressCallback? onLongPress,
+  }) {
+    final expand = actions.onExpand;
+    return MouseRegion(
+      cursor: expand == null ? MouseCursor.defer : SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        excludeFromSemantics: true,
+        onTap: expand,
+        onLongPress: onLongPress,
+        child: child,
+      ),
+    );
+  }
+
+  /// The swipe up that opens the player, and where given the sideways
+  /// skip, from every pointer but a mouse. Where it sits matters: over a
+  /// seek or volume track it would take a two-finger scroll the track
+  /// refuses, and a touch drag that starts more up than along.
+  Widget _swipeSurface({
+    required Widget child,
+    GestureDragEndCallback? onHorizontalDragEnd,
+  }) {
+    final expand = actions.onExpand;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      excludeFromSemantics: true,
+      supportedDevices: swipeDevices,
+      onVerticalDragEnd: expand == null
+          ? null
+          : (details) {
+              if ((details.primaryVelocity ?? 0) < -100) expand();
+            },
+      onHorizontalDragEnd: onHorizontalDragEnd,
+      child: child,
+    );
+  }
+
   Widget _compact(BuildContext context, WaxColors colors) {
-    return Column(
+    final body = Column(
       children: <Widget>[
         // A 2 px amber hairline along the top edge is the whole progress
         // affordance at this size: a seek bar in a 64 px bar is a
@@ -252,54 +300,37 @@ class DeckBar extends StatelessWidget {
             ),
           ),
         Expanded(
-          child: GestureDetector(
-            // Opaque, exactly as WaxPlayerScaffold's collapse detector
-            // is and for the same reason: with deferToChild the padding,
-            // the gutter between artwork and title, and the vertical
-            // slack around a shrink-wrapped title block all fall
-            // through, so the bar expands from some of its surface and
-            // not the rest. Children are hit-tested first, so the
-            // transport keeps its own taps.
-            behavior: HitTestBehavior.opaque,
-            // A pointer gesture and nothing else: the expand affordance
-            // a screen reader uses is the button in the row, which says
-            // what it does. Left in the tree this detector publishes a
-            // tap on a bar-sized node, which is the merge the bar's
-            // explicitChildNodes exists to prevent.
-            excludeFromSemantics: true,
-            onTap: actions.onExpand,
-            onLongPress: actions.onLongPress,
-            onVerticalDragEnd: (details) {
-              if ((details.primaryVelocity ?? 0) < -100) {
-                actions.onExpand?.call();
-              }
-            },
-            onHorizontalDragEnd: (details) {
-              final velocity = details.primaryVelocity ?? 0;
-              if (velocity < -100) {
-                (_spokenWord ? actions.onSkipForward : actions.onNext)?.call();
-              } else if (velocity > 100) {
-                (_spokenWord ? actions.onSkipBack : actions.onPrevious)?.call();
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
-              child: Row(
-                children: <Widget>[
-                  _artwork(context, 48),
-                  const SizedBox(width: WaxSpace.s12),
-                  Expanded(
-                    child: ExcludeSemantics(
-                      child: _titleBlock(context, colors, compact: true),
-                    ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
+            child: Row(
+              children: <Widget>[
+                _artwork(context, 48),
+                const SizedBox(width: WaxSpace.s12),
+                Expanded(
+                  child: ExcludeSemantics(
+                    child: _titleBlock(context, colors, compact: true),
                   ),
-                  ..._transport(context, colors, compact: true),
-                ],
-              ),
+                ),
+                ..._transport(context, colors, compact: true),
+              ],
             ),
           ),
         ),
       ],
+    );
+    return _expandSurface(
+      onLongPress: actions.onLongPress,
+      child: _swipeSurface(
+        onHorizontalDragEnd: (details) {
+          final velocity = details.primaryVelocity ?? 0;
+          if (velocity < -100) {
+            (_spokenWord ? actions.onSkipForward : actions.onNext)?.call();
+          } else if (velocity > 100) {
+            (_spokenWord ? actions.onSkipBack : actions.onPrevious)?.call();
+          }
+        },
+        child: body,
+      ),
     );
   }
 
@@ -399,7 +430,7 @@ class DeckBar extends StatelessWidget {
           ),
         ),
     ];
-    return Padding(
+    final bar = Padding(
       padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
       child: CustomMultiChildLayout(
         delegate: _ZonesLayout(
@@ -417,60 +448,54 @@ class DeckBar extends StatelessWidget {
           LayoutId(
             id: _Zone.title,
             child: GestureDetector(
-              // Same opaque surface and the same semantics exclusion as
-              // the compact bar's, so the desktop zone expands from its
-              // whole rect rather than only where something is drawn.
+              // The hold and the swipe up stay on this zone: across the
+              // whole bar the hold would beat a seek or a volume drag that
+              // paused before it moved, and the swipe would take a scroll
+              // or a steep scrub from a track. The tap is the bar's.
               behavior: HitTestBehavior.opaque,
               excludeFromSemantics: true,
-              onTap: actions.onExpand,
               onLongPress: actions.onLongPress,
-              // The compact bar has had this since it shipped, and there
-              // is no reason a mouse-and-trackpad window should not: a
-              // trackpad swipe up over the bar is the same gesture.
-              onVerticalDragEnd: (details) {
-                if ((details.primaryVelocity ?? 0) < -100) {
-                  actions.onExpand?.call();
-                }
-              },
-              child: Row(
-                children: <Widget>[
-                  _artwork(context, 56),
-                  const SizedBox(width: WaxSpace.s12),
-                  Flexible(
-                    child: ExcludeSemantics(
-                      child: _titleBlock(context, colors, compact: false),
+              child: _swipeSurface(
+                child: Row(
+                  children: <Widget>[
+                    _artwork(context, 56),
+                    const SizedBox(width: WaxSpace.s12),
+                    Flexible(
+                      child: ExcludeSemantics(
+                        child: _titleBlock(context, colors, compact: false),
+                      ),
                     ),
-                  ),
-                  // Wired or pending only: a star that can never work, as
-                  // over a stream, reads as broken rather than absent.
-                  if (actions.onStar != null || actions.pending) ...<Widget>[
-                    const SizedBox(width: WaxSpace.s8),
-                    StarButton(
-                      starred: now.starred,
-                      size: 16,
-                      onChanged: actions.onStar,
-                      semanticsId: ids.star,
-                    ),
+                    // Wired or pending only: a star that can never work, as
+                    // over a stream, reads as broken rather than absent.
+                    if (actions.onStar != null || actions.pending) ...<Widget>[
+                      const SizedBox(width: WaxSpace.s8),
+                      StarButton(
+                        starred: now.starred,
+                        size: 16,
+                        onChanged: actions.onStar,
+                        semanticsId: ids.star,
+                      ),
+                    ],
+                    // Radio's half of the same slot, beside the star and
+                    // under the same rule: a stream has no item to star,
+                    // and what it has instead is the song it just named.
+                    // The label says song, never favourite - the face's
+                    // star already means "pin this station".
+                    if (actions.onSaveSong != null) ...<Widget>[
+                      const SizedBox(width: WaxSpace.s8),
+                      WaxIconButton(
+                        glyph: WaxIcons.heart,
+                        label: now.songSaved
+                            ? l10n.deckBarForgetSong
+                            : l10n.deckBarSaveSong,
+                        size: 16,
+                        active: now.songSaved,
+                        semanticsId: ids.saveSong,
+                        onPressed: () => actions.onSaveSong!(!now.songSaved),
+                      ),
+                    ],
                   ],
-                  // Radio's half of the same slot, beside the star and
-                  // under the same rule: a stream has no item to star,
-                  // and what it has instead is the song it just named.
-                  // The label says song, never favourite - the face's
-                  // star already means "pin this station".
-                  if (actions.onSaveSong != null) ...<Widget>[
-                    const SizedBox(width: WaxSpace.s8),
-                    WaxIconButton(
-                      glyph: WaxIcons.heart,
-                      label: now.songSaved
-                          ? l10n.deckBarForgetSong
-                          : l10n.deckBarSaveSong,
-                      size: 16,
-                      active: now.songSaved,
-                      semanticsId: ids.saveSong,
-                      onPressed: () => actions.onSaveSong!(!now.songSaved),
-                    ),
-                  ],
-                ],
+                ),
               ),
             ),
           ),
@@ -558,6 +583,7 @@ class DeckBar extends StatelessWidget {
         ],
       ),
     );
+    return _expandSurface(child: bar);
   }
 
   /// The cover, and the visible way into the full player.
@@ -582,7 +608,7 @@ class DeckBar extends StatelessWidget {
     // WaxTappable contributes the semantics, the focus, and the ring, and
     // says in its own doc that it adds no gesture: the child keeps its
     // own. Without this one the cover would only be pressable by falling
-    // through to the zone detector behind it, so the control would be
+    // through to the bar's surface behind it, so the control would be
     // real to a screen reader and to the keyboard and an accident to
     // everyone else.
     child: GestureDetector(
@@ -845,6 +871,7 @@ class DeckBar extends StatelessWidget {
         child: Material(
           color: colors.accent,
           shape: const CircleBorder(),
+          animationDuration: Duration.zero,
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: actions.onPlayPause,
@@ -1013,6 +1040,7 @@ class DeckBarOffer extends StatelessWidget {
           // same lack of a Material around it.
           child: Material(
             type: MaterialType.transparency,
+            animationDuration: Duration.zero,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
               child: Row(

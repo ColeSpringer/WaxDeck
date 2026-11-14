@@ -4,6 +4,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'ws_connect/ws_connect.dart';
 
+export 'ws_connect/upgrade_refused.dart';
+
 /// Builds one connection attempt to the server's event channel. The
 /// engine calls it for every (re)connect so each attempt gets a fresh
 /// socket and a fresh subscribe frame.
@@ -13,6 +15,11 @@ typedef EventsChannelFactory =
       required void Function() onDone,
       required Future<String> Function() subscribe,
     });
+
+/// The close code the server ends a socket with when the session that
+/// opened it ended (signed out, revoked, disabled): unlike a dropped link,
+/// reconnecting on that session will be refused.
+const sessionEndedCloseCode = 4401;
 
 /// One WebSocket connection to `GET /api/v1/ws`. Native builds
 /// authenticate with the bearer token header; web builds ride the
@@ -51,6 +58,11 @@ class EventsChannel {
       cancelOnError: true,
     );
   }
+
+  /// The code the socket closed with, once [onDone] has fired: the
+  /// server's own when it sent a close frame, which the browser's close
+  /// event and dart:io both carry; 1006 or null for a link that dropped.
+  int? get closeCode => _channel?.closeCode;
 
   /// Sends one JSON text frame on the live socket. False when no
   /// connection is up (the caller retries after the next connect).

@@ -117,135 +117,137 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ref.watch(oidcProvidersProvider).value ?? const <OidcProvider>[];
     final signupEnabled = ref.watch(signupEnabledProvider).value ?? false;
     return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(WaxSpace.s24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // The mark, not the name set as a heading: this is the
-                  // first screen an account ever sees, and the one place
-                  // the identity is the whole content.
-                  WaxBrandBlock(tagline: l10n.authTagline),
-                  const SizedBox(height: WaxSpace.s32),
-                  WaxTextField(
-                    semanticsId: SemanticsIds.loginUsername,
-                    controller: _username,
-                    label: l10n.authUsername,
-                    autofillHints: const [AutofillHints.username],
-                    validator: (value) =>
-                        (value == null || value.trim().isEmpty)
-                        ? l10n.authEnterUsername
-                        : null,
-                  ),
-                  const SizedBox(height: WaxSpace.s16),
-                  WaxTextField(
-                    semanticsId: SemanticsIds.loginPassword,
-                    controller: _password,
-                    label: l10n.authPassword,
-                    obscureText: true,
-                    autofillHints: const [AutofillHints.password],
-                    validator: (value) => (value == null || value.isEmpty)
-                        ? l10n.authEnterPassword
-                        : null,
-                    onSubmitted: (_) => _submit(),
-                  ),
-                  const SizedBox(height: WaxSpace.s24),
-                  if (_error != null) ...[
-                    Semantics(
-                      identifier: SemanticsIds.loginError,
-                      child: Text(
-                        _error!,
-                        key: const Key(SemanticsIds.loginError),
-                        style: WaxType.body.copyWith(color: colors.error),
-                        textAlign: TextAlign.center,
-                      ),
+      body: WaxPlainTextStyle(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(WaxSpace.s24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 360),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // The mark, not the name set as a heading: this is the
+                    // first screen an account ever sees, and the one place
+                    // the identity is the whole content.
+                    WaxBrandBlock(tagline: l10n.authTagline),
+                    const SizedBox(height: WaxSpace.s32),
+                    WaxTextField(
+                      semanticsId: SemanticsIds.loginUsername,
+                      controller: _username,
+                      label: l10n.authUsername,
+                      autofillHints: const [AutofillHints.username],
+                      validator: (value) =>
+                          (value == null || value.trim().isEmpty)
+                          ? l10n.authEnterUsername
+                          : null,
                     ),
                     const SizedBox(height: WaxSpace.s16),
-                  ],
-                  WaxButton(
-                    semanticsId: SemanticsIds.loginSubmit,
-                    label: l10n.authLogIn,
-                    expand: true,
-                    busy: _submitting,
-                    onPressed: _submitting ? null : _submit,
-                  ),
-                  const SizedBox(height: WaxSpace.s12),
-                  // Open signup gets the louder wording; without it the
-                  // link still serves people holding an invite token.
-                  WaxButton(
-                    semanticsId: SemanticsIds.signupOpen,
-                    label: signupEnabled
-                        ? l10n.authRequestAccount
-                        : l10n.authHaveInvite,
-                    kind: WaxButtonKind.text,
-                    expand: true,
-                    onPressed: _submitting ? null : _openSignup,
-                  ),
-                  if (oidcProviders.isNotEmpty) ...[
+                    WaxTextField(
+                      semanticsId: SemanticsIds.loginPassword,
+                      controller: _password,
+                      label: l10n.authPassword,
+                      obscureText: true,
+                      autofillHints: const [AutofillHints.password],
+                      validator: (value) => (value == null || value.isEmpty)
+                          ? l10n.authEnterPassword
+                          : null,
+                      onSubmitted: (_) => _submit(),
+                    ),
                     const SizedBox(height: WaxSpace.s24),
-                    Row(
-                      children: [
-                        const Expanded(child: WaxHairline()),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: WaxSpace.s12,
-                          ),
-                          child: Text(
-                            l10n.authOr,
-                            style: WaxType.bodySmall.copyWith(
-                              color: colors.textSecondary,
+                    if (_error != null) ...[
+                      Semantics(
+                        identifier: SemanticsIds.loginError,
+                        child: Text(
+                          _error!,
+                          key: const Key(SemanticsIds.loginError),
+                          style: WaxType.body.copyWith(color: colors.error),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(height: WaxSpace.s16),
+                    ],
+                    WaxButton(
+                      semanticsId: SemanticsIds.loginSubmit,
+                      label: l10n.authLogIn,
+                      expand: true,
+                      busy: _submitting,
+                      onPressed: _submitting ? null : _submit,
+                    ),
+                    const SizedBox(height: WaxSpace.s12),
+                    // Open signup gets the louder wording; without it the
+                    // link still serves people holding an invite token.
+                    WaxButton(
+                      semanticsId: SemanticsIds.signupOpen,
+                      label: signupEnabled
+                          ? l10n.authRequestAccount
+                          : l10n.authHaveInvite,
+                      kind: WaxButtonKind.text,
+                      expand: true,
+                      onPressed: _submitting ? null : _openSignup,
+                    ),
+                    if (oidcProviders.isNotEmpty) ...[
+                      const SizedBox(height: WaxSpace.s24),
+                      Row(
+                        children: [
+                          const Expanded(child: WaxHairline()),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: WaxSpace.s12,
+                            ),
+                            child: Text(
+                              l10n.authOr,
+                              style: WaxType.bodySmall.copyWith(
+                                color: colors.textSecondary,
+                              ),
                             ),
                           ),
+                          const Expanded(child: WaxHairline()),
+                        ],
+                      ),
+                      for (final provider in oidcProviders) ...[
+                        const SizedBox(height: WaxSpace.s16),
+                        WaxButton(
+                          key: ValueKey(provider.id),
+                          semanticsId: SemanticsIds.oidcLogin(provider.id),
+                          label: l10n.authContinueWith(provider.displayName),
+                          icon: WaxIcons.signIn,
+                          kind: WaxButtonKind.tonal,
+                          expand: true,
+                          onPressed: _submitting
+                              ? null
+                              : () => _oidcSubmit(provider),
                         ),
-                        const Expanded(child: WaxHairline()),
                       ],
-                    ),
-                    for (final provider in oidcProviders) ...[
-                      const SizedBox(height: WaxSpace.s16),
+                    ],
+                    // Which server this form signs into, native only: the
+                    // web build is served by its own server and has no
+                    // other one to name.
+                    if (!kIsWeb) ...[
+                      const SizedBox(height: WaxSpace.s24),
+                      Text(
+                        ref.watch(serverAddressProvider) ?? '',
+                        style: WaxType.bodySmall.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       WaxButton(
-                        key: ValueKey(provider.id),
-                        semanticsId: SemanticsIds.oidcLogin(provider.id),
-                        label: l10n.authContinueWith(provider.displayName),
-                        icon: WaxIcons.signIn,
-                        kind: WaxButtonKind.tonal,
+                        semanticsId: SemanticsIds.connectServerOpen,
+                        label: l10n.authChangeServer,
+                        kind: WaxButtonKind.text,
                         expand: true,
                         onPressed: _submitting
                             ? null
-                            : () => _oidcSubmit(provider),
+                            : () => context.go(WaxRoute.serverConnect),
                       ),
                     ],
                   ],
-                  // Which server this form signs into, native only: the
-                  // web build is served by its own server and has no
-                  // other one to name.
-                  if (!kIsWeb) ...[
-                    const SizedBox(height: WaxSpace.s24),
-                    Text(
-                      ref.watch(serverAddressProvider) ?? '',
-                      style: WaxType.bodySmall.copyWith(
-                        color: colors.textSecondary,
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    WaxButton(
-                      semanticsId: SemanticsIds.connectServerOpen,
-                      label: l10n.authChangeServer,
-                      kind: WaxButtonKind.text,
-                      expand: true,
-                      onPressed: _submitting
-                          ? null
-                          : () => context.go(WaxRoute.serverConnect),
-                    ),
-                  ],
-                ],
+                ),
               ),
             ),
           ),

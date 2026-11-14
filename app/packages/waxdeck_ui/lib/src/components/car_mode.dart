@@ -103,6 +103,7 @@ class CarModeScaffold extends StatelessWidget {
     final colors = WaxColors.of(context);
     return Material(
       color: colors.canvas,
+      animationDuration: Duration.zero,
       child: Semantics(
         identifier: ids.surface,
         container: true,

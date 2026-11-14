@@ -552,7 +552,6 @@ abstract final class SemanticsIds {
 
   // music: The music hub, its indexes, and the buckets they drill.
   static String albumTrackMore(Object index) => 'album-track-more-$index';
-  static String albumTrackPlays(Object index) => 'album-track-plays-$index';
   static String entityAlbum(Object pid) => 'entity-album-$pid';
   static const String entityAllBooks = 'entity-all-books';
   static const String entityAllTracks = 'entity-all-tracks';
@@ -576,6 +575,7 @@ abstract final class SemanticsIds {
   static const String listingShuffle = 'listing-shuffle';
   static const String musicAdd = 'music-add';
   static String musicTile(Object name) => 'music-tile-$name';
+  static String trackPlays(Object index) => 'track-plays-$index';
 
   // organize: Organize: previews, duplicates, and upgrade groups.
   static const String adminOrganize = 'admin-organize';

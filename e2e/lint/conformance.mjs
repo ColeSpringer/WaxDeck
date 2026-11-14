@@ -52,12 +52,13 @@ const ADMIN_SHAPES = [
 // Each exemption states its reason, so that the set is auditable and
 // nothing is quietly unaccounted for.
 //
-// The three spec exemptions are the three files that ask for `rawPage`
-// by name. That is the whole set, and it is meant to stay that way: a
-// migrated spec drives the app through the driver, and a file that needs
-// the real `Page` is one whose subject is not the app - somebody else's
-// HTML form, the canvas itself, the accessibility tree the driver is
-// forbidden to use, or the platform's own instrumentation.
+// The four spec exemptions are the files that step outside the driver's
+// page: two ask for `rawPage` by name, and the two perf specs open browser
+// contexts of their own. That is the whole set, and it is meant to stay
+// that way: a migrated spec drives the app through the driver, and a file
+// that needs the real `Page` is one whose subject is not the app -
+// somebody else's HTML form, the canvas itself, the accessibility tree the
+// driver is forbidden to use, or the platform's own instrumentation.
 //
 // An exemption names the rules it waives rather than waiving all of
 // them. A blanket skip is how `hand-typed-identifier` - which CLAUDE.md
@@ -77,6 +78,14 @@ const EXEMPT = [
     'tests/a11y-audit.spec.ts',
     ['force-click', 'numeric-timeout'],
     'a roles-and-names-only journey is its contract',
+  ],
+  // Ahead of the perf- prefix, which would otherwise take it: the first
+  // match wins.
+  [
+    'tests/perf-theme-switch.spec.ts',
+    ['force-click', 'numeric-timeout'],
+    'its own context with motion unreduced, on the fixture stack: the measured ' +
+      'click is a pick made inside the timing window, and the probe outlasts every budget tier',
   ],
   [
     'tests/perf-',

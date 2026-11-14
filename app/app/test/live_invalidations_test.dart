@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/connect/connect_bus.dart';
 import 'package:waxdeck/src/home/home_shelves.dart';
 import 'package:waxdeck/src/player/entity_play_state_controller.dart';
 import 'package:waxdeck/src/player/play_progress.dart';
@@ -31,11 +32,14 @@ class _GatedChannel extends EventsChannel {
 
   final Completer<void> gate;
 
-  @override
-  Future<void> connect() => gate.future;
+  /// Whether the socket is open: connected and not closed since.
+  bool up = false;
 
   @override
-  Future<void> close() async {}
+  Future<void> connect() => gate.future.then((_) => up = true);
+
+  @override
+  Future<void> close() async => up = false;
 }
 
 /// Counts what the user fan-out and the entity fan-out cost.
@@ -375,10 +379,11 @@ void main() {
     final gate = Completer<void>();
     var caughtUp = 0;
     var reportedConnected = 0;
+    late _GatedChannel channel;
     final live = LiveInvalidations(
       channelFactory:
           ({required onFrame, required onDone, required subscribe}) =>
-              _GatedChannel(
+              channel = _GatedChannel(
                 gate: gate,
                 onFrame: onFrame,
                 onDone: onDone,
@@ -399,6 +404,7 @@ void main() {
 
     expect(caughtUp, 0, reason: 'no refresh lands on a dead session');
     expect(reportedConnected, 0, reason: 'and no banner state changes');
+    expect(channel.up, isFalse, reason: 'the socket that came up is closed');
   });
 
   test('a connect that resolves while running catches up once', () async {
@@ -605,4 +611,363 @@ void main() {
       expect(catchUp, 2);
     },
   );
+
+  group('the session the socket rides', () {
+    testWidgets('a socket the server closes as ended asks for the session '
+        'at once', (tester) async {
+      final link = FakeLink();
+      var doubts = 0;
+      final live = LiveInvalidations(
+        channelFactory: link.factory,
+        onCatalog: () {},
+        onUser: () {},
+      )..onSessionInDoubt = () async => ++doubts > 0;
+      live.start();
+      await tester.pump();
+      expect(doubts, 0, reason: 'a first connect rides the session just read');
+
+      link.reachable = false;
+      link.attempts.last.drop(sessionEndedCloseCode);
+
+      expect(doubts, 1, reason: 'the server said the session ended');
+      live.stop();
+    });
+
+    testWidgets('a drop asks for nothing; each failed attempt asks once, and '
+        'the return once', (tester) async {
+      final link = FakeLink();
+      var doubts = 0;
+      final live = LiveInvalidations(
+        channelFactory: link.factory,
+        onCatalog: () {},
+        onUser: () {},
+      )..onSessionInDoubt = () async => ++doubts > 0;
+      live.start();
+      await tester.pump();
+
+      // The network goes, as the browser reports it, and the attempts to
+      // come back fail with it.
+      link.reachable = false;
+      link.attempts.last.drop(1006);
+      await tester.pump();
+      expect(doubts, 0, reason: 'a drop says nothing about the session');
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(link.attempts, hasLength(2));
+      expect(
+        doubts,
+        1,
+        reason: 'an upgrade refused for want of a session fails like this',
+      );
+      await tester.pump(const Duration(seconds: 2));
+      expect(link.attempts, hasLength(3));
+      expect(doubts, 2, reason: 'once per attempt, as the backoff spaces them');
+
+      link.reachable = true;
+      await tester.pump(const Duration(seconds: 4));
+      expect(link.attempts, hasLength(4));
+      expect(doubts, 3, reason: 'another account may own the cookie now');
+
+      await tester.pump(const Duration(minutes: 1));
+      expect(doubts, 3, reason: 'a socket that is up asks no more');
+      live.stop();
+    });
+
+    testWidgets('the network back while it waits to reconnect connects now, '
+        'and starts the backoff over', (tester) async {
+      final link = FakeLink();
+      final live = LiveInvalidations(
+        channelFactory: link.factory,
+        onCatalog: () {},
+        onUser: () {},
+      );
+      live.start();
+      await tester.pump();
+
+      // Down a while: the next attempt is four seconds off.
+      link.reachable = false;
+      link.attempts.last.drop(1006);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 2));
+      expect(link.attempts, hasLength(3));
+
+      live.networkBack();
+      await tester.pump();
+      expect(link.attempts, hasLength(4), reason: 'at once');
+      await tester.pump(const Duration(seconds: 1));
+      expect(link.attempts, hasLength(5), reason: 'a second after, not eight');
+
+      link.reachable = true;
+      await tester.pump(const Duration(seconds: 2));
+      expect(link.attempts, hasLength(6));
+      live.networkBack();
+      await tester.pump(const Duration(minutes: 1));
+      expect(link.attempts, hasLength(6), reason: 'a socket that is up stays');
+      live.stop();
+    });
+
+    testWidgets('started again after a stop, its first failed connect waits '
+        'a second, not the delay the outage had grown to', (tester) async {
+      final link = FakeLink()..reachable = false;
+      final live = LiveInvalidations(
+        channelFactory: link.factory,
+        onCatalog: () {},
+        onUser: () {},
+      );
+      live.start();
+      await tester.pump();
+      // Down a while: the waits between attempts grow to four seconds, and
+      // the one after the third failure would be eight.
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 2));
+      expect(link.attempts, hasLength(3));
+
+      live.stop();
+      live.start();
+      await tester.pump();
+      expect(link.attempts, hasLength(4));
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(link.attempts, hasLength(5), reason: 'a second after, not eight');
+      live.stop();
+    });
+
+    group('a return', () {
+      late FakeLink link;
+      late Completer<bool> answer;
+      late LiveInvalidations live;
+
+      /// What the listener did, in order.
+      late List<String> heard;
+
+      setUp(() {
+        link = FakeLink();
+        heard = [];
+        live =
+            LiveInvalidations(
+                channelFactory: link.factory,
+                onCatalog: () => heard.add('catalog'),
+                onUser: () => heard.add('user'),
+              )
+              ..onSessionInDoubt = (() => answer.future)
+              ..onConnected = (() => heard.add('connected'))
+              ..onPlayer = (() => heard.add('player'))
+              ..onRadio = (() => heard.add('radio'))
+              ..onControlFrame = (frame) => heard.add('${frame['type']}');
+      });
+
+      tearDown(() => live.stop());
+
+      const caughtUp = ['connected', 'catalog', 'user'];
+
+      void say(Map<String, Object?> frame) =>
+          link.attempts.last.onFrame(jsonEncode(frame));
+
+      /// What the socket says while its session is read: something of
+      /// every kind a catch-up does not read again, and one it does.
+      void sayMeanwhile() {
+        say(const {'type': 'invalidate', 'topic': 'player'});
+        say(const {'type': 'invalidate', 'topic': 'radio'});
+        say(const {'type': 'session', 'session': <String, Object?>{}});
+        say(const {'type': 'invalidate', 'topic': 'catalog'});
+      }
+
+      const saidMeanwhile = ['player', 'radio', 'session', 'catalog'];
+
+      /// Up and caught up, then dropped and back a second later with the
+      /// session read out.
+      Future<void> back(WidgetTester tester) async {
+        // Made in the test's own zone, so its answer lands on the clock
+        // the test pumps.
+        answer = Completer<bool>();
+        live.start();
+        await tester.pump();
+        expect(heard, caughtUp);
+        heard.clear();
+        link.attempts.last.drop(1006);
+        await tester.pump(const Duration(seconds: 1));
+        expect(link.attempts, hasLength(2));
+      }
+
+      testWidgets('as the same account catches up once it answers, then '
+          'hands on what the socket said meanwhile, in order', (tester) async {
+        await back(tester);
+        sayMeanwhile();
+        await tester.pump();
+        expect(heard, isEmpty, reason: 'nothing before the session answers');
+
+        answer.complete(true);
+        await tester.pump();
+        expect(heard, [...caughtUp, ...saidMeanwhile]);
+
+        heard.clear();
+        say(const {'type': 'invalidate', 'topic': 'user'});
+        expect(heard, ['user'], reason: 'and hears the socket as it speaks');
+      });
+
+      testWidgets('a read that fails hands it on too', (tester) async {
+        await back(tester);
+        sayMeanwhile();
+        await tester.pump();
+
+        answer.completeError(StateError('the read broke'));
+        await tester.pump();
+
+        expect(heard, [...caughtUp, ...saidMeanwhile]);
+      });
+
+      testWidgets('as an account that left catches nothing up and hands on '
+          'nothing', (tester) async {
+        await back(tester);
+        sayMeanwhile();
+        await tester.pump();
+
+        answer.complete(false);
+        await tester.pump();
+        say(const {'type': 'invalidate', 'topic': 'user'});
+        await tester.pump();
+
+        expect(heard, isEmpty);
+      });
+
+      testWidgets('closed as ended while its session is read, hands on '
+          'nothing it said', (tester) async {
+        await back(tester);
+        sayMeanwhile();
+        link.reachable = false;
+        link.attempts.last.drop(sessionEndedCloseCode);
+
+        answer.complete(true);
+        await tester.pump();
+
+        expect(heard, isEmpty);
+        live.stop();
+      });
+
+      testWidgets('the reply to a command sent while its session is read '
+          'reaches the command', (tester) async {
+        final bus = ConnectBus(send: live.sendControl);
+        live.onControlFrame = bus.handleFrame;
+        await back(tester);
+
+        String? registered;
+        bus
+            .registerEndpoint(name: 'desk')
+            .then((id) => registered = id, onError: (Object _) {})
+            .ignore();
+        final sent = link.attempts.last.sent;
+        expect(sent, hasLength(1), reason: 'the socket takes frames at once');
+        final id = (jsonDecode(sent.single) as Map<String, Object?>)['id'];
+        say({'type': 'ack', 'id': id, 'endpointId': 'ep-desk'});
+        await tester.pump();
+
+        answer.complete(true);
+        await tester.pump();
+
+        expect(registered, 'ep-desk');
+      });
+
+      testWidgets('past ${LiveInvalidations.mostHeld} frames lets them go, '
+          'and catches up every topic instead', (tester) async {
+        await back(tester);
+        for (var i = 0; i <= LiveInvalidations.mostHeld; i++) {
+          say(const {'type': 'invalidate', 'topic': 'player'});
+        }
+        sayMeanwhile();
+        await tester.pump();
+
+        answer.complete(true);
+        await tester.pump();
+
+        expect(heard, [...caughtUp, 'player', 'radio']);
+      });
+
+      testWidgets('a pong said while its session is read is not paired with '
+          'the ping the catch-up sends', (tester) async {
+        var clock = DateTime.utc(2026, 7, 21, 12);
+        final bus = ConnectBus(send: live.sendControl, now: () => clock);
+        live
+          ..onControlFrame = ((frame) {
+            heard.add('${frame['type']}');
+            bus.handleFrame(frame);
+          })
+          ..onConnected = (() {
+            heard.add('connected');
+            bus.ping();
+          });
+        Object? lastPingT() =>
+            (jsonDecode(link.attempts.last.sent.last)
+                as Map<String, Object?>)['t'];
+        await back(tester);
+
+        // The ping timer fires while the read is out, and the server
+        // answers on the new socket, its clock five seconds ahead.
+        clock = clock.add(const Duration(minutes: 1));
+        bus.ping();
+        final mid = lastPingT();
+        say({
+          'type': 'pong',
+          't': mid,
+          'at': clock.add(const Duration(seconds: 5)).millisecondsSinceEpoch,
+        });
+
+        clock = clock.add(const Duration(seconds: 3));
+        answer.complete(true);
+        await tester.pump();
+        expect(heard, [...caughtUp, 'pong'], reason: 'the pong is heard');
+        final ping = lastPingT();
+        expect(ping, isNot(mid), reason: 'the catch-up pinged again');
+        expect(
+          bus.serverClockOffset,
+          Duration.zero,
+          reason: 'it answered the ping from before, not the one just sent',
+        );
+
+        say({
+          'type': 'pong',
+          't': ping,
+          'at': clock.add(const Duration(seconds: 5)).millisecondsSinceEpoch,
+        });
+        expect(bus.serverClockOffset, const Duration(seconds: 5));
+      });
+
+      testWidgets('stopped while its session is read and started again, '
+          'hears the socket', (tester) async {
+        await back(tester);
+        sayMeanwhile();
+        live.stop();
+
+        live.start();
+        await tester.pump();
+        expect(link.attempts, hasLength(3));
+        expect(heard, caughtUp, reason: 'a start is a first connect');
+        heard.clear();
+
+        answer.complete(true);
+        await tester.pump();
+        expect(heard, isEmpty, reason: 'the old read touches nothing now');
+
+        say(const {'type': 'invalidate', 'topic': 'user'});
+        expect(heard, ['user']);
+      });
+
+      testWidgets('stopped while down and started again, connects as a '
+          'first connect', (tester) async {
+        answer = Completer<bool>();
+        live.start();
+        await tester.pump();
+        heard.clear();
+        link.attempts.last.drop(1006);
+        live.stop();
+
+        live.start();
+        await tester.pump();
+
+        expect(link.attempts, hasLength(2));
+        expect(heard, caughtUp, reason: 'no session to read before it');
+        say(const {'type': 'invalidate', 'topic': 'user'});
+        expect(heard, [...caughtUp, 'user']);
+      });
+    });
+  });
 }

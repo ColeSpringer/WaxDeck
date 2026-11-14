@@ -66,6 +66,21 @@ Every entry carries a gate tag saying what actually blocks it:
   `Listener` per row on every platform is a poor trade for a menu that
   may never render.
 
+- `[third-party]` **On the web a press in a card chip's square corner
+  that overlaps the play disc goes to the chip.** On a cover narrower
+  than about 147 px a chip's 44 px square reaches into the hover play
+  disc's circle. Natively the shape drawn on top takes the press
+  (`_OutsideDisc` in `cards.dart`): inside the chip's circle the chip,
+  in the rest of the disc's circle the disc. With semantics on (a screen
+  reader, the e2e suite) Flutter's web engine routes a click to the
+  topmost semantics node's rectangle instead, so the chip's whole square
+  takes it; a headless run at 111 and 120 px tiles opened the menu and
+  toggled the pin there, where the rule says play. Raising the disc's
+  node above the chips would give part of each visible chip to the disc,
+  which is worse. Wanted from Flutter: route a semantics click through
+  the hit test at its point. Meanwhile: none; the lens is a few pixels
+  deep, on narrow covers only.
+
 - `[in-repo]` **A shell message raised from a public route is
   dropped.** `ShellMessageHost` (`shell_messages.dart`) draws
   `shellMessengerProvider` and is mounted in the signed-in scope

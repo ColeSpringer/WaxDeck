@@ -324,6 +324,215 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('members wear their play counts, tracks only, from a read of '
+      'the window drawn, and a refresh reads none again', (tester) async {
+    // Heard all the same, but an episode and a book part are not tracks,
+    // and only a track carries a count.
+    final members = <ItemSummary>[
+      testItem('ep-heard', mediaType: MediaType.podcast, title: 'Episode'),
+      testItem('bk-heard', mediaType: MediaType.audiobook, title: 'Part'),
+      for (var i = 0; i < 58; i++)
+        testItem('tr-${i.toString().padLeft(3, '0')}', title: 'Track $i'),
+    ];
+    final repo = FakeRepository(items: members)
+      ..finishedPids.addAll(<String>['ep-heard', 'bk-heard', 'tr-000']);
+    final playlist = await repo.createPlaylist(
+      name: 'Mixed',
+      kind: 'static',
+      itemPids: <String>[for (final member in members) member.pid],
+    );
+    await _pump(tester, repo, PlaylistScreen(pid: playlist.pid));
+
+    // Sixty members, and only the first window's rows are built.
+    expect(repo.playStateBatches.map((batch) => batch.length), <int>[50]);
+    MediaTileData row(String title) => tester
+        .widgetList<MediaListRow>(find.byType(MediaListRow))
+        .singleWhere((row) => row.data.title == title)
+        .data;
+    expect(row('Track 0').playCount, 1);
+    expect(row('Track 0').playCountLabel, 'played once');
+    expect(row('Track 1').playCount, 0);
+    expect(row('Track 1').playCountLabel, isNull);
+    expect(row('Episode').playCount, isNull);
+    expect(row('Part').playCount, isNull);
+
+    // The same members again are the same windows, already answered.
+    final gate = Completer<void>();
+    repo.getPlaylistGate = gate;
+    _containerOf(tester).invalidate(playlistDetailProvider(playlist.pid));
+    await tester.pump();
+    await tester.pump();
+    gate.complete();
+    repo.getPlaylistGate = null;
+    await tester.pumpAndSettle();
+
+    expect(repo.playStateBatches, hasLength(1));
+    expect(row('Track 0').playCount, 1);
+  });
+
+  testWidgets('a smart list reads the counts of the window it draws, not of '
+      'every member', (tester) async {
+    final members = <ItemSummary>[
+      for (var i = 0; i < 60; i++)
+        testItem('tr-${i.toString().padLeft(3, '0')}', title: 'Track $i'),
+    ];
+    final repo = FakeRepository(items: members)
+      ..finishedPids.add('tr-002')
+      ..previewResult = PlaylistPreview(items: members, total: 60);
+    final created = await repo.createPlaylist(
+      name: 'Everything',
+      kind: 'smart',
+      rule: const SmartRule(
+        root: RuleNode.all([
+          RuleNode.condition(field: 'genre', op: 'is', value: 'Rock'),
+        ]),
+      ),
+    );
+    await _pump(tester, repo, PlaylistScreen(pid: created.pid));
+
+    expect(repo.playStateBatches, <List<String>>[
+      <String>[for (final member in members.take(50)) member.pid],
+    ]);
+    expect(
+      tester
+          .widgetList<MediaListRow>(find.byType(MediaListRow))
+          .singleWhere((row) => row.data.title == 'Track 2')
+          .data
+          .playCount,
+      1,
+    );
+  });
+
+  testWidgets('removing the first member reads again only the window drawn, '
+      'and every count drawn stays through the read', (tester) async {
+    // Windows are positional, so a removal at the top moves every row
+    // into a window not yet read.
+    final members = <ItemSummary>[
+      for (var i = 0; i < 60; i++)
+        testItem('tr-${i.toString().padLeft(3, '0')}', title: 'Track $i'),
+    ];
+    const heard = <String>['Track 1', 'Track 3', 'Track 5'];
+    final repo = FakeRepository(items: members)
+      ..finishedPids.addAll(<String>['tr-001', 'tr-003', 'tr-005']);
+    final playlist = await repo.createPlaylist(
+      name: 'Long',
+      kind: 'static',
+      itemPids: <String>[for (final member in members) member.pid],
+    );
+    // Tall enough that the heard rows are on screen, short of row fifty.
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pump(tester, repo, PlaylistScreen(pid: playlist.pid));
+    expect(repo.playStateBatches, hasLength(1));
+    Iterable<int?> counts() => <int?>[
+      for (final title in heard)
+        tester
+            .widgetList<MediaListRow>(find.byType(MediaListRow))
+            .singleWhere((row) => row.data.title == title)
+            .data
+            .playCount,
+    ];
+    expect(counts(), <int>[1, 1, 1]);
+
+    final gate = Completer<void>();
+    repo.playStatesGate = gate;
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistEntryRemove(0)),
+    );
+    for (var frame = 0; frame < 4; frame++) {
+      await tester.pump();
+      expect(counts(), <int>[1, 1, 1], reason: 'frame $frame');
+    }
+    expect(find.text('1'), findsNWidgets(3), reason: 'still drawn');
+
+    gate.complete();
+    repo.playStatesGate = null;
+    await tester.pumpAndSettle();
+    expect(find.text('Track 0'), findsNothing);
+    // The members now at 0..49, the drawn window; not the one past it.
+    expect(repo.playStateBatches.skip(1), <List<String>>[
+      <String>[for (final member in members.skip(1).take(50)) member.pid],
+    ]);
+    expect(counts(), <int>[1, 1, 1]);
+  });
+
+  testWidgets('a move over the line between two windows reads both again, '
+      'and every count drawn stays through the read', (tester) async {
+    // Windows are positional, so the move changes what both of them hold.
+    final members = <ItemSummary>[
+      for (var i = 0; i < 60; i++)
+        testItem('tr-${i.toString().padLeft(3, '0')}', title: 'Track $i'),
+    ];
+    const heard = <String>['Track 10', 'Track 49', 'Track 50', 'Track 55'];
+    final repo = FakeRepository(items: members)
+      ..finishedPids.addAll(<String>['tr-010', 'tr-049', 'tr-050', 'tr-055']);
+    final playlist = await repo.createPlaylist(
+      name: 'Long',
+      kind: 'static',
+      itemPids: <String>[for (final member in members) member.pid],
+    );
+    // Tall enough that every row is built, so both windows are drawn.
+    tester.view.physicalSize = const Size(800, 4800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pump(tester, repo, PlaylistScreen(pid: playlist.pid));
+    expect(repo.playStateBatches.map((batch) => batch.length), <int>[50, 10]);
+    Iterable<MediaTileData> rows() => tester
+        .widgetList<MediaListRow>(find.byType(MediaListRow))
+        .map((row) => row.data);
+    Iterable<int?> counts() => <int?>[
+      for (final title in heard)
+        rows().singleWhere((row) => row.title == title).playCount,
+    ];
+    String titleAt(int index) => rows()
+        .singleWhere(
+          (row) => row.semanticsId == SemanticsIds.playlistEntry(index),
+        )
+        .title;
+    expect(counts(), <int>[1, 1, 1, 1]);
+
+    final gate = Completer<void>();
+    repo.playStatesGate = gate;
+    // Row fifty up one, as a screen reader moves it.
+    final row = tester.widget<Semantics>(
+      find
+          .ancestor(
+            of: find.bySemanticsIdentifier(SemanticsIds.playlistEntry(50)),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics &&
+                  widget.properties.customSemanticsActions != null,
+            ),
+          )
+          .first,
+    );
+    row.properties.customSemanticsActions!.entries
+        .singleWhere((action) => action.key.label == 'Move up')
+        .value();
+    for (var frame = 0; frame < 6; frame++) {
+      await tester.pump();
+      expect(counts(), <int>[1, 1, 1, 1], reason: 'frame $frame');
+    }
+    expect(titleAt(49), 'Track 50', reason: 'the new order is drawn');
+    expect(repo.playStateBatches, hasLength(4), reason: 'both read again');
+
+    gate.complete();
+    repo.playStatesGate = null;
+    await tester.pumpAndSettle();
+    final order = <String>[for (final member in members) member.pid]
+      ..insert(49, 'tr-050');
+    order.removeAt(51);
+    expect(
+      repo.playStateBatches.skip(2),
+      unorderedEquals(<List<String>>[
+        order.take(50).toList()..sort(),
+        order.skip(50).toList()..sort(),
+      ]),
+    );
+    expect(counts(), <int>[1, 1, 1, 1]);
+  });
+
   testWidgets('the header row is one action bar with the playlist menu', (
     tester,
   ) async {

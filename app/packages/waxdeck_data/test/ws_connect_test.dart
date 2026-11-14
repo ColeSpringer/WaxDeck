@@ -44,4 +44,36 @@ void main() {
       throwsA(isA<Exception>()),
     );
   });
+
+  group('an upgrade the server answers with a status', () {
+    Future<int> answering(int status) async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) {
+        request.response
+          ..statusCode = status
+          ..close();
+      });
+      return server.port;
+    }
+
+    test('says which status, so a refusal for want of a session is seen as '
+        'one', () async {
+      final port = await answering(HttpStatus.unauthorized);
+
+      await expectLater(
+        connectWebSocket('ws://127.0.0.1:$port/api/v1/ws'),
+        throwsA(isA<UpgradeRefused>().having((e) => e.status, 'status', 401)),
+      );
+    });
+
+    test('says so for any other status too', () async {
+      final port = await answering(HttpStatus.serviceUnavailable);
+
+      await expectLater(
+        connectWebSocket('ws://127.0.0.1:$port/api/v1/ws'),
+        throwsA(isA<UpgradeRefused>().having((e) => e.status, 'status', 503)),
+      );
+    });
+  });
 }

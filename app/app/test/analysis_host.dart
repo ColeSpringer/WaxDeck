@@ -80,11 +80,15 @@ class AnalysisHost {
         return result;
       }();
 
-  /// One line for each unit of [library] under `lib/` with an error, naming
-  /// the first: code that does not compile resolves to less than it says.
-  List<String> errors(ResolvedLibraryResult library) => [
+  /// One line for each unit of [library] under one of [under], package
+  /// paths that default to `lib/`, with an error, naming the first: code
+  /// that does not compile resolves to less than it says.
+  List<String> errors(
+    ResolvedLibraryResult library, {
+    Iterable<String> under = const ['lib/'],
+  }) => [
     for (final unit in library.units)
-      if (relative(unit.path) case final path when path.startsWith('lib/'))
+      if (relative(unit.path) case final path when under.any(path.startsWith))
         if (_firstError(unit) case final error?)
           '$path:${unit.lineInfo.getLocation(error.offset).lineNumber}: '
               '${error.problemMessage.messageText(includeUrl: false)} (an '

@@ -59,6 +59,7 @@ export 'src/color/palette.dart';
 export 'src/color/palette_extractor.dart';
 export 'src/fonts/wax_fonts.dart';
 export 'src/icons/wax_icon.dart';
+export 'src/theme/plain_text_style.dart';
 export 'src/theme/theme_builder.dart';
 export 'src/theme/wax_accent.dart';
 export 'src/theme/wax_layout.dart';

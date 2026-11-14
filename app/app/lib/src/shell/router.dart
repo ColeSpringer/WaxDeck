@@ -969,6 +969,8 @@ class _SignedInScope extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // What another account's session waits on before it shows.
+    ref.watch(signedInScreensProvider);
     ref.watch(syncBinderProvider);
     ref.watch(queuePersistenceProvider);
     ref.watch(queueRefillProvider);

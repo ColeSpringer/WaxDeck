@@ -4,7 +4,13 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart'
     show ValueListenable, defaultTargetPlatform, precisionErrorTolerance;
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
-import 'package:flutter/rendering.dart' show RendererBinding;
+import 'package:flutter/rendering.dart'
+    show
+        BoxHitTestResult,
+        RenderProxyBox,
+        RenderStack,
+        RendererBinding,
+        StackParentData;
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:material_ui/material_ui.dart';
 
@@ -114,14 +120,15 @@ class SectionHeader extends StatelessWidget {
   }
 }
 
-/// One extra control in a card's corner, beside its overflow.
+/// One extra control in a card's top corner, the overflow taking the
+/// other one.
 ///
 /// For state a card carries that is also a verb - a station's pin is the
-/// case this exists for. Drawn in the same chip row as the overflow and
-/// on the same disc, because a control the card stacked over itself is
-/// what a station tile did: a hand-rolled star and menu at one corner,
-/// eight pixels from the card's own hover menu at the other, two of the
-/// same glyph on a pointer.
+/// case this exists for. Drawn by the card, on the same disc as the
+/// overflow and level with it, because a control the card stacked over
+/// itself is what a station tile did: a hand-rolled star and menu at one
+/// corner, eight pixels from the card's own hover menu at the other, two
+/// of the same glyph on a pointer.
 ///
 /// Always visible, unlike the overflow: it answers a question ("is this
 /// pinned?") as well as offering an action, and there is no hover on a
@@ -158,6 +165,13 @@ class MediaCardAction {
 /// and, where [onMore] is wired, an overflow chip, so desktop browsing
 /// is never tap-to-navigate-only. A right click and a touch long press
 /// open the same menu.
+///
+/// The corner chips keep clear of the cover's centre, where the play
+/// disc sits and a press plays: the [action] has the top-right corner to
+/// itself, and the overflow takes the top-right corner alone or the
+/// top-left beside an action. A [MediaTileData.badge] also takes the
+/// top-left, so a badged card carries at most one of [onMore] and
+/// [action]; both together fail an assertion in debug.
 class MediaCard extends StatefulWidget {
   const MediaCard({
     required this.data,
@@ -359,7 +373,11 @@ class _MediaCardState extends State<MediaCard>
   /// top of the disc rather than under it, and wherever the card stands.
   Widget _chip(WaxColors colors, Widget child) => DecoratedBox(
     decoration: BoxDecoration(color: colors.surface1, shape: BoxShape.circle),
-    child: Material(type: MaterialType.transparency, child: child),
+    child: Material(
+      type: MaterialType.transparency,
+      animationDuration: Duration.zero,
+      child: child,
+    ),
   );
 
   @override
@@ -368,6 +386,11 @@ class _MediaCardState extends State<MediaCard>
     final motion = WaxMotion.of(context);
     final l10n = context.waxL10n;
     final data = widget.data;
+    assert(
+      data.badge == null || widget.onMore == null || widget.action == null,
+      'A badge and an overflow beside an action both claim the top-left '
+      'corner: give a badged MediaCard one of onMore and action.',
+    );
     final width = widget.width ?? WaxSizeClass.of(context).gridExtent;
     final captionsFade =
         (widget.captions ?? WaxLayout.of(context).captions) ==
@@ -429,9 +452,10 @@ class _MediaCardState extends State<MediaCard>
               active: true,
             ),
           ),
-        // Top left, the one corner nothing else claims. Opaque, on a
-        // tested surface pair: the scrim is translucent, so over a dark
-        // cover in light mode it composites to ink on ink.
+        // Top left, which an overflow beside an action would also claim:
+        // the assert above refuses that card.
+        // Opaque, on a tested surface pair: the scrim is translucent, so
+        // over a dark cover in light mode it composites to ink on ink.
         if (data.badge != null)
           Positioned(
             left: WaxSpace.s8,
@@ -474,81 +498,106 @@ class _MediaCardState extends State<MediaCard>
     // The card announces one node for the whole tile and excludes
     // everything under it, which is right for the artwork and the
     // captions and wrong for a control: swallowed, a pin would have no
-    // name, no state, and no handle. So the chip row is the card's
+    // name, no state, and no handle. So the chips are the card's
     // sibling, exactly where a station tile used to hand-roll its own -
-    // except that here it is one row, aligned to the same corner as the
-    // overflow, so the two cannot end up eight pixels apart.
-    final chips = widget.onMore == null && widget.action == null
+    // except that here they share one layer over the cover, so the two
+    // cannot end up eight pixels apart.
+    //
+    // The overflow is revealed like the play affordance: a pointer gets
+    // a visible way into the menu instead of having to guess at a right
+    // click. Offstage while hidden rather than faded, because a faded
+    // chip would still take presses in its corner. Still a tab stop
+    // there, so Shift+Tab reaches it as Tab does, and its focus reveals
+    // it. Touch keeps the long press.
+    final moreChip = widget.onMore == null
+        ? null
+        : FocusTraversalOrder(
+            key: const ValueKey<String>('more'),
+            order: const NumericFocusOrder(2),
+            child: Focus(
+              focusNode: _moreFocus,
+              canRequestFocus: false,
+              skipTraversal: true,
+              includeSemantics: false,
+              child: Visibility(
+                visible: revealed,
+                maintainState: true,
+                maintainFocusability: true,
+                child: _chip(
+                  colors,
+                  WaxIconButton(
+                    glyph: WaxIcons.more,
+                    label: l10n.cardsMoreForItem(data.title),
+                    size: 16,
+                    semanticsId: widget.moreSemanticsId,
+                    onPressed: widget.onMore,
+                  ),
+                ),
+              ),
+            ),
+          );
+    final actionChip = switch (widget.action) {
+      final action? => FocusTraversalOrder(
+        key: const ValueKey<String>('action'),
+        order: const NumericFocusOrder(3),
+        child: _chip(
+          colors,
+          WaxIconButton(
+            glyph: action.glyph,
+            label: action.label,
+            size: 16,
+            active: action.active,
+            semanticsId: action.semanticsId,
+            onPressed: action.onPressed,
+          ),
+        ),
+      ),
+      null => null,
+    };
+    // The always-drawn action keeps the right corner whatever the pointer
+    // does. Beside it the overflow takes the left one, so two chips never
+    // reach into the cover's centre, where the disc is.
+    final chips = moreChip == null && actionChip == null
         ? null
         : Positioned(
             key: const ValueKey<String>('chips'),
-            right: WaxSpace.s8,
-            top: WaxSpace.s8,
+            left: 0,
+            top: 0,
+            width: width,
+            height: width,
             child: Focus(
               focusNode: _chipsFocus,
               canRequestFocus: false,
               skipTraversal: true,
               includeSemantics: false,
-              // One disc apiece and no gap between them, so a card
-              // carrying both draws a capsule rather than two circles.
-              // The overflow leads, so the always-drawn action keeps
-              // the corner and nothing shifts as the pointer arrives.
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  // Revealed like the play affordance: a pointer gets a
-                  // visible way into the menu instead of having to
-                  // guess at a right click. Offstage while hidden rather
-                  // than faded, because a faded chip still occupies its
-                  // whole 44px box - and on a phone, where nothing ever
-                  // hovers, that box pushed the action a third of the
-                  // way across the card with dead space beside it. Still
-                  // a tab stop there, so Shift+Tab reaches it as Tab
-                  // does, and its focus reveals it. Touch keeps the long
-                  // press.
-                  if (widget.onMore != null)
-                    FocusTraversalOrder(
-                      key: const ValueKey<String>('more'),
-                      order: const NumericFocusOrder(2),
-                      child: Focus(
-                        focusNode: _moreFocus,
-                        canRequestFocus: false,
-                        skipTraversal: true,
-                        includeSemantics: false,
-                        child: Visibility(
-                          visible: revealed,
-                          maintainState: true,
-                          maintainFocusability: true,
-                          child: _chip(
-                            colors,
-                            WaxIconButton(
-                              glyph: WaxIcons.more,
-                              label: l10n.cardsMoreForItem(data.title),
-                              size: 16,
-                              semanticsId: widget.moreSemanticsId,
-                              onPressed: widget.onMore,
-                            ),
-                          ),
-                        ),
+              // At a narrow cover a chip's square reaches into the disc's
+              // drawn circle, and the two circles overlap: each press goes
+              // to the shape drawn on top where it lands.
+              child: _OutsideDisc(
+                radius: widget.onPlay != null && revealed
+                    ? HoverPlayDisc.size / 2
+                    : null,
+                child: Stack(
+                  children: <Widget>[
+                    // Keyed, so the action keeps its element, focus and ink
+                    // as the overflow comes and goes beside it.
+                    if (moreChip != null)
+                      Positioned(
+                        key: const ValueKey<String>('more'),
+                        left: actionChip == null ? null : WaxSpace.s8,
+                        right: actionChip == null ? WaxSpace.s8 : null,
+                        top: WaxSpace.s8,
+                        child: moreChip,
                       ),
-                    ),
-                  if (widget.action case final action?)
-                    FocusTraversalOrder(
-                      key: const ValueKey<String>('action'),
-                      order: const NumericFocusOrder(3),
-                      child: _chip(
-                        colors,
-                        WaxIconButton(
-                          glyph: action.glyph,
-                          label: action.label,
-                          size: 16,
-                          active: action.active,
-                          semanticsId: action.semanticsId,
-                          onPressed: action.onPressed,
-                        ),
+                    if (actionChip != null)
+                      Positioned(
+                        key: const ValueKey<String>('action'),
+                        right: WaxSpace.s8,
+                        top: WaxSpace.s8,
+                        child: actionChip,
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           );
@@ -807,6 +856,61 @@ class WaxDirectionalFocusAction extends DirectionalFocusAction {
   }
 }
 
+/// The chips' layer over a cover, where the shape drawn on top takes the
+/// press: inside a chip's own circle the chip; elsewhere inside the circle
+/// of [radius] about the cover's centre, whatever lies beneath; elsewhere
+/// in a chip's square, the chip. Null takes presses everywhere. Not on the
+/// web with semantics on: the engine routes a click by node rectangle, so
+/// there a chip's whole square takes it.
+class _OutsideDisc extends SingleChildRenderObjectWidget {
+  const _OutsideDisc({required this.radius, required super.child});
+
+  final double? radius;
+
+  @override
+  _RenderOutsideDisc createRenderObject(BuildContext context) =>
+      _RenderOutsideDisc(radius);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderOutsideDisc render) =>
+      render.radius = radius;
+}
+
+class _RenderOutsideDisc extends RenderProxyBox {
+  _RenderOutsideDisc(this.radius);
+
+  double? radius;
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    final disc = radius;
+    if (disc != null &&
+        (position - size.center(Offset.zero)).distance < disc &&
+        !_onChip(position)) {
+      return false;
+    }
+    return super.hitTest(result, position: position);
+  }
+
+  /// Whether [position] is inside a chip's drawn circle. Each child of the
+  /// stack is one chip on its disc, which fills the child's square.
+  bool _onChip(Offset position) {
+    final stack = child;
+    if (stack is! RenderStack) return false;
+    for (
+      var chip = stack.firstChild;
+      chip != null;
+      chip = stack.childAfter(chip)
+    ) {
+      final square = (chip.parentData! as StackParentData).offset & chip.size;
+      if ((position - square.center).distance < square.shortestSide / 2) {
+        return true;
+      }
+    }
+    return false;
+  }
+}
+
 /// A card's caption block, faded only in the mode that hides it.
 ///
 /// The two branches lay out identically - opacity is paint, not layout -
@@ -943,8 +1047,70 @@ class MediaListRow extends StatelessWidget {
     );
   }
 
+  /// The row width below which the play count goes, glyph and number
+  /// together; the duration and the overflow never do. A plain row on a
+  /// 320 dp phone is 288 and draws it; an owned playlist's row, beside its
+  /// remove button and drag handle, is 252 on a 360 dp phone and does not.
+  static const double _playCountFloor = 280;
+
   @override
   Widget build(BuildContext context) {
+    final plays = data.playCount;
+    if (plays == null) return _build(context, playCount: false);
+    // Whatever the count, so one arriving or going changes what the
+    // builder draws and never the root: a new root would rebuild the
+    // row, focus, hover and ink with it.
+    return LayoutBuilder(
+      builder: (context, box) => _build(
+        context,
+        playCount: plays > 0 && box.maxWidth >= _playCountFloor,
+      ),
+    );
+  }
+
+  /// `[play glyph][count]` in one node, with one tooltip, in words.
+  Widget _playCount(BuildContext context, WaxColors colors) {
+    final drawn = context.waxL10n.formatCount(data.playCount!);
+    final words = data.playCountLabel ?? drawn;
+    return Padding(
+      // Eight pixels from what precedes it: the star and the downloaded
+      // mark carry theirs, an ellipsized title does not, and a bare
+      // number against it reads as the end of the name.
+      padding: EdgeInsetsDirectional.only(
+        start: data.starred || data.downloaded ? 0 : WaxSpace.s8,
+        end: WaxSpace.s12,
+      ),
+      // Hover only: a long press on a row opens its menu.
+      child: WaxTooltip(
+        message: words,
+        touchTrigger: false,
+        excludeFromSemantics: true,
+        child: Semantics(
+          identifier: data.playCountSemanticsId,
+          label: words,
+          excludeSemantics: true,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              WaxIcon(
+                WaxIcons.play,
+                size: 12,
+                active: true,
+                color: colors.textTertiary,
+              ),
+              const SizedBox(width: WaxSpace.s4),
+              Text(
+                drawn,
+                style: WaxType.monoData.copyWith(color: colors.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _build(BuildContext context, {required bool playCount}) {
     final colors = WaxColors.of(context);
     final layout = WaxLayout.of(context);
     final l10n = context.waxL10n;
@@ -1073,11 +1239,6 @@ class MediaListRow extends StatelessWidget {
                 color: colors.textSecondary,
               ),
             ),
-          if (data.trailingText != null)
-            Text(
-              data.trailingText!,
-              style: WaxType.monoTime.copyWith(color: colors.textTertiary),
-            ),
         ],
       ),
     );
@@ -1096,17 +1257,35 @@ class MediaListRow extends StatelessWidget {
             ),
           ),
         Expanded(child: content),
-        // Outside the content, not inside it beside the duration: the
-        // content's label is built with `excludeSemantics`, so a node
-        // drawn in there would be invisible to a screen reader and to
-        // the suite alike. Its own node is also the better reading -
-        // "played 5 times" after the row rather than buried in its
-        // name.
+        // The count and the detail sit outside the content: its label is
+        // built with `excludeSemantics`, so a node drawn in there would be
+        // invisible to a screen reader and to the suite alike. Their own
+        // nodes are also the better reading - "played 5 times" after the
+        // row rather than buried in its name. The duration comes out with
+        // them so the count can stand before it; its words are already in
+        // the row's label, but the labelled node's rect (a screen reader's
+        // outline) ends before the count and the duration.
+        if (playCount) _playCount(context, colors),
+        if (data.trailingText != null)
+          Padding(
+            // The count's gap, where nothing else stands between an
+            // ellipsized title and the duration.
+            padding: EdgeInsetsDirectional.only(
+              start: playCount || data.starred || data.downloaded
+                  ? 0
+                  : WaxSpace.s8,
+            ),
+            child: ExcludeSemantics(
+              child: Text(
+                data.trailingText!,
+                style: WaxType.monoTime.copyWith(color: colors.textTertiary),
+              ),
+            ),
+          ),
         if (data.trailingDetail != null)
           Padding(
             padding: const EdgeInsetsDirectional.only(start: WaxSpace.s8),
             child: Semantics(
-              identifier: data.trailingDetailSemanticsId,
               label: data.trailingDetailSpoken ?? data.trailingDetail,
               excludeSemantics: true,
               child: Text(
@@ -1129,6 +1308,7 @@ class MediaListRow extends StatelessWidget {
 
     return Material(
       color: selected ? colors.surface2 : Colors.transparent,
+      animationDuration: Duration.zero,
       // As on the card: suppression follows the rows that answer the
       // gesture, and nothing else on the page loses the browser's menu.
       child: WaxSecondaryTapRegion(
@@ -1390,6 +1570,7 @@ class WaxOptionRow extends StatelessWidget {
 
     return Material(
       color: selected ? colors.surface2 : Colors.transparent,
+      animationDuration: Duration.zero,
       child: ConstrainedBox(
         constraints: BoxConstraints(minHeight: layout.rowHeight),
         child: Padding(
@@ -1889,6 +2070,8 @@ class _ShelfChevron extends StatelessWidget {
                   ),
                 ),
                 clipBehavior: Clip.antiAlias,
+                // The ring is part of the shape, which a Material eases.
+                animationDuration: Duration.zero,
                 child: InkWell(
                   onTap: onTap,
                   canRequestFocus: false,

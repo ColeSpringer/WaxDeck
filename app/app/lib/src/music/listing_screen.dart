@@ -7,9 +7,11 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_precache.dart';
 import '../artwork/artwork_providers.dart';
+import '../artwork/artwork_store.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
 import '../player/now_playing_controller.dart';
+import '../player/play_progress.dart';
 import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../queue/queue_drag.dart';
@@ -297,6 +299,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(musicItemsProvider(_listing));
+    final store = ref.watch(artworkStoreProvider);
     final dimension = widget.dimension;
     final items = state.value?.items ?? const <ItemSummary>[];
     fillViewportWhile(
@@ -322,7 +325,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
           warmArtworkAhead(
             context: context,
             precacher: _precacher,
-            store: ref.read(artworkStoreProvider),
+            store: store,
             metrics: metrics,
             count: items.length,
             urlAt: (index) => items[index].artUrl,
@@ -363,14 +366,14 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
             onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
             // The list draws its own empty row, which names the bucket
             // it is empty for, so there is no empty face here.
-            builder: (context, value) => _list(value),
+            builder: (context, value) => _list(value, store),
           ),
         ],
       ),
     );
   }
 
-  Widget _list(MusicItemsState state) {
+  Widget _list(MusicItemsState state, ArtworkStore store) {
     final dimension = widget.dimension;
     final l10n = context.l10n;
     if (state.items.isEmpty) {
@@ -384,6 +387,9 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
         ),
       );
     }
+    // In windows that stay put as the listing pages, each read only once
+    // a row of it is built.
+    final windows = PlayWindows.ofItems(state.items);
     return SliverList.builder(
       itemCount: state.items.length + (state.loadingMore ? 1 : 0),
       findChildIndexCallback: indexByKey(state.items, _itemKey),
@@ -395,25 +401,33 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
         return QueueDraggable(
           key: _itemKey(item),
           drop: QueueDrop.item(item),
-          child: MediaListRow(
-            data: itemRowTile(
-              item,
-              store: ref.watch(artworkStoreProvider),
-              // Addressed by pid rather than by position, unlike the
-              // album and artist screens: this is the complete
-              // enumeration a caller reaches for one known item in,
-              // which is what the deleted library grid was for. Those
-              // two are running orders, where the position is the point.
-              semanticsId: SemanticsIds.item(item.pid),
+          child: PlayCountBuilder(
+            windows: windows,
+            index: index,
+            pid: item.pid,
+            builder: (context, plays) => MediaListRow(
+              data: itemRowTile(
+                item,
+                l10n: l10n,
+                store: store,
+                // Addressed by pid rather than by position, unlike the
+                // album and artist screens: this is the complete
+                // enumeration a caller reaches for one known item in,
+                // which is what the deleted library grid was for. Those
+                // two are running orders, where the position is the
+                // point.
+                semanticsId: SemanticsIds.item(item.pid),
+                playCount: plays,
+              ),
+              onTap: () => _play(state, index),
+              // The item menu, keeping the pin rows this overflow used
+              // to be: a track cannot be pinned itself - a kept set of
+              // tracks is a playlist - so pinning here still means the
+              // album or the artist it belongs to.
+              onMore: () =>
+                  showItemMenuForSummary(context, ref, item, withPin: true),
+              moreSemanticsId: SemanticsIds.listingRowMore(item.pid),
             ),
-            onTap: () => _play(state, index),
-            // The item menu, keeping the pin rows this overflow used
-            // to be: a track cannot be pinned itself - a kept set of
-            // tracks is a playlist - so pinning here still means the
-            // album or the artist it belongs to.
-            onMore: () =>
-                showItemMenuForSummary(context, ref, item, withPin: true),
-            moreSemanticsId: SemanticsIds.listingRowMore(item.pid),
           ),
         );
       },

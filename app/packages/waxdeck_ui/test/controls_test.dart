@@ -121,7 +121,47 @@ void main() {
         SystemMouseCursors.basic,
       );
     });
+
+    testWidgets('a $name tappable spends the press it does not take', (
+      tester,
+    ) async {
+      var behind = 0;
+      await _pump(
+        tester,
+        GestureDetector(
+          onTap: () => behind++,
+          child: WaxTappable(
+            label: 'Artwork',
+            onPressed: busy ? () {} : null,
+            busy: busy,
+            child: const SizedBox.square(dimension: 48),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(WaxTappable));
+      await tester.pump();
+      expect(behind, 0, reason: 'a greyed control is not a way through');
+    });
   }
+
+  testWidgets('an inert tappable lets the press through', (tester) async {
+    var behind = 0;
+    await _pump(
+      tester,
+      GestureDetector(
+        onTap: () => behind++,
+        child: const WaxTappable(
+          label: 'Downloaded',
+          onPressed: null,
+          inert: true,
+          child: SizedBox.square(dimension: 48),
+        ),
+      ),
+    );
+    await tester.tap(find.byType(WaxTappable));
+    await tester.pump();
+    expect(behind, 1);
+  });
 
   group('busy', () {
     for (final icon in <WaxGlyph?>[WaxIcons.refresh, null]) {

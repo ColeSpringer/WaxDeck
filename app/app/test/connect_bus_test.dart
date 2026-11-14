@@ -167,7 +167,14 @@ void main() {
 
   test('pong computes the server clock offset NTP style', () {
     var now = DateTime.utc(2026, 7, 21, 12, 0, 0);
-    final bus = ConnectBus(send: (_) => true, now: () => now);
+    final sent = <Map<String, Object?>>[];
+    final bus = ConnectBus(
+      send: (frame) {
+        sent.add(frame);
+        return true;
+      },
+      now: () => now,
+    );
     bus.ping();
     // The round trip takes 200ms; the server stamped 5 seconds ahead
     // of the local midpoint.
@@ -176,8 +183,48 @@ void main() {
     final serverAt = midpoint.add(const Duration(seconds: 5));
     bus.handleFrame({
       'type': 'pong',
-      't': 0,
+      't': sent.single['t'],
       'at': serverAt.millisecondsSinceEpoch,
+    });
+    expect(bus.serverClockOffset, const Duration(seconds: 5));
+  });
+
+  test('a pong echoing an older ping changes nothing, and the one echoing '
+      'the ping waited on sets the offset', () {
+    var now = DateTime.utc(2026, 7, 21, 12, 0, 0);
+    final sent = <Map<String, Object?>>[];
+    final bus = ConnectBus(
+      send: (frame) {
+        sent.add(frame);
+        return true;
+      },
+      now: () => now,
+    );
+    bus.ping();
+    // Half a minute on, the next ping goes out before the first one's
+    // pong has come.
+    now = now.add(const Duration(seconds: 30));
+    bus.ping();
+    expect(sent[1]['t'], isNot(sent[0]['t']));
+
+    // The late pong stamped the server's clock five seconds ahead of the
+    // first ping; paired with the second it would read as a skew of
+    // minus twenty-five seconds.
+    bus.handleFrame({
+      'type': 'pong',
+      't': sent[0]['t'],
+      'at': DateTime.utc(2026, 7, 21, 12, 0, 5).millisecondsSinceEpoch,
+    });
+    expect(bus.serverClockOffset, Duration.zero);
+
+    // It did not use up the wait: the answer to the ping waited on sets
+    // the offset, here five seconds ahead of that ping's midpoint.
+    now = now.add(const Duration(milliseconds: 200));
+    final midpoint = DateTime.utc(2026, 7, 21, 12, 0, 30, 100);
+    bus.handleFrame({
+      'type': 'pong',
+      't': sent[1]['t'],
+      'at': midpoint.add(const Duration(seconds: 5)).millisecondsSinceEpoch,
     });
     expect(bus.serverClockOffset, const Duration(seconds: 5));
   });

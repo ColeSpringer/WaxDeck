@@ -24,7 +24,7 @@ import 'focus_ring.dart';
 ///
 /// [child] keeps its own ink and its own tap handler; this adds no
 /// gesture of its own, so nothing fires twice, save the one that spends a
-/// press while [busy].
+/// press while [busy] or disabled.
 class WaxTappable extends StatefulWidget {
   const WaxTappable({
     required this.label,
@@ -48,7 +48,8 @@ class WaxTappable extends StatefulWidget {
   /// The accessible name. Stateful controls say what they will do.
   final String label;
 
-  /// Null disables the control, which is reported as well as drawn.
+  /// Null disables the control, which is reported as well as drawn, and
+  /// spends a press rather than letting it through to what holds it.
   final VoidCallback? onPressed;
 
   /// Runs in place of [onPressed] when a key presses the focused control,
@@ -145,6 +146,9 @@ class _WaxTappableState extends State<WaxTappable> {
     final colors = WaxColors.of(context);
     final inert = widget.inert;
     final enabled = !inert && widget.onPressed != null && !widget.busy;
+    // A greyed control is never a way into what is behind it. An inert
+    // one is a state, not a control, so its presses pass.
+    final spends = widget.busy || (!inert && widget.onPressed == null);
     // A tooltip is read by focusing it, so it makes a stop of any control.
     // An inert control with nothing to show stays focusable while its
     // scope would hand focus back to it (a dialog closing, the window
@@ -200,15 +204,15 @@ class _WaxTappableState extends State<WaxTappable> {
             focused: _focused,
             borderRadius: widget.borderRadius,
             surface: widget.surface ?? colors.canvas,
-            // Busy, the child's ink hears nothing and the press is spent
-            // here rather than falling through to whatever holds the
-            // control.
+            // Busy or disabled, the press is spent here rather than
+            // falling through to whatever holds the control; busy, the
+            // child's ink hears nothing either.
             child: GestureDetector(
-              behavior: widget.busy
+              behavior: spends
                   ? HitTestBehavior.opaque
                   : HitTestBehavior.deferToChild,
               excludeFromSemantics: true,
-              onTap: widget.busy ? () {} : null,
+              onTap: spends ? () {} : null,
               child: AbsorbPointer(absorbing: widget.busy, child: widget.child),
             ),
           ),
@@ -301,6 +305,7 @@ class WaxInkTappable extends StatelessWidget {
     child: Material(
       color: color,
       borderRadius: borderRadius,
+      animationDuration: Duration.zero,
       child: InkWell(
         onTap: onPressed,
         onLongPress: onPressed == null ? null : onLongPress,

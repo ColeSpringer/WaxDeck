@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:ui' show Tristate;
+import 'dart:ui' show PointerDeviceKind, Tristate;
 
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1779,6 +1779,309 @@ void main() {
         router.routerDelegate.currentConfiguration.matches,
         hasLength(before + 1),
       );
+    });
+
+    /// The wide bar over the route table, playing, and the route stack's
+    /// depth.
+    Future<(PlayerHarness, int Function())> pumpWide(
+      WidgetTester tester, {
+      FakeEngine? engine,
+      FakeRepository? repo,
+      ProviderContainer? container,
+    }) async {
+      repo ??= FakeRepository(items: [testItem('tr-A')]);
+      final harness = await _pumpDeck(
+        tester,
+        repo: repo,
+        engine: engine ?? FakeEngine(),
+        container: container,
+        routed: true,
+      );
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+      final router = GoRouter.of(tester.element(find.byType(DeckBar)));
+      return (
+        harness,
+        () => router.routerDelegate.currentConfiguration.matches.length,
+      );
+    }
+
+    Finder inBar(Finder finder) =>
+        find.descendant(of: find.byType(DeckBar), matching: finder);
+
+    // Every pixel that is not a control opens the player, not only the
+    // title zone: the wide bar's dead space used to start at the elapsed
+    // time.
+    final blanks = <String, Offset Function(WidgetTester)>{
+      'beside the transport': (tester) {
+        final row = tester.getRect(
+          find
+              .ancestor(
+                of: _byId(SemanticsIds.deckPlay),
+                matching: find.byType(Row),
+              )
+              .first,
+        );
+        return Offset(row.right + 24, row.center.dy);
+      },
+      'right of the last control': (tester) {
+        final more = tester.getRect(_byId(SemanticsIds.deckMore));
+        final bar = tester.getRect(find.byType(DeckBar));
+        return Offset((more.right + bar.right) / 2, more.center.dy);
+      },
+      'under the title': (tester) {
+        final art = tester.getRect(inBar(find.byType(ArtworkImage)));
+        final title = tester.getRect(
+          inBar(find.text('Prancing Pony Blues')).first,
+        );
+        return Offset(title.center.dx, art.bottom + 4);
+      },
+      'on the elapsed time': (tester) =>
+          tester.getCenter(inBar(find.text('0:00'))),
+    };
+    for (final MapEntry(key: name, value: spot) in blanks.entries) {
+      testWidgets('a wide bar takes a click $name', (tester) async {
+        final (_, depth) = await pumpWide(tester);
+        final before = depth();
+        await tester.tapAt(spot(tester));
+        await tester.pumpAndSettle();
+        expect(depth(), before + 1);
+      });
+    }
+
+    testWidgets('a wide bar seeks from its track rather than opening', (
+      tester,
+    ) async {
+      final engine = FakeEngine();
+      final (_, depth) = await pumpWide(tester, engine: engine);
+      final before = depth();
+      engine.seekCalls.clear();
+      await tester.tapAt(tester.getCenter(_byId(SemanticsIds.deckSeek)));
+      await tester.pumpAndSettle();
+      expect(engine.seekCalls, isNotEmpty, reason: 'the track keeps its tap');
+      expect(depth(), before);
+    });
+
+    // A swipe up over a track or the blank band is a scroll or a scrub, not
+    // a way in; over what is playing it is.
+    final scrolls = <String, Offset Function(WidgetTester)>{
+      'the blank band beside the transport': blanks['beside the transport']!,
+      'the seek track': (tester) =>
+          tester.getCenter(_byId(SemanticsIds.deckSeek)),
+      'the volume slider': (tester) =>
+          tester.getCenter(_byId(SemanticsIds.deckVolume)),
+    };
+
+    Future<(FakeEngine, int Function())> pumpWideLevel(
+      WidgetTester tester,
+    ) async {
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final engine = FakeEngine();
+      final (_, depth) = await pumpWide(
+        tester,
+        repo: repo,
+        engine: engine,
+        container: playbackContainer(
+          repo: repo,
+          engine: engine,
+          extra: [localVolumeAvailableProvider.overrideWithValue(true)],
+        ),
+      );
+      return (engine, depth);
+    }
+
+    for (final MapEntry(key: name, value: spot) in scrolls.entries) {
+      testWidgets('a wide bar stays shut to a touch fling up over $name', (
+        tester,
+      ) async {
+        final (_, depth) = await pumpWideLevel(tester);
+        final before = depth();
+        await tester.flingFrom(spot(tester), const Offset(0, -80), 1000);
+        await tester.pumpAndSettle();
+        expect(depth(), before);
+      });
+
+      testWidgets('a wide bar stays shut to a trackpad swipe up over $name', (
+        tester,
+      ) async {
+        final (_, depth) = await pumpWideLevel(tester);
+        final before = depth();
+        await tester.trackpadFlingFrom(
+          spot(tester),
+          const Offset(0, -80),
+          1000,
+        );
+        await tester.pumpAndSettle();
+        expect(depth(), before);
+      });
+    }
+
+    testWidgets('a wide bar seeks from a touch drag that starts steeply up', (
+      tester,
+    ) async {
+      final (engine, depth) = await pumpWideLevel(tester);
+      final before = depth();
+      final track = tester.getCenter(_byId(SemanticsIds.deckSeek));
+      engine.seekCalls.clear();
+      await tester.tapAt(track);
+      await tester.pump(const Duration(milliseconds: 500));
+      final middle = engine.seekCalls.last;
+
+      engine.seekCalls.clear();
+      final finger = await tester.startGesture(track);
+      var at = Duration.zero;
+      Future<void> move(Offset by) async {
+        at += const Duration(milliseconds: 16);
+        await finger.moveBy(by, timeStamp: at);
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+
+      await move(const Offset(4, -24));
+      for (var i = 0; i < 12; i++) {
+        await move(const Offset(8, 0));
+      }
+      await finger.up();
+      await tester.pumpAndSettle();
+      expect(depth(), before, reason: 'the player stayed shut');
+      expect(engine.seekCalls, hasLength(1));
+      expect(
+        engine.seekCalls.single,
+        greaterThan(middle),
+        reason: 'the track followed the finger past the middle',
+      );
+    });
+
+    testWidgets('a wide bar opens on a trackpad swipe up over what is playing, '
+        'and not on a mouse drag', (tester) async {
+      final (_, depth) = await pumpWideLevel(tester);
+      final before = depth();
+      Offset title() =>
+          tester.getCenter(inBar(find.text('Prancing Pony Blues')).first);
+
+      await tester.flingFrom(
+        title(),
+        const Offset(0, -80),
+        1000,
+        deviceKind: PointerDeviceKind.mouse,
+      );
+      await tester.pumpAndSettle();
+      expect(depth(), before, reason: 'a mouse swipes nothing');
+
+      await tester.trackpadFlingFrom(title(), const Offset(0, -80), 1000);
+      await tester.pumpAndSettle();
+      expect(depth(), before + 1);
+    });
+
+    testWidgets('a wide bar opens on a touch fling up over what is playing', (
+      tester,
+    ) async {
+      final (_, depth) = await pumpWideLevel(tester);
+      final before = depth();
+      await tester.flingFrom(
+        tester.getCenter(inBar(find.text('Prancing Pony Blues')).first),
+        const Offset(0, -80),
+        1000,
+      );
+      await tester.pumpAndSettle();
+      expect(depth(), before + 1);
+    });
+
+    testWidgets('a track with no length opens nothing', (tester) async {
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final harness = await _pumpDeck(
+        tester,
+        repo: repo,
+        engine: FakeEngine(),
+        routed: true,
+      );
+      harness.container
+          .read(remoteSessionProvider.notifier)
+          .adopt(
+            PlaybackSessionInfo(
+              id: 'ps-kitchen',
+              endpointId: 'pe-kitchen',
+              endpointName: 'Kitchen speaker',
+              mine: true,
+              authority: 'remote',
+              playing: false,
+              index: 0,
+              positionMs: 0,
+              positionAt: DateTime.now().toUtc(),
+              rate: 1,
+              queueVersion: 1,
+              entries: const [
+                PlaybackSessionEntry(pid: 'tr-Z', title: 'Somewhere Else'),
+              ],
+            ),
+          );
+      await tester.pumpAndSettle();
+      expect(find.text('Somewhere Else'), findsOneWidget);
+
+      final router = GoRouter.of(tester.element(find.byType(DeckBar)));
+      final before = router.routerDelegate.currentConfiguration.matches.length;
+      await tester.tapAt(tester.getCenter(_byId(SemanticsIds.deckSeek)));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(
+        router.routerDelegate.currentConfiguration.matches,
+        hasLength(before),
+        reason: 'a greyed track is not a way in',
+      );
+    });
+
+    testWidgets('a greyed control over a station opens nothing', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final station = RadioStation(
+        pid: 'ra-1',
+        name: 'Coastal FM',
+        streamUrl: 'https://radio.example/stream',
+        createdAt: DateTime.utc(2026, 7, 1),
+      );
+      repo.radioStationsByPid[station.pid] = station;
+      final engine = FakeEngine();
+      final (harness, depth) = await pumpWide(
+        tester,
+        repo: repo,
+        engine: engine,
+        container: appContainer(repo: repo, engine: engine),
+      );
+      await harness.container
+          .read(radioPlaybackProvider.notifier)
+          .play(station);
+      await tester.pumpAndSettle();
+      expect(find.text('Coastal FM'), findsOneWidget);
+
+      final before = depth();
+      await tester.tap(_byId(SemanticsIds.deckShuffle));
+      // Not settled: a station's player face never stops moving.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(depth(), before, reason: 'a dead control is not a way in');
+    });
+
+    testWidgets('a compact bar still skips on a horizontal fling', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: [testItem('tr-A'), testItem('tr-B')]);
+      final harness = await _pumpDeck(
+        tester,
+        repo: repo,
+        engine: FakeEngine(),
+        size: const Size(500, 900),
+        routed: true,
+      );
+      harness.play([testItem('tr-A'), testItem('tr-B', title: 'Second')]);
+      await tester.pumpAndSettle();
+
+      await tester.fling(
+        find.text('Prancing Pony Blues').first,
+        const Offset(-200, 0),
+        1000,
+      );
+      await tester.pumpAndSettle();
+      expect(harness.container.read(queueControllerProvider).currentIndex, 1);
     });
   });
 

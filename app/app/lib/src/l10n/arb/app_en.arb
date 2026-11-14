@@ -8127,10 +8127,11 @@
   },
   "musicTrackPlaysSpoken": "{count, plural, =1{played once} other{played {count} times}}",
   "@musicTrackPlaysSpoken": {
-    "description": "What a screen reader hears in place of the bare play count beside an album track's duration.",
+    "description": "The words for the play count before a music track's duration in a list: its tooltip, and what a screen reader hears in place of the bare number.",
     "placeholders": {
       "count": {
-        "type": "int"
+        "type": "int",
+        "format": "decimalPattern"
       }
     }
   },

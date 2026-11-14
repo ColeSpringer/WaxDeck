@@ -6,6 +6,8 @@
 /// another schema carries the class, and the others pair a decoder.
 library;
 
+import 'dart:convert';
+
 import 'gen/codec.g.dart';
 import 'models.dart';
 import 'wire.dart';
@@ -257,6 +259,10 @@ class PlaybackSessionInfo {
 }
 
 /// Whether the caller is authenticated, and as whom.
+///
+/// Equal to another that says the same on the wire, every field of the
+/// user included: a session read again that changed nothing is not news to
+/// what watches the session.
 class SessionState {
   const SessionState({
     required this.authenticated,
@@ -271,6 +277,15 @@ class SessionState {
   /// write files and deletions are refused for every account. False when
   /// the read carries no `server` object, as a signed-out probe does not.
   final bool serverReadOnly;
+
+  String get _wire => jsonEncode(encodeSessionState(this));
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is SessionState && other._wire == _wire;
+
+  @override
+  int get hashCode => _wire.hashCode;
 }
 
 RuleNode decodeRuleNode(Map<String, Object?> json, WireContext ctx) {

@@ -4,7 +4,7 @@ import { expect, Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Api } from '../api';
 import { T } from '../budgets';
-import { clickThrough, clickToward, openMenu, typeInto } from '../gestures';
+import { chooseFromMenu, clickThrough, clickToward, openMenu, typeInto } from '../gestures';
 import { Surface } from '../context';
 
 /// Signing in and out.
@@ -35,6 +35,17 @@ export class Auth extends Surface {
     await typeInto(page, page.locator(sem(SemanticsIds.loginPassword)), who.password);
     await page.locator(sem(SemanticsIds.loginSubmit)).click();
     await (lands ?? page.locator(sem(SemanticsIds.navRegion))).waitFor({ timeout: T.nav });
+  }
+
+  /// Sign out from the account menu, as a person does, and stop at the
+  /// door.
+  async signOut() {
+    const page = this.ctx.page;
+    await chooseFromMenu(
+      page.locator(sem(SemanticsIds.navAccount)),
+      page.locator(sem(SemanticsIds.navAccountAction('signOut'))),
+      { settled: this.submit() },
+    );
   }
 
   /// Walk in off the login screen with an invite. Settles on the form
@@ -159,6 +170,20 @@ export class Shell extends Surface {
   /// click, which is what `clickThrough` does while it waits.
   async openAccountMenu(): Promise<void> {
     await openMenu(this.account(), this.accountVerb('signOut'));
+  }
+
+  /// The open account menu's head row, which names who is signed in. It
+  /// carries no identifier and draws the name as its accessible name, so
+  /// the spec supplies the name and the row is found by role.
+  accountName(name: string): Locator {
+    return this.ctx.page.getByRole('menuitem', { name, exact: true, disabled: true });
+  }
+
+  /// Escape rather than a click on the barrier, for the bell's reason: a
+  /// stray click on a shell surface navigates.
+  async closeAccountMenu(): Promise<void> {
+    await this.ctx.page.keyboard.press('Escape');
+    await expect(this.accountVerb('signOut')).toBeHidden({ timeout: T.step });
   }
 
   /// An action on the snack bar the app has just shown - an undo, a

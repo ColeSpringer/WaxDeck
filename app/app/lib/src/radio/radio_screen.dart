@@ -435,7 +435,7 @@ class _StationTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
-    // Both controls through the card's own corner. Hand-rolled, they
+    // Both controls through the card's own corners. Hand-rolled, they
     // were a 16-pixel star and a menu button stacked at (0, 0) over a
     // circular card that draws its own overflow at (8, 8): two of the
     // same glyph eight pixels apart on a pointer, and neither aligned

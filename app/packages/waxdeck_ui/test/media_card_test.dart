@@ -455,6 +455,35 @@ void main() {
     expect(discShown(tester), isFalse, reason: 'nothing holds it revealed');
   });
 
+  testWidgets('an overflow chip coming and going leaves the action chip as '
+      'it was, focus and all', (tester) async {
+    final more = ValueNotifier<bool>(true);
+    addTearDown(more.dispose);
+    await pumpCard(
+      tester,
+      ValueListenableBuilder<bool>(
+        valueListenable: more,
+        builder: (context, on, _) => card(more: on, pin: true),
+      ),
+    );
+    final pin = find.ancestor(
+      of: find.byIcon(WaxIcons.star.regular),
+      matching: find.byType(WaxIconButton),
+    );
+    for (var i = 0; i < 4; i++) {
+      await tab(tester);
+    }
+    expect(focusedUnder(pin), isTrue);
+    final held = tester.element(pin);
+
+    for (final on in <bool>[false, true]) {
+      more.value = on;
+      await tester.pumpAndSettle();
+      expect(tester.element(pin), same(held), reason: 'overflow $on');
+      expect(focusedUnder(pin), isTrue, reason: 'overflow $on');
+    }
+  });
+
   testWidgets('a focused card whose play and menu both go keeps its ring '
       'true to its focus, and lets go when focus leaves', (tester) async {
     final parts = ValueNotifier<bool>(true);
@@ -687,11 +716,12 @@ void main() {
       expect(find.semantics.byLabel('More for One'), findsNothing);
       expect(find.semantics.byLabel('Play One'), findsNothing);
 
-      // Where the overflow sits once shown: beside the pin, in the corner.
+      // Where the overflow sits once shown: opposite the pin, in the
+      // start corner.
       final art = cover(tester);
       await tester.tapAt(
         Offset(
-          art.right - WaxSpace.s8 - WaxSpace.touchTarget * 1.5,
+          art.left + WaxSpace.s8 + WaxSpace.touchTarget / 2,
           art.top + WaxSpace.s8 + WaxSpace.touchTarget / 2,
         ),
       );
@@ -699,6 +729,193 @@ void main() {
       expect(mores, 0);
       expect(taps, 1);
       handle.dispose();
+    });
+  });
+
+  group('corner chips and the centre of the cover', () {
+    MediaCard tile(
+      double width, {
+      String? badge,
+      bool more = true,
+      bool pin = true,
+    }) => MediaCard(
+      width: width,
+      data: MediaTileData(
+        title: 'Harbour FM',
+        subtitle: 'Nightjar',
+        badge: badge,
+        shape: ArtworkShape.circle,
+      ),
+      // A station's tap and its disc both tune, so both count as a play.
+      onTap: () => plays++,
+      onPlay: () => plays++,
+      onMore: more ? () => mores++ : null,
+      action: pin
+          ? MediaCardAction(
+              glyph: WaxIcons.star,
+              label: 'Pin',
+              onPressed: () => pins++,
+            )
+          : null,
+    );
+
+    Future<void> click(
+      WidgetTester tester,
+      TestGesture mouse,
+      Offset at,
+    ) async {
+      await mouse.moveTo(at);
+      await mouse.down(at);
+      await mouse.up();
+      await tester.pump();
+    }
+
+    Finder chip(WaxGlyph glyph) => find.ancestor(
+      of: find.byIcon(glyph.regular),
+      matching: find.byType(WaxIconButton),
+    );
+
+    for (final width in <double>[136, 120]) {
+      group('at $width', () {
+        testWidgets('the top and the middle of the cover play, never the menu '
+            'or the pin', (tester) async {
+          await pumpCard(tester, tile(width));
+          final art = cover(tester);
+          final mouse = await mouseTo(tester, art.center);
+
+          for (final dy in <double>[30, 45, width / 2]) {
+            await click(tester, mouse, art.topLeft + Offset(width / 2, dy));
+          }
+          // The clear column's edges too, at the width where it is
+          // narrowest: sixteen pixels between the chips' squares, which
+          // end where the next pixel would be theirs.
+          if (width == 120) {
+            for (final dx in <double>[-7.5, 7.5]) {
+              await click(
+                tester,
+                mouse,
+                art.topLeft + Offset(width / 2 + dx, 30),
+              );
+            }
+          }
+          expect(plays, width == 120 ? 5 : 3);
+          expect(mores, 0);
+          expect(pins, 0);
+        });
+
+        for (final (more, pin) in <(bool, bool)>[
+          (true, true),
+          (false, true),
+          (true, false),
+        ]) {
+          final chips = more && pin
+              ? 'both chips'
+              : pin
+              ? 'only the pin'
+              : 'only the overflow';
+          testWidgets('with $chips, the drawn disc plays to its rim, inside '
+              'a chip\'s square', (tester) async {
+            await pumpCard(tester, tile(width, more: more, pin: pin));
+            final art = cover(tester);
+            final mouse = await mouseTo(tester, art.center);
+
+            // On each upper diagonal, inside the drawn circle.
+            const rim = 18 / 1.4142135623730951;
+            for (final dx in <double>[-rim, rim]) {
+              await click(tester, mouse, art.center + Offset(dx, -rim));
+            }
+            expect((mores, pins, plays), (0, 0, 2));
+          });
+        }
+
+        if (width == 120) {
+          for (final (more, pin) in <(bool, bool)>[
+            (true, true),
+            (false, true),
+            (true, false),
+          ]) {
+            final chips = more && pin
+                ? 'both chips'
+                : pin
+                ? 'only the pin'
+                : 'only the overflow';
+            testWidgets('with $chips, a chip drawn over the disc takes the '
+                'press inside its own circle', (tester) async {
+              await pumpCard(tester, tile(width, more: more, pin: pin));
+              final art = cover(tester);
+              final mouse = await mouseTo(tester, art.center);
+
+              // Fifteen pixels in from each chip's centre toward the
+              // cover's: inside the chip's drawn circle and the disc's.
+              for (final glyph in <WaxGlyph>[
+                if (more) WaxIcons.more,
+                if (pin) WaxIcons.star,
+              ]) {
+                final centre = tester.getCenter(chip(glyph));
+                final inward = art.center - centre;
+                final at = centre + inward / inward.distance * 15;
+                expect((at - art.center).distance, lessThan(_disc / 2));
+                await click(tester, mouse, at);
+              }
+              expect((mores, pins, plays), (more ? 1 : 0, pin ? 1 : 0, 0));
+            });
+          }
+        }
+
+        testWidgets('each chip answers at its own centre', (tester) async {
+          await pumpCard(tester, tile(width));
+          final mouse = await mouseTo(tester, cover(tester).center);
+
+          await click(tester, mouse, tester.getCenter(chip(WaxIcons.more)));
+          expect((mores, pins, plays), (1, 0, 0));
+          await click(tester, mouse, tester.getCenter(chip(WaxIcons.star)));
+          expect((mores, pins, plays), (1, 1, 0));
+        });
+
+        testWidgets('the overflow keeps the start corner and the action the '
+            'end one', (tester) async {
+          await pumpCard(tester, tile(width));
+          await mouseTo(tester, cover(tester).center);
+          final art = cover(tester);
+          final more = tester.getRect(chip(WaxIcons.more));
+          final star = tester.getRect(chip(WaxIcons.star));
+
+          expect(more.left - art.left, WaxSpace.s8);
+          expect(more.top - art.top, WaxSpace.s8);
+          expect(art.right - star.right, WaxSpace.s8);
+          expect(star.top - art.top, WaxSpace.s8);
+          // Neither reaches across the line the disc and the taps sit on.
+          expect(more.right, lessThanOrEqualTo(art.center.dx));
+          expect(star.left, greaterThanOrEqualTo(art.center.dx));
+        });
+
+        testWidgets('a badged card with one chip plays down the same '
+            'column', (tester) async {
+          await pumpCard(tester, tile(width, badge: 'Smart', pin: false));
+          final art = cover(tester);
+          final mouse = await mouseTo(tester, art.center);
+
+          for (final dy in <double>[30, 45, width / 2]) {
+            await click(tester, mouse, art.topLeft + Offset(width / 2, dy));
+          }
+          expect(plays, 3);
+          expect(mores, 0);
+        });
+      });
+    }
+
+    testWidgets('a badge beside both chips is refused in debug', (
+      tester,
+    ) async {
+      // Not through pumpCard: its column cannot hold the error box.
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildWaxTheme(),
+          localizationsDelegates: waxLocalizationsDelegates,
+          home: Scaffold(body: tile(136, badge: 'Smart')),
+        ),
+      );
+      expect(tester.takeException(), isA<AssertionError>());
     });
   });
 

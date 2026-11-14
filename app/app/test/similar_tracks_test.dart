@@ -3,6 +3,7 @@ import 'package:waxdeck/src/discovery/track_list_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'app_host.dart';
 import 'fakes.dart';
@@ -73,6 +74,31 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.itemMenuSheet(_similarPid)),
       findsOneWidget,
     );
+  });
+
+  testWidgets('a row of the answer wears its play count, from one read', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..finishedPids.add(_similarPid);
+    await pumpApp(
+      tester,
+      TrackListScreen(
+        title: 'More like this',
+        basis: MixBasis.sonic,
+        items: <ItemSummary>[
+          testItem(_similarPid, title: 'Kindred Groove'),
+          testItem(_seedPid, title: 'Seed'),
+        ],
+        idPrefix: 'similar',
+      ),
+      container: appContainer(repo: repo),
+    );
+
+    final rows = tester.widgetList<MediaListRow>(find.byType(MediaListRow));
+    expect(rows.first.data.playCount, 1);
+    expect(rows.first.data.playCountLabel, 'played once');
+    expect(rows.last.data.playCount, 0);
+    expect(repo.playStateBatches, hasLength(1));
   });
 
   testWidgets('the metadata fallback names itself on the chip', (tester) async {

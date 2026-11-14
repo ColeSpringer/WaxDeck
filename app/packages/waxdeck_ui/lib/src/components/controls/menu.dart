@@ -9,6 +9,7 @@ import '../../tokens/spacing.dart';
 import '../../tokens/typography.dart';
 import '../secondary_tap.dart';
 import 'icon_button.dart';
+import 'menu_entry.dart';
 
 /// One row of a [WaxMenuButton].
 @immutable
@@ -83,7 +84,6 @@ Future<T?> showWaxMenu<T>(
           read = true;
           onShown();
         };
-  final colors = WaxColors.of(context);
   final trigger = context.findRenderObject()! as RenderBox;
   final overlay =
       Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
@@ -103,24 +103,26 @@ Future<T?> showWaxMenu<T>(
       ),
       items: <PopupMenuEntry<T>>[
         if (items.isEmpty && emptyLabel != null)
-          PopupMenuItem<T>(
+          waxMenuEntry<T>(
             enabled: false,
             // Addressable like every other row: "the menu is open and
             // holds nothing" is a state a driver has to be able to see,
             // and it is the only one with no row to look for.
-            child: _readBy(
+            builder: (context) => _readBy(
               markRead,
               Semantics(
                 identifier: emptySemanticsId,
                 child: Text(
                   emptyLabel,
-                  style: WaxType.body.copyWith(color: colors.textTertiary),
+                  style: WaxType.body.copyWith(
+                    color: WaxColors.of(context).textTertiary,
+                  ),
                 ),
               ),
             ),
           ),
         for (final (index, item) in items.indexed)
-          PopupMenuItem<T>(
+          waxMenuEntry<T>(
             value: item.value,
             enabled: item.enabled,
             // A help line makes the row two lines tall, and a popup row
@@ -130,7 +132,7 @@ Future<T?> showWaxMenu<T>(
                 : kMinInteractiveDimension + WaxSpace.s16,
             // The first row watches for the read: an entry of its own
             // would shift every row's staggered fade.
-            child: _readBy(
+            builder: (context) => _readBy(
               index == 0 ? markRead : null,
               Semantics(
                 identifier: item.semanticsId,
@@ -142,58 +144,7 @@ Future<T?> showWaxMenu<T>(
                 label: item.help == null ? null : '${item.label}. ${item.help}',
                 child: ExcludeSemantics(
                   excluding: item.help != null,
-                  child: Row(
-                    children: <Widget>[
-                      if (item.glyph != null) ...<Widget>[
-                        WaxIcon(
-                          item.glyph!,
-                          size: 16,
-                          color: _menuInk(
-                            colors,
-                            item,
-                            on: colors.textSecondary,
-                          ),
-                        ),
-                        const SizedBox(width: WaxSpace.s12),
-                      ],
-                      Expanded(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text(
-                              item.label,
-                              style: WaxType.body.copyWith(
-                                color: _menuInk(
-                                  colors,
-                                  item,
-                                  on: colors.textPrimary,
-                                ),
-                              ),
-                            ),
-                            if (item.help != null)
-                              Text(
-                                item.help!,
-                                style: WaxType.caption.copyWith(
-                                  color: item.enabled
-                                      ? colors.textTertiary
-                                      : colors.textDisabled,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      if (item.selected)
-                        WaxIcon(
-                          WaxIcons.check,
-                          size: 16,
-                          // Greyed with the rest of the row. A full-strength
-                          // accent tick on a disabled row reads as the one
-                          // live thing in it.
-                          color: _menuInk(colors, item, on: colors.accent),
-                        ),
-                    ],
-                  ),
+                  child: _MenuRow<T>(item: item),
                 ),
               ),
             ),
@@ -204,6 +155,62 @@ Future<T?> showWaxMenu<T>(
   // A choice proves the rows were read, however soon it came.
   if (chosen != null) markRead?.call();
   return chosen;
+}
+
+/// One [WaxMenuItem]'s glyph, label, help line and check, in the theme the
+/// menu is drawn in.
+class _MenuRow<T> extends StatelessWidget {
+  const _MenuRow({required this.item});
+
+  final WaxMenuItem<T> item;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return Row(
+      children: <Widget>[
+        if (item.glyph != null) ...<Widget>[
+          WaxIcon(
+            item.glyph!,
+            size: 16,
+            color: _menuInk(colors, item, on: colors.textSecondary),
+          ),
+          const SizedBox(width: WaxSpace.s12),
+        ],
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                item.label,
+                style: WaxType.body.copyWith(
+                  color: _menuInk(colors, item, on: colors.textPrimary),
+                ),
+              ),
+              if (item.help != null)
+                Text(
+                  item.help!,
+                  style: WaxType.caption.copyWith(
+                    color: item.enabled
+                        ? colors.textTertiary
+                        : colors.textDisabled,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (item.selected)
+          WaxIcon(
+            WaxIcons.check,
+            size: 16,
+            // Greyed with the rest of the row. A full-strength accent tick
+            // on a disabled row reads as the one live thing in it.
+            color: _menuInk(colors, item, on: colors.accent),
+          ),
+      ],
+    );
+  }
 }
 
 Widget _readBy(VoidCallback? onRead, Widget row) =>

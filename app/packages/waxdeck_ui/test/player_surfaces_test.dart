@@ -2065,6 +2065,35 @@ void main() {
       expect(collapsed, 1);
     });
 
+    testWidgets('a click on a greyed control keeps the player up', (
+      tester,
+    ) async {
+      var collapsed = 0;
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 900,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            onCollapse: () => collapsed++,
+            transport: TransportCluster(
+              playing: true,
+              onPlayPause: () {},
+              onNext: () {},
+              canNext: false,
+            ),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(900, 880),
+      );
+
+      await tester.tap(find.bySemanticsLabel('Next'));
+      await tester.pump();
+      expect(collapsed, 0);
+    });
+
     group('an island that moves under a press', () {
       // The bottom region grows on demand, the way an episode's notes
       // landing lifts the whole column.

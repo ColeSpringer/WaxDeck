@@ -100,7 +100,14 @@ device, signing an account out everywhere, resetting its password, and
 disabling or deleting it all close the WebSockets those sessions hold
 at once (status 4401; reconnecting answers 401), and an open socket
 re-checks its session on every keepalive besides, so one that expired
-or vanished closes within half a minute. Media URLs
+or vanished closes within half a minute. An open client that hears the
+close, or whose reconnect is refused, reads its session again until the
+server answers, and lands on the sign-in screen or, when another account
+signed in on the same browser meanwhile, as that account, starting
+clean. A browser, which cannot tell a refused reconnect from a dead
+network and whose cookie another tab can sign in over, also reads its
+session after each failed reconnect and when its socket comes back,
+before it catches up on what it missed. Media URLs
 (streams, downloads, artwork for casts) re-check on every fetch: one
 minted under a session that has ended, an app password that was
 revoked, or an account that lost the item stops opening, though a

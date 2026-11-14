@@ -136,6 +136,7 @@ class WaxBanner extends StatelessWidget {
         ),
         child: Material(
           type: MaterialType.transparency,
+          animationDuration: Duration.zero,
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: WaxSpace.s16,

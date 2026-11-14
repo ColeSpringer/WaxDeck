@@ -610,6 +610,45 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('a click on the top of a station logo tunes in rather than '
+      'raising the menu', (tester) async {
+    final container = _container(_repo());
+    await _pumpHub(tester, container);
+
+    final art = tester.getRect(
+      find
+          .descendant(
+            of: find.ancestor(
+              of: _byId(SemanticsIds.radio('rs-1')),
+              matching: find.byType(MediaCard),
+            ),
+            matching: find.byType(ArtworkImage),
+          )
+          .first,
+    );
+    // The desktop grid's cells, where the two corner chips are widest
+    // against the logo.
+    expect(art.width, inInclusiveRange(100, 148));
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(art.center);
+    await tester.pumpAndSettle();
+
+    final top = Offset(art.center.dx, art.top + 30);
+    await mouse.moveTo(top);
+    await mouse.down(top);
+    await mouse.up();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Edit station'), findsNothing);
+    expect(container.read(radioPlaybackProvider).station?.pid, 'rs-1');
+
+    await container.read(radioPlaybackProvider.notifier).stop();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('a right-click on the tile raises the same menu', (tester) async {
     // The menu was reachable only through a 16-pixel button in the
     // tile's corner. The tile is the surface somebody will try the

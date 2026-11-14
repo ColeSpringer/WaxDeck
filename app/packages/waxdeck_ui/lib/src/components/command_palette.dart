@@ -230,6 +230,7 @@ class _WaxCommandPaletteState extends State<WaxCommandPalette> {
             ),
             child: Material(
               type: MaterialType.transparency,
+              animationDuration: Duration.zero,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
@@ -403,6 +404,7 @@ class WaxShortcutSheet extends StatelessWidget {
           ),
           child: Material(
             type: MaterialType.transparency,
+            animationDuration: Duration.zero,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,

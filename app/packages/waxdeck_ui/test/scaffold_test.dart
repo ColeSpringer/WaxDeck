@@ -91,4 +91,47 @@ void main() {
       expect(small, kToolbarHeight);
     });
   });
+
+  group('the floating button', () {
+    Future<void> pumpWith(WidgetTester tester, Widget floating) =>
+        tester.pumpWidget(
+          MaterialApp(
+            theme: buildWaxTheme(),
+            home: WaxScaffold(
+              title: 'T',
+              body: const SizedBox(height: 200),
+              floating: floating,
+            ),
+          ),
+        );
+
+    testWidgets('a button of another key swaps in as another button', (
+      tester,
+    ) async {
+      await pumpWith(tester, const Text('first', key: ValueKey<String>('a')));
+      await tester.pumpAndSettle();
+
+      await pumpWith(tester, const Text('second', key: ValueKey<String>('b')));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // The Scaffold's swap: the old one leaves as the new one arrives.
+      expect(find.text('first'), findsOneWidget);
+      expect(find.text('second'), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(find.text('first'), findsNothing);
+    });
+
+    testWidgets('a button of the same key is updated in place', (tester) async {
+      final key = GlobalKey();
+      await pumpWith(tester, Text('first', key: key));
+      await tester.pumpAndSettle();
+
+      await pumpWith(tester, Text('second', key: key));
+      await tester.pump();
+
+      expect(find.text('first'), findsNothing);
+      expect(find.text('second'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
 }

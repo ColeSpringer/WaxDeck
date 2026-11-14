@@ -536,23 +536,27 @@ class _InvitesTab extends ConsumerWidget {
         semanticsId: SemanticsIds.inviteCreate,
         onPressed: () => _create(context, ref),
       ),
-      body: AsyncBoxFace<List<Invite>>(
-        state: invites,
-        errorTitle: l10n.adminInvitesLoadError,
-        onRetry: () => ref.invalidate(invitesProvider),
-        isEmpty: (value) => value.isEmpty,
-        empty: (context, _) => Center(child: Text(l10n.adminInvitesEmpty)),
-        builder: (context, value) => ListView(
-          padding: WaxSizeClass.of(
-            context,
-          ).gutter.add(const EdgeInsets.symmetric(vertical: WaxSpace.s16)),
-          children: [
-            for (final invite in value)
-              _InviteRow(
-                invite: invite,
-                onRevoke: () => _revoke(context, ref, invite),
-              ),
-          ],
+      // The empty copy names no colour, and this Scaffold's own Material
+      // would ease it into a new theme.
+      body: WaxPlainTextStyle(
+        child: AsyncBoxFace<List<Invite>>(
+          state: invites,
+          errorTitle: l10n.adminInvitesLoadError,
+          onRetry: () => ref.invalidate(invitesProvider),
+          isEmpty: (value) => value.isEmpty,
+          empty: (context, _) => Center(child: Text(l10n.adminInvitesEmpty)),
+          builder: (context, value) => ListView(
+            padding: WaxSizeClass.of(
+              context,
+            ).gutter.add(const EdgeInsets.symmetric(vertical: WaxSpace.s16)),
+            children: [
+              for (final invite in value)
+                _InviteRow(
+                  invite: invite,
+                  onRevoke: () => _revoke(context, ref, invite),
+                ),
+            ],
+          ),
         ),
       ),
     );

@@ -762,11 +762,9 @@ void main() {
       expect(paintBefore.painter!.shouldRepaint(paintBefore.painter!), isFalse);
     });
 
-    testWidgets('a bar a listener cannot seek offers no cursor', (
-      tester,
-    ) async {
+    testWidgets('a bar a listener cannot seek shows the arrow', (tester) async {
       // A track with no length is inert, and a hand cursor over
-      // something that does nothing is a lie.
+      // something that does nothing is a lie, its holder's included.
       await _pump(
         tester,
         const SizedBox(
@@ -790,8 +788,49 @@ void main() {
                   .first,
             )
             .cursor,
-        MouseCursor.defer,
+        SystemMouseCursors.basic,
       );
+    });
+
+    testWidgets('a bar a listener cannot seek spends a press, not a scroll', (
+      tester,
+    ) async {
+      var behind = 0;
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+      await _pump(
+        tester,
+        ListView(
+          controller: controller,
+          children: <Widget>[
+            const SizedBox(height: 200),
+            GestureDetector(
+              onTap: () => behind++,
+              child: const WaxSeekBar(
+                position: Duration.zero,
+                duration: Duration.zero,
+                onSeek: null,
+              ),
+            ),
+            const SizedBox(height: 800),
+          ],
+        ),
+      );
+
+      await tester.tap(find.byType(WaxSeekBar));
+      await tester.pump();
+      expect(behind, 0, reason: 'a greyed track is not a way through');
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(WaxSeekBar)),
+      );
+      for (var i = 0; i < 5; i++) {
+        await gesture.moveBy(const Offset(0, -30));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(controller.offset, greaterThan(0), reason: 'the list scrolled');
     });
 
     testWidgets('the plain bar is a full touch target', (tester) async {

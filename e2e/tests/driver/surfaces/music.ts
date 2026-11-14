@@ -105,10 +105,11 @@ export class Music extends Surface {
     );
   }
 
-  /// The play count beside one album row's running time, drawn only on
-  /// a track the reading account has finished at least once.
+  /// The play count before the running time of the nth track row on an
+  /// album or an artist page, drawn only on a track the reading account
+  /// has finished at least once.
   trackPlays(nth: number): Locator {
-    return this.ctx.page.locator(sem(SemanticsIds.albumTrackPlays(nth)));
+    return this.ctx.page.locator(sem(SemanticsIds.trackPlays(nth)));
   }
 
   /// Open one album row's overflow and pick the facts sheet from it.

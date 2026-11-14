@@ -141,7 +141,14 @@ export function attachBuffers(page: Page): PageBuffers {
   return buffers;
 }
 
-export async function captureHangEvidence(page: Page, testInfo: TestInfo, buffers: PageBuffers) {
+/// [name] heads the files and the attachment, so a test's second page
+/// leaves its own beside the first's.
+export async function captureHangEvidence(
+  page: Page,
+  testInfo: TestInfo,
+  buffers: PageBuffers,
+  name = 'hang',
+) {
   const evidence: Record<string, unknown> = {
     test: testInfo.titlePath.join(' › '),
     status: testInfo.status,
@@ -178,7 +185,7 @@ export async function captureHangEvidence(page: Page, testInfo: TestInfo, buffer
         : shot;
       if (shot.ok) {
         const png = Buffer.from((shot.value as { data: string }).data, 'base64');
-        fs.writeFileSync(testInfo.outputPath('hang-compositor.png'), png);
+        fs.writeFileSync(testInfo.outputPath(`${name}-compositor.png`), png);
       }
     } else {
       evidence.cdpSession = cdp;
@@ -231,9 +238,9 @@ export async function captureHangEvidence(page: Page, testInfo: TestInfo, buffer
   evidence.console = buffers.console.slice(-120);
   evidence.pageErrors = buffers.errors.slice(-40);
 
-  const out = testInfo.outputPath('hang-evidence.json');
+  const out = testInfo.outputPath(`${name}-evidence.json`);
   fs.writeFileSync(out, JSON.stringify(evidence, null, 2));
-  await testInfo.attach('hang-evidence', { path: out, contentType: 'application/json' });
+  await testInfo.attach(`${name}-evidence`, { path: out, contentType: 'application/json' });
 
   // The one-line verdict, greppable from a suite log.
   const main = evidence.mainThread as ProbeResult | undefined;
@@ -244,4 +251,71 @@ export async function captureHangEvidence(page: Page, testInfo: TestInfo, buffer
     `crashed=${buffers.crashed}`,
   ].join(' ');
   console.log(`[${path.basename(testInfo.outputDir)}] ${summary}`);
+}
+
+/// How long one test may spend collecting hang evidence, however many pages
+/// it opened.
+export const EVIDENCE_BUDGET_MS = 25_000;
+
+interface Enrolled {
+  name: string;
+  take: () => Promise<void>;
+}
+
+interface TestEvidence {
+  pages: Enrolled[];
+  /// Fixed when the first collection starts, and never moved.
+  deadline?: number;
+}
+
+const enrolled = new WeakMap<TestInfo, TestEvidence>();
+
+/// Puts a page's evidence in the test's one budget: [take] is what collects
+/// it, [name] what it is called in a log line.
+export function enrolHangEvidence(testInfo: TestInfo, name: string, take: () => Promise<void>) {
+  let held = enrolled.get(testInfo);
+  if (held === undefined) enrolled.set(testInfo, (held = { pages: [] }));
+  held.pages.push({ name, take });
+}
+
+/// Collects the evidence of every page the test enrolled, together, under
+/// the test's one deadline. Each fixture that owns pages asks at its own
+/// teardown; the first to ask takes them all and the rest find nothing
+/// left, so a failing test with two frozen pages spends one budget rather
+/// than one per page and leaves the time the trace needs. A page still
+/// being probed when the deadline passes is left running and named in a
+/// line; one enrolled after it is skipped the same way.
+export async function takeHangEvidence(testInfo: TestInfo): Promise<void> {
+  if (testInfo.status !== 'timedOut' && testInfo.status !== 'failed') return;
+  const held = enrolled.get(testInfo);
+  const batch = held?.pages.splice(0) ?? [];
+  if (held === undefined || batch.length === 0) return;
+  const tag = `[${path.basename(testInfo.outputDir)}]`;
+  const names = (pages: Enrolled[]) => pages.map((page) => page.name).join(', ');
+  const seconds = EVIDENCE_BUDGET_MS / 1000;
+  held.deadline ??= Date.now() + EVIDENCE_BUDGET_MS;
+  const remaining = held.deadline - Date.now();
+  if (remaining <= 0) {
+    console.log(`${tag} hang evidence skipped for ${names(batch)}: the ${seconds}s budget for this test is spent`);
+    return;
+  }
+  const finished = new Set<Enrolled>();
+  const all = Promise.all(
+    batch.map((page) =>
+      page
+        .take()
+        .catch((e) => console.log(`hangprobe failed: ${e}`))
+        .finally(() => void finished.add(page)),
+    ),
+  );
+  let timer: NodeJS.Timeout | undefined;
+  const cutoff = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, remaining);
+  });
+  await Promise.race([all, cutoff]);
+  clearTimeout(timer);
+  const unfinished = batch.filter((page) => !finished.has(page));
+  if (unfinished.length > 0) {
+    console.log(`${tag} hang evidence for ${names(unfinished)} cut off: the ${seconds}s budget for this test ran out`);
+  }
 }

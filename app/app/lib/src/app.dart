@@ -47,6 +47,10 @@ class WaxDeckApp extends ConsumerWidget {
           captions: spec.captions,
         ),
         themeMode: spec.mode,
+        // A theme change lands in one frame. The default lerps the whole
+        // theme for 200 ms, rebuilding every widget that reads it on each
+        // frame and snapping brightness-keyed layers halfway through.
+        themeAnimationStyle: AnimationStyle.noAnimation,
         actions: waxAppActions(context),
         routerConfig: ref.watch(routerProvider),
         // The boot gate withholds the router until the session probes
@@ -160,7 +164,9 @@ class _BootGateState extends ConsumerState<_BootGate> {
       probing = bootstrap.isLoading && !bootstrap.hasValue;
     }
     if (probing) {
-      return const Scaffold(body: Center(child: WaxWordmark()));
+      return const Scaffold(
+        body: WaxPlainTextStyle(child: Center(child: WaxWordmark())),
+      );
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !_started) setState(() => _started = true);

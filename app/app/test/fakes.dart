@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -455,4 +456,86 @@ class _DeadChannel extends EventsChannel {
 EventsChannelFactory deadChannelFactory() {
   return ({required onFrame, required onDone, required subscribe}) =>
       _DeadChannel(onFrame: onFrame, onDone: onDone, subscribe: subscribe);
+}
+
+/// The network under an event socket: each connect attempt opens a
+/// [LinkedChannel] over it, which comes up while [reachable]. The server
+/// behind it answers a subscribe that presents a cursor as WaxDeck's does,
+/// with an invalidation of each topic it presents one for.
+class FakeLink {
+  bool reachable = true;
+
+  /// What each attempt fails with while set, as a server that answers the
+  /// upgrade without taking it.
+  Object? refusal;
+
+  final attempts = <LinkedChannel>[];
+
+  EventsChannelFactory get factory =>
+      ({required onFrame, required onDone, required subscribe}) {
+        final channel = LinkedChannel._(
+          this,
+          onFrame: onFrame,
+          onDone: onDone,
+          subscribe: subscribe,
+        );
+        attempts.add(channel);
+        return channel;
+      };
+}
+
+/// One socket over a [FakeLink], which goes down when the test says so,
+/// closed with the code it names.
+class LinkedChannel extends EventsChannel {
+  LinkedChannel._(
+    this._link, {
+    required super.onFrame,
+    required super.onDone,
+    required super.subscribe,
+  }) : super(url: 'ws://linked', authToken: null);
+
+  final FakeLink _link;
+  int? _code;
+  bool _up = false;
+
+  /// Every frame sent on it, in order.
+  final sent = <String>[];
+
+  @override
+  int? get closeCode => _code;
+
+  @override
+  Future<void> connect() async {
+    if (_link.refusal case final refusal?) throw refusal;
+    if (!_link.reachable) throw Exception('unreachable');
+    _up = true;
+    final subscribed = jsonDecode(await subscribe()) as Map<String, Object?>;
+    final topics = [
+      if (subscribed['catalogSince'] != null) 'catalog',
+      if (subscribed['serverSince'] != null) 'user',
+    ];
+    // Over the wire, so after the connect has resolved.
+    if (topics.isEmpty) return;
+    Timer.run(() {
+      for (final topic in topics) {
+        if (_up) onFrame(jsonEncode({'type': 'invalidate', 'topic': topic}));
+      }
+    });
+  }
+
+  @override
+  bool send(String frame) {
+    if (!_up) return false;
+    sent.add(frame);
+    return true;
+  }
+
+  @override
+  Future<void> close() async => _up = false;
+
+  void drop(int? code) {
+    _code = code;
+    _up = false;
+    onDone();
+  }
 }

@@ -136,3 +136,98 @@ export function reportScrollPacing(label: string, pacing: ScrollPacing) {
       `p95 ${pacing.p95Ms.toFixed(1)}ms, >50ms share ${(pacing.longFrameShare * 100).toFixed(1)}%`,
   );
 }
+
+// Frame pacing across a theme switch, beside the scroll measurement.
+//
+// A theme change is a burst of work and then stillness, so the question is
+// how the frames inside the burst are spaced: a switch that rebuilds the
+// whole tree every frame for a fade shows up as long intervals, and one that
+// lands in a single frame as a single long one. The window starts just
+// before the change is made, so it includes the gesture that makes it.
+
+export interface ThemeSwitchPacing {
+  /// Frames drawn inside the window.
+  frames: number;
+  medianMs: number;
+  /// The longest gap between two frames inside the window.
+  worstMs: number;
+}
+
+export interface ThemeSwitchOptions {
+  windowMs?: number;
+}
+
+interface StampCollector {
+  __stamps: number[];
+  __stampsStop: boolean;
+  __stampsRun: number;
+}
+
+// Absolute frame times rather than deltas, so the window can be cut out
+// afterwards. Own globals and run counter: this must not share state with
+// the scroll collector above.
+const START_STAMPS = () => {
+  const w = window as unknown as StampCollector;
+  const run = (w.__stampsRun = (w.__stampsRun ?? 0) + 1);
+  w.__stamps = [];
+  w.__stampsStop = false;
+  const tick = (now: number) => {
+    if (w.__stampsRun !== run) return;
+    w.__stamps.push(now);
+    if (!w.__stampsStop) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  return performance.now();
+};
+
+const STOP_STAMPS = () => {
+  const w = window as unknown as StampCollector;
+  w.__stampsStop = true;
+  return w.__stamps;
+};
+
+// Runs [change] - the one action that switches the theme - and reports how
+// the frames paced for [windowMs] from just before it. The caller has the
+// surface up and any menu open already, so only the switch is measured.
+export async function measureThemeSwitchPacing(
+  page: Page,
+  change: () => Promise<void>,
+  options: ThemeSwitchOptions = {},
+): Promise<ThemeSwitchPacing> {
+  const { windowMs = 400 } = options;
+
+  const start: number = await page.evaluate(START_STAMPS);
+  const startedAt = Date.now();
+  await change();
+  const remaining = windowMs - (Date.now() - startedAt);
+  if (remaining > 0) await page.waitForTimeout(remaining);
+  const stamps: number[] = await page.evaluate(STOP_STAMPS);
+
+  // Each frame's interval is the gap from the one before it, which may
+  // itself fall before the window.
+  const intervals: number[] = [];
+  for (let i = 1; i < stamps.length; i++) {
+    if (stamps[i] >= start && stamps[i] <= start + windowMs) {
+      intervals.push(stamps[i] - stamps[i - 1]);
+    }
+  }
+  if (intervals.length === 0) {
+    throw new Error(
+      `theme switch pacing collected no frames in ${windowMs}ms - the page ` +
+        `rendered nothing to measure`,
+    );
+  }
+  const sorted = [...intervals].sort((a, b) => a - b);
+  return {
+    frames: intervals.length,
+    medianMs: sorted[Math.floor(sorted.length / 2)],
+    worstMs: sorted[sorted.length - 1],
+  };
+}
+
+export function reportThemeSwitchPacing(label: string, pacing: ThemeSwitchPacing) {
+  console.log(
+    `  ${label.padEnd(22)} ${pacing.frames} frames, median ${pacing.medianMs.toFixed(1)}ms, ` +
+      `worst ${pacing.worstMs.toFixed(1)}ms`,
+  );
+}

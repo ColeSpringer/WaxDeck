@@ -281,6 +281,7 @@ class HoverPlayDisc extends StatelessWidget {
         // wherever the disc stands.
         child: Material(
           type: MaterialType.transparency,
+          animationDuration: Duration.zero,
           child: InkResponse(
             onTap: onPlay,
             // The whole square presses, corners too: its semantics node is

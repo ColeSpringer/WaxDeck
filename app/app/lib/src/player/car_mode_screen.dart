@@ -39,14 +39,16 @@ class CarModeScreen extends ConsumerWidget {
       child: KeepAwake(
         child: NowPlayingView(
           idle: (context) => Scaffold(
-            body: SafeArea(
-              child: EmptyState(
-                glyph: WaxIcons.headphones,
-                title: l10n.playerNothingPlaying,
-                actionLabel: l10n.playerLeaveCarMode,
-                actionSemanticsId: SemanticsIds.carExit,
-                onAction: () => leavePlayer(context),
-                semanticsId: SemanticsIds.carSurface,
+            body: WaxPlainTextStyle(
+              child: SafeArea(
+                child: EmptyState(
+                  glyph: WaxIcons.headphones,
+                  title: l10n.playerNothingPlaying,
+                  actionLabel: l10n.playerLeaveCarMode,
+                  actionSemanticsId: SemanticsIds.carExit,
+                  onAction: () => leavePlayer(context),
+                  semanticsId: SemanticsIds.carSurface,
+                ),
               ),
             ),
           ),

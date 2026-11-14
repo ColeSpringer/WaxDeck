@@ -383,6 +383,9 @@ void main() {
       pumpBeforeTest: _pumpAnimated,
       builder: () => GoldenTestGroup(
         columns: 2,
+        // A counted row may not be asked its intrinsic size, which an
+        // intrinsic column width asks: the cell is the scenario's width.
+        columnWidthBuilder: (_) => const FixedColumnWidth(444),
         children: <Widget>[
           for (final variant in <WaxThemeVariant>[
             WaxThemeVariant.dark,
@@ -425,16 +428,16 @@ void main() {
                             trailingText: '32:00',
                           ),
                         ),
-                        // A count beside the duration, which is the one
-                        // row with two right-hand readouts: the baseline
-                        // is what says they sit apart rather than
-                        // running together into one number.
+                        // A play count before the duration: the glyph
+                        // and the brighter mono face are what keep it from
+                        // reading as a second running time.
                         MediaListRow(
                           data: const MediaTileData(
                             title: 'Harbour Lights',
                             subtitle: 'Nightjar',
                             trailingText: '4:18',
-                            trailingDetail: '12',
+                            playCount: 12,
+                            playCountLabel: 'played 12 times',
                           ),
                           leadingIndex: 5,
                           onTap: () {},
@@ -445,6 +448,64 @@ void main() {
                   ),
                 ),
               ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'a play count gives way to the title on a narrow row',
+      fileName: 'list_rows_play_count',
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        // For list_rows' reason: the widest row and the frame around it.
+        columnWidthBuilder: (_) => const FixedColumnWidth(424),
+        children: <Widget>[
+          for (final variant in <WaxThemeVariant>[
+            WaxThemeVariant.dark,
+            WaxThemeVariant.light,
+          ])
+            GoldenTestScenario(
+              name: variant.name,
+              child: _themed(
+                variant,
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    // Wide: the glyph and a compact count, after the
+                    // star and the downloaded mark.
+                    for (final (width, plays) in <(double, int)>[
+                      (400, 1234),
+                      // What a phone shows: the glyph and the number.
+                      (320, 12),
+                      // Still drawn whole at the floor.
+                      (280, 12),
+                      // Below it the count goes, glyph and number
+                      // together; the title, the duration and the
+                      // overflow stay.
+                      (270, 12),
+                    ])
+                      SizedBox(
+                        width: width,
+                        child: MediaListRow(
+                          data: MediaTileData(
+                            title: 'Harbour Lights at the end of the pier',
+                            subtitle: 'Nightjar',
+                            trailingText: '4:18',
+                            starred: width == 400,
+                            downloaded: width == 400,
+                            playCount: plays,
+                            playCountLabel: 'played $plays times',
+                          ),
+                          leadingIndex: 5,
+                          onTap: () {},
+                          onMore: () {},
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -572,30 +633,49 @@ void main() {
       builder: () => GoldenTestGroup(
         columns: 2,
         children: <Widget>[
-          for (final badged in <bool>[false, true])
+          for (final kind in <String>['plain', 'badged', 'station'])
             for (final variant in <WaxThemeVariant>[
               WaxThemeVariant.dark,
               WaxThemeVariant.light,
             ])
               GoldenTestScenario(
-                name: badged ? '${variant.name}, badged' : variant.name,
+                name: kind == 'plain' ? variant.name : '${variant.name}, $kind',
                 child: _themed(
                   variant,
                   SizedBox(
                     width: 140,
                     // Badged: the scrim falls under every badge, which
-                    // stays legible over it.
+                    // stays legible over it. Station: both chips, the
+                    // overflow opposite the star and the middle clear
+                    // for the disc, at the radio grid's own width.
                     child: MediaCard(
                       data: MediaTileData(
-                        title: 'Salt Harbour',
-                        subtitle: 'Nightjar',
-                        badge: badged ? 'New' : null,
-                        unplayed: badged,
-                        downloaded: badged,
+                        title: kind == 'station'
+                            ? 'Coastal FM'
+                            : 'Salt Harbour',
+                        subtitle: kind == 'station' ? 'Ambient' : 'Nightjar',
+                        badge: kind == 'badged' ? 'New' : null,
+                        unplayed: kind == 'badged',
+                        downloaded: kind == 'badged',
+                        shape: kind == 'station'
+                            ? ArtworkShape.circle
+                            : ArtworkShape.square,
+                        domain: kind == 'station'
+                            ? WaxDomain.radio
+                            : WaxDomain.music,
                       ),
-                      playing: badged,
-                      width: 120,
+                      playing: kind == 'badged',
+                      width: kind == 'station' ? 136 : 120,
                       onPlay: () {},
+                      onMore: kind == 'station' ? () {} : null,
+                      action: kind == 'station'
+                          ? MediaCardAction(
+                              glyph: WaxIcons.star,
+                              label: 'Unpin Coastal FM',
+                              active: true,
+                              onPressed: () {},
+                            )
+                          : null,
                     ),
                   ),
                 ),

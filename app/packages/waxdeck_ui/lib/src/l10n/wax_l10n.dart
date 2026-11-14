@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart' show NumberFormat;
 import 'package:material_ui/material_ui.dart' show GlobalMaterialLocalizations;
 
 import 'gen/wax_localizations.dart';
@@ -106,3 +107,25 @@ extension WaxProportions on WaxLocalizations {
   String spellPercent(double fraction) =>
       percentOf((fraction.clamp(0.0, 1.0) * 100).round());
 }
+
+/// Counts for a narrow readout.
+extension WaxCounts on WaxLocalizations {
+  /// Digits below a thousand, then CLDR's compact form to two significant
+  /// digits ("1.2K", "12K", "1,2 mil"), so a count beside a running time
+  /// stays a few characters wide however large it grows.
+  String formatCount(int count) => count < 1000
+      ? _decimalFormat(localeName).format(count)
+      : _compactFormat(localeName).format(count);
+}
+
+/// One pattern per locale: these are drawn inside list builders, and a
+/// `NumberFormat` parses its pattern when it is made.
+final Map<String, NumberFormat> _decimalCache = <String, NumberFormat>{};
+final Map<String, NumberFormat> _compactCache = <String, NumberFormat>{};
+
+NumberFormat _decimalFormat(String locale) =>
+    _decimalCache[locale] ??= NumberFormat.decimalPattern(locale);
+
+NumberFormat _compactFormat(String locale) =>
+    _compactCache[locale] ??= NumberFormat.compact(locale: locale)
+      ..significantDigits = 2;

@@ -314,6 +314,43 @@ void main() {
     expect(find.text('Show all'), findsNothing);
   });
 
+  testWidgets('track hits wear their play counts from one read, and opening '
+      'the group reads nothing again', (tester) async {
+    // Heard, but not a track: the episode is never asked about.
+    final repository = FakeRepository()
+      ..searchResults['night'] = _results(
+        artists: <SearchHit>[_hit('artist', 'Nightjar')],
+        tracks: <SearchHit>[
+          for (var i = 0; i < 8; i++) _hit('track', 'Track $i'),
+        ],
+        episodes: <SearchHit>[_hit('episode', 'Nightjar Weekly')],
+      )
+      ..finishedPids.addAll(<String>[
+        'track-Track 1',
+        'track-Track 6',
+        'episode-Nightjar Weekly',
+      ]);
+    await _pump(tester, repository, initialQuery: 'night');
+
+    final trackPids = <String>[for (var i = 0; i < 8; i++) 'track-Track $i'];
+    expect(repository.playStateBatches, <List<String>>[trackPids]);
+    MediaTileData row(String title) => tester
+        .widgetList<MediaListRow>(find.byType(MediaListRow))
+        .singleWhere((row) => row.data.title == title)
+        .data;
+    expect(row('Track 1').playCount, 1);
+    expect(row('Track 1').playCountLabel, 'played once');
+    expect(row('Track 0').playCount, 0);
+    expect(row('Nightjar').playCount, isNull);
+    expect(row('Nightjar Weekly').playCount, isNull);
+
+    await tester.tap(find.text('Show all'));
+    await tester.pumpAndSettle();
+
+    expect(row('Track 6').playCount, 1);
+    expect(repository.playStateBatches, hasLength(1));
+  });
+
   testWidgets('a filter chip narrows to the groups it covers', (tester) async {
     final repository = FakeRepository()
       ..searchResults['night'] = _results(

@@ -30,6 +30,29 @@ String? _length(int durationMs) =>
 
 // Tracks.
 
+/// A music track's play count as its row carries it: the number, and the
+/// words its tooltip and its node say. Zero on a counted list's unplayed
+/// track, so the row keeps its shape when the first play lands; nothing
+/// where the list counts nothing ([count] null) or on any other medium, so
+/// a playlist's episode or a book part draws no count beside the tracks
+/// that do.
+typedef _Plays = ({int count, String? label, String? semanticsId});
+
+_Plays? _plays(
+  MediaType mediaType,
+  int? count,
+  AppLocalizations l10n,
+  String? semanticsId,
+) => count == null || mediaType != MediaType.music
+    ? null
+    : count > 0
+    ? (
+        count: count,
+        label: l10n.musicTrackPlaysSpoken(count),
+        semanticsId: semanticsId,
+      )
+    : (count: 0, label: null, semanticsId: null);
+
 /// What every row that draws an item has in common: the title, the length,
 /// and the hue and shape of the item's medium. A row never assumes music: an
 /// artist's whole library holds books, a playlist holds any medium, and a
@@ -40,9 +63,7 @@ MediaTileData _itemRow(
   String? subtitle,
   ArtworkStore? store,
   String? semanticsId,
-  String? trailingDetail,
-  String? trailingDetailSpoken,
-  String? trailingDetailSemanticsId,
+  _Plays? plays,
 }) => MediaTileData(
   title: item.title,
   subtitle: subtitle,
@@ -50,61 +71,67 @@ MediaTileData _itemRow(
   domain: waxDomainOf(item.mediaType),
   shape: waxShapeOf(item.mediaType),
   trailingText: _length(item.durationMs),
-  trailingDetail: trailingDetail,
-  trailingDetailSpoken: trailingDetailSpoken,
-  trailingDetailSemanticsId: trailingDetailSemanticsId,
+  playCount: plays?.count,
+  playCountLabel: plays?.label,
+  playCountSemanticsId: plays?.semanticsId,
   semanticsId: semanticsId,
 );
 
 /// An item of any medium in a row: the artist under the title, the cover
-/// and the length. What a listing, a playlist's members and a mix's answers
-/// are drawn as.
+/// and the length, and a track's [playCount] on a list that counts them.
+/// What a listing, a playlist's members and a mix's answers are drawn as.
 MediaTileData itemRowTile(
   ItemSummary item, {
+  required AppLocalizations l10n,
   required ArtworkStore store,
   required String semanticsId,
+  int? playCount,
 }) => _itemRow(
   item,
   subtitle: item.artist,
   store: store,
   semanticsId: semanticsId,
+  plays: _plays(item.mediaType, playCount, l10n, null),
 );
 
 /// A track on its album's own screen.
 ///
 /// The album's artist is in the header; a row names its own only where it
 /// differs, which is what makes a compilation readable and an ordinary
-/// release quiet. The detail column is the caller's, since only the album
-/// screen reads play counts.
+/// release quiet.
 MediaTileData trackRowTile(
   ItemSummary track, {
+  required AppLocalizations l10n,
   required String? albumArtist,
   required String semanticsId,
-  String? trailingDetail,
-  String? trailingDetailSpoken,
-  String? trailingDetailSemanticsId,
+  int? playCount,
+  String? playCountSemanticsId,
 }) => _itemRow(
   track,
   subtitle: track.artist == albumArtist ? null : track.artist,
-  trailingDetail: trailingDetail,
-  trailingDetailSpoken: trailingDetailSpoken,
-  trailingDetailSemanticsId: trailingDetailSemanticsId,
   semanticsId: semanticsId,
+  plays: _plays(track.mediaType, playCount, l10n, playCountSemanticsId),
 );
 
 /// A track in an artist's top list, captioned with the album it is on.
 MediaTileData topTrackRowTile(
   ItemSummary track, {
+  required AppLocalizations l10n,
   required ArtworkStore store,
   required String semanticsId,
+  int? playCount,
+  String? playCountSemanticsId,
 }) => _itemRow(
   track,
   subtitle: track.album,
   store: store,
   semanticsId: semanticsId,
+  plays: _plays(track.mediaType, playCount, l10n, playCountSemanticsId),
 );
 
-/// One queued entry, named by whatever the app knows about its pid.
+/// One queued entry, named by whatever the app knows about its pid. No
+/// play count: a queue is what is about to play, not a list to choose
+/// from.
 ///
 /// An unresolved row still says where it sits and still answers a tap: a
 /// queue that cannot be driven until every title has landed is worse than
@@ -116,7 +143,7 @@ MediaTileData queueRowTile(
   required String semanticsId,
 }) => item == null
     ? MediaTileData(title: l10n.commonLoadingTitle, semanticsId: semanticsId)
-    : itemRowTile(item, store: store, semanticsId: semanticsId);
+    : itemRowTile(item, l10n: l10n, store: store, semanticsId: semanticsId);
 
 /// A match in a rule's preview: no cover and no handle, a list to read.
 MediaTileData rulePreviewTile(ItemSummary item) =>
@@ -833,24 +860,34 @@ MediaTileData stationTile(
 MediaTileData recentSearchTile(String query, {required String semanticsId}) =>
     MediaTileData(title: query, semanticsId: semanticsId);
 
-/// A hit in the group [kind]; an artist reads as a disc.
+/// A hit in the group [kind]; an artist reads as a disc, and a track
+/// carries its [playCount].
 MediaTileData searchHitTile(
   SearchHit hit,
   SearchHitKind kind, {
+  required AppLocalizations l10n,
   required String semanticsId,
-}) => MediaTileData(
-  title: hit.title,
-  subtitle: hit.subtitle,
-  shape: kind == SearchHitKind.artists
-      ? ArtworkShape.circle
-      : ArtworkShape.square,
-  domain: switch (kind) {
-    SearchHitKind.episodes => WaxDomain.podcasts,
-    SearchHitKind.books => WaxDomain.audiobooks,
-    _ => WaxDomain.music,
-  },
-  semanticsId: semanticsId,
-);
+  int? playCount,
+}) {
+  final plays = kind == SearchHitKind.tracks
+      ? _plays(MediaType.music, playCount, l10n, null)
+      : null;
+  return MediaTileData(
+    title: hit.title,
+    subtitle: hit.subtitle,
+    shape: kind == SearchHitKind.artists
+        ? ArtworkShape.circle
+        : ArtworkShape.square,
+    domain: switch (kind) {
+      SearchHitKind.episodes => WaxDomain.podcasts,
+      SearchHitKind.books => WaxDomain.audiobooks,
+      _ => WaxDomain.music,
+    },
+    playCount: plays?.count,
+    playCountLabel: plays?.label,
+    semanticsId: semanticsId,
+  );
+}
 
 // Stats.
 

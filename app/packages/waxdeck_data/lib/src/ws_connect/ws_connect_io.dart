@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'upgrade_refused.dart';
+
 /// How long an upgrade may take before it is called a failure, and how
 /// often the socket proves the peer is still there afterwards.
 ///
@@ -16,7 +18,8 @@ const _connectDeadline = Duration(seconds: 10);
 const _pingInterval = Duration(seconds: 30);
 
 /// Native connector: the bearer token authenticates the upgrade via the
-/// Authorization header.
+/// Authorization header. An upgrade the server answers with a status
+/// throws [UpgradeRefused] naming it.
 /// [connectDeadline] is a test hook: the suite proves the half-open case
 /// against a socket that accepts and never upgrades, and waiting the real
 /// budget out would make that a ten-second test.
@@ -29,16 +32,22 @@ Future<WebSocketChannel> connectWebSocket(
     url,
     headers: {if (authToken != null) 'Authorization': 'Bearer $authToken'},
   );
-  final socket = await pending.timeout(
-    connectDeadline,
-    onTimeout: () {
-      // The future is abandoned, not cancelled - there is no cancelling
-      // it - so the socket it may still produce is closed rather than
-      // left open with nobody reading it.
-      unawaited(pending.then((late) => late.close()).catchError((_) {}));
-      throw TimeoutException('the sync channel did not finish connecting');
-    },
-  );
+  final WebSocket socket;
+  try {
+    socket = await pending.timeout(
+      connectDeadline,
+      onTimeout: () {
+        // The future is abandoned, not cancelled - there is no cancelling
+        // it - so the socket it may still produce is closed rather than
+        // left open with nobody reading it.
+        unawaited(pending.then((late) => late.close()).catchError((_) {}));
+        throw TimeoutException('the sync channel did not finish connecting');
+      },
+    );
+  } on WebSocketException catch (e) {
+    if (e.httpStatusCode case final status?) throw UpgradeRefused(status);
+    rethrow;
+  }
   socket.pingInterval = _pingInterval;
   return IOWebSocketChannel(socket);
 }

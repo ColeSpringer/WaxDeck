@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../icons/wax_icon.dart';
+import '../../theme/theme_landing.dart';
 import '../../tokens/colors.dart';
 import '../../tokens/radii.dart';
 import '../tooltip.dart';
@@ -45,21 +46,27 @@ class WaxFab extends StatelessWidget {
       borderRadius: WaxRadius.pill,
       child: WaxTooltip(
         message: label,
-        child: Material(
-          color: enabled ? colors.accent : colors.surface2,
-          shape: const CircleBorder(),
-          elevation: enabled ? 3 : 0,
-          child: InkWell(
-            onTap: onPressed,
-            customBorder: const CircleBorder(),
-            child: SizedBox(
-              width: size,
-              height: size,
-              child: Center(
-                child: WaxIcon(
-                  glyph,
-                  size: 24,
-                  color: enabled ? colors.onAccent : colors.textDisabled,
+        // The lift eases when the button is enabled or not, and lands with
+        // the theme, which would otherwise ease its shadow.
+        child: WaxThemeLanding(
+          duration: kThemeChangeDuration,
+          builder: (context, duration) => Material(
+            color: enabled ? colors.accent : colors.surface2,
+            shape: const CircleBorder(),
+            elevation: enabled ? 3 : 0,
+            animationDuration: duration,
+            child: InkWell(
+              onTap: onPressed,
+              customBorder: const CircleBorder(),
+              child: SizedBox(
+                width: size,
+                height: size,
+                child: Center(
+                  child: WaxIcon(
+                    glyph,
+                    size: 24,
+                    color: enabled ? colors.onAccent : colors.textDisabled,
+                  ),
                 ),
               ),
             ),

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/physics.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -16,6 +15,7 @@ import 'artwork.dart';
 import 'backdrop.dart';
 import 'controls.dart';
 import 'semantics_slots.dart';
+import 'swipe_devices.dart';
 import 'view_data.dart';
 
 /// The transport row.
@@ -118,6 +118,7 @@ class TransportCluster extends StatelessWidget {
             child: Material(
               color: colors.accent,
               shape: const CircleBorder(),
+              animationDuration: Duration.zero,
               child: InkWell(
                 customBorder: const CircleBorder(),
                 onTap: onPlayPause,
@@ -527,6 +528,7 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
       // this in a Scaffold would get its canvas over the backdrop.
       child: Material(
         type: MaterialType.transparency,
+        animationDuration: Duration.zero,
         child: Semantics(
           identifier: widget.ids.surface,
           container: true,
@@ -564,7 +566,7 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
                   excludeFromSemantics: true,
                   // A finger's and a trackpad's pull, not a mouse's: that
                   // is a selection of the text under the face.
-                  supportedDevices: _pullDevices,
+                  supportedDevices: swipeDevices,
                   onVerticalDragStart: widget.onCollapse == null
                       ? null
                       : _dragStart,
@@ -586,11 +588,6 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
       ),
     );
   }
-
-  /// Every pointer that may pull the face down: all but a mouse.
-  static final Set<PointerDeviceKind> _pullDevices = PointerDeviceKind.values
-      .where((kind) => kind != PointerDeviceKind.mouse)
-      .toSet();
 
   /// The gutter each header control keeps around itself.
   ///

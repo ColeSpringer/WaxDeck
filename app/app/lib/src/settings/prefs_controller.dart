@@ -522,8 +522,9 @@ class PrefsController extends AsyncNotifier<Prefs> {
 
 /// Awaited by the nine places that read a preference before acting, so
 /// a refusal has to settle rather than spend thirteen seconds reporting
-/// AsyncLoading: a 401 here means signed out, which the router acts on,
-/// and a 4xx will not become a document on the fourth ask.
+/// AsyncLoading: a 4xx will not become a document on the fourth ask. A
+/// 401 here signs nobody out; a session that ended reaches the screen
+/// through the event socket and the session read it starts.
 final prefsControllerProvider = AsyncNotifierProvider<PrefsController, Prefs>(
   PrefsController.new,
   retry: retryUnlessRefused,

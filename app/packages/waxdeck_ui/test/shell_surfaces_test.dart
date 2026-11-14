@@ -1,3 +1,6 @@
+import 'dart:ui' show PointerDeviceKind;
+
+import 'package:flutter/rendering.dart' show RendererBinding;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -395,6 +398,308 @@ void main() {
       await tester.longPress(find.text('Salt Harbour'));
       await tester.pump();
       expect(held, 1);
+    });
+
+    group('the wide bar', () {
+      var seeks = 0;
+      Duration? lastSeek;
+      var held = 0;
+      var queued = 0;
+      var expanded = 0;
+      Future<TestGesture> pumpWide(
+        WidgetTester tester, {
+        bool seekable = true,
+        bool level = false,
+      }) async {
+        seeks = held = queued = expanded = 0;
+        lastSeek = null;
+        await _pump(
+          tester,
+          DeckBar(
+            now: level
+                ? const NowPlayingData(
+                    title: 'Salt Harbour',
+                    subtitle: 'Nightjar',
+                    position: Duration(minutes: 2, seconds: 41),
+                    duration: Duration(minutes: 4, seconds: 5),
+                    playing: true,
+                    volume: 0.5,
+                  )
+                : _music,
+            sizeClass: WaxSizeClass.wide,
+            // No shuffle: it is drawn greyed.
+            actions: DeckBarActions(
+              onPlayPause: () {},
+              onExpand: () => expanded++,
+              onSeek: seekable
+                  ? (to) {
+                      seeks++;
+                      lastSeek = to;
+                    }
+                  : null,
+              onVolume: level ? (_) {} : null,
+              onLongPress: () => held++,
+              onQueue: () => queued++,
+            ),
+          ),
+        );
+        final mouse = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+          pointer: 1,
+        );
+        addTearDown(mouse.removePointer);
+        await mouse.addPointer(location: Offset.zero);
+        return mouse;
+      }
+
+      Future<MouseCursor?> cursorAt(
+        WidgetTester tester,
+        TestGesture mouse,
+        Offset at,
+      ) async {
+        await mouse.moveTo(at);
+        await tester.pump();
+        return RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1);
+      }
+
+      testWidgets('points a hand wherever a click opens the player', (
+        tester,
+      ) async {
+        final mouse = await pumpWide(tester);
+        final transport = tester.getRect(
+          find
+              .ancestor(
+                of: find.bySemanticsLabel('Pause'),
+                matching: find.byType(Row),
+              )
+              .first,
+        );
+        expect(
+          await cursorAt(
+            tester,
+            mouse,
+            tester.getCenter(find.text('Salt Harbour').first),
+          ),
+          SystemMouseCursors.click,
+        );
+        expect(
+          await cursorAt(
+            tester,
+            mouse,
+            Offset(transport.right + 24, transport.center.dy),
+          ),
+          SystemMouseCursors.click,
+        );
+        expect(
+          await cursorAt(
+            tester,
+            mouse,
+            tester.getCenter(find.bySemanticsLabel('Shuffle off')),
+          ),
+          SystemMouseCursors.basic,
+          reason: 'a greyed control does nothing, and says so',
+        );
+      });
+
+      testWidgets('a click that drifts still presses the control', (
+        tester,
+      ) async {
+        // A mouse's slop is a pixel, so a bar-wide swipe would take
+        // every click that moved at all from the control under it.
+        final mouse = await pumpWide(tester);
+        await mouse.moveTo(tester.getCenter(find.bySemanticsLabel('Queue')));
+        await mouse.down(tester.getCenter(find.bySemanticsLabel('Queue')));
+        await mouse.moveBy(const Offset(0, 3));
+        await mouse.up();
+        await tester.pump();
+        expect(queued, 1);
+      });
+
+      testWidgets('a held press on the track still scrubs', (tester) async {
+        // A hold anywhere on the bar would beat a seek that waited
+        // before it moved.
+        final mouse = await pumpWide(tester);
+        final track = tester.getCenter(find.bySemanticsLabel('Position'));
+        await mouse.moveTo(track);
+        await mouse.down(track);
+        await tester.pump(const Duration(seconds: 1));
+        await mouse.moveBy(const Offset(40, 0));
+        await tester.pump();
+        await mouse.up();
+        await tester.pump();
+        expect(seeks, greaterThan(0));
+        expect(held, 0);
+      });
+
+      testWidgets('a track it cannot seek shows the arrow and opens nothing', (
+        tester,
+      ) async {
+        final mouse = await pumpWide(tester, seekable: false);
+        final track = tester.getCenter(find.bySemanticsLabel('Position'));
+        expect(
+          await cursorAt(tester, mouse, track),
+          SystemMouseCursors.basic,
+          reason: 'a greyed track does nothing, and says so',
+        );
+        await mouse.down(track);
+        await mouse.up();
+        await tester.pump();
+        expect(expanded, 0, reason: 'a greyed track is not a way in');
+      });
+
+      testWidgets('a hold on what is playing opens the item menu', (
+        tester,
+      ) async {
+        await pumpWide(tester);
+        await tester.longPress(find.text('Salt Harbour').first);
+        await tester.pump();
+        expect(held, 1);
+        expect(expanded, 0);
+      });
+
+      // Where a swipe up is a scroll or a scrub and not a way in: the
+      // blank band beside the transport, and both tracks.
+      final scrolls = <String, Offset Function(WidgetTester)>{
+        'the blank band beside the transport': (tester) {
+          final transport = tester.getRect(
+            find
+                .ancestor(
+                  of: find.bySemanticsLabel('Pause'),
+                  matching: find.byType(Row),
+                )
+                .first,
+          );
+          return Offset(transport.right + 24, transport.center.dy);
+        },
+        'the seek track': (tester) =>
+            tester.getCenter(find.bySemanticsLabel('Position')),
+        'the volume slider': (tester) =>
+            tester.getCenter(find.bySemanticsLabel('Volume')),
+      };
+      for (final MapEntry(key: name, value: spot) in scrolls.entries) {
+        testWidgets('a touch fling up over $name opens nothing', (
+          tester,
+        ) async {
+          await pumpWide(tester, level: true);
+          await tester.flingFrom(spot(tester), const Offset(0, -80), 1000);
+          await tester.pump();
+          expect(expanded, 0);
+        });
+
+        testWidgets('a trackpad swipe up over $name opens nothing', (
+          tester,
+        ) async {
+          await pumpWide(tester, level: true);
+          await tester.trackpadFlingFrom(
+            spot(tester),
+            const Offset(0, -80),
+            1000,
+          );
+          await tester.pump();
+          expect(expanded, 0, reason: 'a two-finger scroll is not a way in');
+        });
+      }
+
+      testWidgets('a touch drag that starts steeply up the seek track seeks', (
+        tester,
+      ) async {
+        await pumpWide(tester);
+        final start = tester.getCenter(find.bySemanticsLabel('Position'));
+        final finger = await tester.startGesture(start);
+        var at = Duration.zero;
+        Future<void> move(Offset by) async {
+          at += const Duration(milliseconds: 16);
+          await finger.moveBy(by, timeStamp: at);
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+
+        // More up than along, then along the track for long enough that the
+        // release carries no upward speed.
+        await move(const Offset(4, -24));
+        for (var i = 0; i < 12; i++) {
+          await move(const Offset(8, 0));
+        }
+        await finger.up();
+        await tester.pump();
+        expect(expanded, 0, reason: 'the player stayed shut');
+        expect(seeks, 1);
+        expect(
+          lastSeek,
+          greaterThan(_music.duration * 0.6),
+          reason: 'the track followed the finger to the right of the middle',
+        );
+      });
+
+      testWidgets('a touch fling up over what is playing opens the player', (
+        tester,
+      ) async {
+        await pumpWide(tester);
+        await tester.flingFrom(
+          tester.getCenter(find.text('Salt Harbour').first),
+          const Offset(0, -80),
+          1000,
+        );
+        await tester.pump();
+        expect(expanded, 1);
+      });
+
+      testWidgets('a trackpad swipe up over what is playing opens the player', (
+        tester,
+      ) async {
+        await pumpWide(tester);
+        await tester.trackpadFlingFrom(
+          tester.getCenter(find.text('Salt Harbour').first),
+          const Offset(0, -80),
+          1000,
+        );
+        await tester.pump();
+        expect(expanded, 1);
+      });
+
+      testWidgets(
+        'a mouse drag up opens nothing, over the title or beside it',
+        (tester) async {
+          await pumpWide(tester);
+          await tester.flingFrom(
+            tester.getCenter(find.text('Salt Harbour').first),
+            const Offset(0, -80),
+            1000,
+            deviceKind: PointerDeviceKind.mouse,
+          );
+          await tester.pump();
+          await tester.flingFrom(
+            scrolls.values.first(tester),
+            const Offset(0, -80),
+            1000,
+            deviceKind: PointerDeviceKind.mouse,
+          );
+          await tester.pump();
+          expect(expanded, 0, reason: 'a mouse swipes nothing');
+        },
+      );
+    });
+
+    testWidgets('a compact bar opens on a touch swipe up', (tester) async {
+      var expanded = 0;
+      await _pump(
+        tester,
+        DeckBar(
+          now: _music,
+          sizeClass: WaxSizeClass.compact,
+          actions: DeckBarActions(
+            onPlayPause: () {},
+            onExpand: () => expanded++,
+          ),
+        ),
+        size: const Size(420, 800),
+      );
+      await tester.flingFrom(
+        tester.getCenter(find.text('Salt Harbour').first),
+        const Offset(0, -60),
+        1000,
+      );
+      await tester.pump();
+      expect(expanded, 1);
     });
   });
 }

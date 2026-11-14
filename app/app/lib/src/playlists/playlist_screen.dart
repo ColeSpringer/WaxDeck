@@ -11,6 +11,7 @@ import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
 import '../media_view.dart';
 import '../player/now_playing_controller.dart';
+import '../player/play_progress.dart';
 import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
@@ -477,6 +478,7 @@ class _ReorderableEntries extends ConsumerWidget {
     // rebuilds every visible one on every drag frame.
     final moveUp = CustomSemanticsAction(label: l10n.playlistMoveUp);
     final moveDown = CustomSemanticsAction(label: l10n.playlistMoveDown);
+    final windows = _windowsOf(view);
     return SliverLayoutBuilder(
       builder: (context, constraints) => SliverReorderableList(
         itemCount: entries.length,
@@ -484,6 +486,7 @@ class _ReorderableEntries extends ConsumerWidget {
         // no Material, so an Expanded row would stretch to infinity.
         proxyDecorator: (child, index, animation) => Material(
           color: colors.surface2,
+          animationDuration: Duration.zero,
           child: SizedBox(width: constraints.crossAxisExtent, child: child),
         ),
         // onReorderItem hands over the destination already adjusted for
@@ -512,6 +515,7 @@ class _ReorderableEntries extends ConsumerWidget {
             child: _EntryRow(
               view: view,
               index: index,
+              windows: windows,
               onTap: () => _openEntry(context, ref, view, index),
               onRemove: () => unawaited(_remove(context, ref, index)),
               handle: ReorderableDragStartListener(
@@ -603,21 +607,30 @@ class _FixedEntries extends ConsumerWidget {
   final PlaylistView view;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => SliverList.builder(
-    itemCount: view.entries.length,
-    itemBuilder: (context, index) => _EntryRow(
-      view: view,
-      index: index,
-      onTap: () => _openEntry(context, ref, view, index),
-    ),
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final windows = _windowsOf(view);
+    return SliverList.builder(
+      itemCount: view.entries.length,
+      itemBuilder: (context, index) => _EntryRow(
+        view: view,
+        index: index,
+        windows: windows,
+        onTap: () => _openEntry(context, ref, view, index),
+      ),
+    );
+  }
 }
+
+/// The members' play-count windows, each read once a row of it is built.
+PlayWindows _windowsOf(PlaylistView view) =>
+    PlayWindows(view.entries.length, (index) => view.entries[index].item.pid);
 
 /// One member, however the list draws it.
 class _EntryRow extends ConsumerWidget {
   const _EntryRow({
     required this.view,
     required this.index,
+    required this.windows,
     required this.onTap,
     this.onRemove,
     this.handle,
@@ -625,6 +638,9 @@ class _EntryRow extends ConsumerWidget {
 
   final PlaylistView view;
   final int index;
+
+  /// The list's play-count windows, of which this row reads its own.
+  final PlayWindows windows;
   final VoidCallback onTap;
   final VoidCallback? onRemove;
 
@@ -635,6 +651,7 @@ class _EntryRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     final item = view.entries[index].item;
+    final store = ref.watch(artworkStoreProvider);
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: sizeClass.gutter.horizontal / 2,
@@ -642,16 +659,23 @@ class _EntryRow extends ConsumerWidget {
       child: Row(
         children: <Widget>[
           Expanded(
-            child: MediaListRow(
-              data: itemRowTile(
-                item,
-                store: ref.watch(artworkStoreProvider),
-                semanticsId: SemanticsIds.playlistEntry(index),
+            child: PlayCountBuilder(
+              windows: windows,
+              index: index,
+              pid: item.pid,
+              builder: (context, plays) => MediaListRow(
+                data: itemRowTile(
+                  item,
+                  l10n: context.l10n,
+                  store: store,
+                  semanticsId: SemanticsIds.playlistEntry(index),
+                  playCount: plays,
+                ),
+                onTap: onTap,
+                onMore: () =>
+                    showItemMenuForSummary(context, ref, item, withOpen: true),
+                moreSemanticsId: SemanticsIds.playlistEntryMore(index),
               ),
-              onTap: onTap,
-              onMore: () =>
-                  showItemMenuForSummary(context, ref, item, withOpen: true),
-              moreSemanticsId: SemanticsIds.playlistEntryMore(index),
             ),
           ),
           if (onRemove != null)

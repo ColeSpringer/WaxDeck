@@ -8,6 +8,7 @@ import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'controls.dart';
+import 'controls/menu_entry.dart';
 import 'info_slot.dart';
 import 'info_tip.dart';
 import 'prose.dart';
@@ -476,7 +477,6 @@ class WaxChoice<T> extends StatelessWidget {
   final String Function(T value)? optionSemanticsIdFor;
 
   Future<void> _open(BuildContext context) async {
-    final colors = WaxColors.of(context);
     final trigger = context.findRenderObject()! as RenderBox;
     final overlay =
         Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
@@ -491,24 +491,27 @@ class WaxChoice<T> extends StatelessWidget {
       ),
       items: <PopupMenuEntry<T>>[
         for (final option in options)
-          PopupMenuItem<T>(
+          waxMenuEntry<T>(
             value: option,
-            child: Semantics(
-              identifier: optionSemanticsIdFor?.call(option),
-              selected: option == value,
-              child: Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      labelFor(option),
-                      style: WaxType.body.copyWith(color: colors.textPrimary),
+            builder: (context) {
+              final colors = WaxColors.of(context);
+              return Semantics(
+                identifier: optionSemanticsIdFor?.call(option),
+                selected: option == value,
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        labelFor(option),
+                        style: WaxType.body.copyWith(color: colors.textPrimary),
+                      ),
                     ),
-                  ),
-                  if (option == value)
-                    WaxIcon(WaxIcons.check, size: 16, color: colors.accent),
-                ],
-              ),
-            ),
+                    if (option == value)
+                      WaxIcon(WaxIcons.check, size: 16, color: colors.accent),
+                  ],
+                ),
+              );
+            },
           ),
       ],
     );

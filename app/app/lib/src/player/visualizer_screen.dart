@@ -37,17 +37,19 @@ class VisualizerScreen extends ConsumerWidget {
     return KeepAwake(
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        body: NowPlayingView(
-          idle: (context) => _Frame(
-            domain: WaxDomain.music,
-            child: EmptyState(
-              glyph: WaxIcons.waveform,
-              title: context.l10n.playerNothingPlaying,
-              semanticsId: SemanticsIds.visualizerSurface,
+        body: WaxPlainTextStyle(
+          child: NowPlayingView(
+            idle: (context) => _Frame(
+              domain: WaxDomain.music,
+              child: EmptyState(
+                glyph: WaxIcons.waveform,
+                title: context.l10n.playerNothingPlaying,
+                semanticsId: SemanticsIds.visualizerSurface,
+              ),
             ),
+            builder: (context, session, item, position) =>
+                _Visualizer(session: session, item: item, position: position),
           ),
-          builder: (context, session, item, position) =>
-              _Visualizer(session: session, item: item, position: position),
         ),
       ),
     );

@@ -75,7 +75,13 @@ class ConnectBus {
         }
       case 'pong':
         final sent = _pingSent;
-        if (sent != null) {
+        // The server echoes the ping's `t`. Any other is a late answer to an
+        // older ping, which would measure that ping's trip against this
+        // one's clock, and the answer the wait is for would then be ignored.
+        final echoed = frame['t'];
+        if (sent != null &&
+            echoed is num &&
+            echoed == sent.millisecondsSinceEpoch) {
           final at = (frame['at'] as num?)?.toInt();
           if (at != null) {
             final received = _now();
