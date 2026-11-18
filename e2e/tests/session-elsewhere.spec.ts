@@ -116,15 +116,16 @@ test('a tab that was away while another account signed in comes back as that acc
 
   // Settled. A write from this tab carries the session it now holds: a
   // pin is Ben's preference document, and a stale token would be a 403.
-  const settled = heard.length;
+  // The pin is proved off the document, which shows it before this tab
+  // has its answer, so the answer is waited for, armed ahead of the press.
   const asBen = createApp({ page: app.page, api: app.api.as(ben.token), account: ben });
+  const written = page.waitForResponse(
+    (r) => r.request().method() !== 'GET' && new URL(r.url()).pathname.endsWith('/users/me/prefs'),
+    { timeout: T.fetch },
+  );
   await asBen.music.togglePin(albumPid);
+  expect((await written).status()).toBeLessThan(300);
   page.off('response', record);
-  const since = heard.slice(settled);
-  expect(
-    since.some((r) => r.method !== 'GET' && r.path.endsWith('/users/me/prefs') && r.status < 300),
-    JSON.stringify(since),
-  ).toBe(true);
   // Nothing it sent from the moment it was back carried the last
   // account's token, the catch-up before the swap included.
   const fromBack = heard.slice(back);
