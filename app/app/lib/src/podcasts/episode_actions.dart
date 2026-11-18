@@ -27,10 +27,20 @@ class EpisodeActions {
   /// fetch can refresh the rows that show its state.
   final String? showPid;
 
-  void _report(String message) {
-    ref
-        .read(shellMessengerProvider.notifier)
-        .show(message, channel: ShellChannel.episodes);
+  static void _report(ShellMessenger messenger, String message) =>
+      messenger.show(message, channel: ShellChannel.episodes);
+
+  /// What a verb that awaits reads before it does: the container, which
+  /// outlives the row or screen that asked, and the messenger its answer
+  /// is said through, wherever the visitor has gone by then.
+  static ({ProviderContainer container, ShellMessenger messenger}) _asked(
+    BuildContext context,
+  ) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    return (
+      container: container,
+      messenger: container.read(shellMessengerProvider),
+    );
   }
 
   /// Whether this server can put audio on the wire for [episode] right
@@ -85,12 +95,13 @@ class EpisodeActions {
 
   /// Appends the episode to whatever is playing.
   void enqueue(BuildContext context, EpisodeSummary episode) {
+    final messenger = ref.read(shellMessengerProvider);
     if (!playable(episode)) {
-      _report(context.l10n.podcastNoAudioToQueue);
+      _report(messenger, context.l10n.podcastNoAudioToQueue);
       return;
     }
     ref.read(nowPlayingProvider.notifier).enqueue(<ItemSummary>[episode]);
-    _report(context.l10n.podcastAddedToQueue);
+    _report(messenger, context.l10n.podcastAddedToQueue);
   }
 
   /// Queues a server-side fetch.
@@ -98,11 +109,12 @@ class EpisodeActions {
     // Read before the await, like every other table this class needs:
     // the request outlives the frame that asked for it.
     final l10n = context.l10n;
+    final (:container, :messenger) = _asked(context);
     try {
-      await _fetch(episode);
-      if (context.mounted) _report(l10n.podcastFetchingToServer);
+      await _fetch(container, episode);
+      _report(messenger, l10n.podcastFetchingToServer);
     } on WaxDeckApiException catch (e) {
-      if (context.mounted) _report(explainError(l10n, e));
+      _report(messenger, explainError(l10n, e));
     }
   }
 
@@ -115,13 +127,12 @@ class EpisodeActions {
     EpisodeSummary episode,
   ) async {
     final l10n = context.l10n;
+    final (:container, :messenger) = _asked(context);
     try {
-      await _fetch(episode);
-      if (context.mounted) {
-        _report(l10n.podcastFetchingBeforePlay);
-      }
+      await _fetch(container, episode);
+      _report(messenger, l10n.podcastFetchingBeforePlay);
     } on WaxDeckApiException catch (e) {
-      if (context.mounted) _report(explainError(l10n, e));
+      _report(messenger, explainError(l10n, e));
     }
   }
 
@@ -130,21 +141,20 @@ class EpisodeActions {
     EpisodeSummary episode,
   ) async {
     final l10n = context.l10n;
+    final (:container, :messenger) = _asked(context);
     final pid = episode.pid;
     try {
       if (showPid != null) {
-        await ref
+        await container
             .read(episodesProvider(showPid!).notifier)
             .removeEpisodeDownload(pid);
       } else {
-        await ref.read(repositoryProvider).removeEpisodeDownload(pid);
+        await container.read(repositoryProvider).removeEpisodeDownload(pid);
       }
-      _refreshOthers(episode);
-      if (context.mounted) {
-        _report(l10n.podcastRemovedFromServer);
-      }
+      _refreshOthers(container, episode);
+      _report(messenger, l10n.podcastRemovedFromServer);
     } on WaxDeckApiException catch (e) {
-      if (context.mounted) _report(explainError(l10n, e));
+      _report(messenger, explainError(l10n, e));
     }
   }
 
@@ -160,23 +170,25 @@ class EpisodeActions {
     String progressKey,
   ) async {
     final l10n = context.l10n;
+    final (:container, :messenger) = _asked(context);
     bool? done;
     try {
-      await ref.read(pendingActionsProvider.notifier).run(
+      await container.read(pendingActionsProvider.notifier).run(
         PendingAction.markPlayed(episode.pid),
         () async {
-          done = await ref
+          done = await container
               .read(playProgressProvider(progressKey).notifier)
               .markPlayed(episode.pid, episode.durationMs);
         },
       );
       final marked = done;
-      if (marked == null || !context.mounted) return;
+      if (marked == null) return;
       _report(
+        messenger,
         marked ? l10n.podcastMarkedAsPlayed : l10n.podcastNoDurationToFinish,
       );
     } on WaxDeckApiException catch (e) {
-      if (context.mounted) _report(explainError(l10n, e));
+      _report(messenger, explainError(l10n, e));
     }
   }
 
@@ -184,25 +196,32 @@ class EpisodeActions {
   /// so the row behind the surface on top flips to queued with it, and
   /// straight through the repository when it is not. An episode opened
   /// by a bare link has no listing to keep in step.
-  Future<void> _fetch(EpisodeSummary episode) async {
+  Future<void> _fetch(
+    ProviderContainer container,
+    EpisodeSummary episode,
+  ) async {
     final show = showPid;
     if (show != null) {
-      await ref.read(episodesProvider(show).notifier).fetchEpisode(episode.pid);
+      await container
+          .read(episodesProvider(show).notifier)
+          .fetchEpisode(episode.pid);
     } else {
-      await ref.read(repositoryProvider).fetchEpisode(episode.pid);
+      await container.read(repositoryProvider).fetchEpisode(episode.pid);
     }
-    _refreshOthers(episode);
+    _refreshOthers(container, episode);
   }
 
   /// Re-reads the other surfaces that list the episode, since queuing a
   /// fetch sends no catalog event: the hub's shelves and the episode's
   /// detail always, and the show's listing when this acted outside it.
   /// An invalidation builds nothing that was never read.
-  void _refreshOthers(EpisodeSummary episode) {
-    ref
+  void _refreshOthers(ProviderContainer container, EpisodeSummary episode) {
+    container
       ..invalidate(latestEpisodesProvider)
       ..invalidate(upNextEpisodesProvider)
       ..invalidate(episodeDetailProvider(episode.pid));
-    if (showPid == null) ref.invalidate(episodesProvider(episode.showPid));
+    if (showPid == null) {
+      container.invalidate(episodesProvider(episode.showPid));
+    }
   }
 }

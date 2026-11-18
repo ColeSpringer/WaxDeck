@@ -81,18 +81,6 @@ Every entry carries a gate tag saying what actually blocks it:
   the hit test at its point. Meanwhile: none; the lens is a few pixels
   deep, on narrow covers only.
 
-- `[in-repo]` **A shell message raised from a public route is
-  dropped.** `ShellMessageHost` (`shell_messages.dart`) draws
-  `shellMessengerProvider` and is mounted in the signed-in scope
-  (`router.dart`), so a message raised from login, setup, or any other
-  public route reaches the notifier and is never drawn. Unreachable
-  today: every raiser in the app is a signed-in screen, and
-  `shell_messages_test.dart` covers the positions that occur (an
-  ordinary screen, the player pushed over it, a lone overlay). Closing
-  it means mounting the host where the public routes are built too, and
-  checking that each public page has a Scaffold to present into. Worth
-  doing when a public route first needs to say something, not before.
-
 - `[in-repo]` **The rule editor does not say which fields can never
   reach `.nsp`.** An export's report names every loss after the fact;
   WaxBin's `playlist.NSPExportableFields()` lists the query fields that

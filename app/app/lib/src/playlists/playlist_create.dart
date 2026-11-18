@@ -6,8 +6,11 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../shell/asked_from.dart';
+import '../shell/navigation_history.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'playlists_controller.dart';
 
 /// Asks for a name, a kind, and who can see it, then makes the playlist.
@@ -126,6 +129,7 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
       return;
     }
     final navigator = Navigator.of(context);
+    final from = AskedFrom.of(context);
     final router = GoRouter.of(context);
     if (_kind == 'smart') {
       navigator.pop();
@@ -147,15 +151,21 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
             kind: 'static',
             visibility: _shared ? 'shared' : null,
           );
-      // Nothing if the dialog was dismissed mid-request: popping would
-      // take the screen underneath. The list exists either way.
-      if (!mounted) return;
-      navigator.pop();
-      router.go(WaxRoute.playlist(created.pid));
+      // Nothing if the dialog was dismissed mid-request, or is on its way
+      // out: popping would take the screen underneath. The list exists
+      // either way.
+      final here = from.route?.isCurrent ?? false;
+      closeFinished(from.route);
+      if (here) router.go(WaxRoute.playlist(created.pid));
     } on WaxDeckApiException catch (e) {
       // The server's own words: a name it refused is a value somebody
-      // just typed, and only it knows what was wrong with it.
-      if (mounted) setState(() => _error = explainRefusal(l10n, e));
+      // just typed, and only it knows what was wrong with it. In the shell
+      // once the dialog was dismissed while the create was out.
+      from.refused(
+        explainRefusal(l10n, e),
+        inline: (refusal) => setState(() => _error = refusal),
+        channel: ShellChannel.playlists,
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }

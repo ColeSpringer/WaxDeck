@@ -72,6 +72,7 @@
   "playlistImportNspPartial": "Importar sin ellas",
   "playlistImportPasteFirst": "Primero pega la lista.",
   "playlistImportPayloadLabel": "Exportación de {source}",
+  "playlistImportReady": "Importación terminada: {resolved} de {requested} entradas con coincidencia",
   "playlistImportRun": "Importar",
   "playlistImportSourceAppleMusic": "Apple Music",
   "playlistImportSourceCsv": "CSV genérico",

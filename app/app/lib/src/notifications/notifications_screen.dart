@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../settings/integrations_sections.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'notifications_controller.dart';
 
@@ -78,6 +79,8 @@ class NotificationsScreen extends ConsumerWidget {
       title: l10n.bellTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.notificationsScreen,
+      onBack: () => context.back(),
+      backSemanticsId: SemanticsIds.navBack,
       actions: <Widget>[
         if (view.badge > 0)
           WaxIconButton(

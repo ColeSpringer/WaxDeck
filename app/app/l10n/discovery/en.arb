@@ -57,6 +57,20 @@
   "@discoveryMixEmpty": {
     "description": "Snackbar when the server built a mix with nothing in it."
   },
+  "discoveryMixReady": "Playing an instant mix",
+  "@discoveryMixReady": {
+    "description": "Message when an instant mix started playing after the listener had moved on from where they asked for it; its action opens the mix's list."
+  },
+  "discoverySimilarReady": "Found tracks similar to {title}",
+  "@discoverySimilarReady": {
+    "description": "Message when similar tracks were found after the listener had moved on from where they asked; its action opens the list. {title} is the seed track's own name.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Nightswimming"
+      }
+    }
+  },
   "discoverySimilarTitle": "Similar to {title}",
   "@discoverySimilarTitle": {
     "description": "Title of the list of tracks the server finds similar to one seed. {title} is the seed track's own name.",

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/backups_screen.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
@@ -275,6 +276,43 @@ void main() {
     );
   });
 
+  testWidgets('a restore staged once the page was left still shows its '
+      'plan', (tester) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository()..stageRestoreGate = gate;
+    repo.backupsById['ba-1'] = _backup('ba-1');
+    tester.view.physicalSize = const Size(1200, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await pumpApp(
+      tester,
+      const BackupsScreen(),
+      container: appContainer(
+        repo: repo,
+        extra: [filePickerProvider.overrideWithValue(null)],
+      ),
+      pushed: true,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.backupMenu('ba-1')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Stage restore...'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('backup-restore-confirm')));
+    await tester.pumpAndSettle();
+
+    GoRouter.of(tester.element(find.byType(BackupsScreen))).pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(BackupsScreen), findsNothing);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(repo.stageRestoreCalls, ['ba-1']);
+    expect(find.byKey(const Key('restore-plan-dialog')), findsOneWidget);
+  });
+
   testWidgets('a backup this server cannot open says why it did not stage', (
     tester,
   ) async {
@@ -301,7 +339,7 @@ void main() {
       tester.element(find.byType(BackupsScreen)),
     );
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       startsWith('This backup was made by a WaxDeck version'),
     );
     expect(find.byKey(const Key('restore-plan-dialog')), findsNothing);

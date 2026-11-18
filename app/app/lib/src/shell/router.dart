@@ -95,10 +95,12 @@ import '../tools/tasks_screen.dart';
 import '../uploads/share_intake_gate.dart';
 import '../uploads/uploads_screen.dart';
 import 'adaptive_shell.dart';
+import 'browser_history/browser_history.dart';
 import 'commands.dart';
+import 'navigation_history.dart';
 import 'routes.dart';
+import 'semantics_ids.dart';
 import 'shell_messages.dart';
-import 'signed_in_cover.dart';
 import 'window_title_binder.dart';
 
 /// The app's router, built once per provider container.
@@ -111,6 +113,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final refresh = _SessionRefresh(ref);
   final router = GoRouter(
     initialLocation: WaxRoute.home,
+    observers: <NavigatorObserver>[PageRoutes()],
     refreshListenable: refresh,
     redirect: (context, state) => _redirect(ref, state),
     errorBuilder: (context, state) => const _NotFoundScreen(),
@@ -122,6 +125,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // process.
       ShellRoute(
         navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'signed-in'),
+        observers: <NavigatorObserver>[PageRoutes()],
         builder: (context, state, child) => _SignedInScope(child: child),
         routes: shellRoutes(),
       ),
@@ -142,14 +146,57 @@ final routerProvider = Provider<GoRouter>((ref) {
     );
   }
 
-  router.routerDelegate.addListener(dismissArrivedNews);
+  // The same arrivals are where back returns to.
+  final history = WaxHistory(
+    router,
+    branchRoots: <String>[
+      for (final target in waxShellBranches) target.location,
+    ],
+    browser: ref.read(browserHistoryProvider),
+  );
+  // A read of the history before this router existed answered null.
+  ref.invalidate(waxHistoryProvider);
+  void arrived() {
+    history.record();
+    dismissArrivedNews();
+  }
+
+  router.routerDelegate.addListener(arrived);
+  // Where one account went is not where back takes the next. On the
+  // container, because a provider nobody watches pauses its own listens.
+  final account = ref.container.listen<String?>(signedInAccountProvider, (
+    previous,
+    next,
+  ) {
+    if (previous != null && previous != next) history.clear();
+  });
   ref.onDispose(() {
-    router.routerDelegate.removeListener(dismissArrivedNews);
+    account.close();
+    router.routerDelegate.removeListener(arrived);
+    history.dispose();
     router.dispose();
     refresh.dispose();
   });
   return router;
 });
+
+/// Where the visitor has been, kept beside [routerProvider]'s router, for
+/// code off the element tree. A screen goes through its context
+/// (`context.back`, `context.forget`), which finds the router in scope.
+/// Null where that router was never built (a host with a router of its
+/// own), and never builds it; the router's own build refreshes it, so a
+/// read before the router existed does not keep answering null.
+final Provider<WaxHistory?> waxHistoryProvider = Provider<WaxHistory?>(
+  (ref) => ref.exists(routerProvider)
+      ? WaxHistory.of(ref.watch(routerProvider))
+      : null,
+);
+
+/// The browser's session history the navigation history walks on web;
+/// null on a native build, which has none.
+final browserHistoryProvider = Provider<BrowserHistoryPort?>(
+  (ref) => createBrowserHistory(),
+);
 
 /// Re-runs the router's redirect when the answers it depends on change.
 ///
@@ -215,6 +262,10 @@ bool _isInAppLocation(String location) =>
 /// Signed out lands on setup (no accounts yet) or login, remembering
 /// where the visitor was headed; signing in returns them there. Signed
 /// in, the auth screens are unreachable.
+///
+/// Synchronous, and the navigation history relies on it: a move the router
+/// does not answer within the call is read as no change, so an async
+/// redirect (or a route's `onExit`) needs `WaxHistory` revisited.
 String? _redirect(Ref ref, GoRouterState state) {
   final location = state.matchedLocation;
   // Before the session is even asked about: a native build with no
@@ -392,25 +443,89 @@ GoRoute _bookIndexRoute(BookDimension dimension) => GoRoute(
   ],
 );
 
-Widget _trackList(BuildContext context, GoRouterState state) {
-  final args = state.extra! as TrackListArgs;
-  return TrackListScreen(
-    title: args.title,
-    sourceLabel: args.sourceLabel,
-    basis: args.basis,
-    items: args.items,
-    idPrefix: args.idPrefix,
+Widget _trackList(BuildContext context, GoRouterState state) =>
+    switch (state.extra) {
+      final TrackListArgs args => TrackListScreen(
+        title: args.title,
+        sourceLabel: args.sourceLabel,
+        basis: args.basis,
+        items: args.items,
+        idPrefix: args.idPrefix,
+      ),
+      _ => _Unpaid(at: state.matchedLocation),
+    };
+
+Widget _ruleDraft(BuildContext context, GoRouterState state) =>
+    switch (state.extra) {
+      final RuleDraftArgs args => RuleEditorScreen(
+        createName: args.name,
+        createShared: args.shared,
+      ),
+      _ => _Unpaid(at: state.matchedLocation),
+    };
+
+Widget _ruleEdit(BuildContext context, GoRouterState state) =>
+    switch (state.extra) {
+      final Playlist playlist => RuleEditorScreen(editing: playlist),
+      _ => _Unpaid(at: state.matchedLocation),
+    };
+
+Widget _userEdit(BuildContext context, GoRouterState state) =>
+    switch (state.extra) {
+      final UserEditArgs args => UserEditScreen(
+        user: args.user,
+        approve: args.approve,
+      ),
+      _ => _Unpaid(at: state.matchedLocation),
+    };
+
+/// A page pushed with a payload, built without it: a reload or a browser
+/// entry keeps the push but not a payload that is not plain data, and a
+/// restore runs no redirect of a push's. It draws nothing and leaves at
+/// once, for what is under it, else for where [at] is declared. A browser
+/// step back passing it moves on by itself, so it waits that out.
+class _Unpaid extends StatefulWidget {
+  const _Unpaid({required this.at});
+
+  final String at;
+
+  @override
+  State<_Unpaid> createState() => _UnpaidState();
+}
+
+class _UnpaidState extends State<_Unpaid> {
+  var _left = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_left && ModalRoute.isCurrentOf(context) != false) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _leave());
+    }
+    return const SizedBox.shrink();
+  }
+
+  void _leave() {
+    if (_left || !mounted || ModalRoute.isCurrentOf(context) == false) return;
+    final router = GoRouter.of(context);
+    if (WaxHistory.of(router)?.stepping ?? false) return;
+    _left = true;
+    router.leave(fallback: router.declaredParentOf(widget.at) ?? WaxRoute.home);
+  }
+}
+
+/// A form typed for one connection is not the next one's. The connect
+/// screen is pushed over sign-in and setup, so they outlive an adopted
+/// address; each adoption, of the same address too, builds [child] afresh.
+class _PerServer extends ConsumerWidget {
+  const _PerServer({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => KeyedSubtree(
+    key: ValueKey(ref.watch(serverAdoptionsProvider)),
+    child: child,
   );
-}
-
-Widget _ruleDraft(BuildContext context, GoRouterState state) {
-  final args = state.extra! as RuleDraftArgs;
-  return RuleEditorScreen(createName: args.name, createShared: args.shared);
-}
-
-Widget _userEdit(BuildContext context, GoRouterState state) {
-  final args = state.extra! as UserEditArgs;
-  return UserEditScreen(user: args.user, approve: args.approve);
 }
 
 /// Locations that do not need a session: the auth surfaces themselves.
@@ -421,11 +536,11 @@ final publicRoutes = <RouteBase>[
   ),
   GoRoute(
     path: WaxRoute.login,
-    builder: (context, state) => const LoginScreen(),
+    builder: (context, state) => const _PerServer(child: LoginScreen()),
   ),
   GoRoute(
     path: WaxRoute.setup,
-    builder: (context, state) => const SetupScreen(),
+    builder: (context, state) => const _PerServer(child: SetupScreen()),
   ),
   GoRoute(
     path: WaxRoute.signup,
@@ -456,13 +571,11 @@ final publicRoutes = <RouteBase>[
 List<RouteBase> shellRoutes() => <RouteBase>[
   StatefulShellRoute(
     navigatorContainerBuilder: _branchStack,
-    builder: (context, state, navigationShell) => AdaptiveShell(
-      shell: navigationShell,
-      location: state.uri.path,
-      uri: state.uri.toString(),
-    ),
+    builder: (context, state, navigationShell) =>
+        AdaptiveShell(shell: navigationShell, location: state.uri.path),
     branches: <StatefulShellBranch>[
       StatefulShellBranch(
+        observers: <NavigatorObserver>[PageRoutes()],
         routes: <RouteBase>[
           GoRoute(
             path: WaxRoute.home,
@@ -475,6 +588,7 @@ List<RouteBase> shellRoutes() => <RouteBase>[
       // `/music/tracks` and no route has to be declared before another to
       // win a match.
       StatefulShellBranch(
+        observers: <NavigatorObserver>[PageRoutes()],
         routes: <RouteBase>[
           GoRoute(
             path: WaxRoute.music,
@@ -491,6 +605,7 @@ List<RouteBase> shellRoutes() => <RouteBase>[
         ],
       ),
       StatefulShellBranch(
+        observers: <NavigatorObserver>[PageRoutes()],
         routes: <RouteBase>[
           GoRoute(
             path: WaxRoute.podcasts,
@@ -529,6 +644,7 @@ List<RouteBase> shellRoutes() => <RouteBase>[
       // the book hung off home, so opening one from the library grid lit
       // Home.
       StatefulShellBranch(
+        observers: <NavigatorObserver>[PageRoutes()],
         routes: <RouteBase>[
           GoRoute(
             path: WaxRoute.books,
@@ -558,6 +674,7 @@ List<RouteBase> shellRoutes() => <RouteBase>[
         ],
       ),
       StatefulShellBranch(
+        observers: <NavigatorObserver>[PageRoutes()],
         routes: <RouteBase>[
           GoRoute(
             path: WaxRoute.radio,
@@ -575,6 +692,7 @@ List<RouteBase> shellRoutes() => <RouteBase>[
       // one - its destinations are reached by location - so it needs no
       // root of its own.
       StatefulShellBranch(
+        observers: <NavigatorObserver>[PageRoutes()],
         routes: <RouteBase>[
           // Search is here rather than in a domain because it is over all
           // of them: leaving it must not rewrite the stack of whichever
@@ -606,8 +724,7 @@ List<RouteBase> shellRoutes() => <RouteBase>[
                     redirect: (context, state) => state.extra is Playlist
                         ? null
                         : WaxRoute.playlist(state.pathParameters['pid']!),
-                    builder: (context, state) =>
-                        RuleEditorScreen(editing: state.extra! as Playlist),
+                    builder: _ruleEdit,
                   ),
                 ],
               ),
@@ -699,9 +816,9 @@ List<RouteBase> shellRoutes() => <RouteBase>[
           // entry opens beside it. Nested routes would stack a second
           // surface over the first.
           ShellRoute(
-            builder: (context, state, child) => _CoveredWithoutHeroes(
-              child: ReviewSurface(openEntryId: _reviewEntryOf(state.uri.path)),
-            ),
+            observers: <NavigatorObserver>[PageRoutes()],
+            builder: (context, state, child) =>
+                ReviewSurface(openEntryId: _reviewEntryOf(state.uri.path)),
             routes: <RouteBase>[
               GoRoute(
                 path: WaxRoute.review,
@@ -787,8 +904,19 @@ List<RouteBase> shellRoutes() => <RouteBase>[
           // branch so a visit here never rewrites the stack a tab
           // restores.
           ShellRoute(
-            builder: (context, state, child) => _CoveredWithoutHeroes(
-              child: AdminConsole(location: state.uri.path, child: child),
+            observers: <NavigatorObserver>[PageRoutes()],
+            pageBuilder: (context, state, child) => _NestedShellPage<void>(
+              key: state.pageKey,
+              name: state.name ?? state.path,
+              arguments: <String, String>{
+                ...state.pathParameters,
+                ...state.uri.queryParameters,
+              },
+              restorationId: state.pageKey.value,
+              child: AdminConsole(
+                location: state.uri.path,
+                child: ShellMessageNest(child: child),
+              ),
             ),
             routes: <RouteBase>[
               GoRoute(
@@ -922,37 +1050,91 @@ List<RouteBase> shellRoutes() => <RouteBase>[
 ];
 
 /// go_router's indexed stack of branches, with the hidden ones kept out
-/// of hero flights: each branch's top screen is a Scaffold that draws
-/// the shell's bar, and two of one hero in a route is an error.
+/// of hero flights: each branch's top screen draws the shell's message
+/// bar, a hero, and two of one hero in a route is an error. A nest, so a
+/// branch's screen is in front only while the shell's page is.
 Widget _branchStack(
   BuildContext context,
   StatefulNavigationShell shell,
   List<Widget> branches,
-) => IndexedStack(
-  index: shell.currentIndex,
-  children: <Widget>[
-    for (final (index, branch) in branches.indexed)
-      Offstage(
-        offstage: index != shell.currentIndex,
-        child: TickerMode(
-          enabled: index == shell.currentIndex,
-          child: HeroMode(enabled: index == shell.currentIndex, child: branch),
+) => ShellMessageNest(
+  child: IndexedStack(
+    index: shell.currentIndex,
+    children: <Widget>[
+      for (final (index, branch) in branches.indexed)
+        Offstage(
+          offstage: index != shell.currentIndex,
+          child: TickerMode(
+            enabled: index == shell.currentIndex,
+            child: HeroMode(
+              enabled: index == shell.currentIndex,
+              child: branch,
+            ),
+          ),
         ),
-      ),
-  ],
+    ],
+  ),
 );
 
-/// A nested shell out of hero flights while a screen covers it: Flutter
-/// counts the top screen of the shell's own navigator even then, and a
-/// second copy of the shell's bar in one route is an error.
-class _CoveredWithoutHeroes extends StatelessWidget {
-  const _CoveredWithoutHeroes({required this.child});
-
-  final Widget child;
+/// The page of a shell nested in a branch, the admin console's.
+///
+/// Flutter counts the top screen of a nested navigator in every flight
+/// that passes over it, even while a screen covers the shell's page, and
+/// two copies of the message bar in one flight are an error. So while
+/// covered the page is out of the flights of the navigators around it.
+/// Its own navigator's flights start inside the page, past the guard, so
+/// a screen pushed over the console takes the bar with it and gives it
+/// back as it is popped.
+class _NestedShellPage<T> extends MaterialPage<T> {
+  const _NestedShellPage({
+    required super.child,
+    super.key,
+    super.name,
+    super.arguments,
+    super.restorationId,
+  });
 
   @override
-  Widget build(BuildContext context) =>
-      HeroMode(enabled: ModalRoute.isCurrentOf(context) ?? true, child: child);
+  Route<T> createRoute(BuildContext context) => _NestedShellRoute<T>(this);
+}
+
+class _NestedShellRoute<T> extends PageRoute<T>
+    with MaterialRouteTransitionMixin<T> {
+  _NestedShellRoute(_NestedShellPage<T> page)
+    : super(settings: page, allowSnapshotting: page.allowSnapshotting);
+
+  _NestedShellPage<T> get _page => settings as _NestedShellPage<T>;
+
+  @override
+  Widget buildContent(BuildContext context) => _page.child;
+
+  @override
+  bool get maintainState => _page.maintainState;
+
+  @override
+  bool get fullscreenDialog => _page.fullscreenDialog;
+
+  @override
+  bool get includeRouteSemantics => _page.includeRouteSemantics;
+
+  @override
+  String get debugLabel => '${super.debugLabel}(${_page.name})';
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) => HeroMode(
+    enabled: ModalRoute.isCurrentOf(context) ?? true,
+    child: super.buildTransitions(
+      context,
+      animation,
+      secondaryAnimation,
+      child,
+    ),
+  );
 }
 
 /// Wraps every signed-in screen, so the machinery that belongs to a
@@ -1035,15 +1217,24 @@ class _SignedInScope extends ConsumerWidget {
     // and a global keyboard handler, all to read three providers and
     // return. The platform does not change under a running app; the
     // setting does, and that one is checked when the timer fires.
-    final gated = ShareIntakeGate(child: DownloadNoticeRationale(child: child));
+    // A nest: a dialog opens on the root navigator and leaves every route
+    // here current, so this is what tells a screen it is covered.
+    final gated = ShareIntakeGate(
+      child: DownloadNoticeRationale(child: ShellMessageNest(child: child)),
+    );
     final watched = ref.watch(desktopProvider)
         ? IdleVisualizer(child: gated)
         : gated;
     // Here rather than in the shell: the overlays are pushed onto this
     // navigator, so a map inside the shell would be their sibling and
     // dead on the player, the queue, and car mode.
-    return SignedInCover(
-      child: CommandShortcuts(child: ShellMessageHost(child: watched)),
+    return CommandShortcuts(
+      child: ShellMessageHost(
+        // No flight crosses the session's edge: the root navigator's
+        // would count the copy of a message on an overlay and on the
+        // covered page under it as two.
+        child: HeroMode(enabled: false, child: watched),
+      ),
     );
   }
 }
@@ -1059,7 +1250,8 @@ class _NotFoundScreen extends StatelessWidget {
     return WaxScaffold(
       title: l10n.shellNotFoundTitle,
       largeTitle: false,
-      onBack: () => context.leave(),
+      onBack: () => context.back(),
+      backSemanticsId: SemanticsIds.navBack,
       slivers: <Widget>[
         SliverFillRemaining(
           hasScrollBody: false,

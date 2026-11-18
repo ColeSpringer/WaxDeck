@@ -873,6 +873,16 @@ final List<_Scenario> _scenarios = <_Scenario>[
       ),
     ),
   _scenario(
+    'a message bar with its action and its close control',
+    () => WaxMessageBar(
+      message: 'Marked finished',
+      actionLabel: 'Undo',
+      onAction: () {},
+      onClose: () {},
+      onDismiss: () {},
+    ),
+  ),
+  _scenario(
     'banners, the resume offer and a side panel',
     () => Column(
       children: <Widget>[
@@ -1081,6 +1091,7 @@ const _nonInteractive = <String>{
   'WaxBackdrop',
   'WaxBrandBlock',
   'WaxHairline',
+  'WaxPageMessages',
   'WaxSpinner',
   'WaxWordmark',
 };

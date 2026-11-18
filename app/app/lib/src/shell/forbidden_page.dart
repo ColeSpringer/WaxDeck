@@ -1,6 +1,7 @@
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'routes.dart';
+import 'semantics_ids.dart';
 
 /// What a shareable location draws for an account that may not have it.
 ///
@@ -47,7 +48,8 @@ class ForbiddenPage extends StatelessWidget {
     title: pageTitle,
     largeTitle: false,
     semanticsId: semanticsId,
-    onBack: () => context.leave(fallback: fallback),
+    onBack: () => context.back(fallback: fallback),
+    backSemanticsId: SemanticsIds.navBack,
     slivers: <Widget>[
       SliverFillRemaining(
         hasScrollBody: false,
@@ -77,7 +79,8 @@ class SessionPendingPage extends StatelessWidget {
   Widget build(BuildContext context) => WaxScaffold(
     title: pageTitle,
     largeTitle: false,
-    onBack: () => context.leave(fallback: fallback),
+    onBack: () => context.back(fallback: fallback),
+    backSemanticsId: SemanticsIds.navBack,
     slivers: const <Widget>[
       SliverFillRemaining(
         hasScrollBody: false,

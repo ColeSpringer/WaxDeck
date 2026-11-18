@@ -16,6 +16,7 @@ import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
+import '../shell/asked_from.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -58,9 +59,10 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
     return WaxScaffold(
       title: view?.playlist.name ?? l10n.playlistFallbackTitle,
       largeTitle: false,
-      // Pops where something pushed this, goes to the listing where
-      // nothing did.
-      onBack: () => context.leave(fallback: WaxRoute.playlists),
+      // Back to where the visitor was, the listing when nothing is
+      // recorded.
+      onBack: () => context.back(fallback: WaxRoute.playlists),
+      backSemanticsId: SemanticsIds.navBack,
       actions: const <Widget>[SearchAction()],
       slivers: <Widget>[
         // A permanent slot: a sliver appearing at the head of the list
@@ -378,18 +380,21 @@ class _AddRowState extends ConsumerState<_AddRow> {
     _debounce?.cancel();
     _generation++;
     setState(() => _busy = true);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     try {
       await ref.read(playlistDetailProvider(widget.pid).notifier).append(
         <String>[hit.pid],
       );
-      if (!mounted) return;
-      _controller.clear();
-      setState(() {
-        _hits = const <SearchHit>[];
-        _answered = null;
-      });
+      if (mounted) {
+        _controller.clear();
+        setState(() {
+          _hits = const <SearchHit>[];
+          _answered = null;
+        });
+      }
+      // Confirmed with the screen left meanwhile too, through the
+      // messenger read before the await.
       messenger.show(
         l10n.playlistAdded(hit.title),
         channel: ShellChannel.playlists,
@@ -554,12 +559,12 @@ class _ReorderableEntries extends ConsumerWidget {
     if (from < 0 || from >= pids.length || to < 0 || to >= pids.length) return;
     final moved = pids.removeAt(from);
     pids.insert(to, moved);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final asked = AskedFrom.of(context);
     final l10n = context.l10n;
     try {
       await ref.read(playlistDetailProvider(pid).notifier).reorder(pids);
     } on WaxDeckApiException catch (e) {
-      _refused(ref, messenger, l10n, e, mounted: context.mounted);
+      _refused(ref, asked, l10n, e, mounted: context.mounted);
     }
   }
 
@@ -570,33 +575,41 @@ class _ReorderableEntries extends ConsumerWidget {
     final entry = view.entries[index];
     final position = entry.position;
     if (position == null) return;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final asked = AskedFrom.of(context);
     final l10n = context.l10n;
     try {
       await ref
           .read(playlistDetailProvider(pid).notifier)
           .removeAt(position, itemPid: entry.item.pid);
     } on WaxDeckApiException catch (e) {
-      _refused(ref, messenger, l10n, e, mounted: context.mounted);
+      _refused(ref, asked, l10n, e, mounted: context.mounted);
     }
   }
 
   /// A refused edit: the list goes back to the server's, a race another
-  /// device won gets the banner, and anything else is a one-off failure,
-  /// told even when the screen has gone.
+  /// device won gets the banner while the screen is there and the shell
+  /// once it has gone, and anything else is a one-off failure, told in
+  /// the shell either way.
   void _refused(
     WidgetRef ref,
-    ShellMessenger messenger,
+    AskedFrom asked,
     AppLocalizations l10n,
     WaxDeckApiException e, {
     required bool mounted,
   }) {
-    if (e.code != 'conflict') {
-      messenger.show(explainError(l10n, e), channel: ShellChannel.playlists);
+    if (mounted) ref.invalidate(playlistDetailProvider(pid));
+    if (e.code == 'conflict') {
+      asked.refused(
+        explainRefusal(l10n, e),
+        inline: onConflict,
+        channel: ShellChannel.playlists,
+      );
+    } else {
+      asked.messenger.show(
+        explainError(l10n, e),
+        channel: ShellChannel.playlists,
+      );
     }
-    if (!mounted) return;
-    ref.invalidate(playlistDetailProvider(pid));
-    if (e.code == 'conflict') onConflict(explainRefusal(l10n, e));
   }
 }
 

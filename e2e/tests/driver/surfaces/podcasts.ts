@@ -157,12 +157,12 @@ export class Podcasts extends Surface {
     await page.locator(sem(SemanticsIds.podcastSubscribe)).waitFor({ timeout: T.nav });
   }
 
-  /// The app's own back control, which on a show screen returns to the
-  /// hub. Not the player's - that one is a collapse chevron and a name
-  /// match walks past the player onto the screen underneath.
+  /// The app's own back control, which on a show screen returns to where
+  /// the visitor was. Not the player's - that one is a collapse chevron
+  /// with an id of its own.
   async back(settledOn: Locator): Promise<void> {
     await clickThrough(
-      this.ctx.page.getByRole('button', { name: 'Back' }).first(),
+      this.ctx.page.locator(sem(SemanticsIds.navBack)).first(),
       settledOn,
     );
   }

@@ -100,7 +100,8 @@ class ArtistScreen extends ConsumerWidget {
       title: name,
       largeTitle: false,
       onBack: () =>
-          context.leave(fallback: WaxRoute.musicIndex(MusicDimension.artists)),
+          context.back(fallback: WaxRoute.musicIndex(MusicDimension.artists)),
+      backSemanticsId: SemanticsIds.navBack,
       actions: const <Widget>[SearchAction()],
       slivers: <Widget>[
         if (unproven != null)

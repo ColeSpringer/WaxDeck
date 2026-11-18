@@ -291,14 +291,6 @@ ThemeData buildWaxTheme({
         borderSide: BorderSide(color: colors.error),
       ),
     ),
-    snackBarTheme: SnackBarThemeData(
-      backgroundColor: colors.surface3,
-      contentTextStyle: WaxType.body.copyWith(color: colors.textPrimary),
-      actionTextColor: colors.accent,
-      closeIconColor: colors.textSecondary,
-      behavior: SnackBarBehavior.floating,
-      shape: const RoundedRectangleBorder(borderRadius: WaxRadius.card),
-    ),
     scrollbarTheme: ScrollbarThemeData(
       thumbColor: WidgetStatePropertyAll<Color>(
         colors.textTertiary.withValues(alpha: 0.5),

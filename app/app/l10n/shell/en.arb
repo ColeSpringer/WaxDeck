@@ -5,6 +5,10 @@
   "@shellClientOutdated": {
     "description": "Banner when the app itself is behind what the server serves, on a build that can reload itself."
   },
+  "shellCommandBack": "Go back",
+  "@shellCommandBack": {
+    "description": "Command name: step back to where the visitor was, as the leading arrow does."
+  },
   "shellCommandCarMode": "Open car mode",
   "@shellCommandCarMode": {
     "description": "Command name: the large-target layout meant for a car."

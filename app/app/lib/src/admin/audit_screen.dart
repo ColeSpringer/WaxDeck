@@ -141,6 +141,7 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
       largeTitle: false,
       semanticsId: SemanticsIds.adminAudit,
       onBack: adminBack(context),
+      backSemanticsId: SemanticsIds.navBack,
       slivers: <Widget>[
         SliverToBoxAdapter(
           child: Padding(

@@ -107,6 +107,9 @@ export const accountShapes: Record<string, AccountShape> = {
   // The read-only switch, which left admin-ops for a project of its own.
   'admin-readonly': { role: 'admin' },
   notifications: { role: 'admin' },
+  // The notification row it leaves by is an upload's, and the Tasks row
+  // is for an account that may upload.
+  navigation: { role: 'admin' },
   'review-queue': { role: 'admin' },
   'signup-ui': { role: 'admin' },
   uploads: { role: 'admin' },

@@ -33,6 +33,16 @@
   "@homeLibraryLoadError": {
     "description": "Title of the error state when home's probe of the library failed."
   },
+  "homeMixBasisReady": "Ready to open: {genre}",
+  "@homeMixBasisReady": {
+    "description": "Message when a genre mix card's listing was found after the listener had moved on from home; its action opens it. {genre} is the genre's own name.",
+    "placeholders": {
+      "genre": {
+        "type": "String",
+        "example": "Shoegaze"
+      }
+    }
+  },
   "homeMixEmpty": "No mix available for {title}",
   "@homeMixEmpty": {
     "description": "Snackbar when a mix card was tapped and the server answered with no tracks. {title} is the card's own name.",
@@ -60,6 +70,16 @@
   "homeMixPlay": "Play mix",
   "@homeMixPlay": {
     "description": "Row in a mix card's menu: mints the mix and plays it."
+  },
+  "homeMixReady": "Playing {title}",
+  "@homeMixReady": {
+    "description": "Message when a mix card's mix started playing after the listener had moved on from home; its action opens the mix's list. {title} is the card's own name.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Shoegaze"
+      }
+    }
   },
   "homeMixShuffle": "Shuffle mix",
   "@homeMixShuffle": {

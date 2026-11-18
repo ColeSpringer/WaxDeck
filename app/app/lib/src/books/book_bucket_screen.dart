@@ -117,7 +117,8 @@ class _BookBucketScreenState extends ConsumerState<BookBucketScreen>
         BookDimension.genres => SemanticsIds.bookGenreScreen(widget.segment),
       },
       onBack: () =>
-          context.leave(fallback: WaxRoute.bookIndex(widget.dimension)),
+          context.back(fallback: WaxRoute.bookIndex(widget.dimension)),
+      backSemanticsId: SemanticsIds.navBack,
       actions: const <Widget>[SearchAction()],
       slivers: <Widget>[
         if (unproven != null)

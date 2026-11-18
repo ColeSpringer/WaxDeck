@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/users_screen.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -173,6 +175,39 @@ void main() {
     expect(find.byKey(const Key(SemanticsIds.inviteToken)), findsOneWidget);
     expect(find.text('invite-token-0'), findsOneWidget);
     expect(repo.invitesById.values.single.note, 'For Samwise');
+  });
+
+  testWidgets('an invite created once its tab was left still shows its '
+      'token', (tester) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository()
+      ..createInviteGate = gate
+      ..sessionState = const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(id: 'us-0', username: 'admin', roles: ['admin']),
+      );
+    await mountApp(
+      tester,
+      const UsersScreen(),
+      container: appContainer(repo: repo),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Invites'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.inviteCreate));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('invite-create-confirm')));
+    await tester.pumpAndSettle();
+
+    // Each tab is a location of its own: going to another leaves it.
+    GoRouter.of(tester.element(find.byType(UsersScreen))).go(WaxRoute.users);
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsIdentifier(SemanticsIds.inviteCreate), findsNothing);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('invite-token-0'), findsOneWidget);
   });
 
   testWidgets('revoking an invite flags the row', (tester) async {

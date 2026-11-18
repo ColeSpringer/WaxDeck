@@ -16,6 +16,11 @@ import 'wax_finders.dart';
 /// A picker resolving pickFile to one fixed archive, standing in for
 /// the platform dialog.
 class _ZipPicker implements FilePickerPort {
+  _ZipPicker({this.gate});
+
+  /// Holds the pick open until completed, as the platform dialog does.
+  final Completer<void>? gate;
+
   @override
   bool get canPickFolders => false;
 
@@ -36,12 +41,15 @@ class _ZipPicker implements FilePickerPort {
     required Set<String> extensions,
     required String label,
     String anyLabel = '',
-  }) async => PickedAudioFile(
-    name: 'my_spotify_data.zip',
-    size: 4096,
-    openRead: ([int? start, int? end]) =>
-        Stream<List<int>>.value(const [1, 2, 3]),
-  );
+  }) async {
+    await gate?.future;
+    return PickedAudioFile(
+      name: 'my_spotify_data.zip',
+      size: 4096,
+      openRead: ([int? start, int? end]) =>
+          Stream<List<int>>.value(const [1, 2, 3]),
+    );
+  }
 }
 
 /// A viewport tall enough for the whole form, so no test scrolls.
@@ -130,7 +138,7 @@ void main() {
     // The message rides the shell's own channel now, like every other
     // admin screen's, so it is asserted where it is raised rather than
     // in a snackbar this screen would have to host itself.
-    final raised = container.read(shellMessengerProvider);
+    final raised = container.read(shellMessagesProvider);
     expect(shellMessageText(raised), 'Import started');
     // And it carries the way to watch the import, which is the whole
     // point of saying it started.
@@ -289,6 +297,33 @@ void main() {
       find.byKey(const Key(SemanticsIds.migrateExportStatus)),
       findsNothing,
     );
+  });
+
+  testWidgets('an export picked once the screen has gone is let go', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository();
+    final container = appContainer(
+      repo: repo,
+      extra: [filePickerProvider.overrideWithValue(_ZipPicker(gate: gate))],
+    );
+    await _pump(tester, repo, container);
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.migrateSource));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Spotify data export').last);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.migrateExportPick),
+    );
+    await tester.pump();
+
+    await leaveScreen(tester, container);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(repo.stagedExports, isEmpty);
   });
 
   testWidgets('the upload and the import each draw their own wait', (

@@ -5,7 +5,9 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/asked_from.dart';
 import '../shell/async_box_face.dart';
+import '../shell/navigation_history.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'prefs_controller.dart';
@@ -115,7 +117,9 @@ class _TimezoneDialogState extends ConsumerState<_TimezoneDialog> {
       _busy = true;
       _error = null;
     });
-    final navigator = Navigator.of(context);
+    // This dialog's own route: dismissed while the server answers, a pop
+    // would take the screen under it.
+    final from = AskedFrom.of(context);
     final l10n = context.l10n;
     try {
       // An emptied field returns to the server default; without an
@@ -125,12 +129,16 @@ class _TimezoneDialogState extends ConsumerState<_TimezoneDialog> {
       } else {
         await ref.read(prefsControllerProvider.notifier).setTimezone(timezone);
       }
-      navigator.pop();
+      closeFinished(from.route);
     } on WaxDeckApiException catch (e) {
       // A refusal keeps the server's sentence (what a timezone name may
-      // be is its rule); anything else, a dropped connection included,
-      // reads from the table in the app's language.
-      setState(() => _error = explainRefusal(l10n, e));
+      // be is its rule), under the field or in the shell once the field
+      // has gone; anything else, a dropped connection included, reads
+      // from the table in the app's language.
+      from.refused(
+        explainRefusal(l10n, e),
+        inline: (refusal) => setState(() => _error = refusal),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }

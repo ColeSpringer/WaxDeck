@@ -42,6 +42,7 @@ const ADMIN_SHAPES = [
   'catalog-jobs',
   'driver-smoke',
   'metadata-workbench',
+  'navigation',
   'notifications',
   'playlist-sync',
   'review-queue',

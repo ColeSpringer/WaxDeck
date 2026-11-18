@@ -242,6 +242,36 @@ export async function clickThrough(
   }).toPass({ timeout: T.nav });
 }
 
+// Click a canvas control once and wait for what it opens, for a control
+// whose first press is the thing under test: a retry would make good a
+// press that did nothing. What it opens must be absent before the press,
+// so the wait after it is this press's, and the press waits for the
+// control to be at rest rather than for a second chance.
+export async function clickOnceThrough(trigger: Locator, appears: Locator) {
+  await trigger.waitFor({ timeout: T.nav });
+  await expect(appears, 'not up before the press').toBeHidden({ timeout: T.step });
+  await rectAtRest(trigger);
+  await trigger.click({ timeout: T.step, force: true });
+  await appears.waitFor({ timeout: T.nav });
+}
+
+// Two presses of a canvas control [apartMs] apart, each a raw mouse down
+// and up at the centre of its rect once at rest: no retry and no wait for
+// what the first opens, for a control whose second press is the thing
+// under test.
+export async function pressTwice(page: Page, trigger: Locator, apartMs: number) {
+  await trigger.waitFor({ timeout: T.nav });
+  await rectAtRest(trigger);
+  const box = await trigger.boundingBox();
+  expect(box, 'the control reports a box').toBeTruthy();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  await page.mouse.up();
+  await new Promise((resolve) => setTimeout(resolve, apartMs));
+  await page.mouse.down();
+  await page.mouse.up();
+}
+
 // Click a control the driver cannot reach on its own, as one retried
 // unit.
 //

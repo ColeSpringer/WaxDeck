@@ -1384,6 +1384,52 @@ void main() {
     );
 
     goldenTest(
+      'a message bar floats in its inset, its action at the end and a long '
+      'message wrapping beside it',
+      fileName: 'message_bar',
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          for (final (name, bar) in <(String, WaxMessageBar)>[
+            ('alone', const WaxMessageBar(message: 'Scan started')),
+            (
+              'with an action',
+              WaxMessageBar(
+                message: 'Restored Kind of Blue',
+                actionLabel: 'Undo',
+                onAction: () {},
+              ),
+            ),
+            (
+              'waiting for its action',
+              WaxMessageBar(
+                message: 'Marked finished',
+                actionLabel: 'Undo',
+                onAction: () {},
+                onClose: () {},
+              ),
+            ),
+            (
+              'long',
+              WaxMessageBar(
+                message:
+                    'a.flac, b.flac and c.flac: the tags could not be '
+                    'written, so the files keep their old titles',
+                actionLabel: 'Open review',
+                onAction: () {},
+              ),
+            ),
+          ])
+            for (final variant in _lightAndDark)
+              GoldenTestScenario(
+                name: '${variant.name} $name',
+                child: _themed(variant, SizedBox(width: 360, child: bar)),
+              ),
+        ],
+      ),
+    );
+
+    goldenTest(
       'an info tip opens its text in a popover under the glyph',
       fileName: 'info_tip',
       // After the harness has sized the scene, which would close it.

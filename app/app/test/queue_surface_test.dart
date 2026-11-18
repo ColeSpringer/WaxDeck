@@ -396,7 +396,7 @@ void main() {
       expect(find.textContaining('items'), findsNothing);
 
       final raised = <ShellMessage>[];
-      container.listen(shellMessengerProvider, (_, next) {
+      container.listen(shellMessagesProvider, (_, next) {
         if (next != null) raised.add(next);
       });
       await tester.tap(
@@ -440,7 +440,7 @@ void main() {
       // Every message, not only the newest, so nothing said after the
       // offer can hide it.
       final raised = <ShellMessage>[];
-      container.listen(shellMessengerProvider, (_, next) {
+      container.listen(shellMessagesProvider, (_, next) {
         if (next != null) raised.add(next);
       });
       await tester.tap(

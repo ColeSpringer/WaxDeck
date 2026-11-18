@@ -1,5 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/auth/login_screen.dart';
+import 'package:waxdeck/src/auth/signup_screen.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -8,6 +14,67 @@ import 'app_host.dart';
 import 'fakes.dart';
 
 void main() {
+  // The visitor went back to sign-in while the server answered: sign-in
+  // stays as it is, the sign-up page is not shown again, and what it would
+  // have said is said there.
+  for (final gone in <bool>[false, true]) {
+    for (final invited in <bool>[false, true]) {
+      testWidgets('${invited ? 'an invite' : 'an open'} signup answered '
+          '${gone ? 'once its page has gone' : 'as its page leaves'} says so '
+          'on sign-in', (tester) async {
+        final gate = Completer<void>();
+        final repo = FakeRepository()..signupGate = gate;
+        repo.adminSettings = repo.adminSettings.copyWith(signupEnabled: true);
+        await pumpApp(
+          tester,
+          const LoginScreen(),
+          container: appContainer(repo: repo),
+          at: WaxRoute.login,
+        );
+        await tester.tap(find.bySemanticsIdentifier(SemanticsIds.signupOpen));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.bySemanticsIdentifier(SemanticsIds.signupUsername),
+          'sam',
+        );
+        await tester.enterText(
+          find.bySemanticsIdentifier(SemanticsIds.signupPassword),
+          'po-ta-toes',
+        );
+        if (invited) {
+          await tester.enterText(
+            find.bySemanticsIdentifier(SemanticsIds.signupInviteToken),
+            'invite-token-0',
+          );
+        }
+        await tester.tap(find.bySemanticsIdentifier(SemanticsIds.signupSubmit));
+        await tester.pump();
+
+        GoRouter.of(tester.element(find.byType(SignupScreen))).pop();
+        if (gone) {
+          await tester.pumpAndSettle();
+        } else {
+          await tester.pump(const Duration(milliseconds: 100));
+          expect(find.byType(SignupScreen), findsOneWidget, reason: 'leaving');
+        }
+        gate.complete();
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.byType(LoginScreen), findsOneWidget);
+        expect(find.byType(SignupScreen), findsNothing);
+        expect(find.widgetWithText(WaxTextField, 'sam'), findsNothing);
+        final en = AppLocalizationsEn();
+        final said = raisedMessage(tester);
+        expect(
+          shellMessageText(said),
+          invited ? en.authSignupReady('sam') : en.authSignupPendingNotice,
+        );
+        expect(said!.onAction, isNull, reason: 'on sign-in already');
+      });
+    }
+  }
+
   testWidgets('open signup queues the request and says so', (tester) async {
     final repo = FakeRepository();
     repo.adminSettings = repo.adminSettings.copyWith(signupEnabled: true);

@@ -108,17 +108,17 @@
   "@metadataDerivedChip": {
     "description": "Chip on a read-only value the server computes rather than stores, such as an album's track count."
   },
-  "metadataDiscardBody": "Switching away drops this selection's unsaved edits.",
+  "metadataDiscardBody": "The edits you have not saved here will be lost.",
   "@metadataDiscardBody": {
-    "description": "Body of the confirmation the workbench asks before replacing a pane that holds unsaved edits."
+    "description": "Body of the confirmation asked before unsaved edits are dropped: the workbench replacing a pane that holds them, or the editor leaving for a review entry from its Open review."
   },
   "metadataDiscardConfirm": "Discard",
   "@metadataDiscardConfirm": {
-    "description": "The confirming button on that dialog; Cancel keeps the pane and the typing."
+    "description": "The confirming button on that dialog; Cancel keeps the pane or the editor, and the typing."
   },
   "metadataDiscardTitle": "Discard unsaved edits?",
   "@metadataDiscardTitle": {
-    "description": "Title of the confirmation the workbench asks before replacing a pane that holds unsaved edits."
+    "description": "Title of the confirmation asked before unsaved edits are dropped: the workbench replacing a pane that holds them, or the editor leaving for a review entry from its Open review."
   },
   "metadataEnrichApplied": "Applied: {fields}",
   "@metadataEnrichApplied": {
@@ -421,6 +421,10 @@
   "metadataLyricsTitle": "Lyrics",
   "@metadataLyricsTitle": {
     "description": "Heading over the item's lyrics."
+  },
+  "metadataMergedReady": "Merged into another entry, ready to open",
+  "@metadataMergedReady": {
+    "description": "Said where the visitor went when an edit they saved merged the entry into another after they left its editor; its action opens the entry it joined."
   },
   "metadataNoCreditRoles": "No credit roles for this kind",
   "@metadataNoCreditRoles": {

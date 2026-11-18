@@ -1,13 +1,20 @@
+import 'dart:async';
+
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
+import '../player/now_playing_controller.dart';
 import '../providers.dart';
 import '../home/home_shelves.dart';
 import '../music/entity_facts.dart';
 import '../music/music_controllers.dart';
+import '../shell/navigation_history.dart';
+import '../shell/router.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 
@@ -41,9 +48,17 @@ bool canDeleteItems(WidgetRef ref) {
 /// With [filePids] it deletes those files of the item rather than the
 /// whole item (a copy, from the Details sheet), and the item stays.
 ///
-/// [onDeleted] runs once what was asked for is gone: every file went
-/// and no item stays on a file the deletion left, so a screen showing
-/// the item can leave it.
+/// [onDeleted] runs once what was asked for is gone (every file went and
+/// no item stays on a file the deletion left), so a screen showing the
+/// item can leave it, and only where the page on top is then one of the
+/// item's own, told by its location: the page the delete was asked from,
+/// the item's book, editor or episode, or the full player while it plays
+/// the item. A visitor who went elsewhere while the server answered keeps
+/// their screen, and back and a tab tap leave the item's pages out either
+/// way. Whatever was opened over the page meanwhile closes first, and
+/// once the leave has landed, the flow steps off the page too where it is
+/// still one of the item's own (a caller that only closed what lay over
+/// it, as the full player does).
 Future<void> confirmDeleteItem(
   BuildContext context, {
   required String pid,
@@ -60,28 +75,38 @@ Future<void> confirmDeleteItem(
 const itemDeleteMaxItems = 500;
 
 /// [confirmDeleteItem] for several items at once: an album's tracks, or
-/// every track one file holds.
+/// every track one file holds. [pages] are locations that go with them
+/// (an album's screen and its editor): forgotten with the items' own, and
+/// counted among them for [onDeleted].
 Future<void> confirmDeleteItems(
   BuildContext context, {
   required List<String> pids,
+  List<String> pages = const <String>[],
   VoidCallback? onDeleted,
-}) => _confirmDelete(context, pids: pids, onDeleted: onDeleted);
+}) => _confirmDelete(context, pids: pids, pages: pages, onDeleted: onDeleted);
 
 Future<void> _confirmDelete(
   BuildContext context, {
   required List<String> pids,
   List<String>? filePids,
+  List<String> pages = const <String>[],
   VoidCallback? onDeleted,
+  PageId? asked,
 }) async {
   // Read here: it is wanted after an await, and a context is not read
   // across one.
   final l10n = context.l10n;
+  // The router outlives the screen; the page the delete is asked from is
+  // the caller's own, told by where it is, whatever is on top by now.
+  final router = GoRouter.maybeOf(context);
+  final from =
+      asked ?? (router == null || onDeleted == null ? null : pageIn(context));
   // The container rather than `ref`, for the same reason the mark-older
   // dialog holds one: the deletion happens whether or not the screen
   // that offered it is still mounted when the server answers, and the
   // listings showing what just went have to be told regardless.
   final container = ProviderScope.containerOf(context, listen: false);
-  final messenger = container.read(shellMessengerProvider.notifier);
+  final messenger = container.read(shellMessengerProvider);
   final repo = container.read(repositoryProvider);
   // Permanent deletion is admin-only on the server whatever the delete
   // right says, so the radio for it is drawn only where it can succeed
@@ -150,7 +175,13 @@ Future<void> _confirmDelete(
       ),
     );
     if (whole == true && context.mounted) {
-      await _confirmDelete(context, pids: all, onDeleted: onDeleted);
+      await _confirmDelete(
+        context,
+        pids: all,
+        pages: pages,
+        onDeleted: onDeleted,
+        asked: from,
+      );
     }
     return;
   }
@@ -194,7 +225,35 @@ Future<void> _confirmDelete(
     // A file that stayed, or an item a file keeps, leaves what was asked
     // for in the library, and a screen showing it with it.
     if (result.failed == 0 && !result.entries.any((e) => e.itemSurvives)) {
-      onDeleted?.call();
+      final history = container.read(waxHistoryProvider);
+      // Decided from where a step on its way lands (a collapse of the
+      // player, say), as natively it would have landed already.
+      if (history?.landing case final landing?) await landing;
+      final own = _ownPages(container, pids: pids, pages: pages, from: from);
+      // Left only from the item's own page: one the visitor moved to
+      // while the server answered is theirs. Without a router there is
+      // no other screen.
+      final onScreen =
+          onDeleted != null && (router == null || own(pageOnTop(router)));
+      // What was opened over the page meanwhile closes first, or the
+      // leave would close that instead of the page.
+      if (onScreen && history != null && history.pagelessOnTop) {
+        await history.closePageless();
+      }
+      // Left first: how the page pops is read off the visit on screen.
+      if (onScreen) {
+        onDeleted();
+      } else {
+        // Waiting under what the visitor opened over them, the items'
+        // pages are taken out, so closing that shows what lay under them.
+        history?.takeOutFromUnder(
+          (location, _) => _isOwnLocation(location, pids: pids, pages: pages),
+        );
+      }
+      _forgetItems(container, pids, pages);
+      if (onScreen && history != null && router != null) {
+        unawaited(_leaveItemPage(history, router, own));
+      }
     }
   } on WaxDeckApiException catch (e) {
     // A refusal is the server's answer about the item as it stands, and
@@ -203,6 +262,84 @@ Future<void> _confirmDelete(
     if (e.isRefusal) rereadFiles();
     messenger.show(explainError(l10n, e), channel: ShellChannel.itemDelete);
   }
+}
+
+/// Drops where back could return to an item that is gone, wherever the
+/// delete was asked from: its book, its editor, its episode page, and
+/// [pages], which go with the items. An episode is also visited beneath
+/// its show, which a pid cannot name, so it goes by the tail of its path.
+void _forgetItems(
+  ProviderContainer container,
+  List<String> pids,
+  List<String> pages,
+) {
+  final history = container.read(waxHistoryProvider);
+  if (history == null) return;
+  for (final pid in pids.toSet()) {
+    history
+      ..forget(WaxRoute.book(pid))
+      ..forget(WaxRoute.metadata(pid))
+      ..forget(WaxRoute.episode(pid), anywhere: true);
+  }
+  for (final page in pages) {
+    history.forget(page);
+  }
+}
+
+/// Whether a page is one of the deleted [pids]' own: the page the delete
+/// was asked from ([from]), an item's book, editor or episode (the places
+/// [_forgetItems] drops), one of [pages], or the full player while it
+/// plays one of the items, asked from or not.
+bool Function(PageId? page) _ownPages(
+  ProviderContainer container, {
+  required List<String> pids,
+  required List<String> pages,
+  required PageId? from,
+}) => (page) {
+  if (page == null) return false;
+  final path = Uri.parse(page.location).path;
+  if (path == WaxRoute.nowPlaying) {
+    return pids.contains(container.read(nowPlayingProvider).item?.pid);
+  }
+  return page == from ||
+      _isOwnLocation(page.location, pids: pids, pages: pages);
+};
+
+/// Whether [location] is a page of one of [pids], or at or beneath one
+/// of [pages], which go with them.
+bool _isOwnLocation(
+  String location, {
+  required List<String> pids,
+  required List<String> pages,
+}) {
+  final path = Uri.parse(location).path;
+  bool under(String root) => path == root || path.startsWith('$root/');
+  return pids.any((pid) => _isItemPage(path, pid)) ||
+      pages.any((page) => under(Uri.parse(page).path));
+}
+
+/// Leaves the page on screen too when it is one of the deleted items' own
+/// ([own]), which a caller that only closed what lay over it (the full
+/// player's collapse) lands on: back to what was beneath it, as the arrow
+/// goes.
+Future<void> _leaveItemPage(
+  WaxHistory history,
+  GoRouter router,
+  bool Function(PageId? page) own,
+) async {
+  // Through the browser the leave lands later, and may have gone past it.
+  if (history.landing case final landing?) await landing;
+  if (own(pageOnTop(router))) history.back();
+}
+
+/// Whether [path] is a page of the item [pid].
+bool _isItemPage(String path, String pid) {
+  bool under(String root) => path == root || path.startsWith('$root/');
+  final episode = WaxRoute.episode(pid);
+  return under(WaxRoute.book(pid)) ||
+      under(WaxRoute.metadata(pid)) ||
+      path.endsWith(episode) ||
+      path.contains('$episode/');
 }
 
 /// The tracks a refusal says go together with the one named - every

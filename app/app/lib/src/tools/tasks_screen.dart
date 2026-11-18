@@ -105,8 +105,11 @@ class _TasksScreenState extends ConsumerState<TasksScreen>
     final sweeping = busyBy(_sweep);
     return WaxScaffold(
       title: l10n.toolsTitle,
+      largeTitle: false,
       controller: pagedScroll,
       semanticsId: SemanticsIds.tasksScreen,
+      onBack: () => context.back(),
+      backSemanticsId: SemanticsIds.navBack,
       actions: <Widget>[
         if (anyFinished || busy)
           // An administrator's list holds everyone's tasks, so the
@@ -206,7 +209,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen>
   Future<void> _sweepFinished({required bool all}) async {
     // Read before the dialog: this runs unawaited, so `ref` may be dead
     // by the time the answer comes back.
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final notifier = ref.read(toolTasksProvider.notifier);
     final container = ref.container;
     // Catalog jobs are an administrator's, and the choice of whose tasks
@@ -465,7 +468,7 @@ class _TaskRow extends ConsumerWidget {
     WidgetRef ref,
     String pid,
   ) async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     try {
       final item = await ref.read(repositoryProvider).getItem(pid);
@@ -482,7 +485,7 @@ class _TaskRow extends ConsumerWidget {
     WidgetRef ref,
     List<String> pids,
   ) async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     final List<ItemDetail> items;
     try {
@@ -558,7 +561,7 @@ class _TaskRow extends ConsumerWidget {
   }
 
   Future<void> _dismiss(BuildContext context, WidgetRef ref) async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     try {
       await ref.read(toolTasksProvider.notifier).dismiss(task.id);

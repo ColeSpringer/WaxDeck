@@ -12,8 +12,12 @@ mixin FakeUsers on FakeRepositoryState implements UsersApi {
   /// App passwords created through the fake, served by the listing.
   final List<AppPassword> appPasswords = [];
 
+  /// Holds [createAppPassword] until completed.
+  Completer<void>? createAppPasswordGate;
+
   @override
   Future<AppPasswordCreated> createAppPassword(String label) async {
+    await createAppPasswordGate?.future;
     final created = AppPasswordCreated(
       id: 'ap-FAKE${appPasswords.length}',
       label: label,
@@ -40,8 +44,12 @@ mixin FakeUsers on FakeRepositoryState implements UsersApi {
   /// per-device setting wants: nothing about it reached the account.
   final List<Prefs> putPrefsCalls = [];
 
+  /// Holds [putPrefs] until completed.
+  Completer<void>? putPrefsGate;
+
   @override
   Future<Prefs> putPrefs(Prefs next) async {
+    await putPrefsGate?.future;
     final error = putPrefsError;
     if (error != null) throw error;
     putPrefsCalls.add(next);
@@ -81,6 +89,9 @@ mixin FakeUsers on FakeRepositoryState implements UsersApi {
     return account;
   }
 
+  /// Holds [updateUser] until completed.
+  Completer<void>? updateUserGate;
+
   @override
   Future<UserAccount> updateUser(
     String userId, {
@@ -92,6 +103,7 @@ mixin FakeUsers on FakeRepositoryState implements UsersApi {
     int? uploadQuotaBytes,
     Permissions? permissions,
   }) async {
+    await updateUserGate?.future;
     final current = usersById[userId];
     if (current == null) {
       throw const WaxDeckApiException(
@@ -142,11 +154,15 @@ mixin FakeUsers on FakeRepositoryState implements UsersApi {
   /// What each [deleteUser] asked to become of the playlists, in order.
   final List<String> deletedUserPlaylists = [];
 
+  /// Holds a [deleteUser] until completed: a delete in flight.
+  Completer<void>? deleteUserGate;
+
   @override
   Future<void> deleteUser(
     String userId, {
     String playlists = 'transfer',
   }) async {
+    await deleteUserGate?.future;
     deletedUserIds.add(userId);
     deletedUserPlaylists.add(playlists);
     usersById.remove(userId);
@@ -155,12 +171,16 @@ mixin FakeUsers on FakeRepositoryState implements UsersApi {
   /// Administrator password resets, in order.
   final List<({String userId, String newPassword})> setUserPasswordCalls = [];
 
+  /// Holds [setUserPassword] until completed.
+  Completer<void>? setUserPasswordGate;
+
   @override
   Future<void> setUserPassword(
     String userId,
     String newPassword, {
     String? currentPassword,
   }) async {
+    await setUserPasswordGate?.future;
     // The server's own order, which is what makes the two refusals
     // reachable together: the new password's policy is checked before
     // the current one is verified, so a correct current password and a
@@ -270,6 +290,9 @@ mixin FakeUsers on FakeRepositoryState implements UsersApi {
     return invitesById.values.toList();
   }
 
+  /// Holds [createInvite] until completed.
+  Completer<void>? createInviteGate;
+
   @override
   Future<InviteCreated> createInvite({
     String? note,
@@ -280,6 +303,7 @@ mixin FakeUsers on FakeRepositoryState implements UsersApi {
     int? maxUses,
     DateTime? expiresAt,
   }) async {
+    await createInviteGate?.future;
     final seq = _inviteSeq++;
     final created = InviteCreated(
       id: 'iv-FAKE$seq',

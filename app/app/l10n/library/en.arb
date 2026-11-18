@@ -402,6 +402,14 @@
   "@libraryKindQueued": {
     "description": "Message when a kind change is still running after the dialog stopped watching it (accounts without the Tasks screen)."
   },
+  "libraryKindReadyBook": "Now an audiobook, ready to open",
+  "@libraryKindReadyBook": {
+    "description": "Said where the visitor went when a change to audiobook ended after they left the page they asked for it on; its action opens the book."
+  },
+  "libraryKindReadyMusic": "Now music, ready to open",
+  "@libraryKindReadyMusic": {
+    "description": "Said where the visitor went when a change to music ended after they left the page they asked for it on; its action opens the album the first part landed on, or the track listing."
+  },
   "libraryKindStillRunning": "Still changing. Follow it in Tasks.",
   "@libraryKindStillRunning": {
     "description": "Message, with a Tasks action, when a kind change is still running after the dialog stopped watching it (administrators)."

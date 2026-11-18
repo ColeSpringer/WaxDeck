@@ -335,7 +335,7 @@ class _QueueDropTargetState extends ConsumerState<QueueDropTarget> {
     // accepted, and the queue belongs to the app rather than to this
     // panel.
     final container = ProviderScope.containerOf(context, listen: false);
-    final messenger = container.read(shellMessengerProvider.notifier);
+    final messenger = container.read(shellMessengerProvider);
     final playing = container.read(nowPlayingProvider.notifier);
     final l10n = context.l10n;
     try {

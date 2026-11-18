@@ -336,7 +336,7 @@ void main() {
     expect(repo.pruneEnrichmentCacheCalls.single.olderThanSeconds, 30 * 86400);
     expect(repo.pruneEnrichmentCacheCalls.single.maxBytes, isNull);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       startsWith('1 answer pruned,'),
     );
   });
@@ -578,7 +578,7 @@ void main() {
     expect(repo.enrichmentStatusReads, greaterThan(reads.status));
     expect(repo.jobReads, greaterThan(reads.jobs));
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'A pass is already running.',
     );
   });
@@ -757,7 +757,7 @@ void main() {
 
     expect(repo.enrichmentStatusReads, greaterThan(reads));
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'The sources changed on the server. Look them over and save again.',
     );
   });
@@ -792,7 +792,7 @@ void main() {
 
     await _tap(tester, SemanticsIds.enrichmentSourcesSave);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Could not reach the server. Check the connection and try again.',
     );
 
@@ -821,7 +821,7 @@ void main() {
     await _tap(tester, SemanticsIds.enrichmentSourcesSave);
 
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Source order saved. The pass running now keeps the order it started '
       'with.',
     );

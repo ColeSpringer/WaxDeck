@@ -49,6 +49,33 @@ void main() {
       );
     });
 
+    // One id for the leading arrow wherever the app draws one, so a spec
+    // clicks it without knowing the screen: each `onBack:` in a file has
+    // a `backSemanticsId: SemanticsIds.navBack` beside it.
+    test('every leading arrow carries the one back id', () {
+      final arrow = RegExp(r'\bonBack:');
+      final id = RegExp(r'\bbackSemanticsId:\s*SemanticsIds\.navBack\b');
+      final offenders = <String>[];
+      for (final file in sources) {
+        final code = file
+            .readAsLinesSync()
+            .where((line) => !line.trimLeft().startsWith('//'))
+            .join('\n');
+        final arrows = arrow.allMatches(code).length;
+        final ids = id.allMatches(code).length;
+        if (arrows != ids) {
+          offenders.add('${file.path}: $arrows onBack, $ids navBack');
+        }
+      }
+      expect(
+        offenders,
+        isEmpty,
+        reason:
+            'Pass `backSemanticsId: SemanticsIds.navBack` with each '
+            'onBack:\n${offenders.join('\n')}',
+      );
+    });
+
     // The same rule for the tests: a finder that types an identifier
     // the registry generates goes stale silently on a rename, one literal
     // at a time. A finder string is a generated id when it equals a fixed

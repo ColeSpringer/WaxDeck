@@ -61,7 +61,11 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
     ShareIntakePort port,
     List<SharedFile> files,
   ) async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    // The container rather than `ref` past the first await: this gate
+    // lives in the signed-in scope, so a sign-out mid-share takes it,
+    // and its `ref`, away. The messenger keeps the session that shared.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = container.read(shellMessengerProvider);
     // Held beside the messenger and for the same reason: the loop below
     // outlives this frame.
     final l10n = context.l10n;
@@ -82,7 +86,7 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
     String? batchId;
     if (files.length > 1) {
       try {
-        final batch = await ref
+        final batch = await container
             .read(repositoryProvider)
             .createUploadBatch(
               grouping: UploadGrouping.auto,
@@ -95,7 +99,7 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
         return;
       }
     }
-    await untilUploadsListed(ref.read(uploadsProvider.future));
+    await untilUploadsListed(container.read(uploadsProvider.future));
     for (final file in files) {
       // Measured here rather than inside the upload, so a refusal can
       // be told against the allowance as a picked file's is.
@@ -105,7 +109,7 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
         // Path-backed: the platform side already staged the share to
         // an app-private file, and the upload streams it from disk so
         // an audiobook-sized share never sits whole in memory.
-        await ref
+        await container
             .read(uploadsProvider.notifier)
             .uploadFromPath(
               fileName: file.name,
@@ -123,7 +127,7 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
               l10n,
               e,
               sizeBytes: size,
-              quota: ref.read(uploadsProvider).value?.quota,
+              quota: container.read(uploadsProvider).value?.quota,
             ),
           ),
           channel: ShellChannel.uploads,
@@ -132,11 +136,11 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
     }
     if (batchId != null) {
       try {
-        await ref.read(repositoryProvider).completeUploadBatch(batchId);
+        await container.read(repositoryProvider).completeUploadBatch(batchId);
       } on WaxDeckApiException catch (e) {
         messenger.show(explainError(l10n, e), channel: ShellChannel.uploads);
       }
-      ref.invalidate(uploadsProvider);
+      container.invalidate(uploadsProvider);
     }
   }
 

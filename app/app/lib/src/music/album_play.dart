@@ -39,7 +39,7 @@ Future<void> playAlbumPid(
   // and the play is honoured anyway.
   final repository = ref.read(repositoryProvider);
   final playback = ref.read(nowPlayingProvider.notifier);
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   try {
     final tracks = albumOrder(
       await bucketItems(

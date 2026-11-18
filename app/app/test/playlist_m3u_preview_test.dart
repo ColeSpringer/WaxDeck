@@ -326,6 +326,67 @@ void main() {
     );
   });
 
+  testWidgets('a dismissal as the import lands leaves the screen underneath', (
+    tester,
+  ) async {
+    // Answered while the dialog is on its way out, still mounted.
+    final gate = Completer<void>();
+    final repo = FakeRepository(items: const [_pony])
+      ..m3uPreview = _preview
+      ..importM3uGate = gate
+      ..importMatched = 2
+      ..importUnmatched = 1;
+    await _paste(tester, repo);
+    await _tap(tester, SemanticsIds.playlistM3uCheck);
+    await tester.tap(_id(SemanticsIds.playlistM3uImport));
+    await tester.pump();
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pump();
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(PlaylistsScreen), findsOneWidget);
+    expect(_id(SemanticsIds.playlistImportPayload), findsNothing);
+    expect(repo.importedM3uContents, [_document]);
+  });
+
+  for (final gone in <bool>[false, true]) {
+    testWidgets('a dismissal while the import runs, then a refusal, is said '
+        'in the shell ${gone ? 'once the dialog has gone' : 'as it leaves'}', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository(items: const [_pony])
+        ..m3uPreview = _preview
+        ..importM3uGate = gate
+        ..importM3uError = const WaxDeckApiException(
+          code: 'invalid-request',
+          message: 'a playlist with that name already exists',
+        );
+      await _paste(tester, repo);
+      await _tap(tester, SemanticsIds.playlistM3uCheck);
+      await tester.tap(_id(SemanticsIds.playlistM3uImport));
+      await tester.pump();
+      await tester.tapAt(const Offset(4, 4));
+      if (gone) {
+        await tester.pumpAndSettle();
+      } else {
+        await tester.pump();
+      }
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(PlaylistsScreen), findsOneWidget);
+      expect(_id(SemanticsIds.playlistImportPayload), findsNothing);
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'a playlist with that name already exists',
+      );
+    });
+  }
+
   testWidgets('a path named twice is two lines', (tester) async {
     final repo = FakeRepository(items: const [_pony])
       ..m3uPreview = const M3uPreview(

@@ -26,11 +26,7 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 [11-04-26] When trying to download a music playlist from youtube, there is not good feedback. If you go to the tasks section, it just says URL download and "Running" but you can't see exactly what its doing or even any progess. You also can't tell if its stuck or doing anything at all. There is also no option to cancel the action (this specifically might be a bigger problem outside of just playlist download and probably is the case for all tasks). NOTE: after waiting awhile i think it didn't work at all. Again, I can't see it updating anything but the playlist is not very large and there is no notice of any of the tracks having been downloaded. (playlist used: https://www.youtube.com/playlist?list=PLdmuawL0MnTd9DVQjap6ZEPHC8gYwUS2C). UPDATE: the playlist was private. we should not even accept private playlists and should give an obvious error message or popup. We should only accept lists we have access to (and videos). we should still have been able to cancel the neverending task (and had better feedback/visuals on what was happening, errors, stuck, whatever). UPDATE 2: The download eventually failed with the error message "URL is a playlist; use Enumerate". Pointless message. Doesn't tell the user anything useful.
 
-[11-04-26] When going from tasks to home then clicking on Music I was instead brought back to the tasks screen. I had to click music again to actually get to the section. This was saved through back actions as well.
-
 [11-04-26] Audiobook author shows under music sections (artist, albums, etcs.). We really need better separation for the various audio types (music, podcasts, audiobooks). They are not meant to intermingle at all.
-
-[11-04-26] When approving a track from the review queue, the screen stays at the track you approved. The track you approved is removed from the queue list but it highlights another track without going to it. I don't think we need to stay on a track after a decision has been made for it.
 
 [11-04-26] In listening stats under top we should include small images next to the list items. At least for artists and albums. Also, what the hell is shows supposed to be? Where are books and podcasts?
 

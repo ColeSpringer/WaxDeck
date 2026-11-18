@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -5,10 +7,13 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/navigation_history.dart';
+import '../shell/router.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'admin_providers.dart';
+import 'users_screen.dart';
 
 /// Editor for one account's roles, access, and permissions. Serves two
 /// flows with one shape: editing an existing account, and approving a
@@ -111,8 +116,13 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
     setState(() => _busy = true);
     final l10n = context.l10n;
     final router = GoRouter.of(context);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final repo = ref.read(repositoryProvider);
+    // Read before the await: the work outlives this editor when the
+    // visitor goes elsewhere while the server answers.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final from = pageIn(context);
+    final args = GoRouterState.of(context).extra;
     final roles = [if (_admin) 'admin' else 'user'];
     try {
       if (widget.approve) {
@@ -135,7 +145,16 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
           uploadQuotaBytes: quotaBytesFor(approving: false),
         );
       }
-      router.leave(fallback: WaxRoute.users, result: true);
+      // Saved, Save stays off: the editor is done with. Left only while
+      // it is still on top; a visitor who went elsewhere keeps their
+      // screen, and the lists are told here, since no opener hears.
+      if (await stillOnTop(router, (top) => top == from)) {
+        unawaited(router.leave(fallback: WaxRoute.users, result: true));
+        return;
+      }
+      container.invalidate(adminUsersProvider);
+      if (widget.approve) container.invalidate(signupRequestsProvider);
+      forgetFinished(router, WaxRoute.userEdit, args);
     } on WaxDeckApiException catch (e) {
       messenger.show(explainRefusal(l10n, e));
       if (mounted) setState(() => _busy = false);
@@ -144,7 +163,7 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
 
   Future<void> _setPassword() async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final password = await showDialog<String>(
       context: context,
       builder: (_) => const _SetPasswordDialog(),
@@ -162,7 +181,7 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
 
   Future<void> _revokeSessions() async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final confirmed = await _confirm(
       title: l10n.adminUserRevokeTitle,
       body: l10n.adminUserRevokeBody(widget.user.username),
@@ -179,8 +198,15 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
 
   Future<void> _deleteUser() async {
     final l10n = context.l10n;
+    // Read before the dialog: the work outlives this editor when the
+    // visitor goes elsewhere while the server answers.
+    final container = ProviderScope.containerOf(context, listen: false);
     final router = GoRouter.of(context);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final history = ref.read(waxHistoryProvider);
+    final messenger = ref.read(shellMessengerProvider);
+    final repo = ref.read(repositoryProvider);
+    final id = widget.user.id;
+    final from = pageIn(context);
     final playlists = await showDialog<String>(
       context: context,
       builder: (dialogContext) =>
@@ -188,13 +214,44 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
     );
     if (playlists == null) return;
     try {
-      await ref
-          .read(repositoryProvider)
-          .deleteUser(widget.user.id, playlists: playlists);
-      router.leave(fallback: WaxRoute.users, result: true);
+      await repo.deleteUser(id, playlists: playlists);
     } on WaxDeckApiException catch (e) {
       messenger.show(explainError(l10n, e));
+      return;
     }
+    // The list is told whether or not this editor is still up to answer.
+    container.invalidate(adminUsersProvider);
+    // Left only from this account's editor: the editor's location names no
+    // account, so the one it shows tells it apart. A visitor who went
+    // elsewhere while the server answered keeps their screen.
+    final onScreen = await stillOnTop(
+      router,
+      (top) =>
+          top == from ||
+          (Uri.parse(top.location).path == WaxRoute.userEdit &&
+              switch (extraOnTop(router)) {
+                UserEditArgs(:final user) => user.id == id,
+                _ => false,
+              }),
+    );
+    if (onScreen) {
+      unawaited(router.leave(fallback: WaxRoute.users, result: true));
+    } else {
+      // Waiting under what the visitor opened over it, it is taken out,
+      // so closing that shows the list.
+      history?.takeOutFromUnder(
+        (location, extra) =>
+            Uri.parse(location).path == WaxRoute.userEdit &&
+            extra is UserEditArgs &&
+            extra.user.id == id,
+      );
+    }
+    // The editor carries the account only in the extra it was opened
+    // with, so an earlier visit to it is told by that.
+    history?.forget(
+      WaxRoute.userEdit,
+      where: (extra) => extra is UserEditArgs && extra.user.id == id,
+    );
   }
 
   Future<bool> _confirm({
@@ -265,7 +322,8 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
           ? l10n.adminUserApproveTitle(widget.user.username)
           : widget.user.username,
       largeTitle: false,
-      onBack: () => context.leave(fallback: WaxRoute.users),
+      onBack: () => context.back(fallback: WaxRoute.users),
+      backSemanticsId: SemanticsIds.navBack,
       body: Padding(
         padding: sizeClass.gutter.add(
           const EdgeInsets.only(bottom: WaxSpace.s32),

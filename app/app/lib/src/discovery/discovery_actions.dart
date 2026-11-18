@@ -12,6 +12,7 @@ import '../providers.dart';
 import '../queue/queue_controller.dart';
 import '../queue/queue_state.dart';
 import '../queue/queue_view.dart';
+import '../shell/navigation_history.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -66,14 +67,14 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
     if (_busy) return;
     setState(() => _busy = true);
     ref.read(mixAdventurousnessProvider.notifier).set(_adventurousness);
-    // The sheet's own navigator closes the sheet; pushes go through
+    // The sheet's own route closes the sheet; pushes go through
     // the router, whose stack outlives it. Playback likewise: the
     // controller belongs to the container, and reaching for it through
     // ref after the await would throw if the sheet were dismissed while
     // the mix was building.
-    final navigator = Navigator.of(context);
+    final route = ModalRoute.of(context);
     final router = GoRouter.of(context);
-    final shell = ref.read(shellMessengerProvider.notifier);
+    final shell = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     final playback = ref.read(nowPlayingProvider.notifier);
     // What the mix must not repeat, as it stands when the mix is asked
@@ -100,11 +101,16 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
             // is already in it. Harmless when there is no queue.
             excludePids: queued,
           );
-      // Dismissed while the mix was building: that is a cancel, and
-      // popping again from here would take the screen underneath with
-      // it.
-      if (!mounted) return;
-      navigator.pop();
+      // Dismissed while the mix was building, or on its way out: that is
+      // a cancel, and popping again from here would take the screen
+      // underneath with it.
+      if (!mounted || !(route?.isActive ?? false)) return;
+      // Read through the sheet before it closes, which can unmount it.
+      final queuing = ref.read(queueControllerProvider).isNotEmpty;
+      // The visitor's place while it is on top; something opened over it
+      // since is where they went, and a list is offered there.
+      final here = route?.isCurrent ?? false;
+      closeFinished(route);
       if (mix.items.isEmpty) {
         // Two different empty answers: candidates that are all already
         // queued, and a seed with no candidates at all. The count is
@@ -117,14 +123,13 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
         );
         return;
       }
-      // Read again rather than reusing the snapshot above: `mounted` is
-      // checked a few lines up, so the container is still there.
-      if (ref.read(queueControllerProvider).isNotEmpty) {
+      // Read again rather than reusing the snapshot above, which was
+      // taken before the mix was built.
+      if (queuing) {
         // Something is already queued, so the mix goes behind it and the
         // song playing keeps playing. No route push either: nothing on
         // screen was asked to change, and the message is the way to what
-        // did. Through the shell rather than a bare SnackBarAction,
-        // which carries no semantics identifier for the button.
+        // did.
         playback.enqueue(mix.items);
         shell.show(
           mix.items.length == 1
@@ -146,17 +151,24 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
       // own menu - and this is the right answer there: enqueueing
       // behind nothing would leave the tracks queued and silent. In the
       // shell, past the player when it was the player's menu.
-      unawaited(
-        router.pushInShell<void>(
-          WaxRoute.tracks,
-          extra: TrackListArgs(
-            title: l10n.discoveryInstantMixTitle,
-            basis: mix.basis,
-            items: mix.items,
-            idPrefix: 'mix',
-          ),
-        ),
+      final list = TrackListArgs(
+        title: l10n.discoveryInstantMixTitle,
+        basis: mix.basis,
+        items: mix.items,
+        idPrefix: 'mix',
       );
+      void open() =>
+          unawaited(router.pushInShell<void>(WaxRoute.tracks, extra: list));
+      if (here) {
+        open();
+      } else {
+        shell.show(
+          l10n.discoveryMixReady,
+          actionLabel: l10n.commonOpen,
+          onAction: open,
+          channel: ShellChannel.instantMix,
+        );
+      }
       playback.play(
         mix.items,
         // No label: a mix seeded by one track has no name of its own,
@@ -231,31 +243,44 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
 ///
 /// The player that asked stays up while the answer is on its way, so a
 /// failure is told where it was asked. The list lives in the shell, so it
-/// lands past whatever overlay is up by then.
+/// lands past the player while the visitor is still on it; one who went
+/// elsewhere meanwhile (collapsed it, opened the queue over it) is
+/// offered the list there instead.
 Future<void> openSimilarTracks(
   BuildContext context,
   WidgetRef ref,
   ItemSummary seed,
 ) async {
   final router = GoRouter.of(context);
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final from = pageOnTop(router);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   try {
     final similar = await ref
         .read(repositoryProvider)
         .getSimilarTracks(seed.pid, limit: instantMixSize);
-    await router.pushInShell<void>(
-      WaxRoute.tracks,
-      extra: TrackListArgs(
-        title: l10n.discoverySimilarTitle(seed.title),
-        // No source label, the way the instant mix has none: tracks
-        // like this one are not this one, so naming the seed would have
-        // the queue claim a provenance the list does not have.
-        basis: similar.basis,
-        items: similar.items,
-        idPrefix: 'similar',
-      ),
+    final list = TrackListArgs(
+      title: l10n.discoverySimilarTitle(seed.title),
+      // No source label, the way the instant mix has none: tracks like
+      // this one are not this one, so naming the seed would have the
+      // queue claim a provenance the list does not have.
+      basis: similar.basis,
+      items: similar.items,
+      idPrefix: 'similar',
     );
+    // Read when it is opened, so it lands past whatever is up then.
+    void open() =>
+        unawaited(router.pushInShell<void>(WaxRoute.tracks, extra: list));
+    if (await stillShowing(router, from)) {
+      open();
+    } else {
+      messenger.show(
+        l10n.discoverySimilarReady(seed.title),
+        actionLabel: l10n.commonOpen,
+        onAction: open,
+        channel: ShellChannel.similarTracks,
+      );
+    }
   } on WaxDeckApiException catch (e) {
     messenger.show(explainError(l10n, e), channel: ShellChannel.similarTracks);
   }

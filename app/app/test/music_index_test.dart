@@ -20,6 +20,7 @@ import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -546,6 +547,38 @@ void main() {
       'The server ran into a problem it could not handle.',
     );
     expect(container.read(queueControllerProvider).isEmpty, isTrue);
+  });
+
+  testWidgets('a shuffle refused once the listing was left still says so', (
+    tester,
+  ) async {
+    final repository = FakeRepository()
+      ..facetItems['genre ge-1'] = <ItemSummary>[_track('Track 0')];
+    final container = await _pump(
+      tester,
+      const MusicListingScreen(
+        dimension: MusicDimension.genres,
+        segment: 'ge-1',
+      ),
+      repository,
+    );
+    final gate = repository.browseGate = Completer<void>();
+    repository.listError = const WaxDeckApiException(
+      code: 'internal',
+      message: 'the catalog is busy',
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.listingShuffle));
+    await tester.pump();
+    await leaveScreen(tester, container);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      shellMessageText(container.read(shellMessagesProvider)),
+      'The server ran into a problem it could not handle.',
+    );
   });
 
   testWidgets('the unknown bucket travels as a sentinel, not an empty path', (

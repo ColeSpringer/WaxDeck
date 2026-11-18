@@ -27,7 +27,8 @@ class BookSeriesScreen extends ConsumerWidget {
       title: detail.value?.name ?? l10n.bookSeriesTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.bookSeriesScreen(pid),
-      onBack: () => context.leave(fallback: WaxRoute.bookSeriesIndex),
+      onBack: () => context.back(fallback: WaxRoute.bookSeriesIndex),
+      backSemanticsId: SemanticsIds.navBack,
       slivers: <Widget>[
         AsyncSliverFace<BookSeriesDetail>(
           state: detail,

@@ -1,7 +1,13 @@
 // The review queue: the keyboard-first curation surface.
 
 import { Locator } from '@playwright/test';
-import { SemanticsIds, sem } from '../../semantics-ids';
+import {
+  SEMANTICS_ATTRIBUTE,
+  SemanticsIds,
+  SemanticsIdPrefixes,
+  sem,
+  semPrefix,
+} from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
 import { clickThrough, typeInto } from '../gestures';
@@ -9,6 +15,28 @@ import { clickThrough, typeInto } from '../gestures';
 export class Review extends Surface {
   row(entryId: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.reviewRow(entryId)));
+  }
+
+  /// The entry ids of the queue's rows on screen, top to bottom.
+  async rowIds(): Promise<string[]> {
+    const rows = this.ctx.page.locator(semPrefix(SemanticsIdPrefixes.reviewRow));
+    await rows.first().waitFor({ timeout: T.nav });
+    const found = (await rows.evaluateAll(
+      (els, attribute) =>
+        els.map((e) => ({
+          id: e.getAttribute(attribute) ?? '',
+          top: e.getBoundingClientRect().top,
+        })),
+      SEMANTICS_ATTRIBUTE,
+    )) as { id: string; top: number }[];
+    return found
+      .sort((a, b) => a.top - b.top)
+      .map((row) => row.id.slice(SemanticsIdPrefixes.reviewRow.length));
+  }
+
+  /// The entry pane beside the queue, on a window wide enough for two.
+  pane(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.reviewPane));
   }
 
   /// The as-is decision, which is what an entry with no candidates

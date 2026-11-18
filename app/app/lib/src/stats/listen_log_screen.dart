@@ -59,7 +59,8 @@ class _ListenLogScreenState extends ConsumerState<ListenLogScreen>
       title: l10n.statsDoorListenLog,
       largeTitle: false,
       controller: pagedScroll,
-      onBack: () => context.leave(fallback: WaxRoute.stats),
+      onBack: () => context.back(fallback: WaxRoute.stats),
+      backSemanticsId: SemanticsIds.navBack,
       actions: <Widget>[
         WaxChoice<String>(
           value: filter ?? _allClients,

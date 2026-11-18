@@ -96,7 +96,7 @@ void main() {
       final h = _harness(engine: engine);
       h.repo.instantMixResult = mix;
       final raised = <ShellMessage>[];
-      h.container.listen(shellMessengerProvider, (_, next) {
+      h.container.listen(shellMessagesProvider, (_, next) {
         if (next != null) raised.add(next);
       });
 
@@ -109,7 +109,7 @@ void main() {
       expect(h.container.queueState.currentPid, _mixed);
       expect(raised.map((m) => m.resolve(l10n)), contains(skipped));
       expect(
-        h.container.read(shellMessengerProvider)?.resolve(l10n),
+        h.container.read(shellMessagesProvider)?.resolve(l10n),
         skipped,
         reason: 'nothing the mix starts says anything over it',
       );
@@ -127,7 +127,7 @@ void main() {
       final gate = Completer<void>();
       h.repo.instantMixGate = gate;
       final raised = <ShellMessage>[];
-      h.container.listen(shellMessengerProvider, (_, next) {
+      h.container.listen(shellMessagesProvider, (_, next) {
         if (next != null) raised.add(next);
       });
 
@@ -143,7 +143,7 @@ void main() {
       final l10n = AppLocalizationsEn();
       expect(h.container.queueState.currentPid, _mixed);
       expect(
-        h.container.read(shellMessengerProvider)?.resolve(l10n),
+        h.container.read(shellMessagesProvider)?.resolve(l10n),
         l10n.playerSkippedUnplayable(testItem(_a).title),
       );
     },
@@ -195,7 +195,7 @@ void main() {
       final h = _harness(engine: engine);
       h.container.read(keepPlayingSimilarProvider.notifier).set(false);
       final raised = <ShellMessage>[];
-      h.container.listen(shellMessengerProvider, (_, next) {
+      h.container.listen(shellMessagesProvider, (_, next) {
         if (next != null) raised.add(next);
       });
       h.container.playback.play([testItem(_a)], source: _album);

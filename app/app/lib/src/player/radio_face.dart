@@ -338,7 +338,7 @@ class _SaveSong extends ConsumerWidget {
 /// here is say what went wrong - a full list being the refusal worth
 /// reading, since nothing else on these surfaces explains it.
 Future<void> saveNowPlayingSong(BuildContext context, WidgetRef ref) async {
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   try {
     await ref.read(radioPlaybackProvider.notifier).toggleSaveNowPlaying();
@@ -369,7 +369,7 @@ class _FavoriteButton extends ConsumerWidget {
   /// A full dial is a refusal worth reading; the star has nowhere to
   /// put one, so it goes where the hub's does.
   Future<void> _pin(BuildContext context, WidgetRef ref) async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     final refusal = await ref
         .read(radioFavoritesProvider.notifier)
@@ -429,8 +429,10 @@ class _StationMenu extends ConsumerWidget {
       ],
       onSelected: (choice) => unawaited(switch (choice) {
         'hub' => Future<void>.sync(() {
-          leavePlayer(context);
-          context.go(WaxRoute.radio);
+          final router = GoRouter.of(context);
+          // Once the player has gone: on web its pop lands later, and
+          // would undo a move made before it.
+          return leaveWith(router).then((_) => router.go(WaxRoute.radio));
         }),
         'homepage' => openStationHomepage(context, station),
         'scrobble' => toggleStationScrobble(context, ref, station),

@@ -1,5 +1,6 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -251,8 +252,11 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
   Future<void> _save(Map<String, String> changed) async {
     if (_busy) return;
     setState(() => _busy = true);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
+    final follow = EditFollow.of(context, pid: widget.pid);
+    final container = ProviderScope.containerOf(context, listen: false);
+    final curationKey = _curationKey;
     try {
       final result = await ref
           .read(repositoryProvider)
@@ -264,37 +268,39 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
             lock: _lock,
             force: _force,
           );
-      // Guarded like the artwork manager beside it: the save may land
-      // while this screen is being left, and invalidating through a
-      // disposed ref throws past the catch below, which only knows the
-      // server's refusals.
-      if (!mounted) return;
-      // What was sent stops counting as typed-in, so the refetch below
-      // may adopt the stored (possibly normalized) echo.
-      for (final field in changed.keys) {
-        if (field == 'type') {
-          _typeSeeded = changed[field]!;
-          _typeStaged = null;
-        } else {
-          _seeded[field] = changed[field]!;
+      // The save may land while this screen is being left: its own state
+      // is touched only while it is up, and the rest goes through what
+      // was read before the await, so it is said where the visitor is.
+      if (mounted) {
+        // What was sent stops counting as typed-in, so the refetch below
+        // may adopt the stored (possibly normalized) echo.
+        for (final field in changed.keys) {
+          if (field == 'type') {
+            _typeSeeded = changed[field]!;
+            _typeStaged = null;
+          } else {
+            _seeded[field] = changed[field]!;
+          }
         }
       }
-      ref.invalidate(entityCurationProvider(_curationKey));
-      messenger.show(l10n.musicAlbumEditorSaved);
+      container.invalidate(entityCurationProvider(curationKey));
       // An mbid clear is the one edit that can re-key the entity onto a
       // heuristic twin, which deletes this pid. Follow the survivor
-      // rather than leaving the screen on a row that is gone.
+      // rather than leaving the screen on a row that is gone, whether or
+      // not the screen is still up.
       if (result.mergedInto case final survivor?) {
-        context.replace(WaxRoute.metadata(survivor));
+        unawaited(
+          follow.merged(survivor, said: (l10n) => l10n.musicAlbumEditorSaved),
+        );
+      } else {
+        messenger.show(l10n.musicAlbumEditorSaved);
       }
     } on WaxDeckApiException catch (e) {
-      if (mounted) {
-        messenger.show(
-          e.code == 'field-locked'
-              ? '${e.message}. ${l10n.metadataFieldLockedHint}'
-              : explainRefusal(l10n, e),
-        );
-      }
+      messenger.show(
+        e.code == 'field-locked'
+            ? '${e.message}. ${l10n.metadataFieldLockedHint}'
+            : explainRefusal(l10n, e),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -306,6 +312,9 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
     final l10n = context.l10n;
     final seedKey = (entity: widget.entity, pid: widget.pid);
     final artist = widget.entity == EditableEntity.artist;
+    // Through the container: a rename may land once this screen has gone.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final curationKey = _curationKey;
     return EntityRenameSection(
       entityType: widget.entity.wire,
       pid: widget.pid,
@@ -320,7 +329,7 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
         applyLabel: l10n.musicEntityRenameApply,
         confirmTitle: l10n.musicEntityRenameConfirmTitle,
         confirmBody: l10n.musicEntityRenameConfirmBody,
-        merged: l10n.musicEntityRenameMerged,
+        merged: (l10n) => l10n.musicEntityRenameMerged,
         renamed: l10n.musicEntityRenameDone,
       ),
       ids: RenameSectionIds(
@@ -331,9 +340,9 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
       ),
       busy: _busy,
       onBusyChanged: (busy) => setState(() => _busy = busy),
-      onMerged: (survivor) => context.replace(WaxRoute.metadata(survivor)),
-      onRenamed: () => ref
-        ..invalidate(entityCurationProvider(_curationKey))
+      follow: () => EditFollow.of(context, pid: widget.pid),
+      onRenamed: () => container
+        ..invalidate(entityCurationProvider(curationKey))
         ..invalidate(_entityNameProvider(seedKey)),
     );
   }
@@ -393,7 +402,8 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
       title: name ?? l10n.metadataTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.entityEditor,
-      onBack: () => context.leave(fallback: WaxRoute.music),
+      onBack: () => context.back(fallback: WaxRoute.music),
+      backSemanticsId: SemanticsIds.navBack,
       body: switch (curation) {
         // Value first, like the album pane: the form holds typing
         // nobody else has a copy of, and the failure of a refetch still

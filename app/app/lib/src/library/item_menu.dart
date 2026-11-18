@@ -106,7 +106,7 @@ Future<void> showItemMenuSheet(
   // outlive the row, so what was tapped still happens.
   final rootContext = Navigator.of(context, rootNavigator: true).context;
   final router = GoRouter.of(context);
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   final pinnedController = ref.read(pinnedEntitiesProvider.notifier);
   // The page that raised the sheet, when it is a branch page: read off
@@ -401,7 +401,7 @@ Future<void> showAlbumMenuSheet(
 }) async {
   // Captured for the reason the item menu writes out.
   final rootContext = Navigator.of(context, rootNavigator: true).context;
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   final pinnedController = ref.read(pinnedEntitiesProvider.notifier);
   final PinTarget target = (pid: pid, what: 'album', name: title);

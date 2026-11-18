@@ -4,15 +4,7 @@ import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'app_host.dart';
-
-/// The pushes on the stack, however deep the shells nest them.
-int _pushes(List<RouteMatchBase> matches) => <int>[
-  for (final match in matches)
-    if (match is ImperativeRouteMatch)
-      1
-    else if (match is ShellRouteMatch)
-      _pushes(match.matches),
-].fold(0, (sum, n) => sum + n);
+import 'router_stack.dart';
 
 Future<GoRouter> _mount(WidgetTester tester) async {
   await pumpApp(tester, const SizedBox());
@@ -41,15 +33,15 @@ void main() {
 
       final stack = router.routerDelegate.currentConfiguration;
       expect(stack.last.matchedLocation, location);
-      expect(_pushes(stack.matches), 1);
+      expect(pushesOn(router), 1);
     });
   }
 
   testWidgets('a location under the top of the stack is pushed again', (
     tester,
   ) async {
-    // The review entry's Open uploads, when the entry was opened from
-    // the uploads screen: uploads is beneath the entry, not on top of it.
+    // Uploads is beneath the entry, not on top of it, so asking for it
+    // again is a new push.
     final router = await _mount(tester);
     router.go(WaxRoute.uploads);
     await tester.pumpAndSettle();
@@ -61,6 +53,6 @@ void main() {
 
     final stack = router.routerDelegate.currentConfiguration;
     expect(stack.last.matchedLocation, WaxRoute.uploads);
-    expect(_pushes(stack.matches), 2);
+    expect(pushesOn(router), 2);
   });
 }

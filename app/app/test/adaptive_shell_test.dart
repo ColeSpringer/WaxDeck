@@ -7,13 +7,19 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/books/book_dimension.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
+import 'package:waxdeck/src/books/books_screen.dart';
+import 'package:waxdeck/src/books/series_index_screen.dart';
 import 'package:waxdeck/src/discovery/track_list_screen.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
+import 'package:waxdeck/src/music/music_hub_screen.dart';
 import 'package:waxdeck/src/home/home_screen.dart';
+import 'package:waxdeck/src/library/item_delete.dart';
 import 'package:waxdeck/src/player/deck_bar_host.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
+import 'package:waxdeck/src/podcasts/episode_screen.dart';
 import 'package:waxdeck/src/podcasts/podcasts_screen.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
 import 'package:waxdeck/src/providers.dart';
@@ -25,6 +31,7 @@ import 'package:waxdeck/src/search/search_controller.dart';
 import 'package:waxdeck/src/search/search_screen.dart';
 import 'package:waxdeck/src/settings/settings_screen.dart';
 import 'package:waxdeck/src/tools/tasks_screen.dart';
+import 'package:waxdeck/src/uploads/uploads_screen.dart';
 import 'package:waxdeck/src/shell/adaptive_shell.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
@@ -37,6 +44,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'app_host.dart';
 import 'debug_prints.dart';
 import 'fakes.dart';
+import 'router_stack.dart';
 
 const _showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
 const _episodePid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
@@ -593,22 +601,199 @@ void main() {
     );
   });
 
-  testWidgets('a snackbar excursion returns where it started', (tester) async {
-    // `/tasks` lives in the shared branch and is reached from a snackbar
-    // anywhere, so it is pushed: `go` would unmount whatever started the
-    // task with no route back to it.
+  testWidgets('a destination of its own reached from a snackbar returns '
+      'where it started', (tester) async {
+    // `/tasks` has a place in the chrome, so it is gone to, not pushed:
+    // a push would file it inside whichever tab is on screen. The way
+    // back is the shell's own memory of where the visitor stood.
     final container = await _pumpShell(tester);
     final router = container.read(routerProvider);
 
     router.go(WaxRoute.podcasts);
     await tester.pumpAndSettle();
-    router.push<void>(WaxRoute.tasks);
+    router.go(WaxRoute.tasks);
     await tester.pumpAndSettle();
     expect(find.byType(TasksScreen), findsOneWidget);
 
     await _systemBack(tester);
     expect(find.byType(PodcastsScreen), findsOneWidget);
     expect(_location(container), WaxRoute.podcasts);
+  });
+
+  testWidgets('a destination of its own opened from a domain is never what '
+      'that domain tab restores', (tester) async {
+    final container = await _pumpShell(tester);
+    final router = container.read(routerProvider);
+
+    router.go(WaxRoute.music);
+    await tester.pumpAndSettle();
+    router.go(WaxRoute.tasks);
+    await tester.pumpAndSettle();
+    expect(find.byType(TasksScreen), findsOneWidget);
+
+    await _tapNav(tester, WaxNavTarget.home.name);
+    await _tapNav(tester, WaxNavTarget.music.name);
+
+    expect(find.byType(MusicHubScreen), findsOneWidget);
+    expect(find.byType(TasksScreen), findsNothing);
+    expect(_location(container), WaxRoute.music);
+    expect(_selected(tester), WaxNavTarget.music.name);
+    expect(_stack(router), isNot(contains(WaxRoute.tasks)));
+  });
+
+  testWidgets('the acquire snackbar opens Tasks without filing it under the '
+      'tab it was raised on', (tester) async {
+    final container = await _pumpShell(tester);
+    final router = container.read(routerProvider);
+    router.go(WaxRoute.music);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.musicAdd));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.addFromUrl));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.acquireUrl),
+      'https://tube.example/watch?v=neon-meridian',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.acquireSubmit));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.acquireTasks));
+    await tester.pumpAndSettle();
+    expect(find.byType(TasksScreen), findsOneWidget);
+
+    await _tapNav(tester, WaxNavTarget.home.name);
+    await _tapNav(tester, WaxNavTarget.music.name);
+
+    expect(find.byType(MusicHubScreen), findsOneWidget);
+    expect(find.byType(TasksScreen), findsNothing);
+    expect(_location(container), WaxRoute.music);
+    expect(_selected(tester), WaxNavTarget.music.name);
+    expect(_stack(router), isNot(contains(WaxRoute.tasks)));
+  });
+
+  testWidgets('the uploads list opened from the add sheet is not what its '
+      'tab restores', (tester) async {
+    final container = await _pumpShell(tester);
+    final router = container.read(routerProvider);
+    router.go(WaxRoute.music);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.musicAdd));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.addUploadSessions),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(UploadsScreen), findsOneWidget);
+    expect(pushesOn(router), 0);
+
+    await _tapNav(tester, WaxNavTarget.home.name);
+    await _tapNav(tester, WaxNavTarget.music.name);
+
+    expect(find.byType(MusicHubScreen), findsOneWidget);
+    expect(_location(container), WaxRoute.music);
+  });
+
+  testWidgets('the doors between uploads and the review entry go, not '
+      'push', (tester) async {
+    final container = await _pumpShell(tester);
+    final router = container.read(routerProvider);
+    final repo = _similarRepo(container);
+    repo.uploadsById['up-2'] = testUpload(
+      'up-2',
+      state: 'staged',
+      reviewEntryId: 'rv-9',
+    );
+    repo.reviewEntryDetails['rv-9'] = ReviewEntryDetail(
+      id: 'rv-9',
+      kind: 'import',
+      status: 'pending',
+      mediaType: MediaType.music,
+      origin: 'upload',
+      title: 'Neon Meridian',
+      artist: 'The Cardinal Waves',
+      trackCount: 1,
+      createdAt: DateTime.utc(2026, 8, 1),
+      candidates: const [],
+    );
+    router.go(WaxRoute.uploads);
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadReview('up-2')),
+    );
+    await tester.pumpAndSettle();
+    expect(_location(container), WaxRoute.reviewEntry('rv-9'));
+    expect(pushesOn(router), 0);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.reviewOpenUploads),
+    );
+    await tester.pumpAndSettle();
+    expect(_location(container), WaxRoute.uploads);
+    expect(find.byType(UploadsScreen), findsOneWidget);
+    expect(pushesOn(router), 0);
+  });
+
+  testWidgets('the tab a pushed excursion lights goes to its root', (
+    tester,
+  ) async {
+    // A book opened from Music lights Books while the Music branch is the
+    // one on screen. Tapping the lit tab is "the tab I am on", so it goes
+    // to Books' root rather than restoring the drill-in Books held.
+    final container = await _pumpShell(tester);
+    final router = container.read(routerProvider);
+
+    router.go(WaxRoute.bookSeriesIndex);
+    await tester.pumpAndSettle();
+    expect(find.byType(BookSeriesIndexScreen), findsOneWidget);
+    router.go(WaxRoute.music);
+    await tester.pumpAndSettle();
+    router.push<void>(WaxRoute.book(_bookPid));
+    await tester.pumpAndSettle();
+    expect(find.byType(BookScreen), findsOneWidget);
+    expect(_selected(tester), WaxNavTarget.books.name);
+
+    await _tapNav(tester, WaxNavTarget.books.name);
+
+    expect(find.byType(BooksScreen), findsOneWidget);
+    expect(find.byType(BookScreen), findsNothing);
+    expect(_location(container), WaxRoute.books);
+  });
+
+  testWidgets('the hub drawn lit for an index excursion goes to its root', (
+    tester,
+  ) async {
+    // An artist page lights Artists, and the tab bar draws that as the
+    // Music tab (a hub stands for its indexes there). The visitor sees
+    // Music lit while standing on Home's pushed page, so tapping it is
+    // "the tab I am on", not a request for the page Music last held.
+    final container = await _pumpShell(tester, size: const Size(400, 800));
+    final router = container.read(routerProvider);
+
+    router.go(WaxRoute.musicIndex(MusicDimension.albums));
+    await tester.pumpAndSettle();
+    router.go(WaxRoute.home);
+    await tester.pumpAndSettle();
+    router.push<void>(
+      WaxRoute.musicBucket(
+        MusicDimension.artists,
+        'ar-01JZX5N8QW3F4V9T2B7KDART01',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(_selected(tester), WaxNavTarget.artists.name);
+
+    await _tapNav(tester, WaxNavTarget.music.name);
+
+    expect(find.byType(MusicHubScreen), findsOneWidget);
+    expect(_location(container), WaxRoute.music);
+    expect(
+      _stack(router),
+      isNot(contains(WaxRoute.musicIndex(MusicDimension.albums))),
+    );
   });
 
   testWidgets('compact reaches settings through the account menu', (
@@ -733,11 +918,12 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
-  testWidgets('similar tracks lands past whatever overlay is up by then', (
-    tester,
-  ) async {
-    // The player stays while the answer is on its way, so the push meets
-    // whatever is up when it lands: here, the queue opened over it.
+  testWidgets('similar tracks found once the queue was opened over the '
+      'player are offered there, and land past every overlay', (tester) async {
+    // The queue opened over the player is a place the visitor went to: the
+    // list is offered there rather than pushed past it. Taken, the offer
+    // reads the overlays up at that moment, so it lands in the shell past
+    // both, with no second shell.
     final container = await _pumpShell(tester);
     final gate = Completer<void>();
     _similarRepo(container)
@@ -749,6 +935,20 @@ void main() {
     container.read(routerProvider).push<void>(WaxRoute.queue);
     await tester.pumpAndSettle();
     gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(QueueScreen), findsOneWidget, reason: 'it stays');
+    expect(find.byType(TrackListScreen), findsNothing);
+    final ready = AppLocalizationsEn().discoverySimilarReady('Salt Harbour');
+    expect(find.text(ready), findsOneWidget, reason: 'offered');
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(WaxMessageBar),
+        matching: find.text(AppLocalizationsEn().commonOpen),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
@@ -772,7 +972,7 @@ void main() {
       await _askForSimilar(tester, container);
 
       expect(find.byType(PlayerScreen), findsOneWidget);
-      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.byType(WaxMessageBar), findsOneWidget);
       expect(find.byType(TrackListScreen), findsNothing);
 
       container.read(queueControllerProvider.notifier).clear();
@@ -852,7 +1052,7 @@ void main() {
     // One bar serves the whole app, so hiding unconditionally would take
     // down an error nobody has read.
     final container = await _pumpShell(tester);
-    container.read(shellMessengerProvider.notifier).show('Could not save');
+    container.read(shellMessengerProvider).show('Could not save');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 750));
 
@@ -967,15 +1167,239 @@ void main() {
     );
   });
 
-  testWidgets('back inside a domain pops the drill-in first', (tester) async {
+  testWidgets('back from a drill-in gone to from home returns home, then '
+      'leaves', (tester) async {
     final container = await _pumpShell(tester);
 
     container.read(routerProvider).go(WaxRoute.show(_showPid));
     await tester.pumpAndSettle();
 
     await _systemBack(tester);
+    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(_location(container), WaxRoute.home);
+    expect(await _systemBackLeftTheApp(tester), isTrue);
+  });
+
+  testWidgets('back from a cold link to a drill-in climbs out and never '
+      'returns to it', (tester) async {
+    tester.platformDispatcher.defaultRouteNameTestValue = WaxRoute.show(
+      _showPid,
+    );
+    addTearDown(tester.platformDispatcher.clearDefaultRouteNameTestValue);
+    final container = await _pumpShell(tester, size: const Size(400, 800));
+    expect(find.byType(ShowScreen), findsOneWidget);
+
+    await _systemBack(tester);
     expect(find.byType(PodcastsScreen), findsOneWidget);
     expect(_location(container), WaxRoute.podcasts);
+
+    await _systemBack(tester);
+    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(find.byType(ShowScreen), findsNothing);
+
+    expect(await _systemBackLeftTheApp(tester), isTrue);
+    expect(find.byType(ShowScreen), findsNothing);
+  });
+
+  testWidgets('back from a show opened on a tapped tab returns to the hub, '
+      'then climbs out', (tester) async {
+    final container = await _pumpShell(tester, size: const Size(400, 800));
+
+    await _tapNav(tester, WaxNavTarget.podcasts.name);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.podcast(_showPid)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(ShowScreen), findsOneWidget);
+
+    await _systemBack(tester);
+    expect(find.byType(PodcastsScreen), findsOneWidget);
+    expect(_location(container), WaxRoute.podcasts);
+
+    await _systemBack(tester);
+    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(find.byType(ShowScreen), findsNothing);
+
+    expect(await _systemBackLeftTheApp(tester), isTrue);
+    expect(find.byType(ShowScreen), findsNothing);
+  });
+
+  testWidgets('back at home leaves while another domain is drilled in', (
+    tester,
+  ) async {
+    // go_router wraps every branch navigator in a PopScope that refuses
+    // while its branch holds a drill-in, mounted or not, so the router
+    // answered this press itself and the app stayed open.
+    final container = await _pumpShell(tester, size: const Size(400, 800));
+    container.read(routerProvider).go(WaxRoute.show(_showPid));
+    await tester.pumpAndSettle();
+    await _tapNav(tester, WaxNavTarget.home.name);
+    expect(find.byType(HomeScreen), findsOneWidget);
+
+    expect(await _systemBackLeftTheApp(tester), isTrue);
+  });
+
+  testWidgets('back closes a dialog before it steps back', (tester) async {
+    final container = await _pumpShell(tester);
+    final router = container.read(routerProvider);
+    router.go(WaxRoute.tasks);
+    await tester.pumpAndSettle();
+    router.go(WaxRoute.show(_showPid));
+    await tester.pumpAndSettle();
+
+    unawaited(
+      showDialog<void>(
+        context: tester.element(find.byType(ShowScreen)),
+        builder: (context) => const AlertDialog(content: Text('Unsubscribe?')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Unsubscribe?'), findsOneWidget);
+
+    await _systemBack(tester);
+    expect(find.text('Unsubscribe?'), findsNothing);
+    expect(find.byType(ShowScreen), findsOneWidget);
+    expect(_location(container), WaxRoute.show(_showPid));
+
+    await _systemBack(tester);
+    expect(find.byType(TasksScreen), findsOneWidget);
+    expect(_location(container), WaxRoute.tasks);
+  });
+
+  testWidgets('back with the player up collapses it and nothing else', (
+    tester,
+  ) async {
+    final container = await _pumpShell(tester);
+    final router = container.read(routerProvider);
+    router.go(WaxRoute.show(_showPid));
+    await tester.pumpAndSettle();
+    router.push<void>(WaxRoute.nowPlaying);
+    await tester.pumpAndSettle();
+    expect(find.byType(PlayerScreen), findsOneWidget);
+
+    await _systemBack(tester);
+
+    expect(find.byType(PlayerScreen), findsNothing);
+    expect(find.byType(ShowScreen), findsOneWidget);
+    expect(_location(container), WaxRoute.show(_showPid));
+  });
+
+  testWidgets('back after three tab taps steps home once and then leaves', (
+    tester,
+  ) async {
+    await _pumpShell(tester, size: const Size(400, 800));
+    await _tapNav(tester, WaxNavTarget.radio.name);
+    await _tapNav(tester, WaxNavTarget.music.name);
+    await _tapNav(tester, WaxNavTarget.podcasts.name);
+
+    await _systemBack(tester);
+    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(await _systemBackLeftTheApp(tester), isTrue);
+  });
+
+  testWidgets('a book deleted once the visitor has moved on is not brought '
+      'back by system back climbing home', (tester) async {
+    // Pushed over Home, which keeps it in that tab when the visitor taps
+    // Radio while the server holds the delete.
+    final container = await _pumpShell(tester, size: const Size(400, 800));
+    final router = container.read(routerProvider);
+    final gate = Completer<void>();
+    _similarRepo(container).deleteItemsGate = gate;
+    unawaited(router.push<void>(WaxRoute.book(_bookPid)));
+    await tester.pumpAndSettle();
+    unawaited(
+      confirmDeleteItem(
+        tester.element(find.byType(BookScreen)),
+        pid: _bookPid,
+        onDeleted: router.leave,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+    );
+    await tester.pumpAndSettle();
+    await _tapNav(tester, WaxNavTarget.radio.name);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.byType(RadioScreen), findsOneWidget);
+
+    await _systemBack(tester);
+
+    expect(find.byType(BookScreen), findsNothing);
+    expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
+  group('after a delete on a page a tab tap restored', () {
+    /// An episode pushed over its hub, which the tab taps away from and
+    /// back to (the push comes back with the tap's mark), then deleted
+    /// the way the player's menu asks for it.
+    Future<ProviderContainer> deleted(WidgetTester tester) async {
+      final container = await _pumpShell(tester, size: const Size(400, 800));
+      final router = container.read(routerProvider);
+      await _tapNav(tester, WaxNavTarget.podcasts.name);
+      unawaited(router.push<void>(WaxRoute.episode(_episodePid)));
+      await tester.pumpAndSettle();
+      await _tapNav(tester, WaxNavTarget.radio.name);
+      await _tapNav(tester, WaxNavTarget.podcasts.name);
+      expect(find.byType(EpisodeScreen), findsOneWidget);
+
+      unawaited(
+        confirmDeleteItem(
+          tester.element(find.byType(EpisodeScreen)),
+          pid: _episodePid,
+          onDeleted: router.leave,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(PodcastsScreen), findsOneWidget);
+      expect(find.byType(EpisodeScreen), findsNothing);
+      return container;
+    }
+
+    testWidgets('system back climbs out to home, then leaves', (tester) async {
+      await deleted(tester);
+
+      await _systemBack(tester);
+
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(await _systemBackLeftTheApp(tester), isTrue);
+    });
+
+    testWidgets('the arrow from the hub goes to the other tab', (tester) async {
+      final container = await deleted(tester);
+
+      tester.element(find.byType(WaxScaffold).last).back();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RadioScreen), findsOneWidget);
+      expect(_location(container), WaxRoute.radio);
+    });
+  });
+
+  testWidgets('leaving reports a refusal the way the binding does', (
+    tester,
+  ) async {
+    await _pumpShell(tester, size: const Size(400, 800));
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'SystemNavigator.pop') {
+        throw PlatformException(code: 'refused');
+      }
+      return null;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+
+    await _systemBack(tester);
+
+    expect(tester.takeException(), isA<PlatformException>());
   });
 
   testWidgets('back steps to home from a domain that had been drilled into', (
@@ -1211,9 +1635,9 @@ void main() {
       await tester.pumpAndSettle();
       final stack = _stack(router);
       // How the router is asked to move while typing. The screen writes
-      // its settled query with `replace`, which adds no history entry; a
-      // `go` or a push would, and the location alone cannot tell them
-      // apart.
+      // its settled query with `swap`, a `replace` that adds no history
+      // entry; a `go` or a push would, and the location alone cannot tell
+      // them apart.
       final navigations = <NavigatingType>[];
       void record() {
         final state = router.routeInformationProvider.value.state;

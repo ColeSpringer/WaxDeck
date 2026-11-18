@@ -5,7 +5,9 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/asked_from.dart';
 import '../shell/routes.dart';
+import '../shell/navigation_history.dart';
 import '../shell/semantics_ids.dart';
 
 /// Requests an account: open signup queues the request for an
@@ -45,34 +47,56 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       _error = null;
     });
     final router = GoRouter.of(context);
+    final from = pageIn(context);
+    final extra = GoRouterState.of(context).extra;
+    final asked = AskedFrom.of(context);
+    final username = _username.text.trim();
     final displayName = _displayName.text.trim();
     final inviteToken = _inviteToken.text.trim();
     try {
       final result = await ref
           .read(repositoryProvider)
           .signup(
-            username: _username.text.trim(),
+            username: username,
             password: _password.text,
             displayName: displayName.isEmpty ? null : displayName,
             inviteToken: inviteToken.isEmpty ? null : inviteToken,
           );
-      if (!mounted) return;
+      if (await stillOnTop(router, (page) => page == from) && mounted) {
+        if (result.pending) {
+          setState(() {
+            _submitting = false;
+            _pending = true;
+          });
+        } else {
+          // Active right away: back to the login form, prefilled.
+          router.leave(fallback: WaxRoute.login, result: username);
+        }
+        return;
+      }
+      // Done with while the visitor was elsewhere: never shown again, and
+      // what it would have said is said where they are.
+      forgetFinished(router, from.location, extra);
       if (result.pending) {
-        setState(() {
-          _submitting = false;
-          _pending = true;
-        });
+        asked.messenger.show(l10n.authSignupPendingNotice);
       } else {
-        // Active right away: back to the login form, prefilled.
-        router.leave(fallback: WaxRoute.login, result: _username.text.trim());
+        final onLogin = pageOnTop(router)?.location == WaxRoute.login;
+        asked.messenger.show(
+          l10n.authSignupReady(username),
+          actionLabel: onLogin ? null : l10n.authBackToSignIn,
+          onAction: onLogin ? null : () => router.go(WaxRoute.login),
+        );
       }
     } on WaxDeckApiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _submitting = false;
-        // A refusal of what was just typed keeps the server's words.
-        _error = explainRefusal(l10n, e);
-      });
+      // A refusal of what was just typed keeps the server's words: under
+      // the form while this page is still there, else through the shell.
+      asked.refused(
+        explainRefusal(l10n, e),
+        inline: (refusal) => setState(() {
+          _submitting = false;
+          _error = refusal;
+        }),
+      );
     }
   }
 
@@ -182,7 +206,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     return WaxScaffold(
       title: l10n.authRequestAccount,
       largeTitle: false,
-      onBack: () => context.leave(fallback: WaxRoute.login),
+      onBack: () => context.back(fallback: WaxRoute.login),
+      backSemanticsId: SemanticsIds.navBack,
       // Centred in what the bar leaves, as the sign-in form it came from
       // is, and scrolling once a short window cannot hold it. Measured
       // off the viewport rather than SliverFillRemaining's intrinsic

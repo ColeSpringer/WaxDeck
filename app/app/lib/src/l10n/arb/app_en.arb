@@ -3430,6 +3430,20 @@
   "@authSignInRejected": {
     "description": "Under the sign-in form when the server rejected the credentials just typed."
   },
+  "authSignupPendingNotice": "Request received: an administrator has to approve your account before you can sign in.",
+  "@authSignupPendingNotice": {
+    "description": "Said once the screen it was asked from was left, after a sign-up that needs approving."
+  },
+  "authSignupReady": "Your account {username} is ready: sign in with it.",
+  "@authSignupReady": {
+    "description": "Said once the screen it was asked from was left, after a sign-up that is active at once.",
+    "placeholders": {
+      "username": {
+        "type": "String",
+        "example": "sam"
+      }
+    }
+  },
   "authSsoFailed": "Single sign-on did not go through. Try again.",
   "@authSsoFailed": {
     "description": "Under the sign-in form when a single-sign-on round trip came back refused, whether the provider is unconfigured or the code was stale."
@@ -4321,6 +4335,10 @@
   "@commonLoadingTitle": {
     "description": "Stands in for a track's name while the row it sits in is still resolving. The trailing character is a single-glyph ellipsis."
   },
+  "commonOpen": "Open",
+  "@commonOpen": {
+    "description": "Action on a message offering what the listener asked to see, ready once they had moved on: opens it."
+  },
   "commonOpenReview": "Open review",
   "@commonOpenReview": {
     "description": "Action that opens the review queue, wherever something just landed there: home's pending banner, the post-upload message, the metadata editor's rematch message."
@@ -4700,6 +4718,20 @@
   "discoveryMixEmpty": "No mix available for this track",
   "@discoveryMixEmpty": {
     "description": "Snackbar when the server built a mix with nothing in it."
+  },
+  "discoveryMixReady": "Playing an instant mix",
+  "@discoveryMixReady": {
+    "description": "Message when an instant mix started playing after the listener had moved on from where they asked for it; its action opens the mix's list."
+  },
+  "discoverySimilarReady": "Found tracks similar to {title}",
+  "@discoverySimilarReady": {
+    "description": "Message when similar tracks were found after the listener had moved on from where they asked; its action opens the list. {title} is the seed track's own name.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Nightswimming"
+      }
+    }
   },
   "discoverySimilarTitle": "Similar to {title}",
   "@discoverySimilarTitle": {
@@ -6059,6 +6091,16 @@
   "@homeLibraryLoadError": {
     "description": "Title of the error state when home's probe of the library failed."
   },
+  "homeMixBasisReady": "Ready to open: {genre}",
+  "@homeMixBasisReady": {
+    "description": "Message when a genre mix card's listing was found after the listener had moved on from home; its action opens it. {genre} is the genre's own name.",
+    "placeholders": {
+      "genre": {
+        "type": "String",
+        "example": "Shoegaze"
+      }
+    }
+  },
   "homeMixEmpty": "No mix available for {title}",
   "@homeMixEmpty": {
     "description": "Snackbar when a mix card was tapped and the server answered with no tracks. {title} is the card's own name.",
@@ -6086,6 +6128,16 @@
   "homeMixPlay": "Play mix",
   "@homeMixPlay": {
     "description": "Row in a mix card's menu: mints the mix and plays it."
+  },
+  "homeMixReady": "Playing {title}",
+  "@homeMixReady": {
+    "description": "Message when a mix card's mix started playing after the listener had moved on from home; its action opens the mix's list. {title} is the card's own name.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Shoegaze"
+      }
+    }
   },
   "homeMixShuffle": "Shuffle mix",
   "@homeMixShuffle": {
@@ -6642,6 +6694,14 @@
   "@libraryKindQueued": {
     "description": "Message when a kind change is still running after the dialog stopped watching it (accounts without the Tasks screen)."
   },
+  "libraryKindReadyBook": "Now an audiobook, ready to open",
+  "@libraryKindReadyBook": {
+    "description": "Said where the visitor went when a change to audiobook ended after they left the page they asked for it on; its action opens the book."
+  },
+  "libraryKindReadyMusic": "Now music, ready to open",
+  "@libraryKindReadyMusic": {
+    "description": "Said where the visitor went when a change to music ended after they left the page they asked for it on; its action opens the album the first part landed on, or the track listing."
+  },
   "libraryKindStillRunning": "Still changing. Follow it in Tasks.",
   "@libraryKindStillRunning": {
     "description": "Message, with a Tasks action, when a kind change is still running after the dialog stopped watching it (administrators)."
@@ -6864,17 +6924,17 @@
   "@metadataDerivedChip": {
     "description": "Chip on a read-only value the server computes rather than stores, such as an album's track count."
   },
-  "metadataDiscardBody": "Switching away drops this selection's unsaved edits.",
+  "metadataDiscardBody": "The edits you have not saved here will be lost.",
   "@metadataDiscardBody": {
-    "description": "Body of the confirmation the workbench asks before replacing a pane that holds unsaved edits."
+    "description": "Body of the confirmation asked before unsaved edits are dropped: the workbench replacing a pane that holds them, or the editor leaving for a review entry from its Open review."
   },
   "metadataDiscardConfirm": "Discard",
   "@metadataDiscardConfirm": {
-    "description": "The confirming button on that dialog; Cancel keeps the pane and the typing."
+    "description": "The confirming button on that dialog; Cancel keeps the pane or the editor, and the typing."
   },
   "metadataDiscardTitle": "Discard unsaved edits?",
   "@metadataDiscardTitle": {
-    "description": "Title of the confirmation the workbench asks before replacing a pane that holds unsaved edits."
+    "description": "Title of the confirmation asked before unsaved edits are dropped: the workbench replacing a pane that holds them, or the editor leaving for a review entry from its Open review."
   },
   "metadataEnrichApplied": "Applied: {fields}",
   "@metadataEnrichApplied": {
@@ -7177,6 +7237,10 @@
   "metadataLyricsTitle": "Lyrics",
   "@metadataLyricsTitle": {
     "description": "Heading over the item's lyrics."
+  },
+  "metadataMergedReady": "Merged into another entry, ready to open",
+  "@metadataMergedReady": {
+    "description": "Said where the visitor went when an edit they saved merged the entry into another after they left its editor; its action opens the entry it joined."
   },
   "metadataNoCreditRoles": "No credit roles for this kind",
   "@metadataNoCreditRoles": {
@@ -8271,6 +8335,16 @@
   "@notifToolTaskFailedTitle": {
     "description": "Heading of the notification that a book merge or split, or a CUE split, the reader started failed or stopped and needs attention. The line under it says which and why."
   },
+  "organizeApplied": "{count, plural, =1{1 file moved} other{{count} files moved}}",
+  "@organizeApplied": {
+    "description": "Said when a run applied from a screen the administrator has since left ends: how many files it moved.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "382"
+      }
+    }
+  },
   "organizeApply": "Apply",
   "@organizeApply": {
     "description": "Runs the move. Both the confirming button and the button that opens the confirmation."
@@ -8514,6 +8588,14 @@
   "organizeProfileDeleteBody": "A library laid out by it has to move to another profile first.",
   "@organizeProfileDeleteBody": {
     "description": "Body of the dialog confirming a profile delete."
+  },
+  "organizeProfileDeleteBuiltIn": "A built-in profile cannot be deleted.",
+  "@organizeProfileDeleteBuiltIn": {
+    "description": "Said when the server refuses a profile delete because the profile is a built-in one."
+  },
+  "organizeProfileDeleteInUse": "A library is still laid out by this profile. Move it to another profile first.",
+  "@organizeProfileDeleteInUse": {
+    "description": "Said when the server refuses a profile delete because a managed library still uses the profile."
   },
   "organizeProfileDeleteTitle": "Delete {name}?",
   "@organizeProfileDeleteTitle": {
@@ -9808,6 +9890,18 @@
       "source": {
         "type": "String",
         "example": "Spotify CSV"
+      }
+    }
+  },
+  "playlistImportReady": "Import finished: {resolved} of {requested} entries matched",
+  "@playlistImportReady": {
+    "description": "Message when a playlist import finished after the listener had left its dialog; its action opens the import's report. Counts what resolved out of what was pasted.",
+    "placeholders": {
+      "resolved": {
+        "type": "int"
+      },
+      "requested": {
+        "type": "int"
       }
     }
   },
@@ -13095,7 +13189,7 @@
   },
   "reviewDecidedCount": "{count, plural, =1{Decided 1 entry} other{Decided {count} entries}}",
   "@reviewDecidedCount": {
-    "description": "Snackbar after a bulk decision where every entry took it.",
+    "description": "Snackbar after a decision where every entry took it: a bulk one, or one that moved off the entry it decided.",
     "placeholders": {
       "count": {
         "type": "int",
@@ -13541,6 +13635,14 @@
   "reviewTracksTitle": "Tracks",
   "@reviewTracksTitle": {
     "description": "Heading over the file-by-file comparison between the entry and the chosen candidate."
+  },
+  "reviewUndo": "Undo",
+  "@reviewUndo": {
+    "description": "Action on the confirmation after a decision moved off its entry: reverts that decision, as the entry's own Revert does."
+  },
+  "reviewUndone": "Decision undone",
+  "@reviewUndone": {
+    "description": "Snackbar once the Undo on a decision's confirmation has reverted it."
   },
   "reviewUntitled": "Untitled",
   "@reviewUntitled": {
@@ -15226,6 +15328,10 @@
   "shellClientOutdated": "WaxDeck was updated. Reload to get the new version.",
   "@shellClientOutdated": {
     "description": "Banner when the app itself is behind what the server serves, on a build that can reload itself."
+  },
+  "shellCommandBack": "Go back",
+  "@shellCommandBack": {
+    "description": "Command name: step back to where the visitor was, as the leading arrow does."
   },
   "shellCommandCarMode": "Open car mode",
   "@shellCommandCarMode": {

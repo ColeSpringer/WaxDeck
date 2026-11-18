@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'state.dart';
@@ -20,6 +22,9 @@ mixin FakePlayer on FakeRepositoryState implements PlayerApi {
   final List<({String sessionId, String endpointId})>
   transferPlaybackSessionCalls = [];
   final List<String> deletePlaybackSessionCalls = [];
+
+  /// Holds a [deletePlaybackSession] until completed.
+  Completer<void>? deletePlaybackSessionGate;
   List<PlayerEndpoint> playerEndpoints = [];
   List<PlaybackSessionInfo> playbackSessions = [];
 
@@ -190,6 +195,7 @@ mixin FakePlayer on FakeRepositoryState implements PlayerApi {
   @override
   Future<void> deletePlaybackSession(String sessionId) async {
     deletePlaybackSessionCalls.add(sessionId);
+    await deletePlaybackSessionGate?.future;
   }
 
   /// Thrown by [transferPlaybackSession] when set. `not-found` is the

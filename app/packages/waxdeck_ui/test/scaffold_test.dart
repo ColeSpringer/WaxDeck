@@ -134,4 +134,140 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  group('the page messages hook', () {
+    Future<void> pump(WidgetTester tester, Widget page) =>
+        tester.pumpWidget(MaterialApp(theme: buildWaxTheme(), home: page));
+
+    testWidgets('a WaxScaffold hands its page to present, inside its own '
+        'semantics node', (tester) async {
+      var presented = 0;
+      await pump(
+        tester,
+        WaxPageMessages(
+          present: (page) {
+            presented++;
+            return _Presented(child: page);
+          },
+          child: const WaxScaffold(
+            title: 'T',
+            semanticsId: 'page',
+            body: SizedBox(height: 200),
+          ),
+        ),
+      );
+
+      expect(presented, 1);
+      final over = find.byType(_Presented);
+      expect(
+        find.descendant(of: over, matching: find.byType(Scaffold)),
+        findsOneWidget,
+      );
+      expect(
+        find.ancestor(
+          of: over,
+          matching: find.byWidgetPredicate(
+            (w) => w is Semantics && w.properties.identifier == 'page',
+          ),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a WaxScaffold with no hook above is its Scaffold, '
+        'untouched', (tester) async {
+      await pump(
+        tester,
+        const WaxScaffold(
+          title: 'T',
+          semanticsId: 'page',
+          body: SizedBox(height: 200),
+        ),
+      );
+
+      final scaffold = tester.element(find.byType(Scaffold));
+      Widget? parent;
+      scaffold.visitAncestorElements((element) {
+        parent = element.widget;
+        return false;
+      });
+      expect(
+        parent,
+        isA<Semantics>().having((w) => w.properties.identifier, 'id', 'page'),
+      );
+    });
+
+    testWidgets('a new hook presents the page again', (tester) async {
+      final presents = <String>[];
+      Widget hooked(String name) => WaxPageMessages(
+        present: (page) {
+          presents.add(name);
+          return page;
+        },
+        child: const WaxScaffold(title: 'T', body: SizedBox(height: 200)),
+      );
+      await pump(tester, hooked('first'));
+      await pump(tester, hooked('second'));
+
+      expect(presents, ['first', 'second']);
+    });
+
+    testWidgets('a WaxScaffold hands its floating button to clear, which '
+        'the Scaffold lays out where it lays the button itself', (
+      tester,
+    ) async {
+      final button = WaxFab(
+        glyph: WaxIcons.addPerson,
+        label: 'Invite',
+        onPressed: () {},
+      );
+      await pump(
+        tester,
+        WaxScaffold(
+          title: 'T',
+          body: const SizedBox(height: 200),
+          floating: button,
+        ),
+      );
+      final bare = tester.getRect(find.byType(WaxFab));
+
+      await pump(
+        tester,
+        WaxPageMessages(
+          present: (page) => page,
+          clear: (button) => _Cleared(child: button),
+          child: WaxScaffold(
+            title: 'T',
+            body: const SizedBox(height: 200),
+            floating: button,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.ancestor(of: find.byType(WaxFab), matching: find.byType(_Cleared)),
+        findsOneWidget,
+      );
+      expect(tester.getRect(find.byType(WaxFab)), bare);
+    });
+  });
+}
+
+class _Presented extends StatelessWidget {
+  const _Presented({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => child;
+}
+
+class _Cleared extends StatelessWidget {
+  const _Cleared({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => child;
 }

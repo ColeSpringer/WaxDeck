@@ -129,6 +129,9 @@ mixin FakePlaylists on FakeRepositoryState implements PlaylistsApi {
   /// Holds [createPlaylist] until completed.
   Completer<void>? createPlaylistGate;
 
+  /// Thrown by [createPlaylist] when set: a name the server refuses.
+  WaxDeckApiException? createPlaylistError;
+
   @override
   Future<Playlist> createPlaylist({
     required String name,
@@ -138,6 +141,7 @@ mixin FakePlaylists on FakeRepositoryState implements PlaylistsApi {
     List<String> itemPids = const [],
   }) async {
     if (createPlaylistGate case final gate?) await gate.future;
+    if (createPlaylistError case final error?) throw error;
     final pid = 'pl-FAKE${_playlistSeq++}';
     final pl = Playlist(
       pid: pid,
@@ -182,6 +186,9 @@ mixin FakePlaylists on FakeRepositoryState implements PlaylistsApi {
     return pl;
   }
 
+  /// Holds [updatePlaylist] until completed.
+  Completer<void>? updatePlaylistGate;
+
   @override
   Future<Playlist> updatePlaylist(
     String pid, {
@@ -189,6 +196,7 @@ mixin FakePlaylists on FakeRepositoryState implements PlaylistsApi {
     String? visibility,
     SmartRule? rule,
   }) async {
+    await updatePlaylistGate?.future;
     final pl = await getPlaylist(pid);
     // Name, visibility, and rule all apply in place under a stable pid,
     // like the real server since the reissue seam was retired.
@@ -208,10 +216,14 @@ mixin FakePlaylists on FakeRepositoryState implements PlaylistsApi {
     return next;
   }
 
+  /// Holds a [deletePlaylist] until completed: a delete in flight.
+  Completer<void>? deletePlaylistGate;
+
   @override
   Future<void> deletePlaylist(String pid) async {
     final error = deletePlaylistError;
     if (error != null) throw error;
+    await deletePlaylistGate?.future;
     playlistsByPid.remove(pid);
     playlistMembers.remove(pid);
   }
@@ -277,8 +289,12 @@ mixin FakePlaylists on FakeRepositoryState implements PlaylistsApi {
     playlistMembers[pid] = List.of(itemPids);
   }
 
+  /// Holds [addPlaylistItems] until completed.
+  Completer<void>? addPlaylistItemsGate;
+
   @override
   Future<void> addPlaylistItems(String pid, List<String> itemPids) async {
+    await addPlaylistItemsGate?.future;
     await getPlaylist(pid);
     (playlistMembers[pid] ??= []).addAll(itemPids);
   }
@@ -397,6 +413,12 @@ mixin FakePlaylists on FakeRepositoryState implements PlaylistsApi {
   >
   importPlaylistCalls = [];
 
+  /// Holds [importPlaylist] until completed.
+  Completer<void>? importPlaylistGate;
+
+  /// Thrown by [importPlaylist] when set: a paste the server refuses.
+  WaxDeckApiException? importPlaylistError;
+
   @override
   Future<PlaylistImportResult> importPlaylist({
     required String source,
@@ -404,6 +426,8 @@ mixin FakePlaylists on FakeRepositoryState implements PlaylistsApi {
     String? payload,
     List<PortableRef>? refs,
   }) async {
+    await importPlaylistGate?.future;
+    if (importPlaylistError case final error?) throw error;
     importPlaylistCalls.add((
       source: source,
       name: name,
@@ -618,9 +642,13 @@ mixin FakePlaylists on FakeRepositoryState implements PlaylistsApi {
     return stored;
   }
 
+  /// Holds an [unbindPlaylistSource] until completed.
+  Completer<void>? unbindPlaylistSourceGate;
+
   @override
   Future<void> unbindPlaylistSource(String pid) async {
     unbindPlaylistSourceCalls.add(pid);
+    await unbindPlaylistSourceGate?.future;
     playlistSources.remove(pid);
   }
 
@@ -655,9 +683,13 @@ mixin FakePlaylists on FakeRepositoryState implements PlaylistsApi {
   /// (no binding, no bridge, read-only server).
   WaxDeckApiException? playlistSyncError;
 
+  /// Holds a [syncPlaylistSource] until completed, with the call recorded.
+  Completer<void>? syncPlaylistSourceGate;
+
   @override
   Future<ToolTask> syncPlaylistSource(String pid) async {
     syncPlaylistSourceCalls.add(pid);
+    await syncPlaylistSourceGate?.future;
     final err = playlistSyncError;
     if (err != null) {
       throw err;

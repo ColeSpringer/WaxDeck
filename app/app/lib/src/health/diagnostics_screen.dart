@@ -127,6 +127,7 @@ class DiagnosticsScreen extends ConsumerWidget {
       largeTitle: false,
       semanticsId: SemanticsIds.adminDiagnostics,
       onBack: adminBack(context),
+      backSemanticsId: SemanticsIds.navBack,
       onRefresh: () async {
         ref
           ..invalidate(diagnosticSummaryProvider)

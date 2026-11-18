@@ -11,6 +11,7 @@ import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../queue/queue_controller.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'now_playing_controller.dart';
 import 'now_playing_view.dart';
 import 'playback_session.dart';
@@ -35,20 +36,24 @@ class VisualizerScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return KeepAwake(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: WaxPlainTextStyle(
-          child: NowPlayingView(
-            idle: (context) => _Frame(
-              domain: WaxDomain.music,
-              child: EmptyState(
-                glyph: WaxIcons.waveform,
-                title: context.l10n.playerNothingPlaying,
-                semanticsId: SemanticsIds.visualizerSurface,
+      // A page of its own over the shell: the shell's messages are drawn
+      // over it.
+      child: ShellMessageArea(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          body: WaxPlainTextStyle(
+            child: NowPlayingView(
+              idle: (context) => _Frame(
+                domain: WaxDomain.music,
+                child: EmptyState(
+                  glyph: WaxIcons.waveform,
+                  title: context.l10n.playerNothingPlaying,
+                  semanticsId: SemanticsIds.visualizerSurface,
+                ),
               ),
+              builder: (context, session, item, position) =>
+                  _Visualizer(session: session, item: item, position: position),
             ),
-            builder: (context, session, item, position) =>
-                _Visualizer(session: session, item: item, position: position),
           ),
         ),
       ),

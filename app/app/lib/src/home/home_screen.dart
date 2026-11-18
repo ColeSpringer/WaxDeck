@@ -61,7 +61,7 @@ class HomeScreen extends ConsumerWidget {
       onDropped: (files) => uploadPickedFiles(context, ref, files),
       onSkipped: ({required unsupported, required drm, required nothingKept}) =>
           reportSkippedFiles(
-            ref.read(shellMessengerProvider.notifier),
+            ref.read(shellMessengerProvider),
             l10n,
             unsupported: unsupported,
             drm: drm,

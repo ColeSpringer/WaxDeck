@@ -53,7 +53,8 @@ class TrackListScreen extends ConsumerWidget {
       // An answer has no location of its own (it rides an in-memory
       // payload), so there is nothing under it on a cold open: home is
       // where a dropped stack lands.
-      onBack: () => context.leave(fallback: WaxRoute.home),
+      onBack: () => context.back(fallback: WaxRoute.home),
+      backSemanticsId: SemanticsIds.navBack,
       slivers: <Widget>[
         SliverToBoxAdapter(
           child: Padding(

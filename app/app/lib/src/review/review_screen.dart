@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,7 +14,9 @@ import '../media_view.dart';
 import '../settings/client_prefs.dart';
 import '../shell/async_box_face.dart';
 import '../shell/in_flight.dart';
+import '../shell/navigation_history.dart';
 import '../shell/pending_actions.dart';
+import '../shell/router.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -168,6 +172,19 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
   var _selecting = false;
   final _checked = <String>{};
 
+  /// Where back goes, and the router that goes there, held from the
+  /// start: a decision can land after this screen has gone, and still has
+  /// to be forgotten.
+  WaxHistory? _history;
+  GoRouter? _router;
+
+  @override
+  void initState() {
+    super.initState();
+    _history = ref.read(waxHistoryProvider);
+    _router = GoRouter.maybeOf(context);
+  }
+
   @override
   void dispose() {
     _scroll.dispose();
@@ -212,14 +229,20 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
     final entries = _entries;
     if (_selected < 0 || _selected >= entries.length) return;
     final entry = entries[_selected];
-    if (entry.status != 'pending' || entry.identifying) return;
+    // Decided and being moved off: its row reads pending until the queue
+    // has read again.
+    if (entry.status != 'pending' ||
+        entry.identifying ||
+        _leaving == entry.id) {
+      return;
+    }
     // Opened, for the decision to be made where the duplicates can be
     // seen. Where they already are, opening it again would do nothing,
     // so the key says what decides it instead.
     if (_heldBack(entry, action)) {
       if (widget.openEntryId == entry.id) {
         ref
-            .read(shellMessengerProvider.notifier)
+            .read(shellMessengerProvider)
             .show(context.l10n.reviewDecideHeldInPane);
       } else {
         _open(entry);
@@ -248,14 +271,26 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
     ],
     () async {
       final l10n = context.l10n;
-      final messenger = ref.read(shellMessengerProvider.notifier);
+      final messenger = ref.read(shellMessengerProvider);
+      final container = ProviderScope.containerOf(context, listen: false);
+      final open = widget.openEntryId == entryId;
       try {
-        final warnings = await ref
+        final decided = await ref
             .read(reviewQueueProvider.notifier)
             .decide(entryId, action, candidateMbid: candidateMbid);
-        // The server's own words: a warning names the file or the field it
-        // is about, which no table sentence can.
-        if (warnings.isNotEmpty) messenger.show(warnings.join('\n'));
+        // A key on the row the pane shows moves the pane as its buttons
+        // do, the pane having come to that row meanwhile included.
+        if (open || widget.openEntryId == entryId) {
+          showReviewDecided(container, l10n, entryId, decided);
+          unawaited(_follow(entryId));
+          return;
+        }
+        forgetDecided(_history, [entryId]);
+        if (decided.warnings.isNotEmpty) {
+          // The server's own words: a warning names the file or the field
+          // it is about, which no table sentence can.
+          messenger.show(decided.warnings.join('\n'));
+        }
       } on WaxDeckApiException catch (e) {
         // A `conflict` names the file the library cannot take, which the
         // table's "something changed first" would hide.
@@ -322,7 +357,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
     List<String>? only,
   ) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
+    final shown = widget.openEntryId;
     try {
       final outcomes = ids.isEmpty
           ? const <ReviewBulkOutcome>[]
@@ -365,6 +401,19 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
         mounted: () => mounted,
         retry: (again) => _decideBulk(action, again),
       );
+      // The pane leaves an entry the bulk took, for one it did not: the
+      // one it shows now, which may not be the one it showed at the send.
+      // With this screen gone, the one it showed is what is left of it.
+      final took = {
+        for (final o in outcomes)
+          if (o.ok) o.entryId,
+      };
+      final open = mounted ? widget.openEntryId : shown;
+      if (open != null && took.contains(open)) {
+        unawaited(_follow(open, gone: took));
+      } else {
+        forgetDecided(_history, took);
+      }
       // Only for the decision somebody started: a Retry sends what an
       // earlier selection left, and the selection standing by then is
       // somebody's next one.
@@ -410,16 +459,25 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
   /// The entry the pane opened that the cursor last moved to.
   String? _followed;
 
+  /// The open entry's row at the last build, or -1 where it had none.
+  var _openAt = -1;
+
   /// Keeps the cursor on a row that exists, and brings it to each entry
   /// the pane opens, once: j and k move it on from there. Deciding the
   /// last row shortens the queue under it, and a tap has to move it or
-  /// the next j resumes from somewhere else.
+  /// the next j resumes from somewhere else. A cursor on the open row
+  /// stays on it when rows arrive above, or the keys would decide
+  /// another entry than the pane shows.
   void _syncSelection(List<ReviewEntry> entries) {
     final open = widget.openEntryId;
+    final index = open == null
+        ? -1
+        : entries.indexWhere((entry) => entry.id == open);
+    final was = _openAt;
+    _openAt = index;
     if (open == null) {
       _followed = null;
     } else if (open != _followed) {
-      final index = entries.indexWhere((entry) => entry.id == open);
       if (index >= 0) {
         _followed = open;
         if (index != _selected) {
@@ -427,12 +485,130 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
           return;
         }
       }
+    } else if (index >= 0 && was >= 0 && index != was && _selected == was) {
+      _later(() => _selected = index);
+      return;
     }
     if (_selected >= entries.length) {
       // Onto the last row rather than off the end: the reviewer was
       // working down the queue and the next thing they press should
       // decide something.
       _later(() => _selected = entries.length - 1);
+    }
+  }
+
+  /// The entry [_aroundIn] was last drawn holding.
+  String? _aroundOf;
+
+  /// The list as last drawn holding the open entry, around which the pane
+  /// goes once that entry is decided here (see [_nearest]). Kept from
+  /// every draw rather than taken as a decision starts, because the pane's
+  /// buttons decide without this screen; left alone once the entry drops
+  /// out, which is the decision landing.
+  List<ReviewEntry> _aroundIn = const [];
+
+  /// After [_syncSelection], which leaves the open entry's row in
+  /// [_openAt].
+  void _recordAround(List<ReviewEntry> entries) {
+    final open = widget.openEntryId;
+    if (_openAt >= 0) {
+      _aroundOf = open;
+      _aroundIn = entries;
+    } else if (open != _aroundOf) {
+      _aroundOf = open;
+      _aroundIn = const [];
+    }
+  }
+
+  /// The rows around [entryId] in [_aroundIn], nearest first: those after
+  /// it, then those before.
+  List<String> _nearest(String entryId) {
+    final entries = _aroundIn;
+    final at = entries.indexWhere((entry) => entry.id == entryId);
+    if (at < 0) return const [];
+    return [
+      for (var i = at + 1; i < entries.length; i++) entries[i].id,
+      for (var i = at - 1; i >= 0; i--) entries[i].id,
+    ];
+  }
+
+  /// The entry the pane is moving off, decided here, while the queue
+  /// reads again.
+  String? _leaving;
+
+  /// Moves the pane off [decided], decided here: to the nearest row
+  /// around it that the queue still holds once read again, else to the
+  /// bare queue. Never onto [gone], what the same decision also took,
+  /// and not at all when the pane has moved meanwhile.
+  ///
+  /// After the read rather than before it: the cursor is an index, and
+  /// moving on the old rows would leave it on the row the refetch
+  /// shifts under it. The pane draws the decided entry meanwhile, Revert
+  /// and all, which is then the confirmation's undo: a reverted entry is
+  /// decided for good, so it moves on all the same.
+  Future<void> _follow(String decided, {Set<String> gone = const {}}) async {
+    if (!mounted || widget.openEntryId != decided) {
+      return _offScreen(decided, gone);
+    }
+    final around = _aroundOf == decided ? _nearest(decided) : const <String>[];
+    setState(() => _leaving = decided);
+    final List<ReviewEntry> held;
+    try {
+      held = await _landedQueue();
+    } finally {
+      if (mounted && _leaving == decided) setState(() => _leaving = null);
+    }
+    if (!mounted || widget.openEntryId != decided) {
+      return _offScreen(decided, gone);
+    }
+    final ids = {for (final entry in held) entry.id}..removeAll(gone);
+    final next = around.where(ids.contains).firstOrNull;
+    await leaveDecided(
+      context,
+      decided,
+      next == null ? WaxRoute.review : WaxRoute.reviewEntry(next),
+      inPlace: next != null,
+      alsoDecided: gone,
+    );
+  }
+
+  /// Forgets [decided] and [gone], for a pane no longer on [decided]. Where
+  /// this screen has gone and what took its place still shows [decided] (a
+  /// window narrowed to one pane), that leaves it for the queue, as a
+  /// decision made there would.
+  Future<void> _offScreen(String decided, Set<String> gone) async {
+    final host = mounted
+        ? null
+        : _router?.routerDelegate.navigatorKey.currentContext;
+    if (host == null) {
+      forgetDecided(_history, {decided, ...gone});
+      return;
+    }
+    await leaveDecided(host, decided, WaxRoute.review, alsoDecided: gone);
+  }
+
+  /// The queue once the read a decision started has landed, or as it
+  /// stands when that read fails: Riverpod retries a failed read on its
+  /// own, and the pane does not wait out the backoff.
+  ///
+  /// Heard on the container: this screen can go before the read lands (a
+  /// window narrowed to one pane, a move elsewhere), and its own listens
+  /// close with it, uncalled.
+  Future<List<ReviewEntry>> _landedQueue() async {
+    final now = ref.read(reviewQueueProvider);
+    if (!now.isLoading) return now.value?.entries ?? const [];
+    final landed = Completer<List<ReviewEntry>>();
+    final sub = ProviderScope.containerOf(context, listen: false).listen(
+      reviewQueueProvider,
+      (_, next) {
+        if (landed.isCompleted || (next.isLoading && !next.hasError)) return;
+        landed.complete(next.value?.entries ?? const []);
+      },
+    );
+    try {
+      return await landed.future;
+    } finally {
+      sub.close();
     }
   }
 
@@ -451,6 +627,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
     final pending = ref.watch(pendingActionsProvider);
     final l10n = context.l10n;
     _syncSelection(queue.value?.entries ?? const []);
+    _recordAround(queue.value?.entries ?? const []);
     // Surface a failed "load more": the queue keeps its rows, so the
     // failure is otherwise invisible. Firing on the flag's rising edge
     // shows one notice per failure, and scrolling again retries.
@@ -458,9 +635,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
       final failedNow = next.value?.loadError ?? false;
       final failedBefore = prev?.value?.loadError ?? false;
       if (failedNow && !failedBefore) {
-        ref
-            .read(shellMessengerProvider.notifier)
-            .show(l10n.reviewLoadMoreFailed);
+        ref.read(shellMessengerProvider).show(l10n.reviewLoadMoreFailed);
       }
     });
     return AppShortcuts(
@@ -482,6 +657,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
         title: l10n.reviewTitle,
         largeTitle: false,
         semanticsId: SemanticsIds.adminReview,
+        onBack: () => context.back(),
+        backSemanticsId: SemanticsIds.navBack,
         actions: <Widget>[
           const _MatchingModeMenu(),
           WaxIconButton(
@@ -583,6 +760,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
         key: ValueKey(entryId),
         entryId: entryId,
         onClose: () => context.go(WaxRoute.review),
+        onDecided: () => unawaited(_follow(entryId)),
+        leaving: _leaving == entryId,
       ),
     );
   }
@@ -818,7 +997,7 @@ class _MatchingModeMenu extends ConsumerWidget {
           .read(libraryMatchingProvider(libraryPid).notifier)
           .setMode(mode);
     } on WaxDeckApiException catch (e) {
-      ref.read(shellMessengerProvider.notifier).show(explainError(l10n, e));
+      ref.read(shellMessengerProvider).show(explainError(l10n, e));
     }
   }
 
@@ -835,7 +1014,7 @@ class _MatchingModeMenu extends ConsumerWidget {
           .read(libraryMatchingProvider(libraryPid).notifier)
           .setSinglesAutoApply(!on);
     } on WaxDeckApiException catch (e) {
-      ref.read(shellMessengerProvider.notifier).show(explainError(l10n, e));
+      ref.read(shellMessengerProvider).show(explainError(l10n, e));
     }
   }
 }

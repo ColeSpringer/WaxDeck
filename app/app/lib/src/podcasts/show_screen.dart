@@ -106,7 +106,8 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
       child: WaxScaffold(
         title: title,
         largeTitle: false,
-        onBack: () => context.leave(fallback: WaxRoute.podcasts),
+        onBack: () => context.back(fallback: WaxRoute.podcasts),
+        backSemanticsId: SemanticsIds.navBack,
         actions: const <Widget>[SearchAction()],
         slivers: <Widget>[
           AsyncSliverFace<PodcastDetail>(
@@ -412,7 +413,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
     final l10n = context.l10n;
     setState(_selected.clear);
     ref
-        .read(shellMessengerProvider.notifier)
+        .read(shellMessengerProvider)
         .show(
           <String>[
             if (playable.isNotEmpty) l10n.podcastQueuedCount(playable.length),
@@ -425,7 +426,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
   }
 
   Future<void> _fetchSelected(List<EpisodeSummary> chosen) async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     final notifier = ref.read(episodesProvider(widget.pid).notifier);
     var queued = 0;
@@ -445,8 +446,9 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
         failure ??= explainError(l10n, e);
       }
     }
-    if (!mounted) return;
-    setState(_selected.clear);
+    // Said with the show left meanwhile too, through the messenger read
+    // before the awaits.
+    if (mounted) setState(_selected.clear);
     messenger.show(
       failure == null
           ? l10n.podcastQueuedForDownloadCount(queued)
@@ -456,9 +458,11 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
   }
 
   Future<void> _markSelectedPlayed(List<EpisodeSummary> chosen) async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
-    final repository = ref.read(repositoryProvider);
+    // The container, not `ref`, past the awaits: the show may be left.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final repository = container.read(repositoryProvider);
     var marked = 0;
     var skipped = 0;
     String? failure;
@@ -479,13 +483,13 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
     if (marked > 0) {
       // The family rather than one key: a selection spans windows, and
       // the hub's tile draws the backlog this just changed.
-      ref.invalidate(playProgressProvider);
-      ref.invalidate(subscriptionsProvider);
-      ref.invalidate(upNextEpisodesProvider);
-      ref.invalidate(latestEpisodesProvider);
+      container
+        ..invalidate(playProgressProvider)
+        ..invalidate(subscriptionsProvider)
+        ..invalidate(upNextEpisodesProvider)
+        ..invalidate(latestEpisodesProvider);
     }
-    if (!mounted) return;
-    setState(_selected.clear);
+    if (mounted) setState(_selected.clear);
     messenger.show(
       failure ??
           <String>[
@@ -549,7 +553,7 @@ class _ShowHeader extends ConsumerWidget {
     // Run as the follow control's pending request: it draws busy for as
     // long as the request is out, and a second press is dropped.
     Future<void> guarded(Future<void> Function() action) async {
-      final messenger = ref.read(shellMessengerProvider.notifier);
+      final messenger = ref.read(shellMessengerProvider);
       try {
         await ref
             .read(pendingActionsProvider.notifier)
@@ -610,7 +614,7 @@ class _ShowHeader extends ConsumerWidget {
                 // is followed by the address the listener was given.
                 onPressed: show.feedUrl == null
                     ? () => ref
-                          .read(shellMessengerProvider.notifier)
+                          .read(shellMessengerProvider)
                           .show(
                             l10n.podcastFollowPrivate,
                             channel: ShellChannel.podcasts,

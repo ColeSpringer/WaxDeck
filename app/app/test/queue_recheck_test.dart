@@ -166,7 +166,7 @@ void main() {
     expect(_queued(s), [_b, _c]);
     expect(s.engine.loadedUrls, hasLength(loads));
     expect(s.engine.playing, isTrue);
-    expect(s.container.read(shellMessengerProvider), isNull);
+    expect(s.container.read(shellMessagesProvider), isNull);
     await _end(tester, s);
   });
 
@@ -187,7 +187,7 @@ void main() {
     expect(s.engine.playing, isFalse);
     // Said, not swapped in silence.
     expect(
-      shellMessageText(s.container.read(shellMessengerProvider)),
+      shellMessageText(s.container.read(shellMessagesProvider)),
       'What was playing is no longer in the library.',
     );
     await _end(tester, s);

@@ -7,7 +7,9 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../settings/prefs_controller.dart';
+import '../shell/asked_from.dart';
 import '../shell/in_flight.dart';
+import '../shell/navigation_history.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'radio_controller.dart';
@@ -45,7 +47,7 @@ Future<String?> addDirectoryStation(
   WidgetRef ref,
   RadioDirectoryEntry entry,
 ) async {
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   try {
     await ref
@@ -116,7 +118,7 @@ Future<void> toggleStationScrobble(
   WidgetRef ref,
   RadioStation station,
 ) async {
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   try {
     final muted = await ref
@@ -242,7 +244,7 @@ class _StationDialogState extends ConsumerState<_StationDialog>
       return;
     }
     final name = typed.isEmpty ? stationNameFromUrl(url) : typed;
-    final navigator = Navigator.of(context);
+    final from = AskedFrom.of(context);
     final editing = widget.editing;
     final homepage = _homepage.text.trim();
     final logo = _logo.text.trim();
@@ -269,32 +271,40 @@ class _StationDialogState extends ConsumerState<_StationDialog>
                 logoUrl: logo.isEmpty ? null : logo,
               );
         }
-        // Only while this dialog is still up. A save outlives a dialog
+        // Only while this dialog is still there. A save outlives a dialog
         // somebody dismissed while it was in flight, and popping a
         // captured navigator then takes whatever is on top instead - the
         // screen underneath.
-        if (mounted) navigator.pop();
+        closeFinished(from.route);
       } on WaxDeckApiException catch (e) {
-        // Inline, not a snackbar: this dialog stays open on a refusal,
-        // and a snackbar would render behind it. The server's words,
-        // which name the station a duplicate URL clashes with.
-        if (mounted) setState(() => _error = explainRefusal(l10n, e));
+        // The server's words, which name the station a duplicate URL
+        // clashes with.
+        _refused(from, explainRefusal(l10n, e));
       }
     });
   }
 
   Future<void> _addFromDirectory(RadioDirectoryEntry entry) {
-    final navigator = Navigator.of(context);
+    final from = AskedFrom.of(context);
     return runAs(_StationWork.add, () async {
       setState(() => _error = null);
       final refusal = await addDirectoryStation(context, ref, entry);
       if (refusal == null) {
-        if (mounted) navigator.pop();
+        closeFinished(from.route);
         return;
       }
-      if (mounted) setState(() => _error = refusal);
+      _refused(from, refusal);
     });
   }
+
+  /// Inline while this dialog is still there: it stays open on a refusal,
+  /// and a snackbar would render behind it. In the shell once it was
+  /// dismissed while the save was out.
+  void _refused(AskedFrom from, String refusal) => from.refused(
+    refusal,
+    inline: (refusal) => setState(() => _error = refusal),
+    channel: ShellChannel.radio,
+  );
 
   @override
   Widget build(BuildContext context) {

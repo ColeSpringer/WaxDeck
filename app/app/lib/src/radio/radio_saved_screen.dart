@@ -36,13 +36,12 @@ class _RadioSavedScreenState extends ConsumerState<RadioSavedScreen>
 
   Future<void> _remove(RadioSavedSong song) async {
     final l10n = context.l10n;
+    // Read now: a refusal is said once the list has gone too.
+    final messenger = ref.read(shellMessengerProvider);
     try {
       await ref.read(radioSavedProvider.notifier).remove(song.pid);
     } on WaxDeckApiException catch (e) {
-      if (!mounted) return;
-      ref
-          .read(shellMessengerProvider.notifier)
-          .show(explainError(l10n, e), channel: ShellChannel.radio);
+      messenger.show(explainError(l10n, e), channel: ShellChannel.radio);
     }
   }
 
@@ -60,7 +59,8 @@ class _RadioSavedScreenState extends ConsumerState<RadioSavedScreen>
       largeTitle: false,
       controller: pagedScroll,
       semanticsId: SemanticsIds.radioSaved,
-      onBack: () => context.leave(fallback: WaxRoute.radio),
+      onBack: () => context.back(fallback: WaxRoute.radio),
+      backSemanticsId: SemanticsIds.navBack,
       slivers: <Widget>[
         AsyncSliverFace<RadioSavedState>(
           state: saved,

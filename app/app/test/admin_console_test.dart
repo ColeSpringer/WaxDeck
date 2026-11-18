@@ -6,6 +6,7 @@ import 'package:waxdeck/src/admin/admin_console.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/dashboard_screen.dart';
 import 'package:waxdeck/src/admin/genres_screen.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -289,7 +290,7 @@ void main() {
 
     expect(repo.rescans, 1);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Scan started',
     );
   });
@@ -315,7 +316,7 @@ void main() {
     expect(button().busy, isFalse);
     expect(repo.createBackupCalls, 1);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Backup started',
     );
     // The running archive has the list polling; one with none ends it.
@@ -453,7 +454,7 @@ void main() {
     final doom = repo.genreTree.firstWhere((g) => g.name == 'Doom Metal');
     expect(doom.aliases, <String>['Funeral Doom', 'Sludge']);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Genre tree saved',
     );
   });
@@ -563,6 +564,27 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.genreNormalizations, <bool>[true, false]);
+  });
+
+  testWidgets('a normalize answered once the screen was left is offered in '
+      'the shell', (tester) async {
+    final repo = _HeldWrites();
+    final container = _container(repo);
+    await _pump(tester, container, const GenreTreeScreen());
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.genreNormalize));
+    await tester.pump();
+    await leaveScreen(tester, container);
+    repo.release.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final message = container.read(shellMessagesProvider);
+    expect(
+      shellMessageText(message),
+      AppLocalizationsEn().adminGenreNormalizing,
+    );
+    expect(message?.actionSemanticsId, SemanticsIds.adminAction('genre-tasks'));
   });
 
   testWidgets('a normalize takes one press while it runs, and holds the '

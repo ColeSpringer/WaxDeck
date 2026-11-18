@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/playlists/add_to_playlist_sheet.dart';
+import 'package:waxdeck/src/playlists/playlist_create.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlists_screen.dart';
 import 'package:waxdeck/src/playlists/rule_editor_screen.dart';
@@ -17,9 +18,11 @@ import 'package:waxdeck/src/playlists/rule_vocabulary.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/playlists/playlists_controller.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
@@ -615,6 +618,145 @@ void main() {
     expect(find.text('Delete'), findsNothing);
   });
 
+  testWidgets('a playlist made in a dialog dismissed as it saves leaves the '
+      'page under it up', (tester) async {
+    // Answered while the dialog is on its way out, still mounted: nothing
+    // is gone to, and the list exists all the same.
+    final gate = Completer<void>();
+    final repo = FakeRepository(items: const [_track])
+      ..createPlaylistGate = gate;
+    await _pump(
+      tester,
+      repo,
+      Builder(
+        builder: (context) => Center(
+          child: WaxButton(
+            label: 'Open',
+            onPressed: () => unawaited(showCreatePlaylistDialog(context)),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.playlistNameField),
+      'Road Trip',
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistCreateConfirm),
+    );
+    await tester.pump();
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pump();
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Open'), findsOneWidget);
+    expect(find.byType(PlaylistScreen), findsNothing);
+    expect(
+      repo.playlistsByPid.values.where((p) => p.name == 'Road Trip'),
+      hasLength(1),
+    );
+  });
+
+  for (final gone in <bool>[false, true]) {
+    testWidgets('a playlist made in a dialog dismissed while it saves, then '
+        'refused, is said in the shell '
+        '${gone ? 'once the dialog has gone' : 'as it leaves'}', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository(items: const [_track])
+        ..createPlaylistGate = gate
+        ..createPlaylistError = const WaxDeckApiException(
+          code: 'invalid-request',
+          message: 'a playlist name is at most 200 characters',
+        );
+      await _pump(
+        tester,
+        repo,
+        Builder(
+          builder: (context) => Center(
+            child: WaxButton(
+              label: 'Open',
+              onPressed: () => unawaited(showCreatePlaylistDialog(context)),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.bySemanticsIdentifier(SemanticsIds.playlistNameField),
+        'Road Trip',
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playlistCreateConfirm),
+      );
+      await tester.pump();
+
+      await tester.tapAt(const Offset(4, 4));
+      if (gone) {
+        await tester.pumpAndSettle();
+      } else {
+        await tester.pump();
+      }
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Open'), findsOneWidget);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.playlistNameField),
+        findsNothing,
+      );
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'a playlist name is at most 200 characters',
+      );
+    });
+  }
+
+  testWidgets('a playlist made in a dialog still up when it is refused says '
+      'so under the name', (tester) async {
+    final repo = FakeRepository(items: const [_track])
+      ..createPlaylistError = const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'a playlist name is at most 200 characters',
+      );
+    await _pump(
+      tester,
+      repo,
+      Builder(
+        builder: (context) => Center(
+          child: WaxButton(
+            label: 'Open',
+            onPressed: () => unawaited(showCreatePlaylistDialog(context)),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.playlistNameField),
+      'Road Trip',
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistCreateConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('a playlist name is at most 200 characters'),
+      findsOneWidget,
+    );
+    expect(raisedMessage(tester), isNull, reason: 'under the field');
+  });
+
   testWidgets('a card renames its playlist from the menu', (tester) async {
     final repo = FakeRepository(items: const [_track]);
     final mine = await repo.createPlaylist(
@@ -848,9 +990,8 @@ void main() {
     expect(find.text(_third.title), findsOneWidget);
   });
 
-  testWidgets('a removal refused after the screen closed touches nothing', (
-    tester,
-  ) async {
+  testWidgets('a removal refused after the screen closed touches nothing, '
+      'and is said in the shell', (tester) async {
     final repo = FakeRepository(items: const [_track, _second]);
     final created = await repo.createPlaylist(
       name: 'Left',
@@ -882,6 +1023,11 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(repo.playlistMembers[created.pid], [_second.pid]);
+    expect(
+      shellMessageText(container.read(shellMessagesProvider)),
+      contains('changed since'),
+      reason: 'a race lost once the banner has gone',
+    );
   });
 
   testWidgets('a member row opens the item menu from its kebab', (
@@ -1020,6 +1166,56 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.playlistMembers[created.pid], [_track.pid, _second.pid]);
+  });
+
+  testWidgets('an add answered once the screen was left is confirmed in the '
+      'shell', (tester) async {
+    final repo = FakeRepository(items: const [_track, _second]);
+    repo.searchResults['reel'] = SearchResults(
+      query: 'reel',
+      tracks: [
+        SearchHit(
+          pid: _second.pid,
+          kind: 'track',
+          title: 'Barliman Reel',
+          subtitle: 'The Bree Trio',
+        ),
+      ],
+    );
+    final created = await repo.createPlaylist(
+      name: 'Growing',
+      kind: 'static',
+      itemPids: [_track.pid],
+    );
+    final container = _container(repo);
+    await pumpApp(
+      tester,
+      PlaylistScreen(pid: created.pid),
+      container: container,
+      pushed: true,
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.playlistAddField),
+      'reel',
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    final gate = repo.addPlaylistItemsGate = Completer<void>();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistAddResult(0)),
+    );
+    await tester.pump();
+    await leaveScreen(tester, container);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(repo.playlistMembers[created.pid], [_track.pid, _second.pid]);
+    expect(
+      shellMessageText(container.read(shellMessagesProvider)),
+      AppLocalizationsEn().playlistAdded('Barliman Reel'),
+    );
   });
 
   testWidgets('a search that finds nothing playable says so', (tester) async {
@@ -2680,6 +2876,141 @@ void main() {
       findsOneWidget,
     );
   });
+
+  // Answered while the sheet is on its way out, still mounted: the page
+  // under it stays.
+  for (final create in <bool>[false, true]) {
+    testWidgets('the sheet dismissed as it '
+        '${create ? 'makes a list' : 'adds'} leaves the page under it up', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository(items: const [_track]);
+      final target = await repo.createPlaylist(name: 'Mix', kind: 'static');
+      if (create) {
+        repo.createPlaylistGate = gate;
+      } else {
+        repo.addPlaylistItemsGate = gate;
+      }
+      await _pump(
+        tester,
+        repo,
+        Builder(
+          builder: (context) => Center(
+            child: WaxButton(
+              label: 'Open',
+              onPressed: () =>
+                  unawaited(showAddToPlaylistSheet(context, item: _track)),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      if (create) {
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.addToPlaylistNew),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.bySemanticsIdentifier(SemanticsIds.playlistNameField),
+          'From the player',
+        );
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.playlistCreateConfirm),
+        );
+        await tester.pumpAndSettle();
+      } else {
+        await tester.tap(
+          find.bySemanticsIdentifier(
+            SemanticsIds.addToPlaylistTarget(target.pid),
+          ),
+        );
+        await tester.pump();
+      }
+
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pump();
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Open'), findsOneWidget);
+      expect(find.byType(AddToPlaylistSheet), findsNothing);
+    });
+
+    // Mounted until it has gone, with nobody left to read it.
+    testWidgets('the sheet dismissed as it '
+        '${create ? 'makes a list' : 'adds'}, then refused, is said in the '
+        'shell', (tester) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository(items: const [_track]);
+      final target = await repo.createPlaylist(name: 'Mix', kind: 'static');
+      if (create) {
+        repo
+          ..createPlaylistGate = gate
+          ..createPlaylistError = const WaxDeckApiException(
+            code: 'invalid-request',
+            message: 'a playlist name is at most 200 characters',
+          );
+      } else {
+        repo.addPlaylistItemsGate = gate;
+      }
+      await _pump(
+        tester,
+        repo,
+        Builder(
+          builder: (context) => Center(
+            child: WaxButton(
+              label: 'Open',
+              onPressed: () =>
+                  unawaited(showAddToPlaylistSheet(context, item: _track)),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      if (create) {
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.addToPlaylistNew),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.bySemanticsIdentifier(SemanticsIds.playlistNameField),
+          'From the player',
+        );
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.playlistCreateConfirm),
+        );
+        await tester.pumpAndSettle();
+      } else {
+        await tester.tap(
+          find.bySemanticsIdentifier(
+            SemanticsIds.addToPlaylistTarget(target.pid),
+          ),
+        );
+        await tester.pump();
+        // Deleted elsewhere while the add is out.
+        repo.playlistsByPid.remove(target.pid);
+      }
+
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pump();
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Open'), findsOneWidget);
+      expect(find.byType(AddToPlaylistSheet), findsNothing);
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        create
+            ? 'a playlist name is at most 200 characters'
+            : 'That is not here any more.',
+      );
+    });
+  }
 
   testWidgets('the sheet makes a new list and drops the item in it', (
     tester,

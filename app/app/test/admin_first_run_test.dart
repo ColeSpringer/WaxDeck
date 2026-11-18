@@ -362,7 +362,7 @@ void main() {
     expect(_step(FirstRunStep.warming), findsOneWidget);
     // Said in the app's words, not the server's English.
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'A scan or another catalog job is already running.',
     );
   });

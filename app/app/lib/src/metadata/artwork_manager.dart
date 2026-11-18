@@ -125,7 +125,8 @@ class ArtworkManager extends ConsumerStatefulWidget {
   /// The reads this widget owns are invalidated for it; a screen drawing
   /// the same cover from a read of its own - a detail read carrying the
   /// resolved source, say - has to be told, and this manager has no
-  /// business knowing which provider that is.
+  /// business knowing which provider that is. Called whether or not this
+  /// grid is still up, so it must not reach through its host's ref.
   final VoidCallback? onChanged;
 
   @override
@@ -182,7 +183,7 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
     final l10n = context.l10n;
     if (files.length > 1) {
       ref
-          .read(shellMessengerProvider.notifier)
+          .read(shellMessengerProvider)
           .show(l10n.artworkOneImageOnly(slot.labelOf(l10n), files.first.name));
     }
     await _upload(slot, files.first);
@@ -194,7 +195,7 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
     // element throws rather than doing nothing.
     if (!mounted) return;
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     if (file.size > kArtworkMaxBytes) {
       messenger.show(l10n.artworkTooLarge(file.name));
       return;
@@ -204,6 +205,8 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
       messenger.show(l10n.artworkUnreadable(file.name));
       return;
     }
+    final repository = ref.read(repositoryProvider);
+    final refresh = _refresher(slot);
     await runAs((role: slot.role, action: _ArtAction.set), () async {
       try {
         // Whole in memory, unlike an upload: the endpoint takes one body.
@@ -212,7 +215,6 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
           builder.add(chunk);
         }
         final bytes = builder.takeBytes();
-        final repository = ref.read(repositoryProvider);
         final entity = widget.entityType;
         final writeBack = widget.writeBack && slot == ArtSlot.front;
         final result = entity == null
@@ -229,7 +231,7 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
                 role: slot.role,
                 writeBack: writeBack,
               );
-        await _refresh(slot);
+        await refresh();
         messenger.show(
           result.writeBackFailures.isEmpty
               ? l10n.artworkReplaced(slot.labelOf(l10n))
@@ -254,10 +256,11 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
       cancelSemanticsId: SemanticsIds.confirmCancel,
     );
     if (!confirmed || !mounted) return;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
+    final repository = ref.read(repositoryProvider);
+    final refresh = _refresher(slot);
     await runAs((role: slot.role, action: _ArtAction.clear), () async {
       try {
-        final repository = ref.read(repositoryProvider);
         final entity = widget.entityType;
         if (entity == null) {
           await repository.clearItemArtwork(widget.pid, role: slot.role);
@@ -268,7 +271,7 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
             role: slot.role,
           );
         }
-        await _refresh(slot);
+        await refresh();
         messenger.show(l10n.artworkCleared(slot.labelOf(l10n)));
       } on WaxDeckApiException catch (e) {
         messenger.show(explainError(l10n, e));
@@ -276,21 +279,29 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
     });
   }
 
-  /// The store's own eviction is the cache bust: it notes the URL as
-  /// replaced and asks for it under a new `v` everywhere. A counter
-  /// here would bust a URL only this screen draws.
-  Future<void> _refresh(ArtSlot slot) async {
-    await ref.read(artworkStoreProvider).evict(_urlFor(slot));
-    if (!mounted) return;
-    setState(() {});
-    ref.invalidate(itemArtRolesProvider(widget.pid));
-    // Setting an entity's front cover pins it and clearing one leaves
-    // the pin as it stood, so the switch below is stale either way.
+  /// What refreshes [slot] once a write to it lands, read before it is
+  /// sent: the write may land once this grid has gone. The store's own
+  /// eviction is the cache bust: it notes the URL as replaced and asks
+  /// for it under a new `v` everywhere. A counter here would bust a URL
+  /// only this screen draws.
+  Future<void> Function() _refresher(ArtSlot slot) {
+    final store = ref.read(artworkStoreProvider);
+    final url = _urlFor(slot);
+    final container = ProviderScope.containerOf(context, listen: false);
+    final pid = widget.pid;
     final entity = widget.entityType;
-    if (entity != null) {
-      ref.invalidate(entityArtLockProvider((type: entity, pid: widget.pid)));
-    }
-    widget.onChanged?.call();
+    final onChanged = widget.onChanged;
+    return () async {
+      await store.evict(url);
+      container.invalidate(itemArtRolesProvider(pid));
+      // Setting an entity's front cover pins it and clearing one leaves
+      // the pin as it stood, so the switch below is stale either way.
+      if (entity != null) {
+        container.invalidate(entityArtLockProvider((type: entity, pid: pid)));
+      }
+      onChanged?.call();
+      if (mounted) setState(() {});
+    };
   }
 
   /// Pins or unpins the front cover, which is the one way out of a
@@ -317,10 +328,13 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
     final front = slot == ArtSlot.front;
     final entity = widget.entityType;
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
+    final repository = ref.read(repositoryProvider);
+    final container = ProviderScope.containerOf(context, listen: false);
+    final pid = widget.pid;
+    final onChanged = widget.onChanged;
     await runAs((role: slot.role, action: _ArtAction.pin), () async {
       try {
-        final repository = ref.read(repositoryProvider);
         if (entity == null) {
           await repository.setItemLocks(
             widget.pid,
@@ -335,19 +349,14 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
             locked: locked,
           );
         }
-        // Guarded like _refresh beside it: the pin may have been written
-        // while this screen was being left, and invalidating through a
-        // disposed ref throws. It escapes rather than surfacing, because
-        // the switch takes this as a void callback and discards the
-        // future.
-        if (!mounted) return;
+        // Through what was read before the await: the pin may have been
+        // written while this screen was being left, and a disposed ref
+        // throws, escaping into the future the switch discards.
         if (entity != null) {
-          ref.invalidate(
-            entityArtLockProvider((type: entity, pid: widget.pid)),
-          );
+          container.invalidate(entityArtLockProvider((type: entity, pid: pid)));
         }
-        ref.invalidate(itemArtRolesProvider(widget.pid));
-        widget.onChanged?.call();
+        container.invalidate(itemArtRolesProvider(pid));
+        onChanged?.call();
         messenger.show(switch ((front, locked)) {
           (true, true) => l10n.artworkLockPinned,
           (true, false) => l10n.artworkLockUnpinned,
@@ -355,7 +364,7 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
           (false, false) => l10n.artworkSlotUnpinned(slot.labelOf(l10n)),
         });
       } on WaxDeckApiException catch (e) {
-        if (mounted) messenger.show(explainError(l10n, e));
+        messenger.show(explainError(l10n, e));
       }
     });
   }

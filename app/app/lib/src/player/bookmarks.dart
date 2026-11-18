@@ -288,7 +288,7 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
     final l10n = context.l10n;
     if (_saving) return;
     setState(() => _saving = true);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final note = _note.text.trim();
     try {
       await ref
@@ -311,7 +311,7 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
   }
 
   Future<void> _remove(String id) async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     try {
       await ref.read(bookmarksProvider(_pid).notifier).remove(id);

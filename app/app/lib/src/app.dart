@@ -9,7 +9,10 @@ import 'l10n/locale_warmup.dart';
 import 'l10n/off_tree.dart';
 import 'settings/client_prefs.dart';
 import 'settings/prefs_controller.dart';
+import 'shell/desktop_back.dart';
 import 'shell/router.dart';
+import 'shell/shell_messages.dart';
+import 'shell/system_back_signal.dart';
 
 class WaxDeckApp extends ConsumerWidget {
   const WaxDeckApp({super.key});
@@ -52,6 +55,11 @@ class WaxDeckApp extends ConsumerWidget {
         // frame and snapping brightness-keyed layers halfway through.
         themeAnimationStyle: AnimationStyle.noAnimation,
         actions: waxAppActions(context),
+        // On Android whether the app answers back is the shell's to say:
+        // the navigators alone send presses it would answer out of the app.
+        onNavigationNotification: ref
+            .watch(systemBackSignalProvider)
+            ?.onNavigation,
         routerConfig: ref.watch(routerProvider),
         // The boot gate withholds the router until the session probes
         // answer; the warmup sits here, the highest place the resolved
@@ -63,7 +71,13 @@ class WaxDeckApp extends ConsumerWidget {
           child: MiniWindowGate(
             child: _ReducedMotion(
               child: LocaleFontWarmup(
-                child: _SystemBars(child: _BootGate(child: child!)),
+                child: _SystemBars(
+                  // Around every page, so one outside the session draws
+                  // messages too: the routes and the boot gate's own.
+                  child: ShellMessageHost.public(
+                    child: _BootGate(child: DesktopBack(child: child!)),
+                  ),
+                ),
               ),
             ),
           ),
@@ -164,8 +178,10 @@ class _BootGateState extends ConsumerState<_BootGate> {
       probing = bootstrap.isLoading && !bootstrap.hasValue;
     }
     if (probing) {
-      return const Scaffold(
-        body: WaxPlainTextStyle(child: Center(child: WaxWordmark())),
+      return const ShellMessageArea(
+        child: Scaffold(
+          body: WaxPlainTextStyle(child: Center(child: WaxWordmark())),
+        ),
       );
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {

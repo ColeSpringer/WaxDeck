@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -251,7 +253,7 @@ const _quotaRefusal = WaxDeckApiException(
 String? _message(WidgetTester tester) => shellMessageText(
   ProviderScope.containerOf(
     tester.element(find.byType(UploadsScreen)),
-  ).read(shellMessengerProvider),
+  ).read(shellMessagesProvider),
 );
 
 void main() {
@@ -359,6 +361,46 @@ void main() {
     expect(
       find.bySemanticsIdentifier(SemanticsIds.uploadReview('up-2')),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('a discard refused once the screen was left is said in the '
+      'shell', (tester) async {
+    const refusal = WaxDeckApiException(
+      code: 'unavailable',
+      message: 'the server is restarting',
+    );
+    final gate = Completer<void>();
+    final repo = FakeRepository()
+      ..deleteUploadGate = gate
+      ..deleteUploadError = refusal;
+    repo.uploadsById['up-1'] = testUpload(
+      'up-1',
+      receivedBytes: 1048576,
+      sizeBytes: 4194304,
+    );
+    final container = _container(repo);
+    await _pump(tester, container);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadDelete('up-1')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
+      'discard',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.confirmAccept));
+    await tester.pumpAndSettle();
+    await leaveScreen(tester, container);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      shellMessageText(container.read(shellMessagesProvider)),
+      explainError(AppLocalizationsEn(), refusal),
     );
   });
 
@@ -1255,7 +1297,7 @@ void main() {
     ProviderScope.containerOf(
       tester.element(find.byType(UploadsScreen)),
     ).listen(
-      shellMessengerProvider,
+      shellMessagesProvider,
       (_, next) => shown.add(shellMessageText(next)),
     );
 

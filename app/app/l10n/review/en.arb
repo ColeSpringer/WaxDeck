@@ -125,7 +125,7 @@
   },
   "reviewDecidedCount": "{count, plural, =1{Decided 1 entry} other{Decided {count} entries}}",
   "@reviewDecidedCount": {
-    "description": "Snackbar after a bulk decision where every entry took it.",
+    "description": "Snackbar after a decision where every entry took it: a bulk one, or one that moved off the entry it decided.",
     "placeholders": {
       "count": {
         "type": "int",
@@ -571,6 +571,14 @@
   "reviewTracksTitle": "Tracks",
   "@reviewTracksTitle": {
     "description": "Heading over the file-by-file comparison between the entry and the chosen candidate."
+  },
+  "reviewUndo": "Undo",
+  "@reviewUndo": {
+    "description": "Action on the confirmation after a decision moved off its entry: reverts that decision, as the entry's own Revert does."
+  },
+  "reviewUndone": "Decision undone",
+  "@reviewUndone": {
+    "description": "Snackbar once the Undo on a decision's confirmation has reverted it."
   },
   "reviewUntitled": "Untitled",
   "@reviewUntitled": {

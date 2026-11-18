@@ -457,6 +457,67 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    // Dismissed while the server answers: the section under it stays,
+    // whether the answer comes as the dialog leaves or once it has gone,
+    // and a refusal reaches the shell instead.
+    for (final refused in <bool>[false, true]) {
+      for (final gone in <bool>[false, true]) {
+        testWidgets('a rename dismissed while it saves leaves the section '
+            'up, ${refused ? 'refused' : 'saved'} '
+            '${gone ? 'once the dialog has gone' : 'as it leaves'}', (
+          tester,
+        ) async {
+          _tallWindow(tester);
+          final repo = _signedInRepo(
+            sessions: [testSession('se-2', deviceName: 'Pixel 9')],
+          );
+          if (refused) {
+            repo.renameError = const WaxDeckApiException(
+              code: 'invalid-request',
+              message: 'deviceName must be 1 to 128 characters after trimming',
+            );
+          }
+          await pumpApp(
+            tester,
+            const SettingsSectionScreen(section: SettingsSection.account),
+            container: appContainer(repo: repo),
+            pushed: true,
+          );
+          final rename = find.bySemanticsIdentifier(
+            SemanticsIds.deviceRename('se-2'),
+          );
+          await _show(tester, rename);
+          await tester.tap(rename);
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField), 'Kitchen radio');
+          await tester.pumpAndSettle();
+          final gate = repo.renameGate = Completer<void>();
+          await tester.tap(find.byKey(const Key('device-rename-confirm')));
+          await tester.pump();
+
+          // The scrim.
+          await tester.tapAt(const Offset(4, 4));
+          if (gone) {
+            await tester.pumpAndSettle();
+          } else {
+            await tester.pump();
+          }
+          gate.complete();
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+          expect(find.byType(SettingsSectionScreen), findsOneWidget);
+          expect(find.byKey(const Key('device-rename-confirm')), findsNothing);
+          if (refused) {
+            expect(
+              shellMessageText(raisedMessage(tester)),
+              'deviceName must be 1 to 128 characters after trimming',
+            );
+          }
+        });
+      }
+    }
+
     testWidgets('an empty name cannot be saved', (tester) async {
       _tallWindow(tester);
       final repo = _signedInRepo(
@@ -680,6 +741,102 @@ void main() {
         (userId: _user.id, newPassword: 'newsecret1'),
       ]);
     });
+
+    testWidgets('a password change dismissed as it saves leaves the section '
+        'up', (tester) async {
+      // Answered while the dialog is on its way out, still mounted.
+      _tallWindow(tester);
+      final gate = Completer<void>();
+      final repo = _signedInRepo()..setUserPasswordGate = gate;
+      await pumpApp(
+        tester,
+        const SettingsSectionScreen(section: SettingsSection.account),
+        container: appContainer(repo: repo),
+        pushed: true,
+      );
+      final open = find.bySemanticsIdentifier(SemanticsIds.setting('password'));
+      await _show(tester, open);
+      await tester.tap(open);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'password123');
+      await tester.enterText(find.byType(TextField).last, 'newsecret1');
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.setting('password-save')),
+      );
+      await tester.pump();
+
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pump();
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(SettingsSectionScreen), findsOneWidget);
+      expect(repo.setUserPasswordCalls, hasLength(1));
+    });
+
+    // Refused once it was dismissed: the fields it would have gone under
+    // are leaving or gone, so the shell says it.
+    for (final wrongCurrent in <bool>[true, false]) {
+      for (final gone in <bool>[false, true]) {
+        testWidgets('a password change dismissed while it saves, then '
+            'refused for the ${wrongCurrent ? 'current' : 'new'} password, '
+            'is said in the shell '
+            '${gone ? 'once the dialog has gone' : 'as it leaves'}', (
+          tester,
+        ) async {
+          _tallWindow(tester);
+          final gate = Completer<void>();
+          final repo = _signedInRepo()..setUserPasswordGate = gate;
+          await pumpApp(
+            tester,
+            const SettingsSectionScreen(section: SettingsSection.account),
+            container: appContainer(repo: repo),
+            pushed: true,
+          );
+          final open = find.bySemanticsIdentifier(
+            SemanticsIds.setting('password'),
+          );
+          await _show(tester, open);
+          await tester.tap(open);
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.byType(TextField).first,
+            wrongCurrent ? 'not-it' : 'password123',
+          );
+          await tester.enterText(
+            find.byType(TextField).last,
+            wrongCurrent ? 'newsecret1' : 'short',
+          );
+          final save = find.bySemanticsIdentifier(
+            SemanticsIds.setting('password-save'),
+          );
+          await tester.tap(save);
+          await tester.pump();
+
+          // The scrim.
+          await tester.tapAt(const Offset(4, 4));
+          if (gone) {
+            await tester.pumpAndSettle();
+          } else {
+            await tester.pump();
+          }
+          gate.complete();
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+          expect(find.byType(SettingsSectionScreen), findsOneWidget);
+          expect(save, findsNothing);
+          expect(
+            shellMessageText(raisedMessage(tester)),
+            wrongCurrent
+                ? 'That is not your current password'
+                : 'password must be at least 8 characters',
+          );
+          expect(repo.setUserPasswordCalls, isEmpty);
+        });
+      }
+    }
 
     testWidgets("a password change lost to a dropped connection is said in "
         "the app's words, under the new password", (tester) async {

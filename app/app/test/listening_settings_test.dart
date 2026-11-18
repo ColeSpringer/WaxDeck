@@ -190,6 +190,62 @@ void main() {
     expect(find.textContaining('DioException'), findsNothing);
   });
 
+  // Dismissed while the server answers: the section under it stays,
+  // whether the answer comes as the dialog leaves or once it has gone, and
+  // a refusal reaches the shell instead.
+  for (final refused in <bool>[false, true]) {
+    for (final gone in <bool>[false, true]) {
+      testWidgets('a timezone dismissed while it saves leaves the section '
+          'up, ${refused ? 'refused' : 'saved'} '
+          '${gone ? 'once the dialog has gone' : 'as it leaves'}', (
+        tester,
+      ) async {
+        final gate = Completer<void>();
+        final repo = _signedInRepo()..putPrefsGate = gate;
+        if (refused) {
+          repo.putPrefsError = const WaxDeckApiException(
+            code: 'invalid-request',
+            message: 'unknown timezone',
+            statusCode: 400,
+          );
+        }
+        await mountApp(
+          tester,
+          const SettingsSectionScreen(section: SettingsSection.account),
+          container: appContainer(repo: repo),
+          pushed: true,
+        );
+        await tester.pumpAndSettle();
+        await _show(tester, const Key(SemanticsIds.timezoneEdit));
+        await tester.tap(find.byKey(const Key(SemanticsIds.timezoneEdit)));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const Key('timezone-field')),
+          'Europe/Amsterdam',
+        );
+        await tester.tap(find.bySemanticsIdentifier(SemanticsIds.timezoneSave));
+        await tester.pump();
+
+        // The scrim.
+        await tester.tapAt(const Offset(4, 4));
+        if (gone) {
+          await tester.pumpAndSettle();
+        } else {
+          await tester.pump();
+        }
+        gate.complete();
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.byType(SettingsSectionScreen), findsOneWidget);
+        expect(find.byKey(const Key('timezone-field')), findsNothing);
+        if (refused) {
+          expect(shellMessageText(raisedMessage(tester)), 'unknown timezone');
+        }
+      });
+    }
+  }
+
   testWidgets('the share-links row opens the shares screen', (tester) async {
     final repo = _signedInRepo();
     await _mount(tester, repo);

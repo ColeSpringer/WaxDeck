@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
+import 'package:waxdeck/src/books/books_screen.dart';
 import 'package:waxdeck/src/books/series_controller.dart';
 import 'package:waxdeck/src/books/series_merge.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
@@ -16,9 +17,14 @@ import 'package:waxdeck/src/player/now_playing_slot.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_item.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
+import 'package:waxdeck/src/shell/adaptive_shell.dart';
+import 'package:waxdeck/src/shell/router.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/sync/sync_binder.dart';
 import 'package:waxdeck/src/sync/sync_providers.dart';
+import 'package:waxdeck/src/tools/tasks_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
@@ -27,6 +33,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'app_host.dart';
 import 'fakes.dart';
 import 'player_host.dart';
+import 'router_stack.dart';
 import 'wax_finders.dart';
 
 const _a = 'tr-01JZX5N8QW3F4V9T2B7KDKINDA1';
@@ -103,6 +110,60 @@ Future<void> _confirm(WidgetTester tester, {int polls = 1}) async {
   for (var i = 0; i < polls; i++) {
     await tester.pump(kindChangePoll);
   }
+  await tester.pumpAndSettle();
+}
+
+/// The whole app at desktop width over [repo], where back and the tabs
+/// walk the history.
+Future<ProviderContainer> _pumpWhole(WidgetTester tester, FakeRepository repo) {
+  tester.view.physicalSize = const Size(1000, 900);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  return pumpWholeApp(
+    tester,
+    container: appContainer(repo: repo),
+    disableAnimations: true,
+  );
+}
+
+String _locationOf(ProviderContainer container) =>
+    container.read(routerProvider).routerDelegate.currentConfiguration.uri.path;
+
+Future<void> _goTo(
+  WidgetTester tester,
+  ProviderContainer container,
+  String location,
+) async {
+  container.read(routerProvider).go(location);
+  await tester.pumpAndSettle();
+}
+
+/// Asks for the change from the screen [on] finds, as its menu does, and
+/// confirms it.
+Future<void> _startFrom(
+  WidgetTester tester,
+  Finder on, {
+  required List<String> pids,
+  required String to,
+}) async {
+  unawaited(confirmSetKind(tester.element(on), pids: pids, to: to));
+  await tester.pumpAndSettle();
+  await tester.tap(find.bySemanticsIdentifier(SemanticsIds.kindConfirm));
+  await tester.pump();
+}
+
+/// A choice made on the navigation chrome.
+Future<void> _tapTab(WidgetTester tester, WaxNavTarget target) async {
+  await tester.tap(
+    find
+        .byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.identifier ==
+                  SemanticsIds.navDestination(target.name),
+        )
+        .first,
+  );
   await tester.pumpAndSettle();
 }
 
@@ -376,6 +437,31 @@ void main() {
     final message = raisedMessage(tester);
     expect(shellMessageText(message), 'Still changing. Follow it in Tasks.');
     expect(message!.actionLabel, 'Tasks');
+  });
+
+  testWidgets('the Tasks action of a change still running goes to Tasks', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..jobs = const [Job(pid: _job, kind: 'set-kind', state: 'running')];
+    await _pump(tester, repo, pids: [_a], to: 'audiobook');
+    await _confirm(tester, polls: kindChangePolls);
+    final message = raisedMessage(tester);
+    expect(message?.actionSemanticsId, SemanticsIds.openTasks);
+
+    message!.onAction!();
+    // By frame: a task's bar moves for as long as Tasks draws it.
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    final router = routerOf(tester);
+    expect(find.byType(TasksScreen), findsOneWidget);
+    expect(
+      router.routerDelegate.currentConfiguration.uri.toString(),
+      WaxRoute.tasks,
+    );
+    expect(pushesOn(router), 0, reason: 'Tasks is gone to, not pushed');
   });
 
   testWidgets('a state the app does not know reads as still running', (
@@ -883,4 +969,262 @@ void main() {
       expect(find.text('Start'), findsOneWidget, reason: 'nowhere to go');
     });
   }
+
+  group('the pages of what changed kind', () {
+    final bookA = 'bk-${_a.substring(3)}';
+    final bookB = 'bk-${_b.substring(3)}';
+
+    FakeRepository shelved(List<String> books) {
+      final repo = _repo();
+      for (final pid in books) {
+        repo
+          ..books[pid] = testBook(pid)
+          ..libraryItems.add(testItem(pid));
+      }
+      return repo;
+    }
+
+    testWidgets('give way in place to what the item became, and back does '
+        'not return to them', (tester) async {
+      final container = await _pumpWhole(tester, shelved([bookA]));
+      await _goTo(tester, container, WaxRoute.notifications);
+      await _goTo(tester, container, WaxRoute.book(bookA));
+
+      await _startFrom(
+        tester,
+        find.byType(BookScreen),
+        pids: [bookA],
+        to: 'music',
+      );
+      await tester.pump(kindChangePoll);
+      await tester.pumpAndSettle();
+      expect(_locationOf(container), WaxRoute.musicTracks);
+
+      container.read(waxHistoryProvider)!.back();
+      await tester.pumpAndSettle();
+      expect(_locationOf(container), WaxRoute.notifications);
+      expect(find.byType(BookScreen), findsNothing);
+    });
+
+    testWidgets('left during the change are not brought back by back or a '
+        'tab, and what it became is offered', (tester) async {
+      final repo = shelved([bookA])
+        ..jobs = const [Job(pid: _job, kind: 'set-kind', state: 'running')];
+      final container = await _pumpWhole(tester, repo);
+      await _goTo(tester, container, WaxRoute.notifications);
+      await _goTo(tester, container, WaxRoute.book(bookA));
+
+      await _startFrom(
+        tester,
+        find.byType(BookScreen),
+        pids: [bookA],
+        to: 'music',
+      );
+      await tester.pump(kindChangePoll);
+      // A link followed while the change runs.
+      container.read(routerProvider).go(WaxRoute.tasks);
+      // Bounded pumps: the change's spinner never settles while it runs.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      // The shell's bar takes each message off as it draws it.
+      final raised = <ShellMessage>[];
+      container.listen<ShellMessage?>(shellMessagesProvider, (_, next) {
+        if (next != null) raised.add(next);
+      });
+      repo.jobs = [
+        Job(
+          pid: _job,
+          kind: 'set-kind',
+          state: 'done',
+          result: {
+            'converted': [_a],
+            'absorbed': const <String, Object?>{},
+            'created': const <String>[],
+            'writeBackFailures': const <Object>[],
+          },
+        ),
+      ];
+      await tester.pump(kindChangePoll);
+      await tester.pumpAndSettle();
+
+      expect(_locationOf(container), WaxRoute.tasks);
+      final offer = raised.single;
+      expect(shellMessageText(offer), 'Now music, ready to open');
+      expect(offer.actionLabel, 'Open');
+
+      container.read(waxHistoryProvider)!.back();
+      await tester.pumpAndSettle();
+      expect(_locationOf(container), WaxRoute.notifications);
+      await _tapTab(tester, WaxNavTarget.books);
+      expect(_locationOf(container), WaxRoute.books);
+      expect(find.byType(BooksScreen), findsOneWidget);
+      expect(find.byType(BookScreen), findsNothing);
+    });
+
+    /// An album of [_a] and [_b] on the shelf, open on its own page under
+    /// the Music hub, with the book its tracks become.
+    Future<(ProviderContainer, String)> onAlbum(
+      WidgetTester tester,
+      FakeRepository repo,
+    ) async {
+      const album = 'al-01JZX5N8QW3F4V9T2B7KDKINDAL';
+      repo
+        ..albums[album] = const AlbumDetail(pid: album, title: 'Lectures')
+        ..facetItems['album ${album.substring(3)}'] = [
+          testItem(_a, title: 'One'),
+          testItem(_b, title: 'Two'),
+        ]
+        ..books[bookA] = testBook(bookA);
+      final container = await _pumpWhole(tester, repo);
+      await _goTo(tester, container, WaxRoute.music);
+      final at = WaxRoute.musicBucket(MusicDimension.albums, album);
+      await _goTo(tester, container, at);
+      expect(find.byType(AlbumScreen), findsOneWidget);
+      // The album's own row, as its overflow offers it.
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.entityOverflow));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.itemMenuKindAlbum),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.kindConfirm));
+      await tester.pump();
+      return (container, at);
+    }
+
+    testWidgets('an album made one book from its page is not brought back '
+        'by back or the Music tab', (tester) async {
+      final (container, album) = await onAlbum(tester, _repo());
+      await tester.pump(kindChangePoll);
+      await tester.pumpAndSettle();
+      expect(_locationOf(container), WaxRoute.book(bookA));
+
+      await _tapTab(tester, WaxNavTarget.music);
+      expect(_locationOf(container), isNot(album));
+      expect(find.byType(AlbumScreen), findsNothing);
+      final history = container.read(waxHistoryProvider)!;
+      history.back();
+      await tester.pumpAndSettle();
+      history.back();
+      await tester.pumpAndSettle();
+      expect(_locationOf(container), WaxRoute.music);
+      expect(find.byType(AlbumScreen), findsNothing);
+    });
+
+    testWidgets('an album made one book while the visitor was elsewhere is '
+        'not brought back by back or the Music tab', (tester) async {
+      final repo = _repo()
+        ..jobs = const [Job(pid: _job, kind: 'set-kind', state: 'running')];
+      final (container, album) = await onAlbum(tester, repo);
+      await tester.pump(kindChangePoll);
+      // A link followed while the change runs.
+      container.read(routerProvider).go(WaxRoute.tasks);
+      // Bounded pumps: the change's spinner never settles while it runs.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      repo.jobs = [
+        Job(
+          pid: _job,
+          kind: 'set-kind',
+          state: 'done',
+          result: {
+            'converted': [bookA],
+            'absorbed': {_b: bookA},
+            'created': const <String>[],
+            'writeBackFailures': const <Object>[],
+          },
+        ),
+      ];
+      await tester.pump(kindChangePoll);
+      await tester.pumpAndSettle();
+      expect(_locationOf(container), WaxRoute.tasks);
+
+      await _tapTab(tester, WaxNavTarget.music);
+      expect(_locationOf(container), isNot(album));
+      expect(find.byType(AlbumScreen), findsNothing);
+      final history = container.read(waxHistoryProvider)!;
+      history.back();
+      await tester.pumpAndSettle();
+      history.back();
+      await tester.pumpAndSettle();
+      expect(_locationOf(container), WaxRoute.music);
+      expect(find.byType(AlbumScreen), findsNothing);
+    });
+
+    testWidgets('converted before the change failed are not brought back by '
+        'back or a tab, and an item it did not reach keeps its page', (
+      tester,
+    ) async {
+      final bookC = 'bk-${_c.substring(3)}';
+      final repo = shelved([bookA, bookC])
+        ..jobs = [
+          Job(
+            pid: _job,
+            kind: 'set-kind',
+            state: 'failed',
+            error: 'a file of the item is not on disk',
+            result: {
+              'converted': [_a],
+              'absorbed': const <String, Object?>{},
+              'created': const <String>[],
+              'writeBackFailures': const <Object>[],
+            },
+          ),
+        ];
+      final container = await _pumpWhole(tester, repo);
+      await _goTo(tester, container, WaxRoute.book(bookC));
+      await _goTo(tester, container, WaxRoute.notifications);
+      await _goTo(tester, container, WaxRoute.book(bookA));
+
+      await _startFrom(
+        tester,
+        find.byType(BookScreen),
+        pids: [bookA, bookC],
+        to: 'music',
+      );
+      await tester.pump(kindChangePoll);
+      await tester.pumpAndSettle();
+      // Failed: nowhere to go, so the visitor stays where they were.
+      expect(_locationOf(container), WaxRoute.book(bookA));
+
+      final history = container.read(waxHistoryProvider)!;
+      history.back();
+      await tester.pumpAndSettle();
+      expect(_locationOf(container), WaxRoute.notifications);
+      await _tapTab(tester, WaxNavTarget.books);
+      expect(_locationOf(container), WaxRoute.books);
+      expect(find.byType(BookScreen), findsNothing);
+
+      // The book the change did not reach is still somewhere back goes.
+      history.back();
+      await tester.pumpAndSettle();
+      history.back();
+      await tester.pumpAndSettle();
+      expect(_locationOf(container), WaxRoute.book(bookC));
+      expect(tester.widget<BookScreen>(find.byType(BookScreen)).pid, bookC);
+    });
+
+    testWidgets("of an item folded into another leave that tab's stack", (
+      tester,
+    ) async {
+      final container = await _pumpWhole(tester, shelved([bookA, bookB]));
+      await _goTo(tester, container, WaxRoute.book(bookB));
+      await _goTo(tester, container, WaxRoute.tasks);
+
+      // Two books made music: the second folds into the first.
+      await _startFrom(
+        tester,
+        find.byType(TasksScreen),
+        pids: [bookA, bookB],
+        to: 'music',
+      );
+      await tester.pump(kindChangePoll);
+      await tester.pumpAndSettle();
+      expect(_locationOf(container), WaxRoute.musicTracks);
+
+      await _tapTab(tester, WaxNavTarget.books);
+      expect(_locationOf(container), WaxRoute.books);
+      expect(find.byType(BookScreen), findsNothing);
+    });
+  });
 }

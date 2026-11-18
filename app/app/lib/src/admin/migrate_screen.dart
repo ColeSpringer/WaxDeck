@@ -134,7 +134,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final router = GoRouter.of(context);
     try {
       await ref
@@ -187,7 +187,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
         l10n.adminMigrateStarted,
         actionLabel: l10n.adminOpenTasks,
         actionSemanticsId: SemanticsIds.adminAction('migrate-tasks'),
-        onAction: () => router.pushInShell<void>(WaxRoute.tasks),
+        onAction: () => router.go(WaxRoute.tasks),
       );
     } on WaxDeckApiException catch (e) {
       // The address and credentials somebody just typed.
@@ -282,7 +282,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
     final picker = ref.read(filePickerProvider);
     if (picker == null || _uploading) return;
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     // Read before the picker's await rather than after it: the screen
     // can be gone by the time a file comes back, and a provider read on
     // a disposed container throws where nothing is left to catch it.
@@ -293,7 +293,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
       anyLabel: l10n.uploadsFileTypeAny,
     );
     final openRead = file?.openRead;
-    if (file == null || openRead == null) return;
+    if (file == null || openRead == null || !mounted) return;
     setState(() => _uploading = true);
     try {
       // Read lazily off the picked file and its length declared, so a
@@ -346,6 +346,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
       largeTitle: false,
       semanticsId: SemanticsIds.adminMigrate,
       onBack: adminBack(context),
+      backSemanticsId: SemanticsIds.navBack,
       slivers: <Widget>[
         SliverPadding(
           padding: sizeClass.gutter.add(

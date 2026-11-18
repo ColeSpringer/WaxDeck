@@ -45,7 +45,7 @@ mixin _NowPlayingFailure on _NowPlayingCore, _NowPlayingTransport {
       final skipped = _skipRun;
       _skipRun = 0;
       ref
-          .read(shellMessengerProvider.notifier)
+          .read(shellMessengerProvider)
           .showLocalized(
             (l10n) => l10n.playerSkipsGaveUp(skipped),
             // The same channel the skips used: this is the last thing
@@ -100,7 +100,7 @@ mixin _NowPlayingFailure on _NowPlayingCore, _NowPlayingTransport {
     final offline =
         _resumeOnReconnect && ref.read(liveConnectionProvider) == false;
     ref
-        .read(shellMessengerProvider.notifier)
+        .read(shellMessengerProvider)
         .showLocalized(
           (l10n) => offline
               ? l10n.playerOfflineStart
@@ -149,7 +149,7 @@ mixin _NowPlayingFailure on _NowPlayingCore, _NowPlayingTransport {
     final run = _skipRun;
     final title = item?.title;
     ref
-        .read(shellMessengerProvider.notifier)
+        .read(shellMessengerProvider)
         .showLocalized(
           (l10n) => run > 1 || title == null
               ? l10n.playerSkippedUnplayableMany(run)
@@ -224,7 +224,7 @@ mixin _NowPlayingFailure on _NowPlayingCore, _NowPlayingTransport {
   /// it was: said, and nothing let go of.
   void _onMoveFailed(Object error) {
     ref
-        .read(shellMessengerProvider.notifier)
+        .read(shellMessengerProvider)
         .showLocalized(
           (l10n) => l10n.playerMoveFailed(explainError(l10n, error)),
         );

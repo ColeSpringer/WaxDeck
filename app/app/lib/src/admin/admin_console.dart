@@ -290,13 +290,12 @@ class _SectionRow extends StatelessWidget {
   }
 }
 
-/// What a console page's back control does below sidebar width.
+/// What a console page's back control does: back to where the visitor
+/// was, the dashboard when nothing is recorded.
 ///
-/// The console is a stack on a phone (`/admin` lists the sections, a
-/// section is a page on top), and one pane on a desktop, where the
-/// section list is always there and a back arrow would be a control
-/// pointing at what is already beside it.
-VoidCallback? adminBack(BuildContext context) =>
-    WaxSizeClass.of(context).hasSidebar
-    ? null
-    : () => context.leave(fallback: WaxRoute.admin);
+/// At sidebar width the section list is beside the page and a section row
+/// is a `go`, which makes a visit of its own: the arrow returns to the
+/// previous section once one has been tapped, and to what the visitor was
+/// doing before the console until then. It is there at every width.
+VoidCallback adminBack(BuildContext context) =>
+    () => context.back(fallback: WaxRoute.admin);

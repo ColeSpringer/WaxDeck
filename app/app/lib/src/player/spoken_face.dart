@@ -432,7 +432,7 @@ class SpeedChip extends StatelessWidget {
 void explainVoiceBoostOnce(WidgetRef ref, String message) {
   if (ref.read(voiceBoostExplainedProvider)) return;
   ref.read(voiceBoostExplainedProvider.notifier).set(true);
-  ref.read(shellMessengerProvider.notifier).show(message, channel: _effects);
+  ref.read(shellMessengerProvider).show(message, channel: _effects);
 }
 
 /// The effect chips' run: the last press is the one being explained.
@@ -517,7 +517,7 @@ class _VoiceBoostChipState extends ConsumerState<VoiceBoostChip> {
     if (to) {
       explainVoiceBoostOnce(ref, l10n.playerVoiceBoostExplained);
     }
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     setState(() => _busy = true);
     try {
       // The chip puts itself back when there was nothing to store the

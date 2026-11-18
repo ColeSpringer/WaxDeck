@@ -94,7 +94,7 @@ Future<void> showSeriesMergeSheet(
   if (loser == null) return;
   final l10n = context.l10n;
   final container = ProviderScope.containerOf(context, listen: false);
-  final messenger = container.read(shellMessengerProvider.notifier);
+  final messenger = container.read(shellMessengerProvider);
   await showWaxOptionSheet(
     context,
     scrolls: false,

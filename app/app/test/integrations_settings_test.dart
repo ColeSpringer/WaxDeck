@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Override lives here rather than in the root library.
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/auth/oidc_flow.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/settings/integrations_sections.dart';
@@ -356,10 +358,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // In the dialog still in front, where the shell's bar is not drawn.
     expect(
-      shellMessageText(raisedMessage(tester)),
-      'the service did not accept this token',
+      find.descendant(
+        of: find.byKey(const Key('listenbrainz-refusal')),
+        matching: find.text('the service did not accept this token'),
+      ),
+      findsOneWidget,
     );
+    expect(raisedMessage(tester), isNull);
   });
 
   testWidgets('an unreachable ListenBrainz is said in the app\'s words', (
@@ -388,10 +395,140 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      shellMessageText(raisedMessage(tester)),
-      'An outside service this needs did not answer. Try again later.',
+      find.descendant(
+        of: find.byKey(const Key('listenbrainz-refusal')),
+        matching: find.text(
+          'An outside service this needs did not answer. Try again later.',
+        ),
+      ),
+      findsOneWidget,
     );
+    expect(raisedMessage(tester), isNull);
   });
+
+  // Dismissed while the server answers: the screen under it stays, whether
+  // the answer comes as the dialog leaves or once it has gone, and a
+  // refusal reaches the shell.
+  for (final refused in <bool>[false, true]) {
+    for (final gone in <bool>[false, true]) {
+      final when =
+          '${refused ? 'refused' : 'saved'} '
+          '${gone ? 'once the dialog has gone' : 'as it leaves'}';
+
+      /// Mounted over a page of its own, dialog open, the save asked.
+      Future<void> held(
+        WidgetTester tester,
+        FakeRepository repo, {
+        required String opener,
+        required Future<void> Function() fill,
+        required String save,
+      }) async {
+        await mountApp(
+          tester,
+          const Scaffold(body: ScrobblingSection()),
+          container: appContainer(repo: repo),
+          pushed: true,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.bySemanticsIdentifier(opener));
+        await tester.pumpAndSettle();
+        await fill();
+        await tester.tap(find.bySemanticsIdentifier(save));
+        await tester.pump();
+      }
+
+      Future<void> dismissThenAnswer(
+        WidgetTester tester,
+        Completer<void> gate,
+      ) async {
+        // The scrim.
+        await tester.tapAt(const Offset(4, 4));
+        if (gone) {
+          await tester.pumpAndSettle();
+        } else {
+          await tester.pump();
+        }
+        gate.complete();
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.byType(ScrobblingSection), findsOneWidget);
+      }
+
+      testWidgets('a ListenBrainz connect dismissed while it saves leaves '
+          'the screen up, $when', (tester) async {
+        final gate = Completer<void>();
+        final repo = FakeRepository()..connectGate = gate;
+        if (refused) {
+          repo.connectError = const WaxDeckApiException(
+            code: 'invalid-request',
+            message: 'the service did not accept this token',
+          );
+        }
+        await held(
+          tester,
+          repo,
+          opener: SemanticsIds.scrobblerConnect('listenbrainz'),
+          fill: () => tester.enterText(
+            find.byKey(const Key('listenbrainz-token-field')),
+            'token-123',
+          ),
+          save: SemanticsIds.listenbrainzConnectConfirm,
+        );
+
+        await dismissThenAnswer(tester, gate);
+
+        expect(find.byKey(const Key('listenbrainz-token-field')), findsNothing);
+        if (refused) {
+          expect(
+            shellMessageText(raisedMessage(tester)),
+            'the service did not accept this token',
+          );
+        } else {
+          expect(find.text('Connected as listener'), findsOneWidget);
+        }
+      });
+
+      testWidgets('Last.fm credentials dismissed while they save leave the '
+          'screen up, $when', (tester) async {
+        final gate = Completer<void>();
+        final repo = _adminRepo()..putScrobblingConfigGate = gate;
+        if (refused) {
+          repo.adminError = const WaxDeckApiException(
+            code: 'invalid-request',
+            message: 'the key was not accepted',
+          );
+        }
+        await held(
+          tester,
+          repo,
+          opener: SemanticsIds.scrobblerSetupLastfm,
+          fill: () async {
+            await tester.enterText(
+              find.byKey(const Key('lastfm-api-key-field')),
+              'key-123',
+            );
+            await tester.enterText(
+              find.byKey(const Key('lastfm-secret-field')),
+              'secret-456',
+            );
+          },
+          save: SemanticsIds.lastfmCredentialsSave,
+        );
+
+        await dismissThenAnswer(tester, gate);
+
+        expect(find.byKey(const Key('lastfm-api-key-field')), findsNothing);
+        if (refused) {
+          expect(
+            shellMessageText(raisedMessage(tester)),
+            'the key was not accepted',
+          );
+        } else {
+          expect(repo.scrobblingConfig.lastfmConfigured, isTrue);
+        }
+      });
+    }
+  }
 
   testWidgets('creates an app password and shows the secret once', (
     tester,
@@ -414,6 +551,57 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Symfonium'), findsOneWidget);
+  });
+
+  testWidgets('a secret created after its page was left is shown where '
+      'the visitor is', (tester) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository()..createAppPasswordGate = gate;
+    await mountApp(
+      tester,
+      const Scaffold(body: AppPasswordsSection()),
+      container: appContainer(repo: repo),
+      pushed: true,
+    );
+    await tester.pumpAndSettle();
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.appPasswordAdd));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('app-password-label-field')),
+      'Symfonium',
+    );
+    await tester.tap(find.byKey(const Key('app-password-create-confirm')));
+    await tester.pumpAndSettle();
+    GoRouter.of(tester.element(find.byType(AppPasswordsSection))).pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(AppPasswordsSection), findsNothing);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('FAKESECRETFAKESECRETFAKESE'), findsOneWidget);
+    await tester.tap(find.text('Copy'));
+    await tester.pump();
+    expect(copied, 'FAKESECRETFAKESECRETFAKESE');
+    await tester.tap(find.byKey(const Key('app-password-secret-done')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-password-secret')), findsNothing);
   });
 
   testWidgets('creates a personal notification target through the editor', (
@@ -469,6 +657,97 @@ void main() {
     expect(saved.enabledEvents, ['episode-downloaded']);
     expect(find.text('My phone'), findsOneWidget);
   });
+
+  testWidgets('a notification target dismissed as it saves leaves the '
+      'screen up', (tester) async {
+    // Answered while the dialog is on its way out, still mounted.
+    final gate = Completer<void>();
+    final repo = FakeRepository()..createMyNotificationTargetGate = gate;
+    await mountApp(
+      tester,
+      const Scaffold(body: PersonalNotificationTargetsSection()),
+      container: appContainer(repo: repo),
+      pushed: true,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('notify-config-userKey')),
+      'user-key',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('notify-config-token')),
+      'app-token',
+    );
+    await tester.tap(find.byKey(const Key('notify-target-save')));
+    await tester.pump();
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pump();
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(PersonalNotificationTargetsSection), findsOneWidget);
+    expect(repo.myNotificationTargets, hasLength(1));
+  });
+
+  for (final gone in <bool>[false, true]) {
+    testWidgets('a notification target dismissed while it saves, then '
+        'refused, is said in the shell '
+        '${gone ? 'once the dialog has gone' : 'as it leaves'}', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository()
+        ..createMyNotificationTargetGate = gate
+        ..notificationTargetError = const WaxDeckApiException(
+          code: 'invalid-request',
+          message: 'userKey is not a Pushover user key',
+        );
+      await mountApp(
+        tester,
+        const Scaffold(body: PersonalNotificationTargetsSection()),
+        container: appContainer(repo: repo),
+        pushed: true,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('notify-config-userKey')),
+        'user-key',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('notify-config-token')),
+        'app-token',
+      );
+      await tester.tap(find.byKey(const Key('notify-target-save')));
+      await tester.pump();
+
+      // The scrim.
+      await tester.tapAt(const Offset(4, 4));
+      if (gone) {
+        await tester.pumpAndSettle();
+      } else {
+        await tester.pump();
+      }
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(PersonalNotificationTargetsSection), findsOneWidget);
+      expect(find.byKey(const Key('notify-target-save')), findsNothing);
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'userKey is not a Pushover user key',
+      );
+      expect(repo.myNotificationTargets, isEmpty);
+    });
+  }
 
   testWidgets('a webhook takes typed headers, a secret, mute and pacing', (
     tester,
@@ -899,10 +1178,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // In the dialog still in front, where the shell's bar is not drawn.
     expect(
-      shellMessageText(raisedMessage(tester)),
-      'set both the API key and the secret, or neither',
+      find.descendant(
+        of: find.byKey(const Key('lastfm-refusal')),
+        matching: find.text('set both the API key and the secret, or neither'),
+      ),
+      findsOneWidget,
     );
+    expect(raisedMessage(tester), isNull);
     // The dialog stays up for the correction.
     expect(
       find.bySemanticsIdentifier(SemanticsIds.lastfmCredentialsSave),
@@ -1005,14 +1289,14 @@ void main() {
       final container = await press(tester, repo);
       expect(button(tester).busy, isTrue);
       expect(
-        shellMessageText(container.read(shellMessengerProvider)),
+        shellMessageText(container.read(shellMessagesProvider)),
         'Test queued; the outcome shows on the target shortly',
       );
 
       await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
       expect(
-        shellMessageText(container.read(shellMessengerProvider)),
+        shellMessageText(container.read(shellMessagesProvider)),
         'Test delivered',
       );
       expect(button(tester).busy, isFalse);
@@ -1030,7 +1314,7 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
       expect(
-        shellMessageText(container.read(shellMessengerProvider)),
+        shellMessageText(container.read(shellMessagesProvider)),
         'Test failed: connection refused',
       );
     });
@@ -1044,7 +1328,7 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
       expect(
-        shellMessageText(container.read(shellMessengerProvider)),
+        shellMessageText(container.read(shellMessagesProvider)),
         'No answer from the test yet; the target shows it when it lands',
       );
       expect(button(tester).busy, isFalse);

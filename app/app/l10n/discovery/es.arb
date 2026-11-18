@@ -13,5 +13,7 @@
   "discoveryMixAction": "Mezclar",
   "discoveryMixAllQueued": "Todo lo similar ya está en tu cola",
   "discoveryMixEmpty": "No hay ninguna mezcla disponible para esta pista",
+  "discoveryMixReady": "Reproduciendo una mezcla instantánea",
+  "discoverySimilarReady": "Pistas parecidas a {title} encontradas",
   "discoverySimilarTitle": "Parecido a {title}"
 }

@@ -22,7 +22,7 @@ Future<void> togglePin(
   String pid, {
   String? label,
 }) => togglePinCaptured(
-  messenger: ref.read(shellMessengerProvider.notifier),
+  messenger: ref.read(shellMessengerProvider),
   l10n: context.l10n,
   pinned: ref.read(pinnedEntitiesProvider.notifier),
   pid: pid,
@@ -117,7 +117,7 @@ Future<void> showPinSheet(
   required List<PinTarget> targets,
 }) async {
   // Captured before the sheet: it outlives the row that opened it.
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   final pinned = ref.read(pinnedEntitiesProvider.notifier);
   await showWaxOptionSheet(

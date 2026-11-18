@@ -23,6 +23,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'app_host.dart';
 import 'entity_header_bar.dart';
 import 'fakes.dart';
+import 'router_stack.dart';
 import 'row_finders.dart';
 import 'wax_finders.dart';
 
@@ -559,6 +560,75 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('the settings sheet dismissed as it saves leaves the book up', (
+    tester,
+  ) async {
+    // Answered while the sheet is on its way out, still mounted.
+    final gate = Completer<void>();
+    final repo = _repo()..putBookSettingsGate = gate;
+    await pumpApp(
+      tester,
+      const BookScreen(pid: bookPid),
+      container: appContainer(repo: repo),
+      pushed: true,
+    );
+    await _tap(tester, SemanticsIds.bookSettingsOpen);
+    final save = _byId(SemanticsIds.bookSettingsSave).first;
+    await tester.ensureVisible(save);
+    await tester.pumpAndSettle();
+    await tester.tap(save);
+    await tester.pump();
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pump();
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(BookScreen), findsOneWidget);
+    expect(repo.putBookSettingsCalls, hasLength(1));
+  });
+
+  testWidgets('the settings sheet swiped away mid-save still updates the '
+      'book', (tester) async {
+    final gate = Completer<void>();
+    final repo = _repo()..putBookSettingsGate = gate;
+    await pumpApp(
+      tester,
+      const BookScreen(pid: bookPid),
+      container: appContainer(repo: repo),
+      pushed: true,
+    );
+    Finder boost() => find.descendant(
+      of: find.byKey(const Key('book-settings-boost')),
+      matching: find.byType(WaxSwitch),
+    );
+    await _tap(tester, SemanticsIds.bookSettingsOpen);
+    expect(tester.widget<WaxSwitch>(boost()).value, isFalse);
+    await tester.tap(boost());
+    await tester.pump();
+    final save = _byId(SemanticsIds.bookSettingsSave).first;
+    await tester.ensureVisible(save);
+    await tester.pumpAndSettle();
+    await tester.tap(save);
+    await tester.pump();
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+    expect(find.byType(BookSettingsSheet), findsNothing);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(repo.putBookSettingsCalls.single.settings.voiceBoost, isTrue);
+    await _tap(tester, SemanticsIds.bookSettingsOpen);
+    expect(
+      tester.widget<WaxSwitch>(boost()).value,
+      isTrue,
+      reason: 'the book read again, with what was saved',
+    );
+  });
+
   testWidgets(
     'a multi-file book counts its parts, and a single-file one does not',
     (tester) async {
@@ -773,6 +843,15 @@ void main() {
       expect(repo.mergeBookCalls.single.keepOriginals, isTrue);
       expect(raisedMessage(tester)!.actionLabel, 'Tasks');
       expect(raisedMessage(tester)!.persist, isTrue);
+
+      // Pumped by frame: the queued merge's bar moves for as long as
+      // Tasks draws it, so the tree never settles.
+      raisedMessage(tester)!.onAction!();
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.byType(TasksScreen), findsOneWidget);
+      expect(pushesOn(routerOf(tester)), 0);
     });
 
     testWidgets('a merge left alone trashes the parts', (tester) async {
@@ -889,6 +968,11 @@ void main() {
       expect(message.actionSemanticsId, SemanticsIds.openTasks);
       await pressRaisedAction(tester);
       expect(find.byType(TasksScreen), findsOneWidget);
+      expect(
+        pushesOn(routerOf(tester)),
+        0,
+        reason: 'Tasks is gone to, not pushed over the book',
+      );
     });
 
     testWidgets('a merge refused for a parked task leads to Tasks too', (

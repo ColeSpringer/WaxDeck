@@ -157,7 +157,7 @@ class PrefsController extends AsyncNotifier<Prefs> {
     final refused = engine.prefsRefused.listen((owner) {
       if (owner != _storedFor) return;
       ref
-          .read(shellMessengerProvider.notifier)
+          .read(shellMessengerProvider)
           .showLocalized((l10n) => l10n.settingsOfflineNotSaved);
       readBack();
     });

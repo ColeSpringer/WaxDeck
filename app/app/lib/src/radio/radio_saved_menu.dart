@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/navigation_history.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -129,9 +130,14 @@ class _RadioSavedIdentifySheetState
   Future<void> _identify(ReviewEntry entry) async {
     if (_busy) return;
     setState(() => _busy = true);
-    final navigator = Navigator.of(context);
+    // The sheet's own route, which closes itself only while it is there:
+    // mounted is not that, on its way out.
+    final route = ModalRoute.of(context);
     final router = GoRouter.of(context);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    // The list the sheet stands on, which the entry is gone to from only
+    // while it is still on top.
+    final from = pageOnTop(router);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     final song = widget.song;
     try {
@@ -151,10 +157,13 @@ class _RadioSavedIdentifySheetState
               title: song.title,
             );
       }
-      if (mounted) navigator.pop();
       // Onto the entry itself, where the candidates the search finds
-      // land and the decision is made.
-      unawaited(router.push<void>(WaxRoute.reviewEntry(entry.id)));
+      // land and the decision is made; the sheet closes on the way.
+      if (await stillOnTop(router, (page) => page == from)) {
+        router.go(WaxRoute.reviewEntry(entry.id));
+      } else {
+        closeFinished(route);
+      }
     } on WaxDeckApiException catch (e) {
       messenger.show(explainError(l10n, e));
       if (mounted) setState(() => _busy = false);

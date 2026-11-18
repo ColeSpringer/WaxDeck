@@ -3,6 +3,7 @@
   "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
   "@@x-template": "en.arb",
   "shellClientOutdated": "WaxDeck se ha actualizado. Vuelve a cargar para obtener la versión nueva.",
+  "shellCommandBack": "Volver atrás",
   "shellCommandCarMode": "Abrir el modo coche",
   "shellCommandCast": "Reproducir en otro dispositivo",
   "shellCommandCreatePlaylist": "Crear una lista de reproducción",

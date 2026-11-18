@@ -3,6 +3,7 @@
   "ids": {
     "navAccount": "nav-account",
     "navAccountAction": "nav-account-{name}",
+    "navBack": "nav-back",
     "navDestination": "nav-{name}",
     "navDisclose": "nav-disclose-{name}",
     "navOverflow": "nav-overflow",

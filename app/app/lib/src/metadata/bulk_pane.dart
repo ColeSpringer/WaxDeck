@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -8,10 +10,12 @@ import '../music/album_detail.dart';
 import '../music/music_controllers.dart';
 import '../providers.dart';
 import '../shell/async_box_face.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'metadata_controller.dart';
 import 'metadata_form.dart';
+import 'rename_section.dart';
 
 /// What the bulk form opens on: the music field vocabulary and the
 /// checked tracks' current metadata, read together so every row can say
@@ -60,7 +64,7 @@ class WorkbenchBulkPane extends ConsumerStatefulWidget {
     super.key,
     required this.pids,
     required this.albumPid,
-    required this.onRegrouped,
+    required this.follow,
     this.onDirtyChanged,
   });
 
@@ -71,9 +75,12 @@ class WorkbenchBulkPane extends ConsumerStatefulWidget {
   /// part of it can say where the edited tracks went.
   final String albumPid;
 
-  /// Takes the workbench to the album the edited tracks landed on; the
-  /// host owns the move because a pane in a sheet has a sheet to close.
-  final void Function(String newPid) onRegrouped;
+  /// Where the message's door to the album the edited tracks landed on
+  /// takes the workbench, read as the edit is sent: the door may be taken
+  /// once this pane, or the workbench, has gone. None where the workbench
+  /// had gone already, and then the message has no door. The host owns the
+  /// move because a pane in a sheet has a sheet to close.
+  final EditFollow? Function() follow;
 
   /// Reports whether the form holds anything unsaved; the host asks
   /// before a selection change re-keys this pane and drops it.
@@ -450,7 +457,13 @@ class _WorkbenchBulkPaneState extends ConsumerState<WorkbenchBulkPane> {
     if (_busy || staged.isEmpty) return;
     setState(() => _busy = true);
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
+    final follow = widget.follow();
+    // The answer outlives this pane when the visitor leaves meanwhile: said
+    // and refreshed through what is read here.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final albumPid = widget.albumPid;
+    final seedKey = _seedKey;
     try {
       final result = await ref
           .read(repositoryProvider)
@@ -461,10 +474,11 @@ class _WorkbenchBulkPaneState extends ConsumerState<WorkbenchBulkPane> {
             skipLocked: _policy == BulkLockedPolicy.skip,
             force: _policy == BulkLockedPolicy.force,
           );
-      if (!mounted) return;
-      _markSaved(staged);
-      _reportDirty();
-      setState(() => _writeBackFailures = result.writeBackFailures);
+      if (mounted) {
+        _markSaved(staged);
+        _reportDirty();
+        setState(() => _writeBackFailures = result.writeBackFailures);
+      }
       // All three parts of the answer: what took the edit, what was
       // skipped for locks, and (as the banner beside Save) which files
       // kept their old tags.
@@ -473,32 +487,37 @@ class _WorkbenchBulkPaneState extends ConsumerState<WorkbenchBulkPane> {
         if (result.skipped.isNotEmpty)
           l10n.metadataBulkSkipped(result.skipped.length),
       ];
-      final moved =
-          result.resultingAlbumPid != null &&
-          result.resultingAlbumPid != widget.albumPid;
+      final moved = switch (result.resultingAlbumPid) {
+        final pid? when pid != albumPid => pid,
+        _ => null,
+      };
+      final door = switch ((moved, follow)) {
+        (final pid?, final follow?) => () => unawaited(
+          follow.open(WaxRoute.metadata(pid)),
+        ),
+        _ => null,
+      };
       messenger.show(
         <String>[
           parts.join(', '),
-          if (moved) l10n.metadataBulkRegrouped,
+          if (moved != null) l10n.metadataBulkRegrouped,
         ].join('\n'),
-        actionLabel: moved ? l10n.metadataBulkOpenNewAlbum : null,
-        onAction: moved
-            ? () => widget.onRegrouped(result.resultingAlbumPid!)
-            : null,
+        actionLabel: door != null ? l10n.metadataBulkOpenNewAlbum : null,
+        onAction: door,
       );
       // The edited rows changed under every read that holds them.
-      ref.invalidate(_bulkSeedProvider(_seedKey));
-      ref
-        ..invalidate(albumDetailProvider(widget.albumPid))
+      container
+        ..invalidate(_bulkSeedProvider(seedKey))
+        ..invalidate(albumDetailProvider(albumPid))
         ..invalidate(
           musicItemsProvider((
             dimension: MusicDimension.albums,
-            segment: widget.albumPid,
+            segment: albumPid,
             domain: BrowseDomain.wholeLibrary,
           )),
         );
       for (final pid in result.edited) {
-        ref.invalidate(metadataControllerProvider(pid));
+        container.invalidate(metadataControllerProvider(pid));
       }
     } on WaxDeckApiException catch (e) {
       // A locked refusal gains the half the server cannot know: the

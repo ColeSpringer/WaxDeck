@@ -65,8 +65,17 @@ test('review a queued match with the keyboard', async ({ app }) => {
   }).toPass({ timeout: T.fetch });
 
   // The entry screen offers the as-is decision (no candidates to
-  // approve). Accept it, which returns to the queue.
+  // approve). Accept it, which moves off the decided entry: to the queue
+  // on a narrow window, to its neighbour beside the queue on a wide one.
+  // Asserted by absence alone, since the neighbour is whatever another
+  // worker has queued.
   await app.review.asIs().click();
+  await expect
+    .poll(() => app.nav.location(), {
+      timeout: T.nav,
+      message: 'the decided entry should not stay open',
+    })
+    .not.toContain(entryId);
 
   // The entry is decided: it leaves the pending queue, and the API
   // agrees.

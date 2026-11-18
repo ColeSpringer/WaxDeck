@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -21,6 +23,32 @@ import 'chapter_section.dart';
 import 'enrich_preview_sheet.dart';
 import 'metadata_controller.dart';
 import 'metadata_form.dart';
+
+/// Asks whether unsaved edits may be dropped, for a move that would drop
+/// them; true once the person says discard.
+Future<bool> confirmDiscardEdits(BuildContext context) async {
+  final l10n = context.l10n;
+  final discard = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(l10n.metadataDiscardTitle),
+      content: WaxProse(l10n.metadataDiscardBody),
+      actions: <Widget>[
+        WaxButton(
+          label: l10n.commonCancel,
+          kind: WaxButtonKind.text,
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        WaxButton(
+          label: l10n.metadataDiscardConfirm,
+          semanticsId: SemanticsIds.workbenchDiscardConfirm,
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    ),
+  );
+  return discard ?? false;
+}
 
 /// The per-item metadata editor, deep-linkable at `/metadata/<pid>`.
 /// Always pushed: a review row, a book, and the lyrics view all open it,
@@ -62,7 +90,8 @@ class MetadataScreen extends ConsumerWidget {
       title: context.l10n.metadataTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.metadataEditor,
-      onBack: () => context.leave(),
+      onBack: () => context.back(),
+      backSemanticsId: SemanticsIds.navBack,
       // A filling sliver rather than a body, so the pane can keep its
       // save bar under its own scroll the same way it does when it is
       // mounted beside the workbench's list.
@@ -90,6 +119,7 @@ class MetadataPane extends ConsumerStatefulWidget {
     this.embedded = false,
     this.onSaved,
     this.onDirtyChanged,
+    this.mayLeave,
   });
 
   /// The narrowest the pane works at before its field rows start
@@ -108,13 +138,20 @@ class MetadataPane extends ConsumerStatefulWidget {
 
   /// Fired after a save committed, for a host whose other panes read
   /// the same item: the controller refetches only itself, so a list
-  /// beside this pane would keep the old title without it.
+  /// beside this pane would keep the old title without it. Fired
+  /// whether or not this pane is still up.
   final VoidCallback? onSaved;
 
   /// Reports whether the draft holds anything unsaved, so a host that
   /// replaces this pane on a selection change can ask before it
   /// discards typing. Fired on the edges only.
   final ValueChanged<bool>? onDirtyChanged;
+
+  /// Asked before a door this pane's messages offer leaves the editor on
+  /// screen, true to go: for a host that swaps panes, so the pane on
+  /// screen by then is asked, not the one that offered the door. Without
+  /// it the pane asks about its own edits while it is there.
+  final Future<bool> Function()? mayLeave;
 
   @override
   ConsumerState<MetadataPane> createState() => _MetadataPaneState();
@@ -152,8 +189,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
   void _reportDirty() {
     final onDirty = widget.onDirtyChanged;
     if (onDirty == null) return;
-    final state = ref.read(metadataControllerProvider(widget.pid)).value;
-    final dirty = state != null && !_draft.changes(state).isEmpty;
+    final dirty = _dirty;
     if (dirty != _reportedDirty) {
       _reportedDirty = dirty;
       onDirty(dirty);
@@ -170,7 +206,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
 
   Future<void> _run(_Work work, Future<void> Function() action) {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     return runAs(work, () async {
       try {
         await action();
@@ -196,6 +232,8 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
 
   Future<void> _save(MetadataEditorState state) => _run(_Work.save, () async {
     final l10n = context.l10n;
+    final messenger = ref.read(shellMessengerProvider);
+    final onSaved = widget.onSaved;
     final changes = _draft.changes(state);
     if (changes.isEmpty) return;
     final outcome = await ref
@@ -206,15 +244,17 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
           lock: _lock,
           force: _force,
         );
-    if (!mounted) return;
-    // Re-seed to what was sent only when everything landed: after a
-    // refusal the parts that did not land must stay the user's edits.
-    if (outcome.refusal == null) _draft.markSaved(changes);
-    setState(() => _writeBackFailures = outcome.writeBackFailures);
-    _reportDirty();
+    if (mounted) {
+      // Re-seed to what was sent only when everything landed: after a
+      // refusal the parts that did not land must stay the user's edits.
+      if (outcome.refusal == null) _draft.markSaved(changes);
+      setState(() => _writeBackFailures = outcome.writeBackFailures);
+      _reportDirty();
+    }
     // Even a refused save committed the calls before the refusal, so
-    // the host's other readers of this item are stale either way.
-    widget.onSaved?.call();
+    // the host's other readers of this item are stale either way; and
+    // what it says is said where the visitor is, this pane up or not.
+    onSaved?.call();
     final messages = <String>[
       ...outcome.warnings,
       // A locked field keeps the server's sentence, which names the
@@ -225,9 +265,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
             ? '${e.message}. ${l10n.metadataFieldLockedHint}'
             : explainRefusal(l10n, e),
     ];
-    if (messages.isNotEmpty) {
-      ref.read(shellMessengerProvider.notifier).show(messages.join('\n'));
-    }
+    if (messages.isNotEmpty) messenger.show(messages.join('\n'));
   });
 
   Future<void> _pickGenres(MetadataEditorState state) async {
@@ -242,10 +280,11 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
 
   Future<void> _rematch() => _run(_Work.rematch, () async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     // Hoisted: the message outlives this screen, and a closure over its
     // context throws once the editor is popped.
     final router = GoRouter.maybeOf(context);
+    final mayLeave = widget.mayLeave ?? _mayLeave;
     final entryId = await ref
         .read(metadataControllerProvider(widget.pid).notifier)
         .rematch();
@@ -255,9 +294,31 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
       actionSemanticsId: SemanticsIds.metadataOpenReview,
       onAction: router == null
           ? null
-          : () => router.pushInShell<void>(WaxRoute.reviewEntry(entryId)),
+          : () => unawaited(_openReview(router, entryId, mayLeave)),
     );
   });
+
+  /// The entry is a destination of its own: going there replaces the
+  /// editor on screen where the two share a branch, so edits typed since
+  /// are asked about first.
+  Future<void> _openReview(
+    GoRouter router,
+    String entryId,
+    Future<bool> Function() mayLeave,
+  ) async {
+    if (!await mayLeave()) return;
+    router.go(WaxRoute.reviewEntry(entryId));
+  }
+
+  /// Whether this pane's edits may be dropped: at once when it is gone or
+  /// clean, else as the person says.
+  Future<bool> _mayLeave() async =>
+      !mounted || !_dirty || await confirmDiscardEdits(context);
+
+  bool get _dirty {
+    final state = ref.read(metadataControllerProvider(widget.pid)).value;
+    return state != null && !_draft.changes(state).isEmpty;
+  }
 
   /// `fields` is the track rung of the catalog's own fields walk -
   /// tempo, ISRC, composer - so the editor's Fetch offers a track
@@ -277,7 +338,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
   Future<void> _enrich(MetadataEditorState state) =>
       _run(_Work.enrich, () async {
         final l10n = context.l10n;
-        final messenger = ref.read(shellMessengerProvider.notifier);
+        final messenger = ref.read(shellMessengerProvider);
         final controller = ref.read(
           metadataControllerProvider(widget.pid).notifier,
         );
@@ -711,13 +772,15 @@ class _Header extends ConsumerWidget {
   /// returning a request rather than by having two callbacks.
   Future<void> _editOrigin(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final request = await showAcquisitionSheet(
       context,
       acquisition: state.metadata.acquisition,
     );
     if (request == null || !context.mounted) return;
     final repository = ref.read(repositoryProvider);
+    // The answer outlives this editor when the visitor leaves meanwhile.
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       if (request.clear) {
         await repository.clearItemAcquisition(
@@ -743,13 +806,10 @@ class _Header extends ConsumerWidget {
           force: true,
         );
       }
-      // The sheet is an await away from here and this is a stateless
-      // widget with no mounted of its own, so the ref may be reading a
-      // disposed container by now - invalidating through one throws,
-      // and the throw escapes into a discarded future. The messenger
-      // was read before the gaps for the same reason.
-      if (!context.mounted) return;
-      ref.invalidate(metadataControllerProvider(pid));
+      // Through what was read before the await: the ref may be a
+      // disposed one by now, and invalidating through it throws into a
+      // discarded future.
+      container.invalidate(metadataControllerProvider(pid));
       messenger.show(
         request.clear ? l10n.metadataOriginRemoved : l10n.metadataOriginSaved,
       );

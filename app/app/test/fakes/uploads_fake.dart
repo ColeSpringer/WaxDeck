@@ -138,8 +138,16 @@ mixin FakeUploads on FakeRepositoryState implements UploadsApi {
     return batch;
   }
 
+  /// Asked to complete, in order, before [completeUploadBatchGate].
+  final List<String> completeUploadBatchCalls = [];
+
+  /// Holds [completeUploadBatch] until completed.
+  Completer<void>? completeUploadBatchGate;
+
   @override
   Future<UploadBatch> completeUploadBatch(String batchId) async {
+    completeUploadBatchCalls.add(batchId);
+    await completeUploadBatchGate?.future;
     final error = uploadError;
     if (error != null) throw error;
     final batch = batchesById[batchId];
@@ -224,8 +232,16 @@ mixin FakeUploads on FakeRepositoryState implements UploadsApi {
     return _uploadById(uploadId);
   }
 
+  /// Holds [deleteUpload] until completed.
+  Completer<void>? deleteUploadGate;
+
+  /// Thrown by [deleteUpload] when set.
+  WaxDeckApiException? deleteUploadError;
+
   @override
   Future<void> deleteUpload(String uploadId) async {
+    await deleteUploadGate?.future;
+    if (deleteUploadError case final error?) throw error;
     uploadsById.remove(uploadId);
   }
 

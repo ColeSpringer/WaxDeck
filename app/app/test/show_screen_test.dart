@@ -13,6 +13,7 @@ import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -205,6 +206,27 @@ void main() {
     expect(repo.fetchEpisodeCalls, <String>[remotePid]);
     expect(find.text('Queued for download'), findsOneWidget);
     expect(shellMessageText(raisedMessage(tester)), 'Fetching to server');
+  });
+
+  testWidgets('a fetch answered once the show was left is said in the '
+      'shell', (tester) async {
+    final repo = _repo();
+    final container = await _pump(tester, repo);
+    final gate = repo.fetchEpisodeGate = Completer<void>();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.episodeFetch(remotePid)),
+    );
+    await tester.pump();
+    await leaveScreen(tester, container);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      shellMessageText(container.read(shellMessagesProvider)),
+      'Fetching to server',
+    );
   });
 
   testWidgets('the remove button reclaims a downloaded episode', (
@@ -912,6 +934,46 @@ void main() {
     );
   });
 
+  testWidgets('the settings sheet dismissed as it saves leaves the show up', (
+    tester,
+  ) async {
+    // Answered while the sheet is on its way out, still mounted.
+    tester.view.physicalSize = const Size(900, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final gate = Completer<void>();
+    final repo = FakeRepository()
+      ..addSubscription(
+        testShow(showPid),
+        settings: const SubscriptionSettings(autoDownload: true),
+      )
+      ..episodesByShow[showPid] = <EpisodeSummary>[testEpisode(downloadedPid)]
+      ..putSubscriptionSettingsGate = gate;
+    await pumpApp(
+      tester,
+      const ShowScreen(pid: showPid),
+      container: appContainer(repo: repo),
+      pushed: true,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSettingsOpen),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSettingsSave),
+    );
+    await tester.pump();
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pump();
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(ShowScreen), findsOneWidget);
+    expect(repo.putSubscriptionSettingsCalls, hasLength(1));
+  });
+
   testWidgets('the numeric settings are held to what the contract takes', (
     tester,
   ) async {
@@ -1131,6 +1193,41 @@ void main() {
     expect(manager.entityType, 'podcast');
   });
 
+  testWidgets('a cover cleared as its sheet is closed reads the show again, '
+      'and throws nothing', (tester) async {
+    final repo = _curatorRepo(managePodcasts: true)
+      ..artRoles.add(const ArtRoleInfo(role: 'front', format: 'jpeg'))
+      ..entityArtworkGate = Completer<void>();
+    await _pump(tester, repo);
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.showOverflow));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.showSetCover));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.artSlotClear('front')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
+      'clear',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.confirmAccept));
+    // Frames rather than settling: the slot draws busy while it writes.
+    await tester.pump(const Duration(milliseconds: 500));
+
+    Navigator.of(tester.element(find.byType(ShowCoverSheet))).pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(ShowCoverSheet), findsNothing);
+    final asked = repo.getPodcastCalls.length;
+    repo.entityArtworkGate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(repo.clearEntityArtworkCalls.single.entityType, 'podcast');
+    expect(repo.getPodcastCalls.length, greaterThan(asked));
+  });
+
   testWidgets('the overflow hides the cover entry without the permission', (
     tester,
   ) async {
@@ -1180,6 +1277,32 @@ void main() {
 
     expect(repo.fetchEpisodeCalls, <String>[remotePid, failedPid]);
     expect(shellMessageText(raisedMessage(tester)), '2 queued for download');
+  });
+
+  testWidgets('a batch fetch answered once the show was left is confirmed '
+      'in the shell', (tester) async {
+    final repo = _repo();
+    final container = await _pump(tester, repo);
+    final gate = repo.fetchEpisodeGate = Completer<void>();
+
+    await tester.longPress(
+      find.bySemanticsIdentifier(SemanticsIds.episode(remotePid)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.selectionDownload),
+    );
+    await tester.pump();
+    await leaveScreen(tester, container);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(repo.fetchEpisodeCalls, <String>[remotePid]);
+    expect(
+      shellMessageText(container.read(shellMessagesProvider)),
+      '1 queued for download',
+    );
   });
 }
 

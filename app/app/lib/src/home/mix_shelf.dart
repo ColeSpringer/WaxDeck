@@ -13,6 +13,7 @@ import '../player/now_playing_controller.dart';
 import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
+import '../shell/navigation_history.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -100,7 +101,8 @@ Future<void> playMixCard(
   bool shuffle = false,
 }) async {
   final router = GoRouter.of(context);
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final from = pageOnTop(router);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   final title = card.titleOf(l10n);
   final playback = ref.read(nowPlayingProvider.notifier);
@@ -122,7 +124,8 @@ Future<void> playMixCard(
     // screen, and the deck bar is where it shows up. What is conditional
     // is the navigation - the router outlives this widget, so pushing
     // unguarded would slam a track list over whichever destination the
-    // visitor walked to meanwhile.
+    // visitor walked to meanwhile, or a sheet they opened: there the list
+    // is offered instead.
     playback.play(
       mix.items,
       shuffle: shuffle,
@@ -131,19 +134,25 @@ Future<void> playMixCard(
       // built in, and a seeded mix has no name to store.
       source: QueueSource(kind: QueueSourceKind.mix, label: card.queueLabel),
     );
-    if (!context.mounted) return;
-    unawaited(
-      router.push<void>(
-        WaxRoute.tracks,
-        extra: TrackListArgs(
-          title: title,
-          sourceLabel: card.queueLabel,
-          basis: mix.basis,
-          items: mix.items,
-          idPrefix: 'mix',
-        ),
-      ),
+    final list = TrackListArgs(
+      title: title,
+      sourceLabel: card.queueLabel,
+      basis: mix.basis,
+      items: mix.items,
+      idPrefix: 'mix',
     );
+    void open() =>
+        unawaited(router.pushInShell<void>(WaxRoute.tracks, extra: list));
+    if (await stillShowing(router, from)) {
+      open();
+    } else {
+      messenger.show(
+        l10n.homeMixReady(title),
+        actionLabel: l10n.commonOpen,
+        onAction: open,
+        channel: ShellChannel.mixes,
+      );
+    }
   } on WaxDeckApiException catch (e) {
     messenger.show(explainError(l10n, e), channel: ShellChannel.mixes);
   }
@@ -200,8 +209,8 @@ Future<void> showMixMenuSheet(
   }
 }
 
-/// Pushed, as home's pinned cards are: a bucket is declared under the
-/// music hub, so `go` would throw home away.
+/// A bucket is pushed, as home's pinned cards are: it is declared under
+/// the music hub, so `go` would throw home away.
 Future<void> _openBasis(
   BuildContext context,
   WidgetRef ref,
@@ -212,7 +221,8 @@ Future<void> _openBasis(
     unawaited(router.push(WaxRoute.musicBucket(MusicDimension.artists, seed)));
     return;
   }
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final from = pageOnTop(router);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   final genre = card.genre ?? card.name;
   try {
@@ -228,20 +238,37 @@ Future<void> _openBasis(
     final bucket = page.buckets
         .where((b) => b.label.toLowerCase() == genre.toLowerCase())
         .firstOrNull;
-    // The router outlives the card: a visitor who walked on meanwhile
-    // gets no bucket slammed over where they went.
-    if (!context.mounted) return;
-    unawaited(
-      router.push(
-        bucket == null
-            ? WaxRoute.musicIndex(MusicDimension.genres)
-            : WaxRoute.musicBucket(
-                MusicDimension.genres,
-                musicBucketSegment(MusicDimension.genres, bucket),
-              ),
-        extra: bucket?.label,
-      ),
-    );
+    void open() {
+      if (bucket == null) {
+        // The index has a place of its own in the chrome, so it is gone
+        // to; only a bucket is a drill-in that keeps home beneath it.
+        router.go(WaxRoute.musicIndex(MusicDimension.genres));
+        return;
+      }
+      // In the shell, past an overlay the offer may be taken from.
+      unawaited(
+        router.pushInShell<void>(
+          WaxRoute.musicBucket(
+            MusicDimension.genres,
+            musicBucketSegment(MusicDimension.genres, bucket),
+          ),
+          extra: bucket.label,
+        ),
+      );
+    }
+
+    // The router outlives the card: a visitor who walked on meanwhile, or
+    // opened something over home, is offered the bucket there instead.
+    if (await stillShowing(router, from)) {
+      open();
+    } else {
+      messenger.show(
+        l10n.homeMixBasisReady(genre),
+        actionLabel: l10n.commonOpen,
+        onAction: open,
+        channel: ShellChannel.mixes,
+      );
+    }
   } on WaxDeckApiException catch (e) {
     messenger.show(explainError(l10n, e), channel: ShellChannel.mixes);
   }

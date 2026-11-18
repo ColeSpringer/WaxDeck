@@ -14,6 +14,7 @@ import '../presenters/media_tiles.dart';
 import '../radio/add_station.dart';
 import '../radio/radio_screen.dart';
 import '../shell/adaptive_shell.dart';
+import '../shell/asked_from.dart';
 import '../shell/async_box_face.dart';
 import '../shell/in_flight.dart';
 import '../shell/routes.dart';
@@ -110,15 +111,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// set is only a link if it is in the bar without anyone pressing
   /// Enter for it.
   ///
-  /// `replace`, not `go`. Search is one location whose query changes, so
+  /// `swap`, not `go`. Search is one location whose query changes, so
   /// back should leave it rather than walk back through every prefix
-  /// somebody typed - and on web `go` mints a browser history entry per
-  /// call, which is exactly that walk.
+  /// somebody typed - and on web a `go` or a bare `replace` mints a
+  /// browser history entry per call, which is exactly that walk.
   void _publish(String query) {
     if (!mounted) return;
     final location = WaxRoute.searchFor(query);
     if (GoRouterState.of(context).uri.toString() == location) return;
-    context.replace(location);
+    context.swap(location);
   }
 
   void _onChanged(String value) {
@@ -188,7 +189,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       largeTitle: false,
       // Back to whichever domain the visitor searched from, drill-in
       // and all; home only when nothing was recorded to go back to.
-      onBack: () => ShellBackScope.goBack(context, fallback: WaxRoute.home),
+      onBack: () => context.back(fallback: WaxRoute.home),
+      backSemanticsId: SemanticsIds.navBack,
       slivers: <Widget>[
         SliverToBoxAdapter(
           child: Padding(
@@ -467,15 +469,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     ];
   }
 
-  /// Adds a directory match, reporting a refusal where there is no modal to
-  /// hide a snackbar behind. Keyed by its stream, as a podcast row is by
-  /// its feed.
+  /// Adds a directory match, reporting a refusal in the shell: there is no
+  /// modal to hide a snackbar behind, and search left meanwhile still
+  /// hears it. Keyed by its stream, as a podcast row is by its feed.
   Future<void> _addStation(RadioDirectoryEntry entry) {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final from = AskedFrom.of(context);
     return runAs(entry.streamUrl, () async {
       final refusal = await addDirectoryStation(context, ref, entry);
-      if (refusal == null || !mounted) return;
-      messenger.show(refusal, channel: ShellChannel.radio);
+      if (refusal != null) from.refused(refusal, channel: ShellChannel.radio);
     });
   }
 
@@ -793,14 +794,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     };
   }
 
-  /// Subscribes to a directory match, reporting the refusal where there
-  /// is no modal to put it in. The shared call says so on success.
+  /// Subscribes to a directory match, reporting the refusal in the shell,
+  /// with search left meanwhile too. The shared call says so on success.
   Future<void> _subscribeShow(PodcastDirectoryEntry entry) {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final from = AskedFrom.of(context);
     return runAs(entry.feedUrl, () async {
       final refusal = await subscribeToDirectoryEntry(context, ref, entry);
-      if (refusal == null || !mounted) return;
-      messenger.show(refusal, channel: ShellChannel.podcasts);
+      if (refusal != null) {
+        from.refused(refusal, channel: ShellChannel.podcasts);
+      }
     });
   }
 }

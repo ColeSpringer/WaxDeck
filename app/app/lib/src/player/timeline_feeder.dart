@@ -20,7 +20,7 @@ const int kTimelineMembers = 50;
 /// and what a member has to answer is "is *this* entry the one playing",
 /// which only the id can.
 class _Minted {
-  const _Minted(this.media, this.queueIds, this.pid);
+  const _Minted(this.media, this.queueIds, this.pid, this.server);
 
   final TimelineMedia media;
   final List<String> queueIds;
@@ -28,6 +28,9 @@ class _Minted {
   /// The rendering's own id, for handing its transcode slot back when
   /// this stops being played. Null from a server that mints none.
   final String? pid;
+
+  /// Who minted it, and so who the slot goes back to.
+  final WaxDeckRepository server;
 
   int indexOf(String queueId) => queueIds.indexOf(queueId);
 }
@@ -58,7 +61,10 @@ class TimelineFeeder {
     this.measuringDelay = const Duration(seconds: 3),
   });
 
-  final WaxDeckRepository repository;
+  /// Read at each mint rather than held: the controller that owns this is
+  /// built before a native install has a server, and outlives a change of
+  /// one.
+  final WaxDeckRepository Function() repository;
   final AudioEnginePort engine;
 
   /// Whether the listener has asked for this at all.
@@ -472,7 +478,9 @@ class TimelineFeeder {
   /// forget in both directions: the server's idle sweep releases it a
   /// minute later anyway, so this must never delay a teardown and a
   /// failure is not worth reporting.
-  void _release(_Minted? minted) => _releasePid(minted?.pid);
+  void _release(_Minted? minted) {
+    if (minted != null) _releaseAt(minted.server, minted.pid);
+  }
 
   /// Hands back everything named here, each rendering once and none of
   /// them [keeping]. A re-mint of a queue the server still holds answers
@@ -484,15 +492,15 @@ class TimelineFeeder {
     for (final one in held) {
       final pid = one?.pid;
       if (pid == null || !done.add(pid)) continue;
-      _releasePid(pid);
+      _release(one);
     }
   }
 
-  /// [_release] by pid, for a rendering the server minted that never
-  /// became a [_Minted] here.
-  void _releasePid(String? pid) {
+  /// [_release] by pid, for a rendering [server] minted that never became
+  /// a [_Minted] here.
+  void _releaseAt(WaxDeckRepository server, String? pid) {
     if (pid == null) return;
-    unawaited(repository.releaseQueueTimeline(pid).catchError((Object _) {}));
+    unawaited(server.releaseQueueTimeline(pid).catchError((Object _) {}));
   }
 
   /// Teardown, which is [clear]: a rendering dropped without a release
@@ -605,7 +613,8 @@ class TimelineFeeder {
       final decodable = _withinQuality(
         _timelineEngine?.supportedTimelineFormats,
       );
-      final tl = await repository.createQueueTimeline(
+      final server = repository();
+      final tl = await server.createQueueTimeline(
         <String>[for (final e in run) e.pid],
         crossfadeSeconds: crossfadeSeconds(),
         formats: decodable,
@@ -629,14 +638,17 @@ class TimelineFeeder {
         // stream per track and each of those wants a slot of its own -
         // at a cap of one, the next track is refused by the rendering
         // nobody is listening to.
-        _releasePid(tl.pid);
+        _releaseAt(server, tl.pid);
         _giveUp('gapless-format');
         return null;
       }
       _say(null);
-      return _Minted(_mediaFrom(tl), <String>[
-        for (final e in run) e.queueId,
-      ], tl.pid);
+      return _Minted(
+        _mediaFrom(tl),
+        <String>[for (final e in run) e.queueId],
+        tl.pid,
+        server,
+      );
     } on WaxDeckApiException catch (e) {
       _handleMintRefusal(e, queue, entry, cleared: generation != _generation);
       return null;

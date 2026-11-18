@@ -101,6 +101,39 @@ void main() {
     );
   });
 
+  testWidgets('dismissed by its scrim as the run ends closes the dialog and '
+      'nothing else', (tester) async {
+    // The same window with neither Stop nor dispose having run: the run's
+    // last checkpoint lands while the scrim's dismissal is under way.
+    final repo = _repo(episodes: 1);
+    final gate = Completer<void>();
+    repo.putPlayStateGate = gate;
+    tester.view.physicalSize = const Size(900, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await pumpApp(
+      tester,
+      const ShowScreen(pid: showPid),
+      container: appContainer(repo: repo),
+      pushed: true,
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.showOverflow));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.markOlderPlayed));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.markOlderConfirm));
+    await tester.pump();
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pump();
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(MarkOlderPlayedDialog), findsNothing);
+    expect(find.byType(ShowScreen), findsOneWidget);
+  });
+
   testWidgets('what a stopped run already wrote still reaches the screen', (
     tester,
   ) async {

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/discovery/discovery_actions.dart';
 import 'package:waxdeck/src/discovery/track_list_screen.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/player/deck_bar_host.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -102,7 +105,7 @@ void main() {
     // Raised through the shell's channel, which is where the button
     // beside it can carry a semantics identifier - so the message is
     // read off that rather than found on a screen this host has none of.
-    final message = harness.container.read(shellMessengerProvider);
+    final message = harness.container.read(shellMessagesProvider);
     expect(shellMessageText(message), 'Added 2 tracks to the queue');
     expect(message?.actionLabel, 'Open');
     expect(message?.actionSemanticsId, SemanticsIds.queueOpen);
@@ -150,6 +153,99 @@ void main() {
     );
     expect(find.bySemanticsIdentifier(SemanticsIds.playerBack), findsNothing);
     expect(find.bySemanticsIdentifier(SemanticsIds.deckBar), findsOneWidget);
+  });
+
+  testWidgets('a sheet dismissed as its mix lands is a cancel, and leaves '
+      'the screen under it', (tester) async {
+    // Answered while the sheet is on its way out, still mounted.
+    final gate = Completer<void>();
+    final repo = FakeRepository(items: [testItem(_seedPid)])
+      ..instantMixGate = gate
+      ..instantMixResult = InstantMix(
+        basis: MixBasis.sonic,
+        items: [testItem(_mixPid1, title: 'Mix Opener')],
+      );
+    final engine = FakeEngine();
+    final harness = PlayerHarness(
+      playbackContainer(repo: repo, engine: engine),
+    );
+    await pumpApp(
+      tester,
+      _MixLauncher(seed: testItem(_seedPid)),
+      container: harness.container,
+      pushed: true,
+    );
+    await tester.tap(find.text('Mix from here'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.instantMixRun));
+    await tester.pump();
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pump();
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Mix from here'), findsOneWidget);
+    expect(find.byType(TrackListScreen), findsNothing);
+    expect(engine.playing, isFalse);
+  });
+
+  testWidgets('a mix that lands once something was opened over its sheet '
+      'plays, and its list is offered there', (tester) async {
+    // The visitor went to what they opened: the sheet, done with, is taken
+    // out from under it, and the list waits for them as an offer.
+    final gate = Completer<void>();
+    final repo = FakeRepository(items: [testItem(_seedPid)])
+      ..instantMixGate = gate
+      ..instantMixResult = InstantMix(
+        basis: MixBasis.sonic,
+        items: [testItem(_mixPid1, title: 'Mix Opener')],
+      );
+    final engine = FakeEngine();
+    final harness = PlayerHarness(
+      playbackContainer(repo: repo, engine: engine),
+    );
+    await pumpApp(
+      tester,
+      _MixLauncher(seed: testItem(_seedPid)),
+      container: harness.container,
+      pushed: true,
+    );
+    await tester.tap(find.text('Mix from here'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.instantMixRun));
+    await tester.pump();
+    unawaited(
+      showDialog<void>(
+        context: tester.element(find.text('Mix from here')),
+        builder: (_) => const Text('Over it'),
+      ),
+    );
+    // The sheet spins under it, so time is pumped rather than settled.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Over it'), findsOneWidget, reason: 'it stays');
+    expect(find.byType(TrackListScreen), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.instantMixRun),
+      findsNothing,
+    );
+    expect(engine.playing, isTrue);
+    final offer = raisedMessage(tester);
+    expect(shellMessageText(offer), 'Playing an instant mix');
+    expect(offer?.actionLabelIn(AppLocalizationsEn()), 'Open');
+    Navigator.of(tester.element(find.text('Over it'))).pop();
+    await tester.pumpAndSettle();
+    await pressRaisedAction(tester);
+    expect(find.byType(TrackListScreen), findsOneWidget);
+    harness.container.read(queueControllerProvider.notifier).clear();
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets('playing from the mix list stays put and raises the dock', (

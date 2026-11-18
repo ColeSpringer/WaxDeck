@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -223,6 +225,59 @@ void main() {
     });
   });
 
+  testWidgets('a share whose batch completes after a sign-out finishes '
+      'quietly', (tester) async {
+    // The gate lives in the signed-in scope, so signing out takes it, and
+    // its `ref`, away while the batch is still completing.
+    final dir = Directory.systemTemp.createTempSync('share-intake-test');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final files = [
+      for (final name in ['a.flac', 'b.flac'])
+        SharedFile(
+          path: (File(
+            '${dir.path}/share-$name',
+          )..writeAsBytesSync([1, 2])).path,
+          name: name,
+        ),
+    ];
+    final gate = Completer<void>();
+    final repo = FakeRepository(sessionState: testUploaderSession())
+      ..completeUploadBatchGate = gate;
+    final port = FakeShareIntake(intake: SharedFilesIntake(files));
+    final container = appContainer(
+      repo: repo,
+      extra: [shareIntakeProvider.overrideWithValue(port)],
+    );
+    final raised = <ShellMessage>[];
+    await tester.runAsync(() async {
+      await mountApp(
+        tester,
+        const ShareIntakeGate(child: Scaffold(body: Text('library'))),
+        container: container,
+      );
+      for (var waited = 0; waited < 5000; waited += 10) {
+        if (repo.completeUploadBatchCalls.isNotEmpty) break;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(repo.completeUploadBatchCalls, hasLength(1));
+      await container.read(authControllerProvider.notifier).logout();
+    });
+    await leaveScreen(tester, container);
+    container.listen(shellMessagesProvider, (_, next) {
+      if (next != null) raised.add(next);
+    });
+    await tester.runAsync(() async {
+      gate.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(container.read(signedInAccountProvider), isNull);
+    expect(repo.completedBatchIds, hasLength(1));
+    expect(raised, isEmpty, reason: 'nothing for the next session to hear');
+  });
+
   testWidgets('a shared file over the whole allowance is worded as a '
       'picked one is', (tester) async {
     // Staged on disk for the reason the test above gives; the share
@@ -258,13 +313,13 @@ void main() {
         container: container,
       );
       for (var waited = 0; waited < 5000; waited += 10) {
-        if (container.read(shellMessengerProvider) != null) break;
+        if (container.read(shellMessagesProvider) != null) break;
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
     });
 
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'book.flac: Larger than your whole upload limit of 1 KB, so clearing '
       'Past uploads cannot make room. An administrator can raise the limit.',
     );

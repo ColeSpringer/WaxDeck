@@ -4,11 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/search/search_controller.dart';
 import 'package:waxdeck/src/search/search_screen.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -603,6 +606,82 @@ void main() {
     gate.complete();
     await tester.pumpAndSettle();
     expect(tester.widget<WaxButton>(first).busy, isFalse);
+  });
+
+  testWidgets('a directory Add refused once search was left is said in the '
+      'shell', (tester) async {
+    final gate = Completer<void>();
+    final repository = FakeRepository()
+      ..createStationGate = gate
+      ..createStationError = const WaxDeckApiException(
+        code: 'conflict',
+        message: 'that stream is already Jazz24',
+        statusCode: 409,
+      )
+      ..searchResults['jazz'] = _results()
+      ..directoryEntries = const <RadioDirectoryEntry>[
+        RadioDirectoryEntry(
+          name: 'Jazz24',
+          streamUrl: 'https://jazz24.example/stream',
+        ),
+      ];
+    final container = await _pump(tester, repository, initialQuery: 'jazz');
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchFilter('radio')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(waxControl<WaxButton>(SemanticsIds.radioSearchAdd(0)));
+    await tester.pump();
+
+    await leaveScreen(tester, container);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      shellMessageText(container.read(shellMessagesProvider)),
+      'that stream is already Jazz24',
+    );
+  });
+
+  testWidgets('a directory Subscribe refused once search was left is said '
+      'in the shell', (tester) async {
+    final gate = Completer<void>();
+    const refusal = WaxDeckApiException(
+      code: 'conflict',
+      message: 'already subscribed',
+      statusCode: 409,
+    );
+    final repository = FakeRepository()
+      ..subscribeGate = gate
+      ..subscribeError = refusal
+      ..searchResults['night'] = _results()
+      ..podcastDirectoryEntries = <PodcastDirectoryEntry>[
+        const PodcastDirectoryEntry(
+          name: 'Nightjar Radio Hour',
+          feedUrl: 'https://feeds.example/nightjar',
+        ),
+      ];
+    final container = await _pump(tester, repository, initialQuery: 'night');
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchFilter('podcasts')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      waxControl<WaxButton>(SemanticsIds.podcastSearchSubscribe(0)),
+    );
+    await tester.pump();
+
+    await leaveScreen(tester, container);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    // Off the directory, not typed: the table's sentence.
+    expect(
+      shellMessageText(container.read(shellMessagesProvider)),
+      explainError(AppLocalizationsEn(), refusal),
+    );
   });
 
   testWidgets('a Subscribe in flight stays on its show while the results '

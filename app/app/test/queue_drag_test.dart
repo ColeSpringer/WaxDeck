@@ -113,7 +113,7 @@ void main() {
     final entries = container.read(queueControllerProvider).entries;
     expect(entries.map((e) => e.pid), <String>['tr-9', 'tr-1']);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Added Alpha Song to the queue',
     );
   });
@@ -244,7 +244,7 @@ void main() {
       <String>['tr-9', 'tr-1', 'tr-2'],
     );
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Added 2 tracks to the queue',
     );
   });
@@ -395,7 +395,7 @@ void main() {
     // The code's sentence: a bucket that could not be read is a failed
     // operation, not a refusal of something typed, so the table answers.
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'The library is busy with maintenance. Try again shortly.',
     );
   });

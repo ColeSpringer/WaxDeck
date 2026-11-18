@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/asked_from.dart';
 import '../shell/in_flight.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -23,7 +24,7 @@ Future<String?> subscribeToDirectoryEntry(
   WidgetRef ref,
   PodcastDirectoryEntry entry,
 ) async {
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   try {
     // A directory match is always an RSS feed, so no source kind is asked
@@ -202,7 +203,7 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog>
   /// or every control in the dialog would read as disabled.
   Future<void> _subscribeToEntry(PodcastDirectoryEntry entry) {
     final navigator = Navigator.of(context);
-    final route = ModalRoute.of(context);
+    final from = AskedFrom.of(context);
     return runAs(entry.feedUrl, () async {
       setState(() => _error = null);
       final refusal = await subscribeToDirectoryEntry(context, ref, entry);
@@ -210,18 +211,27 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog>
         // Only while this dialog is still the top route: a subscribe
         // outlives a dialog dismissed while it was in flight, or still on
         // its way out, and popping then takes whatever is under it.
-        if (route?.isCurrent ?? false) navigator.pop();
+        if (from.route?.isCurrent ?? false) navigator.pop();
         return;
       }
-      if (mounted) setState(() => _error = refusal);
+      _refused(from, refusal);
     });
   }
+
+  /// Inline while this dialog is still there, where a snackbar would
+  /// render behind it; in the shell once it was dismissed while the
+  /// subscribe was out.
+  void _refused(AskedFrom from, String refusal) => from.refused(
+    refusal,
+    inline: (refusal) => setState(() => _error = refusal),
+    channel: ShellChannel.podcasts,
+  );
 
   Future<void> _subscribeToUrl() async {
     final url = _urlController.text.trim();
     if (url.isEmpty) return;
     final navigator = Navigator.of(context);
-    final route = ModalRoute.of(context);
+    final from = AskedFrom.of(context);
     final l10n = context.l10n;
     await runAs(_Wait.url, () async {
       setState(() => _error = null);
@@ -230,12 +240,11 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog>
             .read(subscriptionsProvider.notifier)
             .subscribe(url: url, sourceType: _sourceType);
         // As for a directory match: not over a dialog on its way out.
-        if (route?.isCurrent ?? false) navigator.pop();
+        if (from.route?.isCurrent ?? false) navigator.pop();
       } on WaxDeckApiException catch (e) {
-        // Inline rather than a snackbar, which would render behind this
-        // dialog. The URL was just typed, so the server's own words about
-        // it: "the feed's own server did not answer" names the address.
-        if (mounted) setState(() => _error = explainRefusal(l10n, e));
+        // The URL was just typed, so the server's own words about it:
+        // "the feed's own server did not answer" names the address.
+        _refused(from, explainRefusal(l10n, e));
       }
     });
   }

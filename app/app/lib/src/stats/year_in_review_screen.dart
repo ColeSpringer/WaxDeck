@@ -34,7 +34,8 @@ class _YearInReviewScreenState extends ConsumerState<YearInReviewScreen> {
     return WaxScaffold(
       title: l10n.statsDoorYearInReview,
       largeTitle: false,
-      onBack: () => context.leave(fallback: WaxRoute.stats),
+      onBack: () => context.back(fallback: WaxRoute.stats),
+      backSemanticsId: SemanticsIds.navBack,
       slivers: <Widget>[
         SliverPadding(
           padding: sizeClass.gutter,

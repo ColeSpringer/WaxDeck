@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -7,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../books/book_dimension.dart';
 import '../music/music_controllers.dart';
 import '../settings/settings_registry.dart';
+import 'navigation_history.dart';
 
 /// Every canonical location in the app, in one place.
 ///
@@ -426,19 +428,70 @@ extension WaxLeave on GoRouter {
   /// branch, which is the only branch that can have one: a push always
   /// leaves a page underneath, so a pending push future implies this
   /// pops. The fallback branch runs exactly when nobody pushed.
-  void leave({String fallback = WaxRoute.home, Object? result}) {
-    if (canPop()) {
-      pop(result);
-      return;
+  ///
+  /// Done once the pop has landed, natively at once. On web a pop is the
+  /// browser's back, which lands later, so a caller that moves on
+  /// afterwards waits for it, or the landing undoes the move. Asked while
+  /// a step is landing, it is read once that one has: the page it would
+  /// pop may have gone with it (see [WaxHistory.popTurn]).
+  Future<void> leave({String fallback = WaxRoute.home, Object? result}) {
+    if (WaxHistory.of(this)?.popTurn(result) case final turn?) {
+      return turn.then(
+        (go) => go ? leave(fallback: fallback, result: result) : null,
+      );
     }
+    if (canPop()) return popPage(result);
     go(fallback);
+    return SynchronousFuture<void>(null);
+  }
+
+  /// Pops the page on top, answering whoever awaits it with [result],
+  /// and completes once the pop has landed. Through the history where
+  /// there is one: on web a push's pop is the browser's back, so the
+  /// browser keeps no entry for the page closed (see [WaxHistory.pop]).
+  Future<void> popPage([Object? result]) {
+    if (WaxHistory.of(this) case final history?) return history.pop(result);
+    pop(result);
+    return SynchronousFuture<void>(null);
   }
 }
 
 /// The same on a context, for call sites that do not outlive it.
 extension WaxLeaveContext on BuildContext {
-  void leave({String fallback = WaxRoute.home, Object? result}) =>
+  Future<void> leave({String fallback = WaxRoute.home, Object? result}) =>
       GoRouter.of(this).leave(fallback: fallback, result: result);
+}
+
+/// What a leading arrow does: back to where the visitor was, and where
+/// nothing is recorded, [WaxLeave.leave]: a pop when a page is under the
+/// one on screen, else up to [fallback] (then the branch root, then home).
+/// Under a router built without a history, a widget test's host, it is
+/// [WaxLeave.leave] itself.
+extension WaxBack on BuildContext {
+  void back({String? fallback}) {
+    final router = GoRouter.of(this);
+    final history = WaxHistory.of(router);
+    if (history != null) {
+      history.back(fallback: fallback);
+      return;
+    }
+    router.leave(fallback: fallback ?? WaxRoute.home);
+  }
+
+  /// Drops every visit at or beneath [location] from the history of the
+  /// router in scope, for a screen about to leave an entity it deleted.
+  void forget(String location) =>
+      WaxHistory.of(GoRouter.of(this))?.forget(location);
+
+  /// Puts [location] in place of the page on top: the same visit with
+  /// another location, as a search refined, and on web the same browser
+  /// entry. go_router reports a bare `replace` as a new entry, so browser
+  /// back would walk every one; a report made under `Router.neglect`
+  /// replaces the entry instead.
+  void swap(String location) => Router.neglect(
+    this,
+    () => unawaited(GoRouter.of(this).replace<void>(location)),
+  );
 }
 
 /// Where a location sits in the route table.
@@ -476,10 +529,11 @@ extension WaxPushInShell on GoRouter {
   /// shell rather than into it, and a push from under one stacks a second
   /// shell whose navigator keys the first still holds. Read at the push,
   /// so a caller that awaited something first clears whatever is up by
-  /// then rather than what was up when it asked.
+  /// then rather than what was up when it asked. Each overlay's pop lands
+  /// before the push, so on web the browser keeps no entry for it.
   Future<T?> pushInShell<T extends Object?>(String location, {Object? extra}) {
-    while (_overlayOnTop && canPop()) {
-      pop();
+    if (_overlayOnTop && canPop()) {
+      return popPage().then((_) => pushInShell<T>(location, extra: extra));
     }
     // An overlay opened by its own link has nothing under it to pop to.
     if (_overlayOnTop) go(WaxRoute.home);

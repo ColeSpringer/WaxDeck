@@ -526,7 +526,7 @@ void main() {
       final loaded = await h.container.read(prefsControllerProvider.future);
 
       expect(
-        h.container.read(shellMessengerProvider)?.resolve(_l10n),
+        h.container.read(shellMessagesProvider)?.resolve(_l10n),
         'Some settings changed offline were not saved',
       );
       expect(loaded.pinned, ['AL-1']);
@@ -729,7 +729,7 @@ void main() {
         await pumpEventQueue();
 
         expect(
-          h.container.read(shellMessengerProvider)?.resolve(_l10n),
+          h.container.read(shellMessagesProvider)?.resolve(_l10n),
           'Some settings changed offline were not saved',
         );
       },

@@ -27,6 +27,7 @@ class AdminNotificationsScreen extends ConsumerWidget {
       largeTitle: false,
       semanticsId: SemanticsIds.adminNotifications,
       onBack: adminBack(context),
+      backSemanticsId: SemanticsIds.navBack,
       slivers: <Widget>[
         SliverToBoxAdapter(
           child: Padding(

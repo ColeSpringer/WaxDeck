@@ -9,6 +9,7 @@ import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../queue/queue_controller.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'now_playing_controller.dart';
 import 'now_playing_view.dart';
 import 'player_screen.dart';
@@ -36,69 +37,75 @@ class CarModeScreen extends ConsumerWidget {
     // is text and a button on a hard-coded black, and on the light theme
     // that was primary text at under 3:1 on the one control that leaves.
     return CarModeTheme(
-      child: KeepAwake(
-        child: NowPlayingView(
-          idle: (context) => Scaffold(
-            body: WaxPlainTextStyle(
-              child: SafeArea(
-                child: EmptyState(
-                  glyph: WaxIcons.headphones,
-                  title: l10n.playerNothingPlaying,
-                  actionLabel: l10n.playerLeaveCarMode,
-                  actionSemanticsId: SemanticsIds.carExit,
-                  onAction: () => leavePlayer(context),
-                  semanticsId: SemanticsIds.carSurface,
+      // Its messages in its colours, over the playing face, which has no
+      // Scaffold of its own, as over the idle one.
+      child: ShellMessageArea(
+        child: KeepAwake(
+          child: NowPlayingView(
+            idle: (context) => Scaffold(
+              body: WaxPlainTextStyle(
+                child: SafeArea(
+                  child: EmptyState(
+                    glyph: WaxIcons.headphones,
+                    title: l10n.playerNothingPlaying,
+                    actionLabel: l10n.playerLeaveCarMode,
+                    actionSemanticsId: SemanticsIds.carExit,
+                    onAction: () => leavePlayer(context),
+                    semanticsId: SemanticsIds.carSurface,
+                  ),
                 ),
               ),
             ),
-          ),
-          builder: (context, session, item, position) => StreamBuilder<bool>(
-            stream: session.meansToPlayStream,
-            initialData: session.meansToPlay,
-            builder: (context, snapshot) {
-              final playback = ref.read(nowPlayingProvider.notifier);
-              final music = item.mediaType == MediaType.music;
-              return CarModeScaffold(
-                now: NowPlayingData(
-                  title: item.title,
-                  subtitle: item.artist,
-                  // `read`, not `watch`: this runs inside two nested
-                  // builders, so a watch would register the dependency
-                  // outside this widget's own build pass and re-register
-                  // on every play/pause tick. The store is one object for
-                  // the session's life either way.
-                  artwork: waxArtwork(
-                    ref.read(artworkStoreProvider),
-                    item.artUrl,
+            builder: (context, session, item, position) => StreamBuilder<bool>(
+              stream: session.meansToPlayStream,
+              initialData: session.meansToPlay,
+              builder: (context, snapshot) {
+                final playback = ref.read(nowPlayingProvider.notifier);
+                final music = item.mediaType == MediaType.music;
+                return CarModeScaffold(
+                  now: NowPlayingData(
+                    title: item.title,
+                    subtitle: item.artist,
+                    // `read`, not `watch`: this runs inside two nested
+                    // builders, so a watch would register the dependency
+                    // outside this widget's own build pass and re-register
+                    // on every play/pause tick. The store is one object for
+                    // the session's life either way.
+                    artwork: waxArtwork(
+                      ref.read(artworkStoreProvider),
+                      item.artUrl,
+                    ),
+                    domain: waxDomainOf(item.mediaType),
+                    shape: waxShapeOf(item.mediaType),
+                    // The car face draws no bar, so the position it is
+                    // handed is the one it was built with. Nothing here
+                    // ticks: a driver reads a title, not a timecode.
+                    position: position.value,
+                    duration: session.mediaDuration,
+                    playing: snapshot.data ?? false,
                   ),
-                  domain: waxDomainOf(item.mediaType),
-                  shape: waxShapeOf(item.mediaType),
-                  // The car face draws no bar, so the position it is
-                  // handed is the one it was built with. Nothing here
-                  // ticks: a driver reads a title, not a timecode.
-                  position: position.value,
-                  duration: session.mediaDuration,
-                  playing: snapshot.data ?? false,
-                ),
-                ids: const PlayerIds(
-                  surface: SemanticsIds.carSurface,
-                  play: SemanticsIds.carToggle,
-                  next: SemanticsIds.carNext,
-                  previous: SemanticsIds.carPrevious,
-                ),
-                exitSemanticsId: SemanticsIds.carExit,
-                onPlayPause: () => unawaited(session.toggle()),
-                // Spoken word steps by interval rather than by item, and
-                // the giant three-button layout has nowhere to put a
-                // fourth control: a podcast in the car gets play and stop
-                // and the swipe does nothing, which is honest, rather than
-                // a next button that walks out of an episode.
-                onPrevious: music ? () => unawaited(playback.previous()) : null,
-                onNext: music ? () => unawaited(playback.next()) : null,
-                canNext: ref.watch(queueCanAdvanceProvider),
-                onExit: () => leavePlayer(context),
-              );
-            },
+                  ids: const PlayerIds(
+                    surface: SemanticsIds.carSurface,
+                    play: SemanticsIds.carToggle,
+                    next: SemanticsIds.carNext,
+                    previous: SemanticsIds.carPrevious,
+                  ),
+                  exitSemanticsId: SemanticsIds.carExit,
+                  onPlayPause: () => unawaited(session.toggle()),
+                  // Spoken word steps by interval rather than by item, and
+                  // the giant three-button layout has nowhere to put a
+                  // fourth control: a podcast in the car gets play and stop
+                  // and the swipe does nothing, which is honest, rather than
+                  // a next button that walks out of an episode.
+                  onPrevious: music
+                      ? () => unawaited(playback.previous())
+                      : null,
+                  onNext: music ? () => unawaited(playback.next()) : null,
+                  canNext: ref.watch(queueCanAdvanceProvider),
+                  onExit: () => leavePlayer(context),
+                );
+              },
+            ),
           ),
         ),
       ),

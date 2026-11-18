@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -5,7 +7,10 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../shell/async_box_face.dart';
+import '../shell/async_face.dart';
+import '../shell/navigation_history.dart';
 import '../shell/pending_actions.dart';
+import '../shell/router.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -25,16 +30,73 @@ class ReviewEntryScreen extends StatelessWidget {
       title: context.l10n.reviewEntryTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.adminReviewEntry,
-      onBack: () => context.leave(fallback: WaxRoute.review),
+      onBack: () => context.back(fallback: WaxRoute.review),
+      backSemanticsId: SemanticsIds.navBack,
       // A filling sliver, not a body: the view pins its decision bar
       // under a scroll of its own, which needs a bounded height.
       slivers: <Widget>[
         SliverFillRemaining(
           hasScrollBody: true,
-          child: ReviewEntryView(entryId: entryId),
+          child: ReviewEntryView(
+            entryId: entryId,
+            // Back to the list rather than on to the next entry: on a
+            // page of its own, another submission opened unasked is the
+            // surprise, and the list is the overview.
+            onDecided: () =>
+                unawaited(leaveDecided(context, entryId, WaxRoute.review)),
+            leavesOnDecided: true,
+          ),
         ),
       ],
     );
+  }
+}
+
+/// Moves the review surface off [decided], just decided, to [location].
+/// On to another entry ([inPlace]) it is a swap: the same visit, on web
+/// the same browser entry. Back to the list it is a step back where the
+/// list is the visit behind, so no entry of the decided one is left ahead
+/// and none of the list twice, and a swap otherwise (an entry opened from
+/// a notification or a link). Decided, an entry is not somewhere back
+/// returns to, so every visit to it is forgotten, and to each of
+/// [alsoDecided]. Only while the visitor is still on the decided entry:
+/// one gone elsewhere meanwhile keeps their screen.
+Future<void> leaveDecided(
+  BuildContext context,
+  String decided,
+  String location, {
+  bool inPlace = false,
+  Iterable<String> alsoDecided = const <String>[],
+}) async {
+  final router = GoRouter.of(context);
+  final history = WaxHistory.of(router);
+  final on = WaxRoute.reviewEntry(decided);
+  if (!await stillOnTop(router, (page) => page.location == on) ||
+      !context.mounted) {
+    forgetDecided(history, {decided, ...alsoDecided});
+    return;
+  }
+  // Not while back would close something open or land a step first.
+  if (!inPlace &&
+      history != null &&
+      !history.stepping &&
+      !history.pagelessOnTop &&
+      history.isBehind(location)) {
+    context.back();
+  } else {
+    context.swap(location);
+  }
+  // After the move: forgotten first, the visit on screen would be gone,
+  // and the swap would rewrite the one before it.
+  forgetDecided(history, {decided, ...alsoDecided});
+}
+
+/// Drops every visit to each of [decided] from [history]: for a decision
+/// on an entry nothing is on screen for any more, a row the pane does not
+/// show or a page left before the answer came, as for one moved off.
+void forgetDecided(WaxHistory? history, Iterable<String> decided) {
+  for (final id in decided) {
+    history?.forget(WaxRoute.reviewEntry(id));
   }
 }
 
@@ -42,13 +104,37 @@ class ReviewEntryScreen extends StatelessWidget {
 /// decision bar. A view rather than a screen because it is both the
 /// pane beside the queue and the page that replaces it.
 class ReviewEntryView extends ConsumerStatefulWidget {
-  const ReviewEntryView({super.key, required this.entryId, this.onClose});
+  const ReviewEntryView({
+    super.key,
+    required this.entryId,
+    this.onClose,
+    this.onDecided,
+    this.leavesOnDecided = false,
+    this.leaving = false,
+  });
 
   final String entryId;
 
   /// Drawn as a close control when the view is a pane. The page has the
   /// scaffold's own back control and passes null.
   final VoidCallback? onClose;
+
+  /// Called once a decision made here on the pending entry has landed,
+  /// for the caller to move off the decided entry; a revert or a search
+  /// again keeps it. The confirmation then offers the undo the decided
+  /// bar would have.
+  final VoidCallback? onDecided;
+
+  /// Whether the caller takes this view, decision bar and all, off screen
+  /// once a decision lands: the page going back to the queue. Its
+  /// confirmation is then placed for what shows next, not clear of a bar
+  /// that has gone.
+  final bool leavesOnDecided;
+
+  /// Whether the caller is moving off the entry, a decision on it having
+  /// landed. Its Revert is then the confirmation's undo: the entry goes
+  /// from the screen all the same, so the revert says it worked.
+  final bool leaving;
 
   /// The narrowest this reads at, which is what a caller drawing it
   /// beside something else has to leave it.
@@ -69,8 +155,94 @@ class ReviewEntryView extends ConsumerStatefulWidget {
   ConsumerState<ReviewEntryView> createState() => _ReviewEntryViewState();
 }
 
-/// What a revert runs as in the entry's decision in flight.
+/// What a revert runs as in the entry's decision in flight, from the
+/// decided bar or the confirmation's undo alike.
 const _revertWork = 'revert';
+
+/// Whether a decided entry's outcome can be reverted.
+bool reviewRevertible(String status) =>
+    status == 'applied' || status == 'auto-applied';
+
+/// Confirms a decision on [entryId] for a surface that moves off the
+/// entry once it lands, which takes the decided bar and its Revert with
+/// it: so the confirmation offers the undo, where the outcome has one.
+/// [clearsBar] is false where the surface leaves with the entry.
+///
+/// Through [container] rather than a ref: the undo outlives the view
+/// that offered it.
+void showReviewDecided(
+  ProviderContainer container,
+  AppLocalizations l10n,
+  String entryId,
+  ReviewDecideResult decided, {
+  bool clearsBar = true,
+}) {
+  final undo = reviewRevertible(decided.entry.status);
+  final messenger = container.read(shellMessengerProvider)
+    ..show(
+      l10n.reviewDecidedCount(1),
+      actionLabel: undo ? l10n.reviewUndo : null,
+      onAction: undo
+          ? () => unawaited(_undoDecision(container, l10n, entryId))
+          : null,
+      // One at a time: working down the queue raises one per entry, and
+      // the newest undo is the one somebody reaches for, now rather than
+      // behind a warning or an undone notice.
+      channel: ShellChannel.review,
+      interrupts: true,
+      clearsBar: clearsBar,
+      subject: entryId,
+    );
+  // The server's own words, each naming its file or field, in a message
+  // of their own: the next confirmation replaces this one, not them.
+  if (decided.warnings.isNotEmpty) messenger.show(decided.warnings.join('\n'));
+}
+
+/// The decided bar's Revert, for an entry the screen is leaving or has
+/// left: it takes the entry's lock as that does, and holds the entry
+/// while the revert runs, since an unwatched one is gone before its
+/// refresh. It opens nothing: a reverted entry is decided for good.
+///
+/// The confirmation's undo however it is pressed, so the confirmation goes
+/// as it goes when its own Undo is pressed.
+Future<void> _undoDecision(
+  ProviderContainer container,
+  AppLocalizations l10n,
+  String entryId,
+) {
+  container.read(shellMessengerProvider).withdraw(ShellChannel.review, entryId);
+  return _revertDecided(container, l10n, entryId);
+}
+
+Future<void> _revertDecided(
+  ProviderContainer container,
+  AppLocalizations l10n,
+  String entryId,
+) => container.read(pendingActionsProvider.notifier).runAll(
+  [
+    PendingAction.reviewEntry(entryId),
+    PendingAction.reviewAction(entryId, _revertWork),
+  ],
+  () async {
+    final entry = container.listen(
+      reviewEntryProvider(entryId).notifier,
+      (_, _) {},
+    );
+    final messenger = container.read(shellMessengerProvider);
+    try {
+      await entry.read().revert();
+    } on WaxDeckApiException catch (e) {
+      messenger.show(explainError(l10n, e));
+      return;
+    } finally {
+      entry.close();
+    }
+    // Said, since nothing on screen moves: the entry left it already. On no
+    // channel, so a decision made while the revert was out keeps its
+    // confirmation and this waits behind it.
+    messenger.show(l10n.reviewUndone);
+  },
+);
 
 class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
   ReviewCandidate? _selectedCandidate(ReviewEntryDetail detail) {
@@ -86,14 +258,14 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
   Future<void> _decide(String action, {String? candidateMbid}) =>
       _claim(action, () async {
         final l10n = context.l10n;
-        final messenger = ref.read(shellMessengerProvider.notifier);
+        final messenger = ref.read(shellMessengerProvider);
+        final container = ProviderScope.containerOf(context, listen: false);
+        final history = ref.read(waxHistoryProvider);
+        final ReviewDecideResult decided;
         try {
-          final warnings = await ref
+          decided = await ref
               .read(reviewEntryProvider(widget.entryId).notifier)
               .decide(action, candidateMbid: candidateMbid);
-          // The server's own words: a warning names the file or the field
-          // it is about, which no table sentence can.
-          if (warnings.isNotEmpty) messenger.show(warnings.join('\n'));
         } on WaxDeckApiException catch (e) {
           // A `conflict` names the file the library cannot take, which the
           // table's "something changed first" would hide.
@@ -105,18 +277,49 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
             mounted: () => mounted,
             retry: (_) => _decide(action, candidateMbid: candidateMbid),
           );
+          return;
+        }
+        final onDecided = widget.onDecided;
+        if (onDecided == null) {
+          // The server's own words: a warning names the file or the field
+          // it is about, which no table sentence can.
+          if (decided.warnings.isNotEmpty) {
+            messenger.show(decided.warnings.join('\n'));
+          }
+          return;
+        }
+        showReviewDecided(
+          container,
+          l10n,
+          widget.entryId,
+          decided,
+          clearsBar: !widget.leavesOnDecided,
+        );
+        if (mounted) {
+          onDecided();
+        } else {
+          forgetDecided(history, [widget.entryId]);
         }
       });
 
-  Future<void> _revert() => _claim(_revertWork, () async {
-    final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
-    try {
-      await ref.read(reviewEntryProvider(widget.entryId).notifier).revert();
-    } on WaxDeckApiException catch (e) {
-      messenger.show(explainError(l10n, e));
-    }
-  });
+  /// On an entry the screen is leaving, the confirmation's undo.
+  Future<void> _revert() => widget.leaving
+      ? _undoDecision(
+          ProviderScope.containerOf(context, listen: false),
+          context.l10n,
+          widget.entryId,
+        )
+      : _claim(_revertWork, () async {
+          final l10n = context.l10n;
+          final messenger = ref.read(shellMessengerProvider);
+          try {
+            await ref
+                .read(reviewEntryProvider(widget.entryId).notifier)
+                .revert();
+          } on WaxDeckApiException catch (e) {
+            messenger.show(explainError(l10n, e));
+          }
+        });
 
   /// Runs [work] as the entry's [action], holding the entry's lock.
   Future<void> _claim(String action, Future<void> Function() work) =>
@@ -128,28 +331,40 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
   @override
   Widget build(BuildContext context) {
     final pending = ref.watch(pendingActionsProvider);
-    // The shared face rather than a switch on the state's type: a read
-    // Riverpod is retrying is a loading state carrying its error, which a
-    // type switch drew as a skeleton for as long as the retries ran.
-    return AsyncBoxFace<ReviewEntryDetail>(
-      state: ref.watch(reviewEntryProvider(widget.entryId)),
-      skeleton: SkeletonShape.detail,
-      errorTitle: context.l10n.reviewEntryLoadError,
-      onRetry: () => ref.invalidate(reviewEntryProvider(widget.entryId)),
-      builder: (context, value) => Column(
-        children: <Widget>[
-          Expanded(child: _body(context, value)),
-          _ActionBar(
-            detail: value,
-            candidate: _selectedCandidate(value),
-            busy: pending.contains(PendingAction.reviewEntry(widget.entryId)),
-            busyBy: (action) => pending.contains(
-              PendingAction.reviewAction(widget.entryId, action),
+    final entry = ref.watch(reviewEntryProvider(widget.entryId));
+    // The skeleton between one entry and the next: a message clear of the
+    // last one's buttons is kept there for these.
+    return ShellMessageClearance.pending(
+      pending: resolveAsyncFace(entry) is AsyncFaceWaiting,
+      // The shared face rather than a switch on the state's type: a read
+      // Riverpod is retrying is a loading state carrying its error, which
+      // a type switch drew as a skeleton for as long as the retries ran.
+      child: AsyncBoxFace<ReviewEntryDetail>(
+        state: entry,
+        skeleton: SkeletonShape.detail,
+        errorTitle: context.l10n.reviewEntryLoadError,
+        onRetry: () => ref.invalidate(reviewEntryProvider(widget.entryId)),
+        builder: (context, value) => Column(
+          children: <Widget>[
+            Expanded(child: _body(context, value)),
+            // Working down the queue, each confirmation would otherwise
+            // lie over the next entry's buttons.
+            ShellMessageClearance(
+              child: _ActionBar(
+                detail: value,
+                candidate: _selectedCandidate(value),
+                busy: pending.contains(
+                  PendingAction.reviewEntry(widget.entryId),
+                ),
+                busyBy: (action) => pending.contains(
+                  PendingAction.reviewAction(widget.entryId, action),
+                ),
+                onDecide: _decide,
+                onRevert: _revert,
+              ),
             ),
-            onDecide: _decide,
-            onRevert: _revert,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -175,9 +390,13 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
             children: <Widget>[
               const WaxSpinner(),
               const SizedBox(width: WaxSpace.s8),
-              Text(
-                l10n.reviewIdentifyingLong,
-                style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+              Expanded(
+                child: Text(
+                  l10n.reviewIdentifyingLong,
+                  style: WaxType.bodySmall.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                ),
               ),
             ],
           ),
@@ -342,8 +561,7 @@ class _ActionBar extends StatelessWidget {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final decided = detail.status != 'pending';
-    final revertible =
-        detail.status == 'applied' || detail.status == 'auto-applied';
+    final revertible = reviewRevertible(detail.status);
     // Discard leads only where a file is certainly the library's own:
     // the same audio or recording id, not a name or a sound alike.
     final held = detail.tracks.any(
@@ -544,7 +762,7 @@ class _IdentifySearchState extends ConsumerState<_IdentifySearch> {
     // of pressing it, not a way around it.
     if (widget.busy) return;
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     try {
       await ref
           .read(reviewEntryProvider(widget.entryId).notifier)
@@ -673,11 +891,6 @@ class _Header extends StatelessWidget {
               // The sessions list rather than one session: the entry
               // carries no upload id, and the list is where a batch's
               // several sessions are together anyway.
-              //
-              // Pushed, which is the mirror of the link pointing this
-              // way: the sessions list is not declared under the queue,
-              // so `go` would drop whatever the entry was opened from
-              // and leave back with nothing to answer.
               if (detail.origin == 'upload')
                 Padding(
                   padding: const EdgeInsets.only(top: WaxSpace.s4),
@@ -685,7 +898,7 @@ class _Header extends StatelessWidget {
                     label: l10n.reviewOpenUploads,
                     kind: WaxButtonKind.text,
                     semanticsId: SemanticsIds.reviewOpenUploads,
-                    onPressed: () => context.pushOnce(WaxRoute.uploads),
+                    onPressed: () => context.go(WaxRoute.uploads),
                   ),
                 ),
             ],

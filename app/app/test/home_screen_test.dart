@@ -8,9 +8,12 @@ import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/home/home_screen.dart';
 import 'package:waxdeck/src/home/home_shelves.dart';
 import 'package:waxdeck/src/home/item_shelf.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/library/page_walk.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
+import 'package:waxdeck/src/music/index_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
+import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/podcasts/episode_screen.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
@@ -27,6 +30,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'app_host.dart';
 import 'fakes.dart';
 import 'player_host.dart';
+import 'router_stack.dart';
 import 'secondary_click.dart';
 
 const _uploader = WaxDeckUser(
@@ -1023,6 +1027,30 @@ void main() {
       expect(repo.facetStartsAt.last, 'Shoegaze');
       expect(find.byType(MusicListingScreen), findsOneWidget);
       expect(repo.facetDrills.last, ('genre', 'gn-shoegaze'));
+      expect(pushesOn(routerOf(tester)), 1, reason: 'a bucket is a drill-in');
+    });
+
+    testWidgets('goes to the genres index when no bucket carries the genre', (
+      tester,
+    ) async {
+      final repo = mixRepo()
+        ..facets['genre'] = const <FacetBucket>[
+          FacetBucket(key: 'gn-ambient', label: 'Ambient', count: 4),
+        ];
+      await _pumpHome(tester, repo);
+
+      await rightClick(tester, _byId(SemanticsIds.homeMix(0)).first);
+      await tester.tap(find.text('Go to genre'));
+      await tester.pumpAndSettle();
+
+      final router = routerOf(tester);
+      expect(repo.facetStartsAt, contains('Shoegaze'));
+      expect(find.byType(MusicIndexScreen), findsOneWidget);
+      expect(
+        router.routerDelegate.currentConfiguration.uri.toString(),
+        WaxRoute.musicIndex(MusicDimension.genres),
+      );
+      expect(pushesOn(router), 0, reason: 'the index is gone to, not pushed');
     });
 
     testWidgets('opens nothing once home is left while it looks', (
@@ -1046,6 +1074,76 @@ void main() {
       gate.complete();
       await tester.pumpAndSettle();
       expect(find.byType(MusicListingScreen), findsNothing);
+    });
+
+    // Found once home was left, the genre is offered where the visitor
+    // went, and the offer opens what a press on home would have.
+    testWidgets('offers the genre once home is left while it looks, and '
+        'opens its bucket from where the visitor went', (tester) async {
+      final gate = Completer<void>();
+      final repo = mixRepo()
+        ..facets['genre'] = const <FacetBucket>[
+          FacetBucket(key: 'gn-shoegaze', label: 'Shoegaze', count: 3),
+        ]
+        ..facetGate = gate;
+      await _pumpHome(tester, repo);
+      final router = GoRouter.of(tester.element(find.byType(HomeScreen)));
+
+      await rightClick(tester, _byId(SemanticsIds.homeMix(0)).first);
+      await tester.tap(find.text('Go to genre'));
+      await tester.pump();
+      router.go(WaxRoute.playlists);
+      await tester.pumpAndSettle();
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MusicListingScreen), findsNothing);
+      final offer = raisedMessage(tester);
+      expect(shellMessageText(offer), 'Ready to open: Shoegaze');
+      expect(offer?.actionLabelIn(AppLocalizationsEn()), 'Open');
+      await pressRaisedAction(tester);
+
+      expect(find.byType(MusicListingScreen), findsOneWidget);
+      expect(repo.facetDrills.last, ('genre', 'gn-shoegaze'));
+      expect(pushesOn(router), 1, reason: 'a drill-in, over where they went');
+      expect(
+        router.routerDelegate.currentConfiguration.uri.toString(),
+        WaxRoute.playlists,
+      );
+    });
+
+    testWidgets('offers the genres index once home is left where no bucket '
+        'carries the genre, and goes to it', (tester) async {
+      final gate = Completer<void>();
+      final repo = mixRepo()
+        ..facets['genre'] = const <FacetBucket>[
+          FacetBucket(key: 'gn-ambient', label: 'Ambient', count: 4),
+        ]
+        ..facetGate = gate;
+      await _pumpHome(tester, repo);
+      final router = GoRouter.of(tester.element(find.byType(HomeScreen)));
+
+      await rightClick(tester, _byId(SemanticsIds.homeMix(0)).first);
+      await tester.tap(find.text('Go to genre'));
+      await tester.pump();
+      router.go(WaxRoute.playlists);
+      await tester.pumpAndSettle();
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MusicIndexScreen), findsNothing);
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'Ready to open: Shoegaze',
+      );
+      await pressRaisedAction(tester);
+
+      expect(find.byType(MusicIndexScreen), findsOneWidget);
+      expect(
+        router.routerDelegate.currentConfiguration.uri.toString(),
+        WaxRoute.musicIndex(MusicDimension.genres),
+      );
+      expect(pushesOn(router), 0, reason: 'the index is gone to, not pushed');
     });
 
     testWidgets('opens the artist an artist card is drawn from', (

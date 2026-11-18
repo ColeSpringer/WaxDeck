@@ -159,7 +159,7 @@ class _HubOverflow extends ConsumerWidget {
   /// web build has no file-save surface, and an OPML document on the
   /// clipboard pastes into every other podcast client's import box.
   static Future<void> _exportOpml(BuildContext context, WidgetRef ref) async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     final String opml;
     try {
@@ -193,7 +193,7 @@ class _HubOverflow extends ConsumerWidget {
   static Future<void> _importOpml(BuildContext context, WidgetRef ref) async {
     final picker = ref.read(filePickerProvider);
     if (picker == null) return;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     try {
       final file = await picker.pickFile(

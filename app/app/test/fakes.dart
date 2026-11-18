@@ -84,7 +84,7 @@ String? shellMessageText(ShellMessage? message) =>
 ShellMessage? raisedMessage(WidgetTester tester) => ProviderScope.containerOf(
   tester.element(find.byType(Navigator).first),
   listen: false,
-).read(shellMessengerProvider);
+).read(shellMessagesProvider);
 
 /// Presses the action on the last message raised to the shell, as the
 /// shell's bar would.

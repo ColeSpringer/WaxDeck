@@ -13,6 +13,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'app_host.dart';
 import 'fakes.dart';
+import 'router_stack.dart';
 import 'wax_finders.dart';
 
 const _admin = WaxDeckUser(
@@ -299,7 +300,7 @@ void main() {
 
     await _confirmRepair(tester);
     expect(repo.catalogRepairs, hasLength(1));
-    final message = container.read(shellMessengerProvider);
+    final message = container.read(shellMessagesProvider);
     expect(shellMessageText(message), _l10n.healthCatalogRepairStarted);
     expect(message?.actionSemanticsId, SemanticsIds.openTasks);
 
@@ -314,6 +315,7 @@ void main() {
       findsOneWidget,
       reason: 'Tasks lists the repair it was opened for',
     );
+    expect(pushesOn(routerOf(tester)), 0);
   });
 
   testWidgets('a repair already under way says so and points at Tasks', (
@@ -328,7 +330,7 @@ void main() {
       );
     final container = await _pump(tester, repo);
     await _confirmRepair(tester);
-    final message = container.read(shellMessengerProvider);
+    final message = container.read(shellMessagesProvider);
     expect(shellMessageText(message), _l10n.healthCatalogRepairRunning);
     expect(message?.actionSemanticsId, SemanticsIds.openTasks);
   });
@@ -418,7 +420,7 @@ void main() {
     final repo = _repo()..catalogRepairError = refusal;
     final container = await _pump(tester, repo);
     await _confirmRepair(tester);
-    final message = container.read(shellMessengerProvider);
+    final message = container.read(shellMessagesProvider);
     expect(shellMessageText(message), explainError(_l10n, refusal));
     expect(message?.actionSemanticsId, isNull);
     expect(repo.catalogRepairs, isEmpty);

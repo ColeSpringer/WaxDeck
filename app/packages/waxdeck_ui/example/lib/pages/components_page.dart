@@ -1240,6 +1240,31 @@ class _ComponentsPageState extends State<ComponentsPage> {
             onClose: () {},
           ),
         ),
+        const SizedBox(height: WaxSpace.s24),
+
+        // At a phone's width, in place: the app lays one along the foot of
+        // the screen, over whatever is there.
+        const SectionHeader(overline: 'Shell', title: 'Messages'),
+        for (final bar in <WaxMessageBar>[
+          const WaxMessageBar(message: 'Scan started'),
+          WaxMessageBar(
+            message: 'Marked finished',
+            actionLabel: 'Undo',
+            onAction: () {},
+            onClose: () {},
+          ),
+          WaxMessageBar(
+            message:
+                'a.flac, b.flac and c.flac: the tags could not be written, '
+                'so the files keep their old titles',
+            actionLabel: 'Open review',
+            onAction: () {},
+          ),
+        ])
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: SizedBox(width: 360, child: bar),
+          ),
         const SizedBox(height: WaxSpace.s32),
       ],
     );

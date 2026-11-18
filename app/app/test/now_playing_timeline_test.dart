@@ -442,7 +442,7 @@ void main() {
     // ordinary way, which is what a refusal at the mint leads to as well.
     final h = _harness();
     final raised = <ShellMessage>[];
-    h.container.listen(shellMessengerProvider, (_, next) {
+    h.container.listen(shellMessagesProvider, (_, next) {
       if (next != null) raised.add(next);
     });
     h.engine
@@ -550,7 +550,7 @@ void main() {
     () async {
       final h = _harness();
       final raised = <ShellMessage>[];
-      h.container.listen(shellMessengerProvider, (_, next) {
+      h.container.listen(shellMessagesProvider, (_, next) {
         if (next != null) raised.add(next);
       });
       h.repo.timelineError = WaxDeckApiException(
@@ -618,7 +618,7 @@ void main() {
       expect(h.repo.timelineCalls, hasLength(1), reason: 'no re-mint helps');
       expect(h.engine.playing, isFalse);
       expect(
-        h.container.read(shellMessengerProvider)?.resolve(_l10n),
+        h.container.read(shellMessagesProvider)?.resolve(_l10n),
         _l10n.playerGaplessPaused,
         reason: 'playback stopped, and the listener is told why',
       );
@@ -895,7 +895,7 @@ void main() {
     test('and a transcode-limit answer after it says nothing', () async {
       final h = await lostMidMint();
       final raised = <ShellMessage>[];
-      h.container.listen(shellMessengerProvider, (_, next) {
+      h.container.listen(shellMessagesProvider, (_, next) {
         if (next != null) raised.add(next);
       });
       final radio = h.container.read(radioPlaybackProvider.notifier);

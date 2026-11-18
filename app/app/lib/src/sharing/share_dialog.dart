@@ -94,7 +94,7 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
     final route = ModalRoute.of(context);
     final l10n = context.l10n;
     final container = ProviderScope.containerOf(context, listen: false);
-    final messenger = container.read(shellMessengerProvider.notifier);
+    final messenger = container.read(shellMessengerProvider);
     final base = container.read(serverBaseUrlProvider);
     try {
       final share = await container

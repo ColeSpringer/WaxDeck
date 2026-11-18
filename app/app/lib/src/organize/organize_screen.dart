@@ -172,7 +172,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
       _report = null;
     });
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final under = _profilesKey(ref.read(organizeProfilesProvider).value);
     try {
       final plan = await ref
@@ -212,7 +212,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     );
     if (!confirmed || !mounted) return;
     setState(() => _busy = _applying = true);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     try {
       final report = await ref
           .read(repositoryProvider)
@@ -222,6 +222,10 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
           _report = report;
           _plan = null;
         });
+      } else {
+        // The report is drawn here; with the screen left, what it moved
+        // is said where the administrator is.
+        messenger.show(l10n.organizeApplied(report.moved));
       }
     } on WaxDeckApiException catch (e) {
       messenger.show(explainError(l10n, e));
@@ -248,7 +252,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     );
     if (!confirmed || !mounted) return;
     setState(() => _busy = true);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     try {
       final report = await ref
           .read(repositoryProvider)
@@ -280,6 +284,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
       largeTitle: false,
       semanticsId: SemanticsIds.adminOrganize,
       onBack: adminBack(context),
+      backSemanticsId: SemanticsIds.navBack,
       body: Padding(
         padding: sizeClass.gutter.add(
           const EdgeInsets.only(bottom: WaxSpace.s32),
@@ -682,7 +687,7 @@ class _HistorySection extends ConsumerWidget {
   /// Asks for the next, older page; one that does not come says why.
   Future<void> _loadOlder(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     try {
       await ref.read(organizeHistoryProvider.notifier).loadMore();
     } on WaxDeckApiException catch (e) {

@@ -3,6 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../shell/navigation_history.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'podcasts_controller.dart';
@@ -106,8 +107,8 @@ class _SubscriptionSettingsSheetState
   Future<void> _save() async {
     if (_busy) return;
     setState(() => _busy = true);
-    final messenger = ref.read(shellMessengerProvider.notifier);
-    final navigator = Navigator.of(context);
+    final messenger = ref.read(shellMessengerProvider);
+    final route = ModalRoute.of(context);
     final l10n = context.l10n;
     final include = _splitTerms(_include.text);
     final exclude = _splitTerms(_exclude.text);
@@ -135,10 +136,10 @@ class _SubscriptionSettingsSheetState
       await ref
           .read(podcastDetailProvider(widget.pid).notifier)
           .saveSettings(settings);
-      // Only while this sheet is still up: a save outlives a sheet
+      // Only while this sheet is still there: a save outlives a sheet
       // somebody swiped away, and popping then takes the show screen
       // underneath with it.
-      if (mounted) navigator.pop();
+      closeFinished(route);
     } on WaxDeckApiException catch (e) {
       // The fields carry values somebody just typed, so a refusal of one
       // keeps the server's own words about it.

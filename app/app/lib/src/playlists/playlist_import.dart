@@ -8,6 +8,8 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/asked_from.dart';
+import '../shell/navigation_history.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -261,6 +263,7 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
       _error = null;
     });
     final navigator = Navigator.of(context);
+    final from = AskedFrom.of(context);
     // Read here, beside the navigator and for the same reason: the bind
     // happens after an await, and `ref` is only good while this dialog
     // is mounted - which a dismissal ends. The import already ran, so the
@@ -303,21 +306,46 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
         payload: exportPayload,
         refs: refs,
       );
-      if (mounted) navigator.pop();
+      // Shown only where the visitor still is, on this dialog: with it
+      // dismissed while the import ran, or something opened over it, they
+      // have moved on, and the report is offered where they are.
+      final here = from.route?.isCurrent ?? false;
+      closeFinished(from.route);
       // This dialog's own context died with the pop; the navigator's
       // context hosts the report.
-      if (!navigator.mounted) return;
-      await showDialog<void>(
-        context: navigator.context,
-        builder: (_) => _ImportReportDialog(result: result, binding: binding),
-      );
+      Future<void> report() async {
+        if (!navigator.mounted) return;
+        await showDialog<void>(
+          context: navigator.context,
+          builder: (_) => _ImportReportDialog(result: result, binding: binding),
+        );
+      }
+
+      if (here) {
+        await report();
+      } else {
+        from.messenger.show(
+          l10n.playlistImportReady(result.resolved, result.requested),
+          actionLabel: l10n.commonOpen,
+          onAction: () => unawaited(report()),
+          channel: ShellChannel.playlists,
+        );
+      }
     } on WaxDeckApiException catch (e) {
       // What was pasted is what was refused, so the server's own words.
-      if (mounted) setState(() => _error = explainRefusal(l10n, e));
+      _refused(from, explainRefusal(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  /// Shows an import's refusal in the dialog while it is still there,
+  /// and in the shell once it was dismissed while the import was out.
+  void _refused(AskedFrom from, String refusal) => from.refused(
+    refusal,
+    inline: (refusal) => setState(() => _error = refusal),
+    channel: ShellChannel.playlists,
+  );
 
   /// Asks what importing the pasted NSP document would lose, and shows
   /// it before anything is imported.
@@ -372,7 +400,7 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
       _busy = true;
       _error = null;
     });
-    final navigator = Navigator.of(context);
+    final from = AskedFrom.of(context);
     final router = GoRouter.of(context);
     try {
       final created = await ref
@@ -382,13 +410,14 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
             partial: partial,
             name: name.isEmpty ? null : name,
           );
-      // Nothing if the dialog was dismissed mid-request: popping would
-      // take the screen underneath. The playlist exists either way.
-      if (!mounted) return;
-      navigator.pop();
-      router.go(WaxRoute.playlist(created.pid));
+      // Nothing if the dialog was dismissed mid-request, or is on its way
+      // out: popping would take the screen underneath. The playlist
+      // exists either way.
+      final here = from.route?.isCurrent ?? false;
+      closeFinished(from.route);
+      if (here) router.go(WaxRoute.playlist(created.pid));
     } on WaxDeckApiException catch (e) {
-      if (mounted) setState(() => _error = explainRefusal(l10n, e));
+      _refused(from, explainRefusal(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -444,17 +473,16 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
       _step = _M3uStep.importing;
       _error = null;
     });
-    final navigator = Navigator.of(context);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final from = AskedFrom.of(context);
     try {
       final result = await ref
           .read(playlistsProvider.notifier)
           .importM3u(name: name, content: content);
-      // Only while this dialog is still up: an import outlives a dialog
-      // somebody dismissed, and popping then takes the screen underneath
-      // with it.
-      if (mounted) navigator.pop();
-      messenger.show(
+      // Only while this dialog is still there: an import outlives a
+      // dialog somebody dismissed, and popping then takes the screen
+      // underneath with it.
+      closeFinished(from.route);
+      from.messenger.show(
         result.unmatched == 0
             ? l10n.playlistImportedAll(result.playlist.name, result.matched)
             : l10n.playlistImportedPartial(
@@ -465,7 +493,7 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
         channel: ShellChannel.playlists,
       );
     } on WaxDeckApiException catch (e) {
-      if (mounted) setState(() => _error = explainRefusal(l10n, e));
+      _refused(from, explainRefusal(l10n, e));
     } finally {
       running.release(content);
       if (mounted) {

@@ -25,7 +25,13 @@
 import { expect, Locator, Page } from '@playwright/test';
 import { SemanticsIds, sem } from '../semantics-ids';
 import { T } from './budgets';
-import { clickThrough, openMenu, submitThrough } from './gestures';
+import {
+  clickOnceThrough,
+  clickThrough,
+  openMenu,
+  pressTwice,
+  submitThrough,
+} from './gestures';
 
 /// A destination: the location a stranger can open, the control that
 /// proves the screen is up, and - when the chrome can reach it - the
@@ -390,9 +396,108 @@ export class Nav {
   /// A router that pushed where it should have gone leaves Back landing
   /// on the page before the app - which unloads the SPA, and which a
   /// re-entry can never notice.
-  async back(arriveAt: Destination, options: { within?: number } = {}): Promise<void> {
+  async back(
+    arriveAt: Destination | Locator,
+    options: { within?: number } = {},
+  ): Promise<void> {
     await this.page.goBack();
-    await DEST[arriveAt].arrival(this.page).waitFor({ timeout: options.within ?? T.nav });
+    await this.arrival(arriveAt).waitFor({ timeout: options.within ?? T.nav });
+  }
+
+  /// The browser's own Back button where it should leave the app: done
+  /// once the tab shows a page of another origin than [origin].
+  async backOutOf(origin: string): Promise<void> {
+    await this.page.goBack();
+    await expect
+      .poll(() => new URL(this.page.url()).origin, {
+        timeout: T.nav,
+        message: 'the page before the app',
+      })
+      .not.toBe(origin);
+  }
+
+  /// The browser's own Forward button, and what should be ahead of it.
+  async forward(
+    arriveAt: Destination | Locator,
+    options: { within?: number } = {},
+  ): Promise<void> {
+    await this.page.goForward();
+    await this.arrival(arriveAt).waitFor({ timeout: options.within ?? T.nav });
+  }
+
+  /// The leading arrow of the screen on top, pressed once, and where it
+  /// should return. Never pressed again: an arrow dead on its first press
+  /// is what the navigation specs look for, and a second would hide it.
+  async arrow(arriveAt: Destination | Locator): Promise<void> {
+    await clickOnceThrough(
+      this.page.locator(sem(SemanticsIds.navBack)).first(),
+      this.arrival(arriveAt),
+    );
+  }
+
+  /// A nav-rail destination tapped from wherever the app is, for a tap
+  /// that lands somewhere other than the destination's own arrival: a
+  /// domain's tab restores the place it was left at.
+  async tab(destination: string, arriveAt: Destination | Locator): Promise<void> {
+    await clickThrough(
+      this.page.locator(sem(SemanticsIds.navDestination(destination))),
+      this.arrival(arriveAt),
+    );
+  }
+
+  /// The leading arrow pressed twice, [apartMs] apart, by raw presses
+  /// that neither retry nor wait in between.
+  async arrowTwice(apartMs: number): Promise<void> {
+    await pressTwice(this.page, this.page.locator(sem(SemanticsIds.navBack)).first(), apartMs);
+  }
+
+  /// Marks the document on screen, so [sameDocument] can tell a step out
+  /// of the app, or a reload, from a move inside it.
+  async markDocument(): Promise<void> {
+    await this.page.evaluate(() => {
+      (window as unknown as { waxMarked?: boolean }).waxMarked = true;
+    });
+  }
+
+  /// Whether the document [markDocument] marked is still the one showing.
+  async sameDocument(): Promise<boolean> {
+    return this.page
+      .evaluate(() => (window as unknown as { waxMarked?: boolean }).waxMarked === true)
+      .catch(() => false);
+  }
+
+  /// Where the address bar comes to rest: read until it has held one
+  /// location for a second.
+  async settled(): Promise<URL> {
+    let last = '';
+    let since = Date.now();
+    await expect
+      .poll(
+        () => {
+          const now = this.page.url();
+          if (now !== last) {
+            last = now;
+            since = Date.now();
+          }
+          return Date.now() - since >= 1_000;
+        },
+        { timeout: T.nav, intervals: [50], message: 'the address bar should come to rest' },
+      )
+      .toBe(true);
+    return new URL(last);
+  }
+
+  /// [settled], asserted with the screen. For a move whose fault would be
+  /// a second step after the first has landed, which an [expectAt]
+  /// polled in between would pass.
+  async settledAt(dest: Destination): Promise<void> {
+    const { path } = DEST[dest];
+    expect((await this.settled()).pathname, `the address bar should rest at ${path}`).toBe(path);
+    await this.arrival(dest).waitFor({ timeout: T.step });
+  }
+
+  private arrival(arriveAt: Destination | Locator): Locator {
+    return typeof arriveAt === 'string' ? DEST[arriveAt].arrival(this.page) : arriveAt;
   }
 
   /// Re-open the current location cold. A real page load since

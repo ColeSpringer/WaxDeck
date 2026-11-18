@@ -17,6 +17,9 @@ mixin FakeBooks on FakeRepositoryState implements BooksApi {
 
   final List<({String pid, BookSettings settings})> putBookSettingsCalls = [];
 
+  /// Holds [putBookSettings] until completed.
+  Completer<void>? putBookSettingsGate;
+
   /// Bookmarks by book pid, in the order they were made. The listing
   /// orders them by position, which is what the contract promises and
   /// what the server's own `ORDER BY position_ms` does; the controller's
@@ -79,6 +82,7 @@ mixin FakeBooks on FakeRepositoryState implements BooksApi {
     String pid,
     BookSettings settings,
   ) async {
+    await putBookSettingsGate?.future;
     putBookSettingsCalls.add((pid: pid, settings: settings));
     storedBookSettings[pid] = settings;
     return settings;

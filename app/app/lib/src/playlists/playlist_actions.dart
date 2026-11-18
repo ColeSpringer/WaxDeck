@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -12,6 +13,9 @@ import '../l10n/l10n.dart';
 import '../metadata/artwork_manager.dart';
 import '../providers.dart';
 import '../sharing/share_dialog.dart';
+import '../shell/navigation_history.dart';
+import '../shell/router.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import '../uploads/file_picker_port.dart';
@@ -223,7 +227,9 @@ Future<void> showPlaylistMenuSheet(
 }
 
 /// Runs [action] on [playlist]. [onDeleted] runs once a confirmed delete
-/// has landed and [context] is still up: the screen leaves, a card stays.
+/// has landed, and only where the page on top is then the playlist's own,
+/// told by its location: the screen leaves, a card stays. A visitor who
+/// went elsewhere while the server answered keeps their screen.
 Future<void> runPlaylistAction(
   BuildContext context,
   WidgetRef ref,
@@ -266,7 +272,7 @@ Future<void> _rename(BuildContext context, Playlist playlist) async {
   // is a use across the gap.
   final l10n = context.l10n;
   final container = ProviderScope.containerOf(context, listen: false);
-  final messenger = container.read(shellMessengerProvider.notifier);
+  final messenger = container.read(shellMessengerProvider);
   final name = await promptPlaylistName(
     context,
     title: l10n.playlistRenameTitle,
@@ -287,7 +293,7 @@ Future<void> _rename(BuildContext context, Playlist playlist) async {
 Future<void> _setVisibility(BuildContext context, Playlist playlist) {
   final container = ProviderScope.containerOf(context, listen: false);
   return _guard(
-    container.read(shellMessengerProvider.notifier),
+    container.read(shellMessengerProvider),
     context.l10n,
     () => _edit(
       container,
@@ -319,8 +325,12 @@ Future<void> _delete(
   VoidCallback? onDeleted,
 ) async {
   final container = ProviderScope.containerOf(context, listen: false);
-  final messenger = container.read(shellMessengerProvider.notifier);
+  final messenger = container.read(shellMessengerProvider);
   final l10n = context.l10n;
+  // The router outlives the screen; the page the delete is asked from is
+  // the caller's own, told by where it is, whatever is on top by then.
+  final router = GoRouter.maybeOf(context);
+  final from = router == null || onDeleted == null ? null : pageIn(context);
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
@@ -347,9 +357,54 @@ Future<void> _delete(
     container.invalidate(playlistsProvider);
     deleted = true;
   });
-  // Only while the asker is up: a back gesture during the delete would
-  // otherwise have the screen it landed on leave instead.
-  if (deleted && context.mounted) onDeleted?.call();
+  if (!deleted) return;
+  final history = container.read(waxHistoryProvider);
+  final page = WaxRoute.playlist(playlist.pid);
+  bool own(String location) {
+    final path = Uri.parse(location).path;
+    return path == page || path.startsWith('$page/');
+  }
+
+  // Left only from the playlist's own page: one the visitor moved to while
+  // the server answered is theirs. Without a router, while the asker is up.
+  final onScreen =
+      onDeleted != null &&
+      (router == null
+          ? context.mounted
+          : await stillOnTop(
+              router,
+              (top) => top == from || own(top.location),
+            ));
+  if (onScreen) {
+    onDeleted();
+  } else {
+    // Waiting under what the visitor opened over it, it is taken out, so
+    // closing that shows what lay under it.
+    history?.takeOutFromUnder((location, _) => own(location));
+  }
+  // Wherever it was deleted from: back must not return to it, and a later
+  // visit reads it afresh and is told it is gone. After the leave, which
+  // is read off the visit on screen.
+  history?.forget(page);
+  container.invalidate(playlistDetailProvider(playlist.pid));
+  if (onScreen && history != null && router != null) {
+    unawaited(_stepOffDeleted(history, router, own));
+  }
+}
+
+/// Steps off the page on screen too where it is still one of the deleted
+/// playlist's own ([own]), as a leave from its rule editor lands on the
+/// playlist itself: back to what was beneath it, as the arrow goes.
+Future<void> _stepOffDeleted(
+  WaxHistory history,
+  GoRouter router,
+  bool Function(String location) own,
+) async {
+  // Through the browser the leave lands later.
+  if (history.landing case final landing?) await landing;
+  if (pageOnTop(router) case final top? when own(top.location)) {
+    history.back();
+  }
 }
 
 /// Offers the playlist as M3U for copying: the web build has no
@@ -359,7 +414,7 @@ Future<void> _exportM3u(
   WidgetRef ref,
   Playlist playlist,
 ) async {
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   final String content;
   try {
@@ -388,7 +443,7 @@ Future<void> _exportNsp(
   WidgetRef ref,
   Playlist playlist,
 ) async {
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   final repository = ref.read(repositoryProvider);
   final pid = playlist.pid;
@@ -605,7 +660,7 @@ Future<void> _exportPortable(
   WidgetRef ref,
   Playlist playlist,
 ) async {
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   final PortablePlaylist portable;
   try {
@@ -633,7 +688,7 @@ Future<void> _setCover(
   final picker = ref.read(filePickerProvider);
   if (picker == null) return;
   final pid = playlist.pid;
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   // Picking and reading are inside the guard: a permission error or a
   // file that vanished throws from the platform, not from the API.
@@ -667,7 +722,7 @@ Future<void> _resetCover(
   Playlist playlist,
 ) async {
   final pid = playlist.pid;
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   try {
     await ref.read(playlistDetailProvider(pid).notifier).resetCover();

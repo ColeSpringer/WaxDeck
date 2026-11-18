@@ -116,7 +116,7 @@ void main() {
       findsNothing,
     );
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       startsWith('Restored Music/'),
     );
   });
@@ -169,7 +169,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       contains('reclaimed 2.0 MB'),
     );
   });
@@ -203,7 +203,7 @@ void main() {
     expect(repo.emptyTrashCalls, 1);
     expect(repo.trashEntries, isEmpty);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Purged 2 files, reclaimed 4.0 MB',
     );
   });
@@ -228,7 +228,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Purged 1 file, reclaimed 2.0 MB; 1 file stays in read-only libraries',
     );
     expect(repo.trashEntries.map((e) => e.id), ['ts-2']);
@@ -276,7 +276,7 @@ void main() {
     // spelled as a real zero.
     expect(repo.thumbnailPrunes, [(null, 0)]);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Cleared 12 copies, freeing 3.0 MB',
     );
     // And the card re-reads: an emptied cache has no clear button left

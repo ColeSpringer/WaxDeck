@@ -949,6 +949,7 @@ export const SemanticsIds = {
   // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, the skip link, and the read-only banner.
   navAccount: 'nav-account',
   navAccountAction: (name: string | number) => `nav-account-${name}`,
+  navBack: 'nav-back',
   navDestination: (name: string | number) => `nav-${name}`,
   navDisclose: (name: string | number) => `nav-disclose-${name}`,
   navOverflow: 'nav-overflow',

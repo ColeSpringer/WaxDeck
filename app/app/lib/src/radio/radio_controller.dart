@@ -419,7 +419,7 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
     _stopTitlePoll();
     state = const RadioPlayback();
     ref
-        .read(shellMessengerProvider.notifier)
+        .read(shellMessengerProvider)
         .showLocalized(
           (l10n) => l10n.radioCouldNotTune(station.name),
           channel: ShellChannel.radio,

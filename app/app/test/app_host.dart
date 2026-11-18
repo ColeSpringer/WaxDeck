@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart' show HttpClientAdapter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Override lives here rather than in the root library.
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -32,6 +33,7 @@ import 'routed_host.dart';
 /// under test: the session would stay loading, where here it resolves to
 /// whatever [repo] reports. The default repository is signed out, so a
 /// test of the signed-in app passes `FakeRepository(sessionState: ...)`.
+/// [server] runs the app's real client over a fake HTTP server instead.
 ///
 /// A provider's uncaught error, a listener's throw among them, goes to the
 /// zone this was called in, as by default: it fails the test wherever it
@@ -41,6 +43,7 @@ import 'routed_host.dart';
 /// as they are.
 ProviderContainer appContainer({
   WaxDeckRepository? repo,
+  HttpClientAdapter? server,
   AudioEnginePort? engine,
   CredentialStorePort? credentials,
   ArtworkStore? artwork,
@@ -52,9 +55,13 @@ ProviderContainer appContainer({
   List<ProviderObserver>? observers,
   Duration? Function(int retryCount, Object error)? retry,
 }) {
+  assert(repo == null || server == null, 'a fake repository or a server');
   final container = ProviderContainer(
     overrides: [
-      repositoryProvider.overrideWithValue(repo ?? FakeRepository()),
+      if (server != null)
+        httpAdapterProvider.overrideWithValue(server)
+      else
+        repositoryProvider.overrideWithValue(repo ?? FakeRepository()),
       audioEngineProvider.overrideWithValue(engine ?? FakeEngine()),
       credentialStoreProvider.overrideWithValue(
         credentials ?? InMemoryCredentialStore(),

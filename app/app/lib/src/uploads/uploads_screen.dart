@@ -26,10 +26,12 @@ class UploadsScreen extends ConsumerWidget {
   const UploadsScreen({super.key});
 
   Future<void> _retry(AppLocalizations l10n, WidgetRef ref, String id) async {
+    // Read before the await: a refusal is said with the screen left too.
+    final messenger = ref.read(shellMessengerProvider);
     try {
       await ref.read(uploadsProvider.notifier).retry(id);
     } on WaxDeckApiException catch (e) {
-      ref.read(shellMessengerProvider.notifier).show(explainError(l10n, e));
+      messenger.show(explainError(l10n, e));
     }
   }
 
@@ -39,6 +41,8 @@ class UploadsScreen extends ConsumerWidget {
     UploadSession upload,
   ) async {
     final l10n = context.l10n;
+    final messenger = ref.read(shellMessengerProvider);
+    final uploads = ref.read(uploadsProvider.notifier);
     final confirmed = await showTypedConfirm(
       context,
       title: l10n.uploadsDiscardTitle,
@@ -51,9 +55,9 @@ class UploadsScreen extends ConsumerWidget {
     );
     if (!confirmed) return;
     try {
-      await ref.read(uploadsProvider.notifier).discard(upload.id);
+      await uploads.discard(upload.id);
     } on WaxDeckApiException catch (e) {
-      ref.read(shellMessengerProvider.notifier).show(explainError(l10n, e));
+      messenger.show(explainError(l10n, e));
     }
   }
 
@@ -74,7 +78,7 @@ class UploadsScreen extends ConsumerWidget {
       onDropped: (files) => uploadPickedFiles(context, ref, files),
       onSkipped: ({required unsupported, required drm, required nothingKept}) =>
           reportSkippedFiles(
-            ref.read(shellMessengerProvider.notifier),
+            ref.read(shellMessengerProvider),
             l10n,
             unsupported: unsupported,
             drm: drm,
@@ -84,12 +88,11 @@ class UploadsScreen extends ConsumerWidget {
         title: l10n.uploadsTitle,
         largeTitle: false,
         semanticsId: SemanticsIds.uploadsScreen,
-        // A way out, which a destination does not need and this is not
-        // one any more: it is opened from the add sheet, from a
-        // notification, and from a review entry's origin line, and it
-        // lights no row for a visitor to press again. Popping where
-        // something pushed it, home where a link did.
-        onBack: () => context.leave(),
+        // Opened from the add sheet, from a notification, and from a
+        // review entry's origin line, and it lights no row to go back
+        // by: back is where the visitor came from, home for a link.
+        onBack: () => context.back(),
+        backSemanticsId: SemanticsIds.navBack,
         actions: <Widget>[
           if (picker != null && canUpload)
             WaxIconButton(
@@ -601,11 +604,8 @@ class _UploadRow extends StatelessWidget {
                   label: l10n.uploadsOpenReview,
                   kind: WaxButtonKind.text,
                   semanticsId: SemanticsIds.uploadReview(upload.id),
-                  // Pushed: an entry is declared under the review queue,
-                  // not under this list, so `go` would leave the uploads
-                  // behind.
                   onPressed: () =>
-                      context.push(WaxRoute.reviewEntry(reviewEntryId)),
+                      context.go(WaxRoute.reviewEntry(reviewEntryId)),
                 ),
               ),
             ],

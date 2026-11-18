@@ -129,6 +129,16 @@ MetadataFields _vocabulary(List<String> fields) => MetadataFields(
 Finder _field(String name) =>
     find.bySemanticsIdentifier(SemanticsIds.metadataField(name));
 
+/// Every message raised to the shell over [container] from here on.
+List<ShellMessage> _raised(ProviderContainer container) {
+  final raised = <ShellMessage>[];
+  final heard = container.listen(shellMessagesProvider, (_, next) {
+    if (next != null) raised.add(next);
+  });
+  addTearDown(heard.close);
+  return raised;
+}
+
 /// Presses the save bar's button and settles.
 Future<void> _saveNow(WidgetTester tester) async {
   final save = find.bySemanticsIdentifier(SemanticsIds.metadataSave);
@@ -677,7 +687,7 @@ void main() {
     expect(sent.sourceId, isNull);
     expect(sent.writeBack, isFalse);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Origin updated',
     );
   });
@@ -748,7 +758,7 @@ void main() {
     expect(repo.clearItemAcquisitionCalls, hasLength(1));
     expect(repo.setItemAcquisitionCalls, isEmpty);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Origin removed',
     );
   });
@@ -818,7 +828,7 @@ void main() {
     expect(repo.setItemArtworkCalls.single.role, 'booklet');
     expect(repo.setItemArtworkCalls.single.bytes, 64);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Booklet replaced',
     );
   });
@@ -867,7 +877,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       "Booklet replaced, but the file's tags could not be updated",
     );
   });
@@ -909,7 +919,7 @@ void main() {
 
     expect(repo.setItemArtworkCalls, isEmpty);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'huge.png is larger than the 16 MB an image may be',
     );
   });
@@ -1132,9 +1142,140 @@ void main() {
     // The server's own sentence names the field that refused; the app
     // adds the switch that overrides it.
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'field locked. Check "Force" to overwrite locked fields.',
     );
+  });
+
+  testWidgets('a save refused once the editor has gone says so where the '
+      'visitor is', (tester) async {
+    final repo = _repo()..editItemMetadataGate = Completer<void>();
+    repo.lockedFieldsByPid['tr-1'] = {'title'};
+    final container = _container(repo);
+    await _pump(tester, container);
+    await tester.enterText(_field('title'), 'Neon Meridian');
+    await tester.pump();
+    final save = find.bySemanticsIdentifier(SemanticsIds.metadataSave);
+    await tester.ensureVisible(save);
+    await tester.pumpAndSettle();
+    await tester.tap(save);
+    await tester.pump();
+    final raised = _raised(container);
+
+    await leaveScreen(tester, container);
+    repo.editItemMetadataGate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(raised.map(shellMessageText), [
+      'field locked. Check "Force" to overwrite locked fields.',
+    ]);
+  });
+
+  testWidgets('an origin corrected once the editor has gone says so where '
+      'the visitor is, and the item is read again', (tester) async {
+    final repo = _repo()
+      ..itemAcquisition['tr-1'] = ItemAcquisition(
+        sourceType: 'manual',
+        sourceUrl: 'https://wrong.example.test/ep-99.mp3',
+        sourceId: 'ep-99',
+      )
+      ..setItemAcquisitionGate = Completer<void>();
+    final container = _container(repo);
+    await _pump(tester, container);
+    container.listen(metadataControllerProvider('tr-1'), (_, _) {});
+    await tester.tap(
+      find.text(
+        'Origin: an unnamed source - https://wrong.example.test/ep-99.mp3',
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Podcast feed'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.originSave));
+    await tester.pumpAndSettle();
+    final raised = _raised(container);
+
+    await leaveScreen(tester, container);
+    repo.setItemAcquisitionGate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(repo.setItemAcquisitionCalls.single.sourceType, 'rss');
+    expect(raised.map(shellMessageText), ['Origin updated']);
+    expect(
+      container
+          .read(metadataControllerProvider('tr-1'))
+          .value
+          ?.metadata
+          .acquisition
+          ?.sourceType,
+      'rss',
+    );
+  });
+
+  testWidgets('a cover pin written once the editor has gone says so where '
+      'the visitor is', (tester) async {
+    final repo = _repo()
+      ..ownArtworkPids.add('tr-1')
+      ..artRoles.add(
+        const ArtRoleInfo(
+          role: 'front',
+          format: 'jpeg',
+          width: 600,
+          height: 600,
+          locked: true,
+        ),
+      )
+      ..setItemLocksGate = Completer<void>();
+    final container = _container(repo);
+    await _pump(tester, container);
+    final lock = find.bySemanticsIdentifier(SemanticsIds.artLock);
+    await tester.ensureVisible(lock);
+    await tester.pumpAndSettle();
+    await tester.tap(lock);
+    await tester.pump();
+    final raised = _raised(container);
+
+    await leaveScreen(tester, container);
+    repo.setItemLocksGate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(repo.setItemLocksCalls.single.locked, isFalse);
+    expect(raised.map(shellMessageText), ['Cover unpinned']);
+  });
+
+  testWidgets('a slot cleared once the editor has gone says so where the '
+      'visitor is', (tester) async {
+    final repo = _repo()
+      ..artRoles.add(const ArtRoleInfo(role: 'disc', format: 'png'))
+      ..clearItemArtworkGate = Completer<void>();
+    final container = _container(repo);
+    await _pump(tester, container);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.artSlotClear('disc')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
+      'clear',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.confirmAccept));
+    await tester.pump();
+    final raised = _raised(container);
+
+    await leaveScreen(tester, container);
+    repo.clearItemArtworkGate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(repo.clearItemArtworkCalls.single.role, 'disc');
+    final l10n = AppLocalizationsEn();
+    expect(raised.map(shellMessageText), [
+      l10n.artworkCleared(ArtSlot.disc.labelOf(l10n)),
+    ]);
   });
 
   testWidgets('a fetched field lands in the form and is not offered back', (
@@ -1239,9 +1380,106 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.rematchCalls, ['tr-1']);
-    final message = container.read(shellMessengerProvider);
+    final message = container.read(shellMessagesProvider);
     expect(shellMessageText(message), 'Queued for identification');
     expect(message?.actionLabel, 'Open review');
+  });
+
+  group("the rematch message's door to the review entry", () {
+    /// The editor of tr-1 rematched, and the message's Open review.
+    Future<(GoRouter, VoidCallback)> rematched(
+      WidgetTester tester,
+      ProviderContainer container,
+    ) async {
+      await _pump(tester, container, routed: true);
+      final rematch = find.bySemanticsIdentifier(SemanticsIds.metadataRematch);
+      await tester.ensureVisible(rematch);
+      await tester.pumpAndSettle();
+      await tester.tap(rematch);
+      await tester.pumpAndSettle();
+      return (
+        GoRouter.of(tester.element(find.byType(MetadataScreen))),
+        container.read(shellMessagesProvider)!.onAction!,
+      );
+    }
+
+    String location(GoRouter router) =>
+        router.routerDelegate.currentConfiguration.uri.path;
+
+    const discard = 'Discard unsaved edits?';
+
+    /// Frames rather than settling: the entry it opens is still being
+    /// identified, and its spinner never stops.
+    Future<void> frames(WidgetTester tester) async {
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+    }
+
+    testWidgets('goes at once from a draft with nothing unsaved', (
+      tester,
+    ) async {
+      final (router, open) = await rematched(tester, _container(_repo()));
+
+      open();
+      await frames(tester);
+
+      expect(find.text(discard), findsNothing);
+      expect(location(router), WaxRoute.reviewEntry('re-FAKE0'));
+    });
+
+    testWidgets('asks before it drops unsaved edits, and goes on a discard', (
+      tester,
+    ) async {
+      final (router, open) = await rematched(tester, _container(_repo()));
+      final at = location(router);
+      await tester.enterText(_field('title'), 'Retitled');
+      await tester.pumpAndSettle();
+
+      open();
+      await frames(tester);
+      expect(find.text(discard), findsOneWidget);
+      expect(
+        find.text('The edits you have not saved here will be lost.'),
+        findsOneWidget,
+      );
+      expect(location(router), at);
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.workbenchDiscardConfirm),
+      );
+      await frames(tester);
+      expect(location(router), WaxRoute.reviewEntry('re-FAKE0'));
+    });
+
+    testWidgets('keeps the edits and the editor when the question is '
+        'cancelled', (tester) async {
+      final (router, open) = await rematched(tester, _container(_repo()));
+      final at = location(router);
+      await tester.enterText(_field('title'), 'Retitled');
+      await tester.pumpAndSettle();
+
+      open();
+      await frames(tester);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(discard), findsNothing);
+      expect(location(router), at);
+      expect(find.byType(MetadataScreen), findsOneWidget);
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(
+                of: _field('title'),
+                matching: find.byType(EditableText),
+              ),
+            )
+            .controller
+            .text,
+        'Retitled',
+      );
+    });
   });
 
   testWidgets("a track's editor turns it into an audiobook", (tester) async {
@@ -1991,7 +2229,7 @@ void main() {
     await _saveNow(tester);
 
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'field locked. Check "Force" to overwrite locked fields.',
     );
     // Not written, still staged: the count and the chip both stand.
@@ -2122,7 +2360,7 @@ void main() {
     await tester.enterText(_field('title'), 'Neon Meridian');
     await _saveNow(tester);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       lockedTitleRefusal,
     );
     expect(repo.itemFieldsByPid['tr-1']?['title'], isNot('Neon Meridian'));

@@ -289,18 +289,56 @@ void main() {
     });
   });
 
-  test('a snack bar close icon clears 3:1 on its bar', () {
-    // The only dismiss a waiting bar offers; left to Material it takes
-    // the inverse-surface tone, which is this bar's canvas.
-    for (final variant in WaxThemeVariant.values) {
-      final bar = buildWaxTheme(variant: variant).snackBarTheme;
-      expect(
-        WaxContrast.ratio(bar.closeIconColor!, bar.backgroundColor!),
-        greaterThanOrEqualTo(WaxContrast.aaLarge),
-        reason: '${variant.name}: the close icon fades into the bar',
+  for (final variant in WaxThemeVariant.values) {
+    testWidgets('${variant.name}: a message bar\'s close control clears 3:1 '
+        'on its bar', (tester) async {
+      // The only dismiss a waiting bar offers. Read as drawn: the glyph's
+      // ink over the bar's own Material.
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildWaxTheme(variant: variant),
+          localizationsDelegates: waxLocalizationsDelegates,
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomCenter,
+              child: WaxMessageBar(
+                message: 'Marked finished',
+                actionLabel: 'Undo',
+                onAction: () {},
+                onClose: () {},
+              ),
+            ),
+          ),
+        ),
       );
-    }
-  });
+
+      final close = find.byWidgetPredicate(
+        (w) => w is WaxIcon && w.glyph == WaxIcons.close,
+      );
+      final ink = tester
+          .widget<RichText>(
+            find.descendant(of: close, matching: find.byType(RichText)),
+          )
+          .text
+          .style!
+          .color!;
+      final bar = tester
+          .widget<Material>(
+            find
+                .descendant(
+                  of: find.byType(WaxMessageBar),
+                  matching: find.byType(Material),
+                )
+                .first,
+          )
+          .color!;
+      expect(
+        WaxContrast.ratio(ink, bar),
+        greaterThanOrEqualTo(WaxContrast.aaLarge),
+        reason: 'the close control fades into the bar',
+      );
+    });
+  }
 
   group('shelf chevron', () {
     // The chevron sits over any artwork at its resting opacity, and no one

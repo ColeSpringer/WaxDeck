@@ -24,7 +24,7 @@ Future<void> playPlaylistPid(
   // Read before the await, for the reason [playAlbumPid] does.
   final repository = ref.read(repositoryProvider);
   final playback = ref.read(nowPlayingProvider.notifier);
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   try {
     // In order the queue keeps only its first [kQueueCap], so one page
     // starts it; a shuffle draws from the whole list.

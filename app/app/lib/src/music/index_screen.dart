@@ -16,6 +16,7 @@ import '../search/search_chrome.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'music_controllers.dart';
 
 /// The rail row a bucket files under: the server's letter when it sent
@@ -294,6 +295,7 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
     // about what it does.
     final buckets = state.value?.buckets ?? const <FacetBucket>[];
     final railed = sort == FacetSort.label && buckets.isNotEmpty;
+    final railWidth = railed ? WaxSpace.s24 : 0.0;
 
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
@@ -302,43 +304,48 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
       },
       child: Stack(
         children: <Widget>[
-          WaxScaffold(
-            title: copy.title,
-            onBack: () =>
-                context.go(copy.book == null ? WaxRoute.music : WaxRoute.books),
-            largeTitle: false,
-            controller: _scroll,
-            actions: const <Widget>[SearchAction()],
-            slivers: <Widget>[
-              SliverToBoxAdapter(
-                child: _Toolbar(
-                  dimension: dimension,
-                  domain: widget.domain,
-                  sort: sort,
-                  count: state.value?.buckets.length,
-                  hasMore: state.value?.hasMore ?? false,
-                  onSort: (value) => ref
-                      .read(musicIndexSortProvider(sortKey).notifier)
-                      .select(value),
-                ),
+          ShellMessageMargin(
+            right: railWidth,
+            child: WaxScaffold(
+              title: copy.title,
+              onBack: () => context.back(
+                fallback: copy.book == null ? WaxRoute.music : WaxRoute.books,
               ),
-              SliverPadding(
-                // Room for the rail, which floats over the list's
-                // trailing edge rather than taking a column of its own:
-                // a column would narrow every row on a phone to buy a
-                // strip that is only useful while a finger is on it.
-                padding: EdgeInsets.only(right: railed ? WaxSpace.s24 : 0),
-                sliver: AsyncSliverFace<MusicIndexState>(
-                  state: state,
-                  // The whole body of this screen, so the wait is the
-                  // page rather than six rows above empty space.
-                  skeletonFills: true,
-                  errorTitle: copy.loadError,
-                  onRetry: () => ref.invalidate(musicIndexProvider(key)),
-                  builder: (context, value) => _list(value),
+              backSemanticsId: SemanticsIds.navBack,
+              largeTitle: false,
+              controller: _scroll,
+              actions: const <Widget>[SearchAction()],
+              slivers: <Widget>[
+                SliverToBoxAdapter(
+                  child: _Toolbar(
+                    dimension: dimension,
+                    domain: widget.domain,
+                    sort: sort,
+                    count: state.value?.buckets.length,
+                    hasMore: state.value?.hasMore ?? false,
+                    onSort: (value) => ref
+                        .read(musicIndexSortProvider(sortKey).notifier)
+                        .select(value),
+                  ),
                 ),
-              ),
-            ],
+                SliverPadding(
+                  // Room for the rail, which floats over the list's
+                  // trailing edge rather than taking a column of its own:
+                  // a column would narrow every row on a phone to buy a
+                  // strip that is only useful while a finger is on it.
+                  padding: EdgeInsets.only(right: railWidth),
+                  sliver: AsyncSliverFace<MusicIndexState>(
+                    state: state,
+                    // The whole body of this screen, so the wait is the
+                    // page rather than six rows above empty space.
+                    skeletonFills: true,
+                    errorTitle: copy.loadError,
+                    onRetry: () => ref.invalidate(musicIndexProvider(key)),
+                    builder: (context, value) => _list(value),
+                  ),
+                ),
+              ],
+            ),
           ),
           if (railed)
             Positioned(

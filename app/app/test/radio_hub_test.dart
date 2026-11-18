@@ -830,6 +830,125 @@ void main() {
     expect(added.name, 'somafm.com');
   });
 
+  // Answered while the dialog is on its way out, still mounted: the hub
+  // under it stays.
+  for (final directory in <bool>[false, true]) {
+    testWidgets('a station ${directory ? 'from the directory' : 'by URL'} '
+        'dismissed as it is added leaves the hub up', (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final gate = Completer<void>();
+      final repo = _repo()
+        ..createStationGate = gate
+        ..directoryEntries = const [
+          RadioDirectoryEntry(
+            name: 'Jazz24',
+            streamUrl: 'https://jazz24.example/stream',
+          ),
+        ];
+      await pumpApp(
+        tester,
+        const RadioScreen(),
+        container: _container(repo),
+        pushed: true,
+      );
+      await tester.tap(_byId(SemanticsIds.radioAdd));
+      await tester.pumpAndSettle();
+      if (directory) {
+        await tester.enterText(_byId(SemanticsIds.radioSearchField), 'jazz');
+        await tester.tap(_byId(SemanticsIds.radioSearchRun));
+        await tester.pumpAndSettle();
+        await tester.tap(_byId(SemanticsIds.radioAddDirectory(0)));
+      } else {
+        await tester.tap(find.text('By URL'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          _byId(SemanticsIds.radioUrlField),
+          'http://www.somafm.com/groovesalad',
+        );
+        await tester.tap(_byId(SemanticsIds.radioAddConfirm));
+      }
+      await tester.pump();
+
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pump();
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(RadioScreen), findsOneWidget);
+      expect(_byId(SemanticsIds.radioAddConfirm), findsNothing);
+    });
+
+    for (final gone in <bool>[false, true]) {
+      testWidgets('a station ${directory ? 'from the directory' : 'by URL'} '
+          'dismissed while it is added, then refused, is said in the shell '
+          '${gone ? 'once the dialog has gone' : 'as it leaves'}', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(1200, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final gate = Completer<void>();
+        final repo = _repo()
+          ..createStationGate = gate
+          ..createStationError = const WaxDeckApiException(
+            code: 'conflict',
+            message: 'That stream is already saved as Groove Salad',
+          )
+          ..directoryEntries = const [
+            RadioDirectoryEntry(
+              name: 'Jazz24',
+              streamUrl: 'https://jazz24.example/stream',
+            ),
+          ];
+        await pumpApp(
+          tester,
+          const RadioScreen(),
+          container: _container(repo),
+          pushed: true,
+        );
+        await tester.tap(_byId(SemanticsIds.radioAdd));
+        await tester.pumpAndSettle();
+        if (directory) {
+          await tester.enterText(_byId(SemanticsIds.radioSearchField), 'jazz');
+          await tester.tap(_byId(SemanticsIds.radioSearchRun));
+          await tester.pumpAndSettle();
+          await tester.tap(_byId(SemanticsIds.radioAddDirectory(0)));
+        } else {
+          await tester.tap(find.text('By URL'));
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            _byId(SemanticsIds.radioUrlField),
+            'http://www.somafm.com/groovesalad',
+          );
+          await tester.tap(_byId(SemanticsIds.radioAddConfirm));
+        }
+        await tester.pump();
+
+        // The scrim.
+        await tester.tapAt(const Offset(4, 4));
+        if (gone) {
+          await tester.pumpAndSettle();
+        } else {
+          await tester.pump();
+        }
+        gate.complete();
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.byType(RadioScreen), findsOneWidget);
+        expect(_byId(SemanticsIds.radioSearchField), findsNothing);
+        expect(
+          shellMessageText(raisedMessage(tester)),
+          'That stream is already saved as Groove Salad',
+        );
+        expect(repo.radioStationsByPid, hasLength(3), reason: 'none added');
+      });
+    }
+  }
+
   testWidgets('the options disclosure points right closed and down open', (
     tester,
   ) async {

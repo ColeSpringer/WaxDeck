@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../shell/asked_from.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/paged_scroll.dart';
 import '../shell/routes.dart';
@@ -31,28 +32,27 @@ class _SharesScreenState extends ConsumerState<SharesScreen> with PagedScroll {
   @override
   void loadMore() => ref.read(sharesProvider.notifier).loadMore();
 
-  void _report(String message) {
-    ref
-        .read(shellMessengerProvider.notifier)
-        .show(message, channel: ShellChannel.shares);
-  }
-
   Future<void> _copy(Share share) async {
+    final l10n = context.l10n;
+    final from = AskedFrom.of(context);
     await Clipboard.setData(
       ClipboardData(text: shareAbsoluteUrl(ref, share.url)),
     );
-    if (!mounted) return;
-    _report(context.l10n.sharingLinkCopied);
+    from.messenger.show(l10n.sharingLinkCopied, channel: ShellChannel.shares);
   }
 
   Future<void> _revoke(Share share) async {
+    final l10n = context.l10n;
+    // Read now: the answer is said once the screen has gone too.
+    final from = AskedFrom.of(context);
     try {
       await ref.read(sharesProvider.notifier).revoke(share.pid);
-      if (!mounted) return;
-      _report(context.l10n.sharingLinkRevoked);
+      from.messenger.show(
+        l10n.sharingLinkRevoked,
+        channel: ShellChannel.shares,
+      );
     } on WaxDeckApiException catch (e) {
-      if (!mounted) return;
-      _report(context.explain(e));
+      from.messenger.show(explainError(l10n, e), channel: ShellChannel.shares);
     }
   }
 
@@ -68,7 +68,8 @@ class _SharesScreenState extends ConsumerState<SharesScreen> with PagedScroll {
       title: context.l10n.sharingTitle,
       largeTitle: false,
       controller: pagedScroll,
-      onBack: () => context.leave(fallback: WaxRoute.settings),
+      onBack: () => context.back(fallback: WaxRoute.settings),
+      backSemanticsId: SemanticsIds.navBack,
       slivers: <Widget>[
         AsyncSliverFace<SharesState>(
           state: shares,

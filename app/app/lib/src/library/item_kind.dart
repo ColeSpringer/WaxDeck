@@ -20,6 +20,7 @@ import '../providers.dart';
 import '../queue/queue_controller.dart';
 import '../queue/queue_item.dart';
 import '../settings/settings_registry.dart';
+import '../shell/navigation_history.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -39,15 +40,22 @@ const kindChangeMaxItems = 500;
 /// together whose tags name one book become that one book. More [pids]
 /// than one change may name (an album's, the one caller naming several)
 /// are refused here rather than sent in part.
+///
+/// [pages] are locations that go with the items once the change is done
+/// (an album's screen and its editor, every track of it changed): no
+/// page of them is shown again, as none of an item's old kind is.
 Future<void> confirmSetKind(
   BuildContext context, {
   required List<String> pids,
   required String to,
+  List<String> pages = const <String>[],
 }) async {
   final l10n = context.l10n;
   final container = ProviderScope.containerOf(context, listen: false);
-  final messenger = container.read(shellMessengerProvider.notifier);
+  final messenger = container.read(shellMessengerProvider);
   final router = GoRouter.of(context);
+  // Gone from only while the page it was asked on is still on top.
+  final from = pageOnTop(router);
   final outcome = await showDialog<_KindOutcome>(
     context: context,
     barrierDismissible: false,
@@ -90,6 +98,7 @@ Future<void> confirmSetKind(
       // the server's words, as a failed job carries no code to translate.
       await _letGoOfFolded(container, job.result);
       _forgetConverted(container, job.result);
+      _forgetOldPages(router, _oldPages(job.result, to));
       invalidate();
       final why = job.error?.trim() ?? '';
       messenger.show(
@@ -104,7 +113,7 @@ Future<void> confirmSetKind(
         messenger.show(
           l10n.libraryKindStillRunning,
           actionLabel: l10n.bookToolTasks,
-          onAction: () => router.pushInShell<void>(WaxRoute.tasks),
+          onAction: () => router.go(WaxRoute.tasks),
           actionSemanticsId: SemanticsIds.openTasks,
           persist: true,
         );
@@ -135,13 +144,86 @@ Future<void> confirmSetKind(
   }
   _forgetConverted(container, result);
   if (_joinedUnseen(result)) notes.add(l10n.libraryKindJoinedUnseen);
-  if (notes.isNotEmpty) messenger.show(notes.join('\n'));
   // Where to go is read before the listings are dropped, so the screen
   // still showing the old kind does not refetch it and draw its error
   // while the destination loads.
   final destination = await _destination(container, _landedPid(result), to);
   invalidate();
-  if (destination != null) router.go(destination);
+  final old = [..._oldPages(result, to), ...pages];
+  // From the page it was asked on, or one of the items' old pages, which
+  // the move leaves behind.
+  final on =
+      destination != null &&
+      await stillOnTop(
+        router,
+        (page) => page == from || _isUnder(page.location, old),
+      );
+  if (on) {
+    if (notes.isNotEmpty) messenger.show(notes.join('\n'));
+    router.go(destination);
+  } else if (destination != null) {
+    // Elsewhere by now: offered there, not forced on them.
+    messenger.show(
+      [
+        to == 'audiobook'
+            ? l10n.libraryKindReadyBook
+            : l10n.libraryKindReadyMusic,
+        ...notes,
+      ].join('\n'),
+      actionLabel: l10n.commonOpen,
+      onAction: () => unawaited(router.pushInShell<void>(destination)),
+    );
+  } else if (notes.isNotEmpty) {
+    messenger.show(notes.join('\n'));
+  }
+  // After the move, so the visit it leaves goes with the rest.
+  _forgetOldPages(router, old);
+}
+
+/// The pages that show what [result] says changed as it no longer is:
+/// each converted item's under the kind it was, and each folded-away
+/// item's under either prefix.
+List<String> _oldPages(Map<String, Object?>? result, String to) {
+  final was = to == 'audiobook' ? 'tr-' : 'bk-';
+  final converted = result?['converted'];
+  final absorbed = result?['absorbed'];
+  final pids = <String>{
+    if (converted is List)
+      for (final pid in converted)
+        if (pid is String) '$was${ulidOf(pid)}',
+    if (absorbed is Map)
+      for (final pid in absorbed.keys)
+        if (pid is String)
+          for (final prefix in const ['tr-', 'bk-']) '$prefix${ulidOf(pid)}',
+  };
+  return [
+    for (final pid in pids) ...[
+      if (pid.startsWith('bk-')) WaxRoute.book(pid),
+      WaxRoute.metadata(pid),
+    ],
+  ];
+}
+
+/// Whether [location] is at or beneath one of [pages].
+bool _isUnder(String location, List<String> pages) {
+  final path = Uri.parse(location).path;
+  return pages.any((page) {
+    final root = Uri.parse(page).path;
+    return path == root || path.startsWith('$root/');
+  });
+}
+
+/// Makes sure none of [pages] is shown again, as a delete does for the
+/// pages of what it deleted: taken out from under what is on top, and
+/// every visit of them forgotten, so neither back nor a tab brings one
+/// back.
+void _forgetOldPages(GoRouter router, List<String> pages) {
+  final history = WaxHistory.of(router);
+  if (history == null || pages.isEmpty) return;
+  history.takeOutFromUnder((location, _) => _isUnder(location, pages));
+  for (final page in pages) {
+    history.forget(page);
+  }
 }
 
 /// Lets go of what [result] says was folded away, gone under either

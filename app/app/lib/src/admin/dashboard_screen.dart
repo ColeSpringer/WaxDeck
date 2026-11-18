@@ -194,7 +194,7 @@ class _StatusTiles extends ConsumerWidget {
           label: l10n.adminTileJobs,
           glyph: WaxIcons.refresh,
           semanticsId: SemanticsIds.adminTile('jobs'),
-          onTap: () => context.push(WaxRoute.tasks),
+          onTap: () => context.go(WaxRoute.tasks),
           ready: (jobs) {
             final running = jobs.where((j) => j.state == 'running').length;
             return (
@@ -439,7 +439,7 @@ class _QuickActions extends ConsumerWidget {
     // backup is started either way, so the list that shows it has to be
     // told either way.
     final container = ProviderScope.containerOf(ref.context, listen: false);
-    final messenger = container.read(shellMessengerProvider.notifier);
+    final messenger = container.read(shellMessengerProvider);
     final l10n = ref.context.l10n;
     // The backups screen's key: one backup in flight, whichever surface
     // started it.
@@ -470,7 +470,7 @@ Future<void> startLibraryScan(WidgetRef ref) async {
   // opened. The scan starts regardless, so the job list is refreshed
   // regardless.
   final container = ProviderScope.containerOf(ref.context, listen: false);
-  final messenger = container.read(shellMessengerProvider.notifier);
+  final messenger = container.read(shellMessengerProvider);
   final l10n = ref.context.l10n;
   final router = GoRouter.maybeOf(ref.context);
   await container.read(pendingActionsProvider.notifier).run(
@@ -483,9 +483,7 @@ Future<void> startLibraryScan(WidgetRef ref) async {
           l10n.adminScanStarted,
           actionLabel: router == null ? null : l10n.commonOpenTasks,
           actionSemanticsId: SemanticsIds.openTasks,
-          onAction: router == null
-              ? null
-              : () => router.pushInShell<void>(WaxRoute.tasks),
+          onAction: router == null ? null : () => router.go(WaxRoute.tasks),
         );
       } on WaxDeckApiException catch (error) {
         // A job already running is the common answer, said in the app's

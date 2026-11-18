@@ -33,7 +33,7 @@ Future<void> _startFix(
   List<String>? itemPids,
 }) async {
   final l10n = context.l10n;
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final router = GoRouter.of(context);
   try {
     await ref
@@ -43,7 +43,7 @@ Future<void> _startFix(
       l10n.healthFixStarted(name),
       actionLabel: l10n.commonOpenTasks,
       actionSemanticsId: SemanticsIds.openTasks,
-      onAction: () => router.pushInShell<void>(WaxRoute.tasks),
+      onAction: () => router.go(WaxRoute.tasks),
     );
   } on WaxDeckApiException catch (e) {
     if (e.code != 'conflict') {
@@ -78,7 +78,7 @@ class HealthScreen extends ConsumerWidget {
 
   Future<void> _sweep(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     try {
       await ref.read(healthSweepRequestProvider.notifier).send();
       messenger.show(l10n.healthSweepQueued);
@@ -93,6 +93,10 @@ class HealthScreen extends ConsumerWidget {
     DuplicateGroup group,
   ) async {
     final l10n = context.l10n;
+    // Read before the confirm, which is an await the screen can be left
+    // across.
+    final messenger = ref.read(shellMessengerProvider);
+    final duplicates = ref.read(duplicatesProvider.notifier);
     final losers = group.losers.map((l) => '"${l.name}"').join(', ');
     final confirmed = await showTypedConfirm(
       context,
@@ -105,9 +109,8 @@ class HealthScreen extends ConsumerWidget {
       cancelSemanticsId: SemanticsIds.confirmCancel,
     );
     if (!confirmed) return;
-    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
-      final outcome = await ref.read(duplicatesProvider.notifier).merge(group);
+      final outcome = await duplicates.merge(group);
       messenger.show(
         <String>[
           l10n.healthMerged(outcome.merged),
@@ -132,6 +135,9 @@ class HealthScreen extends ConsumerWidget {
     UpgradeGroup group,
   ) async {
     final l10n = context.l10n;
+    // Read before the confirm, as a merge's are.
+    final messenger = ref.read(shellMessengerProvider);
+    final upgrades = ref.read(upgradesProvider.notifier);
     final confirmed = await showTypedConfirm(
       context,
       title: l10n.healthResolveTitle,
@@ -143,9 +149,8 @@ class HealthScreen extends ConsumerWidget {
       cancelSemanticsId: SemanticsIds.confirmCancel,
     );
     if (!confirmed) return;
-    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
-      final trashed = await ref.read(upgradesProvider.notifier).resolve(group);
+      final trashed = await upgrades.resolve(group);
       messenger.show(l10n.healthTrashedFiles(trashed));
     } on WaxDeckApiException catch (e) {
       messenger.show(_refused(l10n, e));
@@ -166,6 +171,7 @@ class HealthScreen extends ConsumerWidget {
       largeTitle: false,
       semanticsId: SemanticsIds.adminHealth,
       onBack: adminBack(context),
+      backSemanticsId: SemanticsIds.navBack,
       actions: <Widget>[
         if (isAdmin)
           WaxIconButton(
@@ -713,7 +719,7 @@ class HealthIssuesScreen extends ConsumerWidget {
     HealthIssue issue,
   ) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final OrganizePlan plan;
     try {
       plan = await ref
@@ -723,10 +729,10 @@ class HealthIssuesScreen extends ConsumerWidget {
       messenger.show(explainError(l10n, e));
       return;
     }
-    if (!context.mounted) return;
     if (plan.actions.isEmpty) {
-      // A library gone read-only since the sweep leaves the file out of
-      // the plan, out of place all the same.
+      // Said with the screen left meanwhile too, through the messenger
+      // read before the await. A library gone read-only since the sweep
+      // leaves the file out of the plan, out of place all the same.
       final hold = plan.holds.firstOrNull;
       messenger.show(switch (hold) {
         OrganizeHold(:final code) => l10n.healthIssueFixHeld(
@@ -739,6 +745,8 @@ class HealthIssuesScreen extends ConsumerWidget {
       });
       return;
     }
+    // A question, asked only where it was: gone, nothing has moved yet.
+    if (!context.mounted) return;
     final colors = WaxColors.of(context);
     // A book moves as all its parts, so each is named.
     final confirmed = await showDialog<bool>(
@@ -825,9 +833,7 @@ class HealthIssuesScreen extends ConsumerWidget {
       final failedNow = next.value?.loadError ?? false;
       final failedBefore = prev?.value?.loadError ?? false;
       if (failedNow && !failedBefore) {
-        ref
-            .read(shellMessengerProvider.notifier)
-            .show(l10n.healthLoadMoreFailed);
+        ref.read(shellMessengerProvider).show(l10n.healthLoadMoreFailed);
       }
     });
     // Paged off the scroll rather than from the builder: a `loadMore`
@@ -845,7 +851,8 @@ class HealthIssuesScreen extends ConsumerWidget {
         title: title,
         largeTitle: false,
         semanticsId: SemanticsIds.adminHealthRule,
-        onBack: () => context.leave(fallback: WaxRoute.health),
+        onBack: () => context.back(fallback: WaxRoute.health),
+        backSemanticsId: SemanticsIds.navBack,
         slivers: <Widget>[
           AsyncSliverFace<HealthIssuesState>(
             state: issues,

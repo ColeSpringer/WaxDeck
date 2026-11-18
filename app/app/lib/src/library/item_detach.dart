@@ -29,7 +29,7 @@ Future<void> confirmDetachItem(
 }) async {
   final l10n = context.l10n;
   final container = ProviderScope.containerOf(context, listen: false);
-  final messenger = container.read(shellMessengerProvider.notifier);
+  final messenger = container.read(shellMessengerProvider);
   var writeBack = true;
   final confirmed = await showDialog<bool>(
     context: context,

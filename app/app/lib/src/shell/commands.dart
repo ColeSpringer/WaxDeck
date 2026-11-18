@@ -17,6 +17,7 @@ import '../player/now_playing_slot.dart';
 import '../player/output_volume.dart';
 import '../player/waveform.dart';
 import '../playlists/playlist_create.dart';
+import '../providers.dart';
 import '../queue/queue_controller.dart';
 import '../settings/settings_registry.dart';
 import '../queue/queue_view.dart';
@@ -61,6 +62,7 @@ class WaxCommand {
     this.offered,
     this.whileTyping = false,
     this.inPalette = true,
+    this.aboveRouter = false,
   });
 
   /// Stable: it is the palette's row handle.
@@ -116,6 +118,14 @@ class WaxCommand {
   /// Whether the palette offers it. False for the commands that operate
   /// the palette itself.
   final bool inPalette;
+
+  /// Whether its keys are bound above the router, by [DesktopBack], and
+  /// not by [CommandShortcuts]. That map sits inside the signed-in
+  /// navigator, and a dialog (or the palette and the shortcut sheet,
+  /// opened on the root navigator) is pushed on another, so a chord bound
+  /// there is never heard while one is open: a command that has to close
+  /// one binds above it instead. A sheet or a menu opens inside it.
+  final bool aboveRouter;
 
   bool isEnabled(WidgetRef ref) => enabled?.call(ref) ?? true;
 
@@ -337,6 +347,7 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
     // The search screen autofocuses its own field.
     run: (context, ref) => context.go(WaxRoute.search),
   ),
+  waxBackCommand,
   // Administrators only, and withheld rather than disabled for everyone
   // else: an account that cannot start a scan should not be taught a
   // command for it. `offered` is what does that - it is read once by the
@@ -368,6 +379,35 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
   ),
 ];
 
+/// Back, as the leading arrow does it, on the machines whose keyboard and
+/// mouse have a convention for it: Alt+Left (Cmd+[ on a Mac) and the
+/// mouse's back button, which [DesktopBack] binds above the router. A
+/// browser keeps both for its own history and a phone has the system
+/// back, so there it is not offered at all.
+///
+/// Once per press, and not in a text field, which keeps Alt+Left for its
+/// caret.
+final WaxCommand waxBackCommand = WaxCommand(
+  id: 'back',
+  section: WaxCommandSection.app,
+  glyph: WaxIcons.back,
+  activators: const <ShortcutActivator>[
+    SingleActivator(
+      LogicalKeyboardKey.arrowLeft,
+      alt: true,
+      includeRepeats: false,
+    ),
+    SingleActivator(
+      LogicalKeyboardKey.bracketLeft,
+      meta: true,
+      includeRepeats: false,
+    ),
+  ],
+  aboveRouter: true,
+  offered: (ref) => ref.watch(desktopBackProvider),
+  run: (context, ref) => context.back(),
+);
+
 /// What a command is called. A scoped one names itself; a standing one
 /// is named here, because its list is const and above every context.
 /// The id is a last resort `command_palette_test.dart` says is unused.
@@ -375,6 +415,7 @@ String commandLabel(AppLocalizations l10n, WaxCommand command) =>
     command.label ?? _standingLabel(l10n, command.id) ?? command.id;
 
 String? _standingLabel(AppLocalizations l10n, String id) => switch (id) {
+  'back' => l10n.shellCommandBack,
   'play-pause' => l10n.shellCommandPlayPause,
   'next' => l10n.shellCommandNext,
   'previous' => l10n.shellCommandPrevious,
@@ -614,6 +655,7 @@ class CommandShortcuts extends ConsumerWidget {
     final bindings = <ShortcutActivator, VoidCallback>{};
     final typing = <ShortcutActivator, VoidCallback>{};
     for (final command in commands) {
+      if (command.aboveRouter) continue;
       for (final activator in command.activators) {
         void run() {
           if (command.isEnabled(ref)) command.run(context, ref);

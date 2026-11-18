@@ -134,11 +134,11 @@ class AlbumScreen extends ConsumerWidget {
     return WaxScaffold(
       title: facts.title,
       largeTitle: false,
-      // Pops when something pushed this - an artist's release tile - and
-      // goes to the index when nothing did, so the arrow and the system
-      // gesture do the same thing from either entry point.
+      // Back to where the visitor was, the index when nothing is
+      // recorded: a cold link, a reload.
       onBack: () =>
-          context.leave(fallback: WaxRoute.musicIndex(MusicDimension.albums)),
+          context.back(fallback: WaxRoute.musicIndex(MusicDimension.albums)),
+      backSemanticsId: SemanticsIds.navBack,
       actions: const <Widget>[SearchAction()],
       slivers: <Widget>[
         if (unproven != null)
@@ -263,7 +263,7 @@ class _Header extends ConsumerWidget {
   /// name, which the dialog then refuses rather than sending a part.
   Future<void> _toBook(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final List<ItemSummary> all;
     try {
       all = await ref
@@ -284,6 +284,11 @@ class _Header extends ConsumerWidget {
       context,
       pids: [for (final t in albumOrder(all)) t.pid],
       to: 'audiobook',
+      // Every track of it goes to the book, its pages with them.
+      pages: [
+        WaxRoute.musicBucket(MusicDimension.albums, pid),
+        WaxRoute.metadata(pid),
+      ],
     );
   }
 
@@ -291,7 +296,7 @@ class _Header extends ConsumerWidget {
   /// them, and leaves the release once it is gone.
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final List<ItemSummary> all;
     try {
       all = await ref
@@ -315,6 +320,11 @@ class _Header extends ConsumerWidget {
     await confirmDeleteItems(
       context,
       pids: [for (final t in albumOrder(all)) t.pid],
+      // The release is gone for good with its tracks, its pages with it.
+      pages: [
+        WaxRoute.musicBucket(MusicDimension.albums, pid),
+        WaxRoute.metadata(pid),
+      ],
       onDeleted: () {
         if (context.mounted) {
           context.leave(fallback: WaxRoute.musicIndex(MusicDimension.albums));

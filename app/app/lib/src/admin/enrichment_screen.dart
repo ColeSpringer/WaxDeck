@@ -37,6 +37,7 @@ class EnrichmentScreen extends ConsumerWidget {
       largeTitle: false,
       semanticsId: SemanticsIds.adminEnrichment,
       onBack: adminBack(context),
+      backSemanticsId: SemanticsIds.navBack,
       body: Padding(
         padding: sizeClass.gutter.add(
           const EdgeInsets.only(bottom: WaxSpace.s32),
@@ -231,7 +232,7 @@ class _RunPassState extends ConsumerState<_RunPass> {
 
   Future<void> _run() async {
     setState(() => _busy = true);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     try {
       await ref
@@ -418,7 +419,7 @@ class _SourcesState extends ConsumerState<_Sources> {
 
   Future<void> _save() async {
     setState(() => _busy = true);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     try {
       final saved = await ref
@@ -700,7 +701,7 @@ class _ResponseCacheState extends ConsumerState<_ResponseCache> {
   /// Pruning takes the typed word: what goes is asked for again, one
   /// request at a time, the next time a pass needs it.
   Future<void> _prune() async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     final days = _bound(_olderThanDays.text, _dayCap);
     final megabytes = _bound(_maxMegabytes.text, _megabyteCap);

@@ -180,7 +180,7 @@ class _FoldGroups extends ConsumerWidget {
     final which = _which(l10n, fold, apart);
     // The section can go while the dialog is up; the container outlives it.
     final container = ProviderScope.containerOf(context, listen: false);
-    final messenger = container.read(shellMessengerProvider.notifier);
+    final messenger = container.read(shellMessengerProvider);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -246,7 +246,7 @@ class _FoldGroups extends ConsumerWidget {
 
   Future<void> _more(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     try {
       await ref.read(foldsProvider.notifier).loadMore();
     } on WaxDeckApiException catch (e) {

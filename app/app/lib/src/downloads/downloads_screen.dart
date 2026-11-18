@@ -9,6 +9,7 @@ import '../l10n/l10n.dart';
 import '../presenters/media_tiles.dart';
 import '../search/search_chrome.dart';
 import '../shell/async_sliver_face.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'downloads_controller.dart';
@@ -33,7 +34,10 @@ class DownloadsScreen extends ConsumerWidget {
 
     return WaxScaffold(
       title: context.l10n.downloadsTitle,
+      largeTitle: false,
       semanticsId: SemanticsIds.downloadsScreen,
+      onBack: () => context.back(),
+      backSemanticsId: SemanticsIds.navBack,
       actions: <Widget>[
         if (downloads.entries.isNotEmpty) const _Overflow(),
         const SearchAction(),
@@ -201,7 +205,7 @@ class _Overflow extends ConsumerWidget {
     WidgetRef ref,
     _DownloadsAction action,
   ) async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     final notifier = ref.read(downloadsProvider.notifier);
     switch (action) {

@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../library/item_delete.dart';
+import '../shell/asked_from.dart';
 import '../shell/in_flight.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -130,15 +131,14 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet>
     required bool refusal,
     required String by,
   }) {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final from = AskedFrom.of(context);
     final l10n = context.l10n;
-    void refused(String message) {
-      if (mounted) {
-        setState(() => _refusal = message);
-      } else {
-        messenger.show(message);
-      }
-    }
+    // In the sheet while it is still there: swiped away it is mounted
+    // until it has gone, with nobody to read it.
+    void refused(String message) => from.refused(
+      message,
+      inline: (message) => setState(() => _refusal = message),
+    );
 
     return runAs(by, () async {
       setState(() => _refusal = null);
@@ -183,7 +183,7 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet>
 
   Future<void> _save(PlaylistSource? bound) =>
       _run(refusal: true, by: SemanticsIds.playlistSyncSave, () async {
-        final messenger = ref.read(shellMessengerProvider.notifier);
+        final messenger = ref.read(shellMessengerProvider);
         final l10n = context.l10n;
         final body = _body(bound, l10n);
         await ref
@@ -204,7 +204,7 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet>
 
   Future<void> _syncNow() =>
       _run(refusal: true, by: SemanticsIds.playlistSyncNow, () async {
-        final messenger = ref.read(shellMessengerProvider.notifier);
+        final messenger = ref.read(shellMessengerProvider);
         final l10n = context.l10n;
         await ref.read(playlistSyncProvider(widget.pid).notifier).syncNow();
         messenger.show(l10n.playlistSyncQueued);
@@ -212,12 +212,15 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet>
 
   Future<void> _unbind() =>
       _run(refusal: false, by: SemanticsIds.playlistSyncUnbind, () async {
-        final messenger = ref.read(shellMessengerProvider.notifier);
+        final messenger = ref.read(shellMessengerProvider);
         final l10n = context.l10n;
         final navigator = Navigator.of(context);
+        final sheet = ModalRoute.of(context);
         await ref.read(playlistSyncProvider(widget.pid).notifier).unbind();
         messenger.show(l10n.playlistSyncUnbound);
-        if (navigator.mounted) navigator.pop();
+        // Closes itself only while it is still the route on top: closed
+        // meanwhile, the pop would take the page under it.
+        if (mounted && (sheet?.isCurrent ?? false)) navigator.pop();
       });
 
   Future<void> _preview(PlaylistSource? bound) =>

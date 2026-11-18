@@ -367,6 +367,18 @@
       }
     }
   },
+  "playlistImportReady": "Import finished: {resolved} of {requested} entries matched",
+  "@playlistImportReady": {
+    "description": "Message when a playlist import finished after the listener had left its dialog; its action opens the import's report. Counts what resolved out of what was pasted.",
+    "placeholders": {
+      "resolved": {
+        "type": "int"
+      },
+      "requested": {
+        "type": "int"
+      }
+    }
+  },
   "playlistImportRun": "Import",
   "@playlistImportRun": {
     "description": "Confirming button of the import dialog."

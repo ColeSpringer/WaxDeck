@@ -155,15 +155,13 @@ void main() {
     });
 
     test('toasts go through the shell messenger', () {
-      // The shell coalesces a run by channel; a screen's own hide eats
-      // whatever unread bar another screen raised.
-      final offenders = <String>[
-        for (final path in _sourcesMatching(const <String>[
-          'lib',
-          _designSystem,
-        ], _rawToast))
-          if (!path.endsWith('/shell/shell_messages.dart')) path,
-      ];
+      // The shell coalesces a run by channel and draws its bar itself; a
+      // Material snack bar would be a second bar beside it, its hide
+      // eating whatever unread bar another screen raised.
+      final offenders = _sourcesMatching(const <String>[
+        'lib',
+        _designSystem,
+      ], _rawToast);
       expect(
         offenders,
         isEmpty,

@@ -4,8 +4,10 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/asked_from.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'forget_server.dart';
 import 'server_address.dart';
 
@@ -26,6 +28,11 @@ class _ConnectServerScreenState extends ConsumerState<ConnectServerScreen> {
   bool _probing = false;
   bool _forgetting = false;
   String? _error;
+
+  /// Whether another screen is under this one, read as it is first built
+  /// and kept: a dialog opened over it, or its own exit after a connect,
+  /// must not change what it looks like.
+  late final bool _overAnother = Navigator.canPop(context);
 
   @override
   void initState() {
@@ -109,6 +116,7 @@ class _ConnectServerScreenState extends ConsumerState<ConnectServerScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
+    final from = AskedFrom.of(context);
     setState(() {
       _forgetting = true;
       _error = null;
@@ -117,7 +125,12 @@ class _ConnectServerScreenState extends ConsumerState<ConnectServerScreen> {
       await forget();
       if (mounted) _address.clear();
     } on Object catch (error) {
-      if (mounted) setState(() => _error = context.explain(error));
+      // Under the form while this page is still there, else through the
+      // shell, so a refusal is never lost with a page left.
+      from.refused(
+        explainError(l10n, error),
+        inline: (refusal) => setState(() => _error = refusal),
+      );
     } finally {
       if (mounted) setState(() => _forgetting = false);
     }
@@ -128,67 +141,98 @@ class _ConnectServerScreenState extends ConsumerState<ConnectServerScreen> {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final stored = ref.watch(serverAddressProvider);
-    return Scaffold(
-      body: WaxPlainTextStyle(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(WaxSpace.s24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 360),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  WaxBrandBlock(tagline: l10n.authServerConnectTagline),
-                  const SizedBox(height: WaxSpace.s32),
-                  WaxTextField(
-                    semanticsId: SemanticsIds.connectServerAddress,
-                    controller: _address,
-                    label: l10n.authServerAddressLabel,
-                    hint: l10n.authServerAddressHint,
-                    autofocus: true,
-                    keyboardType: TextInputType.url,
-                    autocorrect: false,
-                    onSubmitted: (_) => _connect(),
-                  ),
-                  const SizedBox(height: WaxSpace.s24),
-                  if (_error != null) ...[
-                    Semantics(
-                      identifier: SemanticsIds.connectServerError,
-                      child: Text(
-                        _error!,
-                        key: const Key(SemanticsIds.connectServerError),
-                        style: WaxType.body.copyWith(color: colors.error),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    const SizedBox(height: WaxSpace.s16),
-                  ],
-                  WaxButton(
-                    semanticsId: SemanticsIds.connectServerSubmit,
-                    label: l10n.authServerConnect,
-                    expand: true,
-                    busy: _probing,
-                    onPressed: _probing || _forgetting ? null : _connect,
-                  ),
-                  if (stored != null) ...[
-                    const SizedBox(height: WaxSpace.s8),
-                    WaxButton(
-                      key: const Key(SemanticsIds.connectServerForget),
-                      semanticsId: SemanticsIds.connectServerForget,
-                      label: l10n.authServerForget,
-                      kind: WaxButtonKind.destructive,
-                      onPressed: _probing || _forgetting
-                          ? null
-                          : () => _forget(stored),
-                    ),
-                  ],
-                ],
+    final form = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 360),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          WaxBrandBlock(tagline: l10n.authServerConnectTagline),
+          const SizedBox(height: WaxSpace.s32),
+          WaxTextField(
+            semanticsId: SemanticsIds.connectServerAddress,
+            controller: _address,
+            label: l10n.authServerAddressLabel,
+            hint: l10n.authServerAddressHint,
+            autofocus: true,
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            onSubmitted: (_) => _connect(),
+          ),
+          const SizedBox(height: WaxSpace.s24),
+          if (_error != null) ...[
+            Semantics(
+              identifier: SemanticsIds.connectServerError,
+              child: Text(
+                _error!,
+                key: const Key(SemanticsIds.connectServerError),
+                style: WaxType.body.copyWith(color: colors.error),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: WaxSpace.s16),
+          ],
+          WaxButton(
+            semanticsId: SemanticsIds.connectServerSubmit,
+            label: l10n.authServerConnect,
+            expand: true,
+            busy: _probing,
+            onPressed: _probing || _forgetting ? null : _connect,
+          ),
+          if (stored != null) ...[
+            const SizedBox(height: WaxSpace.s8),
+            WaxButton(
+              key: const Key(SemanticsIds.connectServerForget),
+              semanticsId: SemanticsIds.connectServerForget,
+              label: l10n.authServerForget,
+              kind: WaxButtonKind.destructive,
+              onPressed: _probing || _forgetting ? null : () => _forget(stored),
+            ),
+          ],
+        ],
+      ),
+    );
+    // A cold start has nothing under it and nothing to go back to. Opened
+    // over sign-in or setup it draws the arrow they draw, because the
+    // focused address field keeps the keyboard's back to itself.
+    if (!_overAnother) {
+      return ShellMessageArea(
+        child: Scaffold(
+          body: WaxPlainTextStyle(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(WaxSpace.s24),
+                child: form,
               ),
             ),
           ),
         ),
-      ),
+      );
+    }
+    return WaxScaffold(
+      title: l10n.authChangeServer,
+      largeTitle: false,
+      onBack: () => context.back(fallback: WaxRoute.login),
+      backSemanticsId: SemanticsIds.navBack,
+      slivers: <Widget>[
+        SliverLayoutBuilder(
+          builder: (context, constraints) => SliverToBoxAdapter(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight:
+                    constraints.viewportMainAxisExtent -
+                    constraints.precedingScrollExtent,
+              ),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(WaxSpace.s24),
+                  child: form,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

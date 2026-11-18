@@ -6,9 +6,17 @@ import 'package:waxdeck/src/connectivity/connectivity_port.dart';
 import 'package:waxdeck/src/downloads/downloads_controller.dart';
 import 'package:waxdeck/src/downloads/downloads_screen.dart';
 import 'package:waxdeck/src/downloads/wifi_only_gate.dart';
+import 'package:waxdeck/src/music/album_screen.dart';
+import 'package:waxdeck/src/music/music_controllers.dart';
+import 'package:waxdeck/src/notifications/notifications_controller.dart';
+import 'package:waxdeck/src/notifications/notifications_screen.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
+import 'package:waxdeck/src/shell/router.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck_api/waxdeck_api.dart'
+    show AlbumDetail, SessionState, WaxDeckUser;
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -18,6 +26,7 @@ import 'fakes.dart';
 const _track = 'tr-01JZX5N8QW3F4V9T2B7KDTRACK1';
 const _episode = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
 const _book = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
+const _album = 'al-01JZX5N8QW3F4V9T2B7KDALBUM1';
 
 DownloadedItem _stored(String pid, {int bytes = 4194304, int files = 1}) =>
     DownloadedItem(pid: pid, sizeBytes: bytes, files: files, complete: true);
@@ -843,6 +852,49 @@ void main() {
       expect(_byId(SemanticsIds.downloadPause(_book)), findsOneWidget);
       expect(row().trailingDetail, 'Waiting for wifi');
     });
+  });
+
+  testWidgets('a download notification opens the screen, and its arrow walks '
+      'back through Notifications to the album', (tester) async {
+    tester.view.physicalSize = const Size(1000, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = FakeRepository(
+      sessionState: const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']),
+      ),
+    )..albums[_album] = const AlbumDetail(pid: _album, title: 'Gullwing');
+    final container = await pumpWholeApp(
+      tester,
+      container: appContainer(repo: repo, downloads: downloads),
+      disableAnimations: true,
+    );
+    final router = container.read(routerProvider);
+    router.go(WaxRoute.musicBucket(MusicDimension.albums, _album));
+    await tester.pumpAndSettle();
+    router.go(WaxRoute.notifications);
+    await tester.pumpAndSettle();
+    container
+        .read(localNotificationsProvider.notifier)
+        .record(NotificationKind.download, at: DateTime.now());
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(
+        SemanticsIds.notificationRowPlain(NotificationKind.download.token),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(DownloadsScreen), findsOneWidget);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.navBack));
+    await tester.pumpAndSettle();
+    expect(find.byType(NotificationsScreen), findsOneWidget);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.navBack));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlbumScreen), findsOneWidget);
   });
 }
 

@@ -194,7 +194,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(container.read(radioPlaybackProvider).station, isNull);
-    final message = container.read(shellMessengerProvider);
+    final message = container.read(shellMessagesProvider);
     expect(message?.channel, ShellChannel.radio);
     expect(
       message?.resolve(AppLocalizationsEn()),

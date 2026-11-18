@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -171,6 +173,246 @@ void main() {
       reason: 'the listing is read again',
     );
   });
+
+  // Answered while the sheet is on its way out, still mounted: the screen
+  // under it stays.
+  for (final delete in <bool>[false, true]) {
+    testWidgets('a profile ${delete ? 'deleted' : 'saved'} as its sheet is '
+        'dismissed leaves the screen up', (tester) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository()
+        ..organizeProfiles = const [
+          OrganizeProfile(name: 'default', builtIn: true),
+          OrganizeProfile(name: 'flat'),
+        ];
+      tester.view.physicalSize = const Size(1200, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await pumpApp(
+        tester,
+        const OrganizeScreen(),
+        container: appContainer(repo: repo),
+        pushed: true,
+      );
+      if (delete) {
+        await tester.tap(
+          find.bySemanticsIdentifier(
+            SemanticsIds.organizeProfileOption('flat'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.organizeProfileEdit('flat')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.bySemanticsIdentifier(
+            SemanticsIds.organizeProfileDelete('flat'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        repo.organizeProfileGate = gate;
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.organizeProfileDeleteConfirm),
+        );
+      } else {
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.organizeProfileNew),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.bySemanticsIdentifier(SemanticsIds.organizeProfileName),
+          'tidy',
+        );
+        await tester.pump();
+        repo.organizeProfileGate = gate;
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.organizeProfileSave),
+        );
+      }
+      // Past the confirmation's own exit; the work spins meanwhile.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pump();
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(OrganizeScreen), findsOneWidget);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.organizeProfileSheet),
+        findsNothing,
+      );
+    });
+
+    // Mounted until it has gone, with nobody left to read it.
+    testWidgets('a profile ${delete ? 'delete' : 'save'} refused as its '
+        'sheet is dismissed is said in the shell', (tester) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository()
+        ..organizeProfiles = const [
+          OrganizeProfile(name: 'default', builtIn: true),
+          OrganizeProfile(name: 'flat'),
+        ];
+      tester.view.physicalSize = const Size(1200, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await pumpApp(
+        tester,
+        const OrganizeScreen(),
+        container: appContainer(repo: repo),
+        pushed: true,
+      );
+      if (delete) {
+        repo.deleteOrganizeProfileError = const WaxDeckApiException(
+          code: 'conflict',
+          message: 'the library "Music" is laid out by this profile',
+        );
+        await tester.tap(
+          find.bySemanticsIdentifier(
+            SemanticsIds.organizeProfileOption('flat'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.organizeProfileEdit('flat')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.bySemanticsIdentifier(
+            SemanticsIds.organizeProfileDelete('flat'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        repo.organizeProfileGate = gate;
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.organizeProfileDeleteConfirm),
+        );
+      } else {
+        repo.putOrganizeProfileError = const WaxDeckApiException(
+          code: 'invalid-request',
+          message: 'the music template names no file',
+        );
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.organizeProfileNew),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.bySemanticsIdentifier(SemanticsIds.organizeProfileName),
+          'tidy',
+        );
+        await tester.pump();
+        repo.organizeProfileGate = gate;
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.organizeProfileSave),
+        );
+      }
+      // Past the confirmation's own exit; the work spins meanwhile.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pump();
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(OrganizeScreen), findsOneWidget);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.organizeProfileSheet),
+        findsNothing,
+      );
+      // A delete is no refusal of anything typed: its own sentence. A save
+      // keeps the server's, which names what in the typing it refused.
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        delete
+            ? AppLocalizationsEn().organizeProfileDeleteInUse
+            : 'the music template names no file',
+      );
+    });
+  }
+
+  // What the contract says a delete's refusals mean, said in the sheet
+  // while it is up and in the shell once it was dismissed.
+  for (final (code, said) in <(String, String Function(AppLocalizationsEn))>[
+    ('conflict', (l10n) => l10n.organizeProfileDeleteInUse),
+    ('invalid-request', (l10n) => l10n.organizeProfileDeleteBuiltIn),
+    ('forbidden', (l10n) => l10n.errorForbidden),
+  ]) {
+    for (final dismissed in <bool>[false, true]) {
+      testWidgets('a profile delete refused $code '
+          '${dismissed ? 'as its sheet is dismissed' : 'with its sheet up'} '
+          'says what the refusal means', (tester) async {
+        final gate = Completer<void>();
+        final repo = FakeRepository()
+          ..organizeProfiles = const [
+            OrganizeProfile(name: 'default', builtIn: true),
+            OrganizeProfile(name: 'flat'),
+          ]
+          ..deleteOrganizeProfileError = WaxDeckApiException(
+            code: code,
+            message: 'the server says $code',
+          );
+        tester.view.physicalSize = const Size(1200, 1600);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await pumpApp(
+          tester,
+          const OrganizeScreen(),
+          container: appContainer(repo: repo),
+          pushed: true,
+        );
+        await tester.tap(
+          find.bySemanticsIdentifier(
+            SemanticsIds.organizeProfileOption('flat'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.organizeProfileEdit('flat')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.bySemanticsIdentifier(
+            SemanticsIds.organizeProfileDelete('flat'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        repo.organizeProfileGate = gate;
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.organizeProfileDeleteConfirm),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        if (dismissed) {
+          await tester.tapAt(const Offset(20, 20));
+          await tester.pump();
+        }
+        gate.complete();
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        final sentence = said(AppLocalizationsEn());
+        final sheet = find.bySemanticsIdentifier(
+          SemanticsIds.organizeProfileSheet,
+        );
+        if (dismissed) {
+          expect(sheet, findsNothing);
+          expect(shellMessageText(raisedMessage(tester)), sentence);
+        } else {
+          expect(
+            find.descendant(of: sheet, matching: find.text(sentence)),
+            findsOneWidget,
+          );
+          expect(raisedMessage(tester), isNull);
+        }
+        expect(find.text('the server says $code'), findsNothing);
+      });
+    }
+  }
 
   testWidgets('a profile is deleted behind a confirmation', (tester) async {
     final repo = FakeRepository()
@@ -812,6 +1054,50 @@ void main() {
     repo.applyOrganizeGate!.complete();
     await tester.pumpAndSettle();
     expect(apply().busy, isFalse);
+  });
+
+  testWidgets('an apply answered once the screen was left says what it '
+      'moved', (tester) async {
+    final repo = FakeRepository()
+      ..applyOrganizeGate = Completer<void>()
+      ..organizeReportResult = const OrganizeReport(
+        moved: 3,
+        skipped: 0,
+        failed: 0,
+      )
+      ..organizePlanResult = const OrganizePlan(
+        profile: 'default',
+        totalActions: 1,
+        actions: [
+          OrganizeAction(
+            itemPid: 'tr-1',
+            from: '/old/a.flac',
+            to: '/library/waves/a.flac',
+          ),
+        ],
+      );
+    final container = await _pump(tester, repo);
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeApply));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
+      'ORGANIZE',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeConfirm));
+    await tester.pump();
+
+    await leaveScreen(tester, container);
+    repo.applyOrganizeGate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      shellMessageText(container.read(shellMessagesProvider)),
+      '3 files moved',
+    );
   });
 
   testWidgets('preview is busy until its dry run answers', (tester) async {

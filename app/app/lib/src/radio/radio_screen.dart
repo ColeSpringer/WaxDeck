@@ -494,7 +494,7 @@ class _StationTile extends ConsumerWidget {
   /// go: a full dial is actionable, and a refused write would otherwise be
   /// a star that silently springs back.
   Future<void> _pin(BuildContext context, WidgetRef ref) async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     final refusal = await ref
         .read(radioFavoritesProvider.notifier)
@@ -520,7 +520,7 @@ class _StationTile extends ConsumerWidget {
   }
 
   Future<void> _remove(BuildContext context, WidgetRef ref) async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     final favorites = ref.read(radioFavoritesProvider.notifier);
     final playbackController = ref.read(radioPlaybackProvider.notifier);
@@ -568,7 +568,7 @@ Future<void> _tune(
   if (station.pid != playback.station?.pid) {
     return tuneStation(context, ref, station);
   }
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   try {
     await ref.read(radioPlaybackProvider.notifier).stop();
@@ -589,7 +589,7 @@ Future<void> tuneStation(
   WidgetRef ref,
   RadioStation station,
 ) async {
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   try {
     await ref.read(radioPlaybackProvider.notifier).play(station);

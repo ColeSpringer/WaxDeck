@@ -227,7 +227,7 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet>
 
   Future<void> _export(ShareCardFormat format) {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final exporter = ref.read(shareCardExporterProvider);
     return runAs(format, () async {
       try {

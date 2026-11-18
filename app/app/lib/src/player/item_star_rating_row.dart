@@ -32,7 +32,7 @@ class ItemStarRatingRow extends ConsumerWidget {
     ref.listen(playStateControllerProvider(pid), (previous, next) {
       if (rejectedMutation(previous, next)) {
         ref
-            .read(shellMessengerProvider.notifier)
+            .read(shellMessengerProvider)
             .show(l10n.playerRatingFailed, channel: ShellChannel.rating);
       }
     });

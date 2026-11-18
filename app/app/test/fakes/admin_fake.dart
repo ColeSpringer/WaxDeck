@@ -17,11 +17,15 @@ mixin FakeAdmin on FakeRepositoryState implements AdminApi {
   @override
   Future<ScrobblingAdminConfig> getScrobblingConfig() async => scrobblingConfig;
 
+  /// Holds [putScrobblingConfig] until completed.
+  Completer<void>? putScrobblingConfigGate;
+
   @override
   Future<ScrobblingAdminConfig> putScrobblingConfig({
     required String apiKey,
     required String secret,
   }) async {
+    await putScrobblingConfigGate?.future;
     final error = adminError;
     if (error != null) throw error;
     // The server refuses a half-set pair, like it does.
@@ -475,8 +479,12 @@ mixin FakeAdmin on FakeRepositoryState implements AdminApi {
   final List<String> stageRestoreCalls = [];
   int cancelStagedRestoreCalls = 0;
 
+  /// Holds [stageRestore] until completed.
+  Completer<void>? stageRestoreGate;
+
   @override
   Future<RestorePlan> stageRestore(String backupId) async {
+    await stageRestoreGate?.future;
     final error = adminError;
     if (error != null) throw error;
     stageRestoreCalls.add(backupId);

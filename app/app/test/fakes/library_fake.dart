@@ -557,6 +557,10 @@ mixin FakeLibrary on FakeRepositoryState implements LibraryApi {
   final List<({List<String> pids, String? mode, bool dryRun})>
   deleteItemsCalls = [];
 
+  /// Holds an applied [deleteLibraryItems] until completed: a delete in
+  /// flight.
+  Completer<void>? deleteItemsGate;
+
   @override
   Future<DeleteItemsResult> deleteLibraryItems({
     required List<String> pids,
@@ -566,6 +570,7 @@ mixin FakeLibrary on FakeRepositoryState implements LibraryApi {
     final error = deleteItemsError;
     if (error != null) throw error;
     deleteItemsCalls.add((pids: pids, mode: mode, dryRun: dryRun));
+    if (!dryRun) await deleteItemsGate?.future;
     final refusal = deleteItemsRefusal?.call(pids, dryRun);
     if (refusal != null) throw refusal;
     final entries = [

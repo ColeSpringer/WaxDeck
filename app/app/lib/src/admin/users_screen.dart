@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/asked_from.dart';
 import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -135,6 +136,7 @@ class UsersScreen extends StatelessWidget {
       largeTitle: false,
       semanticsId: SemanticsIds.adminUsers,
       onBack: adminBack(context),
+      backSemanticsId: SemanticsIds.navBack,
       // Slivers rather than a body: each view pages a list of its own, so
       // the remaining space is exactly what it should get.
       slivers: <Widget>[
@@ -188,11 +190,13 @@ class _UsersTab extends ConsumerWidget {
     WidgetRef ref,
     UserAccount user,
   ) async {
+    // The container, not `ref`, past the await: the tab may be gone.
+    final container = ProviderScope.containerOf(context, listen: false);
     final changed = await context.push<bool>(
       WaxRoute.userEdit,
       extra: UserEditArgs(user: user),
     );
-    if (changed ?? false) ref.invalidate(adminUsersProvider);
+    if (changed ?? false) container.invalidate(adminUsersProvider);
   }
 
   @override
@@ -325,13 +329,16 @@ class _RequestsTab extends ConsumerWidget {
     WidgetRef ref,
     UserAccount user,
   ) async {
+    // The container, not `ref`, past the await: the tab may be gone.
+    final container = ProviderScope.containerOf(context, listen: false);
     final changed = await context.push<bool>(
       WaxRoute.userEdit,
       extra: UserEditArgs(user: user, approve: true),
     );
     if (changed ?? false) {
-      ref.invalidate(signupRequestsProvider);
-      ref.invalidate(adminUsersProvider);
+      container
+        ..invalidate(signupRequestsProvider)
+        ..invalidate(adminUsersProvider);
     }
   }
 
@@ -341,7 +348,9 @@ class _RequestsTab extends ConsumerWidget {
     UserAccount user,
   ) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
+    // The container, not `ref`, past the awaits: the tab may be gone.
+    final container = ProviderScope.containerOf(context, listen: false);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -364,8 +373,8 @@ class _RequestsTab extends ConsumerWidget {
     );
     if (confirmed != true) return;
     try {
-      await ref.read(repositoryProvider).rejectSignupRequest(user.id);
-      ref.invalidate(signupRequestsProvider);
+      await container.read(repositoryProvider).rejectSignupRequest(user.id);
+      container.invalidate(signupRequestsProvider);
     } on WaxDeckApiException catch (e) {
       messenger.show(explainRefusal(l10n, e));
     }
@@ -433,14 +442,18 @@ class _InvitesTab extends ConsumerWidget {
 
   Future<void> _create(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final request = await showDialog<_InviteRequest>(
       context: context,
       builder: (_) => const _CreateInviteDialog(),
     );
     if (request == null || !context.mounted) return;
+    // Read before the await: the tab may be left meanwhile, and the token
+    // is shown once, so wherever the admin is by then.
+    final from = AskedFrom.of(context);
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
-      final created = await ref
+      final created = await container
           .read(repositoryProvider)
           .createInvite(
             note: request.note,
@@ -450,10 +463,8 @@ class _InvitesTab extends ConsumerWidget {
             maxUses: request.maxUses,
             expiresAt: request.expiresAt,
           );
-      ref.invalidate(invitesProvider);
-      if (!context.mounted) return;
-      await showDialog<void>(
-        context: context,
+      container.invalidate(invitesProvider);
+      await from.showDialogOnScreen<void>(
         builder: (dialogContext) => AlertDialog(
           title: Text(l10n.adminInviteCreatedTitle),
           content: Column(
@@ -491,7 +502,9 @@ class _InvitesTab extends ConsumerWidget {
     Invite invite,
   ) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
+    // The container, not `ref`, past the awaits: the tab may be gone.
+    final container = ProviderScope.containerOf(context, listen: false);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -514,8 +527,8 @@ class _InvitesTab extends ConsumerWidget {
     );
     if (confirmed != true) return;
     try {
-      await ref.read(repositoryProvider).revokeInvite(invite.id);
-      ref.invalidate(invitesProvider);
+      await container.read(repositoryProvider).revokeInvite(invite.id);
+      container.invalidate(invitesProvider);
     } on WaxDeckApiException catch (e) {
       messenger.show(explainError(l10n, e));
     }

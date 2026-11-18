@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/admin_shares_screen.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/sharing/shares_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -52,6 +57,60 @@ Future<ProviderContainer> _pump(
 }
 
 void main() {
+  for (final left in <bool>[false, true]) {
+    testWidgets(
+      'a revoke refused ${left ? 'once the console section has '
+                'gone' : 'while it is up'} is said in the shell',
+      (tester) async {
+        const refusal = WaxDeckApiException(
+          code: 'unavailable',
+          message: 'the server is restarting',
+        );
+        final repo = FakeRepository()
+          ..allShares.add(_share(pid: 'sh-1', title: 'Gone', owner: 'Sam'));
+        final container = await _pump(tester, repo, const AdminSharesScreen());
+        final gate = repo.revokeShareGate = Completer<void>();
+        repo.shareError = refusal;
+
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.shareRevoke('sh-1')),
+        );
+        await tester.pump();
+        if (left) await leaveScreen(tester, container);
+        gate.complete();
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(
+          shellMessageText(container.read(shellMessagesProvider)),
+          explainError(AppLocalizationsEn(), refusal),
+        );
+      },
+    );
+  }
+
+  testWidgets('a revoke answered once the console section has gone is '
+      'confirmed in the shell', (tester) async {
+    final repo = FakeRepository()
+      ..allShares.add(_share(pid: 'sh-1', title: 'Gone', owner: 'Sam'));
+    final container = await _pump(tester, repo, const AdminSharesScreen());
+    final gate = repo.revokeShareGate = Completer<void>();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.shareRevoke('sh-1')),
+    );
+    await tester.pump();
+    await leaveScreen(tester, container);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      shellMessageText(container.read(shellMessagesProvider)),
+      AppLocalizationsEn().adminShareRevoked,
+    );
+  });
+
   testWidgets('the console lists every account\'s links and names them', (
     tester,
   ) async {

@@ -6,7 +6,9 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/asked_from.dart';
 import '../shell/async_box_face.dart';
+import '../shell/navigation_history.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'playlist_create.dart';
@@ -43,13 +45,13 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
   /// A refused add: the shell's toast would sit under this sheet.
   String? _refusal;
 
-  void _refused(ShellMessenger messenger, String message) {
-    if (mounted) {
-      setState(() => _refusal = message);
-    } else {
-      messenger.show(message, channel: ShellChannel.playlists);
-    }
-  }
+  // In the sheet while it is still there: swiped away it is mounted
+  // until it has gone, with nobody to read it.
+  void _refused(AskedFrom from, String message) => from.refused(
+    message,
+    inline: (message) => setState(() => _refusal = message),
+    channel: ShellChannel.playlists,
+  );
 
   @override
   void initState() {
@@ -79,8 +81,7 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
       _busy = true;
       _refusal = null;
     });
-    final navigator = Navigator.of(context);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final from = AskedFrom.of(context);
     final l10n = context.l10n;
     try {
       await ref.read(playlistsProvider.notifier).appendTo(playlist, <String>[
@@ -88,13 +89,13 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
       ]);
       // A request outlives a sheet somebody swiped away, and popping
       // then takes the screen underneath.
-      if (mounted) navigator.pop();
-      messenger.show(
+      closeFinished(from.route);
+      from.messenger.show(
         l10n.playlistAddedTo(widget.item.title, playlist.name),
         channel: ShellChannel.playlists,
       );
     } on WaxDeckApiException catch (e) {
-      _refused(messenger, explainError(l10n, e));
+      _refused(from, explainError(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -102,8 +103,7 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
 
   Future<void> _createAndAdd() async {
     if (_busy) return;
-    final navigator = Navigator.of(context);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final from = AskedFrom.of(context);
     final l10n = context.l10n;
     final name = await promptPlaylistName(
       context,
@@ -124,14 +124,14 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
             kind: 'static',
             itemPids: <String>[widget.item.pid],
           );
-      if (mounted) navigator.pop();
-      messenger.show(
+      closeFinished(from.route);
+      from.messenger.show(
         l10n.playlistAddedTo(widget.item.title, name),
         channel: ShellChannel.playlists,
       );
     } on WaxDeckApiException catch (e) {
       // A name somebody just typed, so the server's own refusal.
-      _refused(messenger, explainRefusal(l10n, e));
+      _refused(from, explainRefusal(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

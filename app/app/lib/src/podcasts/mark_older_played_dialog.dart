@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
+import '../shell/navigation_history.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'podcast_shelves.dart';
@@ -116,7 +117,7 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
       _done = 0;
       _total = 0;
     });
-    final navigator = Navigator.of(context);
+    final route = ModalRoute.of(context);
     // Read beside it, and for the same reason: this loop outlives the
     // frame that started it, so nothing here reaches for a context.
     final l10n = context.l10n;
@@ -126,7 +127,7 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
     // `ref` is dead the moment this State is disposed; the container is
     // not.
     final container = ProviderScope.containerOf(context, listen: false);
-    final messenger = container.read(shellMessengerProvider.notifier);
+    final messenger = container.read(shellMessengerProvider);
     final repository = container.read(repositoryProvider);
     var done = 0;
     String? failure;
@@ -195,8 +196,10 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
     // checkpoint landing inside that window would find `mounted` true
     // and pop the show screen. `_cancelled` is set by the Stop button
     // and by dispose, and both mean the same thing here: this dialog
-    // is on its way out and is nobody's to close a second time.
-    if (_cancelled || !mounted) return;
+    // is on its way out and is nobody's to close a second time. So is
+    // one dismissed by its scrim or by back, on its way out with neither
+    // set yet.
+    if (_cancelled || !mounted || !(route?.isActive ?? false)) return;
     if (failure != null) {
       setState(() => _running = false);
       messenger.show(
@@ -205,7 +208,7 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
       );
       return;
     }
-    navigator.pop();
+    closeFinished(route);
     messenger.show(
       l10n.podcastMarkedPlayedTotal(done),
       channel: ShellChannel.markOlder,

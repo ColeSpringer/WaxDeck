@@ -329,7 +329,9 @@ class NowPlayingController extends _NowPlayingCore
     _registry = ref.read(currentSessionRegistryProvider);
     _boundarySub = _engine.itemBoundary.listen((_) => _onBoundary());
     _feeder = TimelineFeeder(
-      repository: ref.read(repositoryProvider),
+      // Per mint, not here: a native install's media session builds this
+      // before the install has a server.
+      repository: () => ref.read(repositoryProvider),
       engine: _engine,
       enabled: () => ref.read(webGaplessProvider),
       crossfadeSeconds: () =>
@@ -350,7 +352,7 @@ class NowPlayingController extends _NowPlayingCore
       onRefusal: (code, {required midStream}) {
         if (!ref.mounted || code != 'transcode-limited') return;
         ref
-            .read(shellMessengerProvider.notifier)
+            .read(shellMessengerProvider)
             .showLocalized(
               (l10n) =>
                   midStream ? l10n.playerGaplessPaused : l10n.playerGaplessBusy,

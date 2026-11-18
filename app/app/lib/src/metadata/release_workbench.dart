@@ -16,12 +16,14 @@ import '../settings/client_prefs.dart';
 import '../settings/settings_registry.dart';
 import '../shell/async_box_face.dart';
 import '../shell/forbidden_page.dart';
+import '../shell/navigation_history.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shortcuts.dart';
 import 'album_pane.dart';
 import 'bulk_pane.dart';
 import 'metadata_screen.dart';
+import 'rename_section.dart';
 
 /// Where the workbench put its seam, in whole pixels; zero is "wherever
 /// the layout puts it". Per device, beside the review queue's own, for
@@ -129,8 +131,17 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
     ref.read(musicItemsProvider(_listing)).value?.items ?? const [],
   );
 
+  /// The album or bulk sheet open over this workbench, which goes with it.
+  Route<Object?>? _sheet;
+
   @override
   void dispose() {
+    // Its sheet goes with it: a go to another release reuses this page, and
+    // the sheet left over it would edit a release nothing there shows.
+    // After the frame, as the tree is locked while this is disposed.
+    if (_sheet case final sheet?) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => closeFinished(sheet));
+    }
     _scroll.dispose();
     super.dispose();
   }
@@ -166,30 +177,14 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
   /// owns the draft.
   Future<bool> _confirmDiscard() async {
     if (!_twoPane || !_paneDirty) return true;
-    final l10n = context.l10n;
-    final discard = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.metadataDiscardTitle),
-        content: WaxProse(l10n.metadataDiscardBody),
-        actions: <Widget>[
-          WaxButton(
-            label: l10n.commonCancel,
-            kind: WaxButtonKind.text,
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          WaxButton(
-            label: l10n.metadataDiscardConfirm,
-            semanticsId: SemanticsIds.workbenchDiscardConfirm,
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
-      ),
-    );
-    if (!(discard ?? false)) return false;
+    if (!await confirmDiscardEdits(context)) return false;
     _paneDirty = false;
     return true;
   }
+
+  /// Whether a door a pane's message opens may leave the workbench, asked
+  /// of the pane on screen now: the one that offered it may be gone.
+  Future<bool> _mayLeave() async => !mounted || await _confirmDiscard();
 
   void _move(int delta) {
     final tracks = _tracks;
@@ -307,37 +302,49 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
     });
   }
 
-  /// Where a regroup takes the workbench: the same location under the
-  /// album pid the tracks landed on. Replaced rather than gone to, so
-  /// a workbench that was pushed from an album's overflow keeps its
-  /// way back.
-  void _goTo(String albumPid) {
-    if (mounted) context.replace(WaxRoute.metadata(albumPid));
-  }
+  /// Where a pane's answer takes the workbench, read as the pane writes
+  /// (see [EditFollow]): a merge replaces it with the album the release
+  /// joined rather than going there, so a workbench pushed from an album's
+  /// overflow keeps its way back. [sheet], a pane's sheet, closes with it.
+  /// None once the workbench has gone (its sheet then closing after it).
+  EditFollow? _follow([BuildContext? sheet]) => mounted
+      ? EditFollow.of(
+          context,
+          pid: widget.pid,
+          closing: sheet == null ? null : ModalRoute.of(sheet),
+        )
+      : null;
 
   /// A member saved in the pane: the pane's controller refetches only
-  /// itself, and the list beside it holds the same item.
-  void _memberSaved() {
-    ref
-      ..invalidate(musicItemsProvider(_listing))
-      ..invalidate(albumDetailProvider(widget.pid));
+  /// itself, and the list beside it holds the same item, as may the page
+  /// Back lands on once the workbench has gone. Read while it is up.
+  VoidCallback _memberSaved() {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final listing = _listing;
+    final pid = widget.pid;
+    return () => container
+      ..invalidate(musicItemsProvider(listing))
+      ..invalidate(albumDetailProvider(pid));
   }
 
-  Future<void> _albumSheet() => showWaxSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    builder: (sheetContext) => FractionallySizedBox(
-      heightFactor: 0.95,
-      child: AlbumPane(
-        pid: widget.pid,
-        onRegrouped: (newPid) {
-          // The regroup can arrive from a snackbar action after the
-          // sheet was swiped away; a dead context must not be walked.
-          if (sheetContext.mounted) Navigator.of(sheetContext).pop();
-          _goTo(newPid);
-        },
-      ),
-    ),
+  /// Opens [pane] as the workbench's sheet, kept as [_sheet] while it is up.
+  Future<void> _openSheet(Widget Function(BuildContext sheet) pane) async {
+    await showWaxSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        _sheet = ModalRoute.of(sheetContext);
+        return FractionallySizedBox(
+          heightFactor: 0.95,
+          child: pane(sheetContext),
+        );
+      },
+    );
+    if (mounted) _sheet = null;
+  }
+
+  Future<void> _albumSheet() => _openSheet(
+    (sheet) => AlbumPane(pid: widget.pid, follow: () => _follow(sheet)),
   );
 
   Future<void> _bulkSheet() async {
@@ -345,19 +352,11 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
     // Checks can outlive their rows - a regroup moves tracks off the
     // release - and a form over nothing has nothing to fetch.
     if (ordered.isEmpty) return;
-    await showWaxSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => FractionallySizedBox(
-        heightFactor: 0.95,
-        child: WorkbenchBulkPane(
-          pids: ordered,
-          albumPid: widget.pid,
-          onRegrouped: (newPid) {
-            if (sheetContext.mounted) Navigator.of(sheetContext).pop();
-            _goTo(newPid);
-          },
-        ),
+    await _openSheet(
+      (sheet) => WorkbenchBulkPane(
+        pids: ordered,
+        albumPid: widget.pid,
+        follow: () => _follow(sheet),
       ),
     );
   }
@@ -426,7 +425,8 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
         title: album.value?.title ?? l10n.musicAlbumTitle,
         largeTitle: false,
         semanticsId: SemanticsIds.metadataWorkbench,
-        onBack: () => context.leave(fallback: WaxRoute.music),
+        onBack: () => context.back(fallback: WaxRoute.music),
+        backSemanticsId: SemanticsIds.navBack,
         // A filling sliver, not a body: the list needs a bounded height
         // and a scroll position of its own for j/k to move by
         // arithmetic, and the pane keeps its save bar under its own
@@ -522,7 +522,7 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
               key: ValueKey(ordered.join(' ')),
               pids: ordered,
               albumPid: widget.pid,
-              onRegrouped: _goTo,
+              follow: _follow,
               onDirtyChanged: _paneDirtyChanged,
             );
     } else if (_open case final pid?) {
@@ -533,13 +533,14 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
         key: ValueKey(pid),
         pid: pid,
         embedded: true,
-        onSaved: _memberSaved,
+        onSaved: _memberSaved(),
         onDirtyChanged: _paneDirtyChanged,
+        mayLeave: _mayLeave,
       );
     } else {
       pane = AlbumPane(
         pid: widget.pid,
-        onRegrouped: _goTo,
+        follow: _follow,
         onDirtyChanged: _paneDirtyChanged,
       );
     }

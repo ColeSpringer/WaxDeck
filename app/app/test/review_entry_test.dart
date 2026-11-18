@@ -102,7 +102,8 @@ class _HeldDecisions extends FakeRepository {
 }
 
 /// Tall enough for the diff to be laid out below the candidate list
-/// without the decision bar overrunning it.
+/// without the decision bar overrunning it. At the entry's own location,
+/// since a decision leaves the page for the queue.
 Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
   tester.view.physicalSize = const Size(700, 1600);
   tester.view.devicePixelRatio = 1;
@@ -111,9 +112,13 @@ Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
     tester,
     const ReviewEntryScreen(entryId: 'rv-1'),
     container: appContainer(repo: repo),
-    routed: false,
+    at: WaxRoute.reviewEntry('rv-1'),
   );
 }
+
+String _location(WidgetTester tester) => GoRouter.of(
+  tester.element(find.byType(Navigator).first),
+).routerDelegate.currentConfiguration.uri.path;
 
 /// The review surface open on the entry, settled.
 Future<void> _pumpSurface(WidgetTester tester, FakeRepository repo) => pumpApp(
@@ -236,6 +241,45 @@ void main() {
         ReviewEntryView.minWidth,
       );
       expect(_diffOverflow(tester), 0);
+    });
+
+    testWidgets('wraps the line saying it is still identifying rather than '
+        'running past its narrowest width', (tester) async {
+      tester.view.physicalSize = const Size(ReviewEntryView.minWidth, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final detail = _detail();
+      await mountApp(
+        tester,
+        Scaffold(body: ReviewEntryView(entryId: detail.id)),
+        container: appContainer(
+          repo: _repoWith(
+            ReviewEntryDetail(
+              id: detail.id,
+              kind: detail.kind,
+              status: detail.status,
+              mediaType: detail.mediaType,
+              origin: detail.origin,
+              title: detail.title,
+              artist: detail.artist,
+              trackCount: detail.trackCount,
+              createdAt: detail.createdAt,
+              identifying: true,
+            ),
+          ),
+        ),
+        routed: false,
+      );
+      // Frames rather than settling: its spinner never stops.
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(
+        find.text('Identifying: candidate lookup is still running'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('and one pixel under it does not', (tester) async {
@@ -420,7 +464,8 @@ void main() {
     repo.release.complete();
     await tester.pumpAndSettle();
     expect(repo.decideReviewCalls.single.action, 'approve');
-    expect(find.text('Decided: Applied'), findsOneWidget);
+    // Answered, the page leaves the decided entry for the queue.
+    expect(_location(tester), WaxRoute.review);
   });
 
   testWidgets('a decision refused for a reason keeps the server\'s words', (
@@ -564,6 +609,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.decideReviewCalls.single.action, 'discard');
 
+    // The decision left the page; the canned entry reads pending again.
+    GoRouter.of(
+      tester.element(find.byType(Navigator).first),
+    ).go(WaxRoute.reviewEntry('rv-1'));
+    await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAddCopy));
     await tester.pumpAndSettle();
     expect(repo.decideReviewCalls.last.action, 'as-is');
@@ -827,6 +877,103 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
       findsOneWidget,
     );
+  });
+
+  testWidgets('a decision on the page of its own returns to the queue', (
+    tester,
+  ) async {
+    final repo = _repoWith(_detail());
+    repo.reviewEntries = [
+      ...repo.reviewEntries,
+      testReviewEntry('rv-2', title: 'Second Album'),
+    ];
+    tester.view.physicalSize = const Size(700, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _mountBlank(tester, repo);
+    final router = GoRouter.of(tester.element(find.byType(Scaffold).first));
+    router.go(WaxRoute.reviewEntry('rv-1'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ReviewEntryScreen), findsOneWidget);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+    await tester.pumpAndSettle();
+
+    expect(repo.decideReviewCalls.single.action, 'as-is');
+    expect(_location(tester), WaxRoute.review);
+    expect(find.byType(ReviewEntryScreen), findsNothing);
+    expect(find.byType(ReviewScreen), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.reviewRow('rv-2')),
+      findsOneWidget,
+    );
+    expect(shellMessageText(raisedMessage(tester)), 'Decided 1 entry');
+  });
+
+  testWidgets('a decision on the page of its own that lands once the '
+      'visitor went elsewhere leaves them there', (tester) async {
+    final repo = _repoWith(_detail());
+    repo.reviewEntries = [
+      ...repo.reviewEntries,
+      testReviewEntry('rv-2', title: 'Second Album'),
+    ];
+    tester.view.physicalSize = const Size(700, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _mountBlank(tester, repo);
+    final router = GoRouter.of(tester.element(find.byType(Scaffold).first));
+    router.go(WaxRoute.reviewEntry('rv-1'));
+    await tester.pumpAndSettle();
+    final gate = repo.decideReviewGate = Completer<void>();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+    await tester.pump();
+    router.go(WaxRoute.home);
+    await tester.pumpAndSettle();
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(repo.decideReviewCalls.single.action, 'as-is');
+    expect(_location(tester), WaxRoute.home);
+    expect(shellMessageText(raisedMessage(tester)), 'Decided 1 entry');
+  });
+
+  testWidgets('an approve made on the page of its own is undone from the '
+      'queue, which stays', (tester) async {
+    final repo = _repoWith(_detail());
+    repo.reviewEntries = [
+      ...repo.reviewEntries,
+      testReviewEntry('rv-2', title: 'Second Album'),
+    ];
+    tester.view.physicalSize = const Size(700, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _mountBlank(tester, repo);
+    GoRouter.of(
+      tester.element(find.byType(Scaffold).first),
+    ).go(WaxRoute.reviewEntry('rv-1'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewApprove));
+    await tester.pumpAndSettle();
+    expect(_location(tester), WaxRoute.review);
+    expect(raisedMessage(tester)!.actionLabel, 'Undo');
+
+    await pressRaisedAction(tester);
+    expect(repo.revertedReviewEntryIds, ['rv-1']);
+    expect(_location(tester), WaxRoute.review);
+    expect(find.byType(ReviewEntryScreen), findsNothing);
+    // Reverted is decided: the queue the visitor is on holds the rest.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.reviewRow('rv-2')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.reviewRow('rv-1')),
+      findsNothing,
+    );
+    expect(shellMessageText(raisedMessage(tester)), 'Decision undone');
   });
 
   testWidgets('applied entries show status and revert', (tester) async {

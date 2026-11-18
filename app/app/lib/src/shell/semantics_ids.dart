@@ -1001,6 +1001,7 @@ abstract final class SemanticsIds {
   // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, the skip link, and the read-only banner.
   static const String navAccount = 'nav-account';
   static String navAccountAction(Object name) => 'nav-account-$name';
+  static const String navBack = 'nav-back';
   static String navDestination(Object name) => 'nav-$name';
   static String navDisclose(Object name) => 'nav-disclose-$name';
   static const String navOverflow = 'nav-overflow';

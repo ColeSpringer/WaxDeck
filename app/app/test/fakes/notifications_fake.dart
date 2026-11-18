@@ -207,6 +207,9 @@ mixin FakeNotifications on FakeRepositoryState implements NotificationsApi {
   Future<List<NotificationTarget>> listMyNotificationTargets() async =>
       List.of(myNotificationTargets);
 
+  /// Holds [createMyNotificationTarget] until completed.
+  Completer<void>? createMyNotificationTargetGate;
+
   @override
   Future<NotificationTarget> createMyNotificationTarget({
     required String kind,
@@ -216,6 +219,7 @@ mixin FakeNotifications on FakeRepositoryState implements NotificationsApi {
     bool muted = false,
     int minIntervalSeconds = 0,
   }) async {
+    await createMyNotificationTargetGate?.future;
     if (notificationTargetError != null) throw notificationTargetError!;
     return _storeTarget(
       myNotificationTargets,

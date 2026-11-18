@@ -6,9 +6,10 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/asked_from.dart';
 import '../shell/in_flight.dart';
+import '../shell/navigation_history.dart';
 import '../shell/semantics_ids.dart';
-import '../shell/shell_messages.dart';
 import 'organize_screen.dart';
 
 /// How long typing rests before the samples are asked for again.
@@ -117,14 +118,12 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet>
     }
   }
 
-  /// Shows a refusal in the sheet, or, the sheet gone, as a toast.
-  void _refused(ShellMessenger messenger, String message) {
-    if (mounted) {
-      setState(() => _refusal = message);
-    } else {
-      messenger.show(message);
-    }
-  }
+  /// Shows a refusal in the sheet, or, the sheet dismissed, as a toast:
+  /// on its way out it is still mounted, with nobody to read it.
+  void _refused(AskedFrom from, String message) => from.refused(
+    message,
+    inline: (message) => setState(() => _refusal = message),
+  );
 
   Future<void> _save() async {
     final name = _name.text.trim();
@@ -132,7 +131,7 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet>
     final l10n = context.l10n;
     // The sheet can be dismissed before the answer; the container outlives it.
     final container = ProviderScope.containerOf(context, listen: false);
-    final messenger = container.read(shellMessengerProvider.notifier);
+    final from = AskedFrom.of(context);
     await runAs(_ProfileWork.save, () async {
       setState(() => _refusal = null);
       try {
@@ -147,10 +146,10 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet>
               compilationFolder: _compilationFolder,
             );
         container.invalidate(organizeProfilesProvider);
-        messenger.show(l10n.organizeProfileSaved(name));
-        if (mounted) Navigator.of(context).pop();
+        from.messenger.show(l10n.organizeProfileSaved(name));
+        closeFinished(from.route);
       } on WaxDeckApiException catch (error) {
-        _refused(messenger, explainRefusal(l10n, error));
+        _refused(from, explainRefusal(l10n, error));
       }
     });
   }
@@ -158,7 +157,7 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet>
   Future<void> _delete(String name) async {
     final l10n = context.l10n;
     final container = ProviderScope.containerOf(context, listen: false);
-    final messenger = container.read(shellMessengerProvider.notifier);
+    final from = AskedFrom.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -185,11 +184,15 @@ class _ProfileEditorSheetState extends ConsumerState<_ProfileEditorSheet>
       try {
         await container.read(repositoryProvider).deleteOrganizeProfile(name);
         container.invalidate(organizeProfilesProvider);
-        messenger.show(l10n.organizeProfileDeleted(name));
-        if (mounted) Navigator.of(context).pop();
+        from.messenger.show(l10n.organizeProfileDeleted(name));
+        closeFinished(from.route);
       } on WaxDeckApiException catch (error) {
-        // A library still laid out by it: the server names which.
-        _refused(messenger, explainRefusal(l10n, error));
+        // What the contract says each refusal of a delete means.
+        _refused(from, switch (error.code) {
+          'conflict' => l10n.organizeProfileDeleteInUse,
+          'invalid-request' => l10n.organizeProfileDeleteBuiltIn,
+          _ => explainError(l10n, error),
+        });
       }
     });
   }

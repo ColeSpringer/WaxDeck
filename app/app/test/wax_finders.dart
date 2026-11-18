@@ -1,3 +1,5 @@
+import 'dart:ui' show CheckedState, Tristate;
+
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -74,4 +76,82 @@ bool hasOwnSemanticsNode(WidgetTester tester, Finder tip) {
   );
   return node.label == widget.message &&
       node.getSemanticsData().hasAction(SemanticsAction.tap);
+}
+
+/// Where [node] is on screen, in logical pixels: its rect through every
+/// transform above it but the window's own.
+Rect semanticsRectOnScreen(SemanticsNode node) {
+  var rect = node.rect;
+  for (var at = node; at.parent != null; at = at.parent!) {
+    final transform = at.transform;
+    if (transform != null) rect = MatrixUtils.transformRect(transform, rect);
+  }
+  return rect;
+}
+
+/// The node a screen reader exploring by touch lands on at [position], as
+/// Android's accessibility bridge picks it: the topmost node holding the
+/// point, children before their parent, that takes the focus.
+SemanticsNode? touchExploredAt(WidgetTester tester, Offset position) {
+  SemanticsNode? landOn(SemanticsNode node, Offset point) {
+    final transform = node.transform;
+    final local = transform == null
+        ? point
+        : MatrixUtils.transformPoint(Matrix4.inverted(transform), point);
+    if (!node.rect.contains(local)) return null;
+    final found = _topmostFirst(node)
+        .where((child) => !child.getSemanticsData().flagsCollection.isHidden)
+        .map((child) => landOn(child, local))
+        .firstWhere((hit) => hit != null, orElse: () => null);
+    return found ?? (_takesFocus(node.getSemanticsData()) ? node : null);
+  }
+
+  final root = tester
+      .binding
+      .renderViews
+      .first
+      .owner!
+      .semanticsOwner!
+      .rootSemanticsNode!;
+  return _topmostFirst(root)
+      .map((child) => landOn(child, position))
+      .firstWhere((hit) => hit != null, orElse: () => null);
+}
+
+/// [node]'s children in the order a touch asks them: the last painted
+/// first.
+List<SemanticsNode> _topmostFirst(SemanticsNode node) {
+  final children = <SemanticsNode>[];
+  node.visitChildren((child) {
+    children.add(child);
+    return true;
+  });
+  return children.reversed.toList();
+}
+
+/// Whether the bridge would put the accessibility focus on a node with
+/// [data]: something to read or to do besides scrolling, or a state.
+bool _takesFocus(SemanticsData data) {
+  final flags = data.flagsCollection;
+  if (flags.scopesRoute || flags.isAccessibilityFocusBlocked) return false;
+  const scrolls = <SemanticsAction>{
+    SemanticsAction.scrollLeft,
+    SemanticsAction.scrollRight,
+    SemanticsAction.scrollUp,
+    SemanticsAction.scrollDown,
+  };
+  return SemanticsAction.values.any(
+        (action) => !scrolls.contains(action) && data.hasAction(action),
+      ) ||
+      flags.isChecked != CheckedState.none ||
+      flags.isSelected == Tristate.isTrue ||
+      flags.isTextField ||
+      flags.isFocused != Tristate.none ||
+      flags.isEnabled != Tristate.none ||
+      flags.isInMutuallyExclusiveGroup ||
+      flags.isToggled != Tristate.none ||
+      flags.isSlider ||
+      data.label.isNotEmpty ||
+      data.value.isNotEmpty ||
+      data.hint.isNotEmpty;
 }

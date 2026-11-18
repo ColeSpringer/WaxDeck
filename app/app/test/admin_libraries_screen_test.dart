@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/libraries_screen.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -67,6 +69,39 @@ void main() {
     expect(repo.listLibrariesCalls, contains(true));
   });
 
+  testWidgets('a matching mode refused once the screen was left is said in '
+      'the shell', (tester) async {
+    const refusal = WaxDeckApiException(
+      code: 'unavailable',
+      message: 'the server is restarting',
+    );
+    final gate = Completer<void>();
+    final repo = FakeRepository()
+      ..setLibraryMatchingGate = gate
+      ..setLibraryMatchingError = refusal;
+    repo.libraries.add(
+      const LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/media/music'),
+    );
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMatching('lb-1')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ask me').last);
+    await tester.pumpAndSettle();
+    await leaveScreen(tester, container);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      shellMessageText(container.read(shellMessagesProvider)),
+      explainError(AppLocalizationsEn(), refusal),
+    );
+  });
+
   testWidgets('adding a library creates it and refreshes the list', (
     tester,
   ) async {
@@ -90,7 +125,7 @@ void main() {
 
     expect(repo.libraries.map((l) => l.name), contains('audiobooks'));
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       contains('Library "audiobooks" created'),
     );
     // The list picked the new root up.
@@ -158,7 +193,7 @@ void main() {
 
     expect(repo.libraries, isEmpty);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       contains('name and an absolute path are required'),
     );
   });
@@ -278,7 +313,7 @@ void main() {
     // The rest take it on a rescan that re-reads unchanged files, which
     // a plain Rescan does not: the message names that switch.
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Applies to new files; for the rest, Rescan with Re-read unchanged '
       'files.',
     );
@@ -364,7 +399,7 @@ void main() {
       (libraryPid: 'lb-1', media: 'audiobook'),
     ]);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Scanning spoken to apply the change.',
     );
 
@@ -377,7 +412,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.setLibraryMediaCalls.last.media, 'music');
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Another job is running. Once it ends, rescan with Re-read unchanged '
       'files on to apply the change to spoken.',
     );
@@ -486,7 +521,7 @@ void main() {
       (libraryPid: 'lb-1', media: 'audiobook'),
     ]);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Scanning spoken to apply the change.',
     );
   });
@@ -672,7 +707,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Library "audiobooks" created. Another catalog job is running, so '
       'the next scan will index it.',
     );
@@ -701,7 +736,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'A scan or another catalog job is already running.',
     );
   });
@@ -760,7 +795,7 @@ void main() {
 
     expect(repo.removeLibraryCalls, ['lb-2']);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Removing "spare"; follow it in Tasks',
     );
     expect(
@@ -886,7 +921,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'the library path must be absolute',
     );
     expect(find.text('shelf'), findsOneWidget);
@@ -965,7 +1000,7 @@ void main() {
 
     expect(repo.removeLibraryCalls, ['lb-2']);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       "Another job is holding the library's files. Try again shortly.",
       reason: "the table's sentence, not the server's",
     );
@@ -1020,7 +1055,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Something else changed this first. Take another look and try again.',
       reason: "the table's sentence: the row it acted on was out of date",
     );

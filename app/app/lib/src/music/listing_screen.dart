@@ -244,6 +244,11 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
     final dimension = widget.dimension;
     final l10n = context.l10n;
     final repository = ref.read(repositoryProvider);
+    // Read before the await: what the shuffle answers is said with the
+    // listing left too.
+    final messenger = ref.read(shellMessengerProvider);
+    void report(String message) =>
+        messenger.show(message, channel: ShellChannel.listing);
     final ItemPage page;
     try {
       // A bucket shuffles through the random list scoped to itself, so
@@ -266,10 +271,9 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
       // A shuffle that fetched nothing has to say so: the button is
       // fire-and-forget, so an unreported failure is a control that does
       // nothing at all.
-      if (mounted) _report(explainError(l10n, error));
+      report(explainError(l10n, error));
       return;
     }
-    if (!mounted) return;
     final playable = <ItemSummary>[
       for (final item in page.items)
         if (dimension == null
@@ -278,9 +282,11 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
           item,
     ];
     if (playable.isEmpty) {
-      _report(l10n.musicShuffleNothingPlayable);
+      report(l10n.musicShuffleNothingPlayable);
       return;
     }
+    // The play itself is the listing's: it needs this screen's `ref`.
+    if (!mounted) return;
     ref
         .read(nowPlayingProvider.notifier)
         .play(
@@ -288,12 +294,6 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
           shuffle: true,
           source: _source(playable, cursor: page.nextCursor, seed: page.seed),
         );
-  }
-
-  void _report(String message) {
-    ref
-        .read(shellMessengerProvider.notifier)
-        .show(message, channel: ShellChannel.listing);
   }
 
   @override
@@ -337,15 +337,15 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
         title: _title(items),
         largeTitle: false,
         controller: pagedScroll,
-        // Pops what is beneath, which is the screen this was opened
-        // from: an artist's own screen for their full track list, the
-        // dimension's index for a bucket. The fallback covers a
-        // location opened cold with nothing under it.
-        onBack: () => context.leave(
+        // Back to where the visitor was. Opened cold, it pops to the page
+        // the location is declared beneath (an artist's own screen for
+        // their full track list); the fallback is for when nothing is.
+        onBack: () => context.back(
           fallback: dimension == null
               ? WaxRoute.music
               : WaxRoute.musicIndex(dimension),
         ),
+        backSemanticsId: SemanticsIds.navBack,
         actions: <Widget>[
           if (items.isNotEmpty)
             WaxIconButton(

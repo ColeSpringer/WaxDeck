@@ -5,7 +5,9 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/asked_from.dart';
 import '../shell/async_box_face.dart';
+import '../shell/navigation_history.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'about_screen.dart';
@@ -168,8 +170,7 @@ class _PasswordDialogState extends ConsumerState<_PasswordDialog> {
 
   Future<void> _save() async {
     if (_busy) return;
-    final navigator = Navigator.of(context);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final from = AskedFrom.of(context);
     final l10n = context.l10n;
     final changed = l10n.settingsPasswordChanged;
     setState(() {
@@ -185,28 +186,32 @@ class _PasswordDialogState extends ConsumerState<_PasswordDialog> {
             _next.text,
             currentPassword: _current.text,
           );
-      // Guarded, because a pop past a dismissed dialog pops the screen
-      // underneath it: the request can be in flight while somebody taps
-      // the scrim. The password still changed, so the confirmation is
+      // Its own route only: the request can be in flight while somebody
+      // taps the scrim, and a pop past a dismissed dialog pops the screen
+      // underneath it. The password still changed, so the confirmation is
       // shown either way.
-      if (mounted) navigator.pop();
-      messenger.show(changed);
+      closeFinished(from.route);
+      from.messenger.show(changed);
     } on WaxDeckApiException catch (e) {
-      // Guarded because the dialog can be dismissed while the request is
-      // out, and setState past that throws.
-      if (!mounted) return;
-      setState(() {
-        if (e.code == 'forbidden') {
-          // The server's wrong-current-password sentence: the table's
-          // `forbidden` would say the account may not do this at all.
-          _currentError = e.message;
-        } else {
-          // `invalid-request` is the password policy, which the server
-          // owns, so a refusal keeps its sentence; a dropped connection
-          // or a 500 reads from the table instead.
-          _nextError = explainRefusal(l10n, e);
-        }
-      });
+      // The server's wrong-current-password sentence: the table's
+      // `forbidden` would say the account may not do this at all.
+      // `invalid-request` is the password policy, which the server
+      // owns, so a refusal keeps its sentence; a dropped connection
+      // or a 500 reads from the table instead.
+      final wrongCurrent = e.code == 'forbidden';
+      final refusal = wrongCurrent ? e.message : explainRefusal(l10n, e);
+      // Under the field it is about, or in the shell once the dialog was
+      // dismissed while the request was out.
+      from.refused(
+        refusal,
+        inline: (refusal) => setState(() {
+          if (wrongCurrent) {
+            _currentError = refusal;
+          } else {
+            _nextError = refusal;
+          }
+        }),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -275,7 +280,7 @@ class _DeviceSessions extends ConsumerWidget {
     DeviceSession session,
   ) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -427,18 +432,24 @@ class _DeviceRenameDialogState extends ConsumerState<_DeviceRenameDialog> {
       _busy = true;
       _error = null;
     });
-    final navigator = Navigator.of(context);
+    // This dialog's own route: dismissed while the server answers, a pop
+    // would take the screen under it.
+    final from = AskedFrom.of(context);
     final l10n = context.l10n;
     try {
       await ref
           .read(sessionsControllerProvider.notifier)
           .rename(widget.session.id, name);
-      navigator.pop();
+      closeFinished(from.route);
     } on WaxDeckApiException catch (e) {
       // A refusal keeps the server's sentence (what a device name may be
-      // is its rule) under the field that broke it; anything else reads
-      // from the table.
-      setState(() => _error = explainRefusal(l10n, e));
+      // is its rule) under the field that broke it, or in the shell once
+      // the field has gone; anything else reads from the table.
+      from.refused(
+        explainRefusal(l10n, e),
+        inline: (refusal) => setState(() => _error = refusal),
+        channel: ShellChannel.devices,
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }

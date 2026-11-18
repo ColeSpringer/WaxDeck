@@ -131,7 +131,7 @@ void main() {
     expect(
       ProviderScope.containerOf(
         tester.element(find.byType(ItemStarRatingRow)),
-      ).read(shellMessengerProvider),
+      ).read(shellMessagesProvider),
       isNull,
     );
   });

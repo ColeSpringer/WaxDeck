@@ -177,10 +177,9 @@ Future<void> showAddToLibrarySheet(
         await pickFolderAndUpload(context, ref, picker, fixed: fixed);
       }
     case 'sessions':
-      // Pushed, so back returns to the screen the sheet was opened over:
-      // the list is not declared under any of them, and `go` would
-      // strand a visitor who only wanted to check a quota.
-      context.pushOnce(WaxRoute.uploads);
+      // Gone to: the list has a place of its own, and a push would file
+      // it inside whichever tab the sheet was opened on.
+      context.go(WaxRoute.uploads);
   }
 }
 
@@ -195,7 +194,7 @@ Future<void> acquireFromUrl(
   bool kindFixed = false,
   String? initialUrl,
 }) async {
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final router = GoRouter.of(context);
   final l10n = context.l10n;
   // Past the first await, the container rather than `ref`: the request
@@ -246,7 +245,7 @@ Future<void> acquireFromUrl(
       l10n.uploadsAcquireQueued,
       actionLabel: l10n.uploadsAcquireTasks,
       actionSemanticsId: SemanticsIds.acquireTasks,
-      onAction: () => router.pushInShell<void>(WaxRoute.tasks),
+      onAction: () => router.go(WaxRoute.tasks),
     );
   } on WaxDeckApiException catch (e) {
     // A refusal of the URL somebody just pasted keeps the server's own
@@ -263,7 +262,7 @@ Future<void> pickAndUpload(
   MediaType? fixed,
 }) async {
   // Held across the picker, which can outlive the widget that opened it.
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   final formats = await resolveUploadFormats(ref);
   final picked = await picker.pickAudioFiles(
@@ -353,7 +352,7 @@ Future<void> pickFolderAndUpload(
   FilePickerPort picker, {
   MediaType? fixed,
 }) async {
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   final FolderPick pick;
   try {
@@ -378,8 +377,11 @@ Future<void> pickFolderAndUpload(
     );
     return;
   }
-  if (!context.mounted) return;
-  await uploadPickedFiles(context, ref, pick.files, fixed: fixed);
+  // The upload asks its question where the pick was made; with that
+  // gone, nothing is sent, and the report below still is said.
+  if (context.mounted) {
+    await uploadPickedFiles(context, ref, pick.files, fixed: fixed);
+  }
   // After the flow rather than before it: the media-type dialog is
   // modal, and a toast raised under a modal is hidden from the
   // semantics tree and can expire before the dialog closes. The
@@ -405,7 +407,7 @@ Future<void> uploadPickedFiles(
   List<PickedAudioFile> files, {
   MediaType? fixed,
 }) async {
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final router = GoRouter.of(context);
   // Held across the awaits below, which outlive the dialog: everything
   // this loop reports is worded from a code, and there is no context to

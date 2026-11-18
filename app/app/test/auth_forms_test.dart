@@ -1,9 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/connect_server_screen.dart';
 import 'package:waxdeck/src/auth/login_screen.dart';
 import 'package:waxdeck/src/auth/setup_screen.dart';
 import 'package:waxdeck/src/auth/signup_screen.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'app_host.dart';
@@ -19,6 +25,133 @@ Finder _under(String id, String message) => find.descendant(
 );
 
 void main() {
+  group('a refusal answered', () {
+    const typed = WaxDeckApiException(
+      code: 'invalid_argument',
+      message: 'username must be 3 to 32 characters',
+    );
+
+    /// [screen] over [repo], its form filled by [fill] and sent by
+    /// [submit], held at [gate], then let go while the page is up or once
+    /// it has gone where [left]: the sentence under the form, and the one
+    /// the shell was told.
+    Future<(String?, String?)> answered(
+      WidgetTester tester,
+      Widget screen,
+      FakeRepository repo,
+      Completer<void> gate, {
+      required bool left,
+      required Future<void> Function() fill,
+      required String submit,
+      required String error,
+    }) async {
+      final container = appContainer(repo: repo);
+      await mountApp(tester, screen, container: container);
+      await tester.pump();
+      await fill();
+      await tester.tap(_id(submit));
+      await tester.pump();
+      if (left) await leaveScreen(tester, container);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final under = find.byKey(Key(error));
+      return (
+        under.evaluate().isEmpty ? null : tester.widget<Text>(under).data,
+        shellMessageText(container.read(shellMessagesProvider)),
+      );
+    }
+
+    for (final left in <bool>[false, true]) {
+      final where = left
+          ? 'once its page has gone is said in the shell'
+          : 'while its page is up is said under the form';
+
+      testWidgets('to a sign-in $where', (tester) async {
+        final gate = Completer<void>();
+        final repo = FakeRepository()
+          ..loginGate = gate
+          ..loginError = const WaxDeckApiException(
+            code: 'unauthenticated',
+            message: 'invalid credentials',
+            statusCode: 401,
+          );
+        final said = AppLocalizationsEn().authSignInRejected;
+        final (under, shell) = await answered(
+          tester,
+          const LoginScreen(),
+          repo,
+          gate,
+          left: left,
+          fill: () async {
+            await tester.enterText(_id(SemanticsIds.loginUsername), 'admin');
+            await tester.enterText(_id(SemanticsIds.loginPassword), 'nope');
+          },
+          submit: SemanticsIds.loginSubmit,
+          error: SemanticsIds.loginError,
+        );
+        expect(under, left ? isNull : said);
+        expect(shell, left ? said : isNull);
+      });
+
+      testWidgets('to a first run $where', (tester) async {
+        final gate = Completer<void>();
+        final repo = FakeRepository()
+          ..bootstrapGate = gate
+          ..bootstrapError = typed;
+        final said = explainRefusal(AppLocalizationsEn(), typed);
+        final (under, shell) = await answered(
+          tester,
+          const SetupScreen(),
+          repo,
+          gate,
+          left: left,
+          fill: () async {
+            await tester.enterText(_id(SemanticsIds.setupUsername), 'admin');
+            await tester.enterText(
+              _id(SemanticsIds.setupPassword),
+              'long-enough',
+            );
+            await tester.enterText(
+              _id(SemanticsIds.setupConfirm),
+              'long-enough',
+            );
+          },
+          submit: SemanticsIds.setupSubmit,
+          error: SemanticsIds.setupError,
+        );
+        expect(under, left ? isNull : said);
+        expect(shell, left ? said : isNull);
+      });
+
+      testWidgets('to a sign-up $where', (tester) async {
+        final gate = Completer<void>();
+        final repo = FakeRepository()
+          ..signupGate = gate
+          ..signupError = typed;
+        final said = explainRefusal(AppLocalizationsEn(), typed);
+        final (under, shell) = await answered(
+          tester,
+          const SignupScreen(),
+          repo,
+          gate,
+          left: left,
+          fill: () async {
+            await tester.enterText(_id(SemanticsIds.signupUsername), 'sam');
+            await tester.enterText(
+              _id(SemanticsIds.signupPassword),
+              'po-ta-toes',
+            );
+          },
+          submit: SemanticsIds.signupSubmit,
+          error: SemanticsIds.signupError,
+        );
+        expect(under, left ? isNull : said);
+        expect(shell, left ? said : isNull);
+      });
+    }
+  });
+
   testWidgets('the login form is made of Wax controls', (tester) async {
     await mountApp(tester, const LoginScreen());
     await tester.pump();

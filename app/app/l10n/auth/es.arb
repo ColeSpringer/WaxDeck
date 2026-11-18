@@ -38,6 +38,8 @@
   "authServerInvalid": "Eso no parece una dirección de servidor",
   "authServerUnreachable": "Ningún servidor WaxDeck ha respondido en esa dirección",
   "authSignInRejected": "Ese usuario y esa contraseña no coinciden.",
+  "authSignupPendingNotice": "Solicitud recibida: un administrador tiene que aprobar tu cuenta antes de que puedas iniciar sesión.",
+  "authSignupReady": "Tu cuenta {username} está lista: inicia sesión con ella.",
   "authSsoFailed": "El inicio de sesión único no se ha completado. Inténtalo de nuevo.",
   "authTagline": "Música, pódcast y audiolibros",
   "authTimedOut": "El inicio de sesión ha tardado demasiado; inténtalo de nuevo",

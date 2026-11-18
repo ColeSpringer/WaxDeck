@@ -26,7 +26,7 @@ class _DefectLogScreenState extends ConsumerState<DefectLogScreen> {
   Future<void> _copy() async {
     final report = ref.read(defectLogProvider.notifier).report();
     final copied = context.l10n.defectsCopied;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     await Clipboard.setData(ClipboardData(text: report));
     messenger.show(copied, channel: ShellChannel.defects);
   }
@@ -41,7 +41,8 @@ class _DefectLogScreenState extends ConsumerState<DefectLogScreen> {
       title: l10n.defectsTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.defectsScreen,
-      onBack: () => context.leave(fallback: WaxRoute.settingsAbout),
+      onBack: () => context.back(fallback: WaxRoute.settingsAbout),
+      backSemanticsId: SemanticsIds.navBack,
       slivers: <Widget>[
         if (defects.isEmpty)
           SliverFillRemaining(

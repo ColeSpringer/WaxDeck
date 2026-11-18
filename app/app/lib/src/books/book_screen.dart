@@ -29,6 +29,7 @@ import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/async_sliver_face.dart';
+import '../shell/navigation_history.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/server_health.dart';
@@ -114,10 +115,9 @@ class _BookScreenState extends ConsumerState<BookScreen> {
     return WaxScaffold(
       title: book?.title ?? l10n.bookFallbackTitle,
       largeTitle: false,
-      // Pops where something pushed this - a search hit, a shelf on
-      // home - and goes to the hub where nothing did, so the arrow and
-      // the system gesture agree from either entry point.
-      onBack: () => context.leave(fallback: WaxRoute.books),
+      // Back to where the visitor was, the hub when nothing is recorded.
+      onBack: () => context.back(fallback: WaxRoute.books),
+      backSemanticsId: SemanticsIds.navBack,
       actions: const <Widget>[SearchAction()],
       slivers: <Widget>[
         // The shared face rather than a switch on the state's type: a
@@ -716,7 +716,7 @@ class _BookOverflow extends ConsumerWidget {
     // screen left behind while the toast is still up would take the undo
     // with it - the same lesson the mark-older dialog is built on.
     final container = ProviderScope.containerOf(context, listen: false);
-    final messenger = container.read(shellMessengerProvider.notifier);
+    final messenger = container.read(shellMessengerProvider);
     final repository = container.read(repositoryProvider);
     try {
       final before = await repository.getPlayState(book.pid);
@@ -836,7 +836,7 @@ class _BookOverflow extends ConsumerWidget {
     // The container, captured first: this runs unawaited from a menu, so
     // `ref` may be dead by the time the request lands.
     final container = ProviderScope.containerOf(context, listen: false);
-    final messenger = container.read(shellMessengerProvider.notifier);
+    final messenger = container.read(shellMessengerProvider);
     try {
       final task = await start();
       container.invalidate(toolTasksProvider);
@@ -844,7 +844,7 @@ class _BookOverflow extends ConsumerWidget {
       messenger.show(
         l10n.bookToolQueued,
         actionLabel: l10n.bookToolTasks,
-        onAction: () => router.pushInShell<void>(WaxRoute.tasks),
+        onAction: () => router.go(WaxRoute.tasks),
         actionSemanticsId: SemanticsIds.openTasks,
         channel: ShellChannel.bookTools,
         persist: true,
@@ -860,9 +860,7 @@ class _BookOverflow extends ConsumerWidget {
       messenger.show(
         explainError(l10n, e),
         actionLabel: running ? l10n.bookToolTasks : null,
-        onAction: running
-            ? () => router.pushInShell<void>(WaxRoute.tasks)
-            : null,
+        onAction: running ? () => router.go(WaxRoute.tasks) : null,
         actionSemanticsId: running ? SemanticsIds.openTasks : null,
         channel: ShellChannel.bookTools,
       );
@@ -1007,25 +1005,29 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
   Future<void> _save() async {
     if (_busy) return;
     setState(() => _busy = true);
-    final messenger = ref.read(shellMessengerProvider.notifier);
-    final navigator = Navigator.of(context);
+    // Swiped away mid-save the sheet takes its `ref` with it; the
+    // container outlives it.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = container.read(shellMessengerProvider);
+    final route = ModalRoute.of(context);
     final l10n = context.l10n;
+    final pid = widget.pid;
     try {
-      await ref
+      await container
           .read(repositoryProvider)
           .putBookSettings(
-            widget.pid,
+            pid,
             BookSettings(
               speed: _speed,
               voiceBoost: _voiceBoost,
               trimSilence: _trimSilence,
             ),
           );
-      ref.invalidate(bookDetailProvider(widget.pid));
-      // Only while this sheet is still up: a save outlives a sheet
+      container.invalidate(bookDetailProvider(pid));
+      // Only while this sheet is still there: a save outlives a sheet
       // somebody swiped away, and popping then takes the book screen
       // underneath with it.
-      if (mounted) navigator.pop();
+      closeFinished(route);
     } on WaxDeckApiException catch (e) {
       messenger.show(explainError(l10n, e), channel: ShellChannel.bookSettings);
     } finally {

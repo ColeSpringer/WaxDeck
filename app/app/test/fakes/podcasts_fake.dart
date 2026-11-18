@@ -393,9 +393,13 @@ mixin FakePodcasts on FakeRepositoryState implements PodcastsApi {
     }
   }
 
+  /// Holds [fetchEpisode] until completed, with the call recorded.
+  Completer<void>? fetchEpisodeGate;
+
   @override
   Future<void> fetchEpisode(String pid) async {
     fetchEpisodeCalls.add(pid);
+    await fetchEpisodeGate?.future;
     _rewriteEpisode(pid, downloaded: false, fetchState: 'queued');
   }
 

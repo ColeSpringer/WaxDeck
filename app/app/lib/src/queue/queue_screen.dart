@@ -26,7 +26,8 @@ class QueueScreen extends ConsumerWidget {
       child: WaxScaffold(
         title: WaxPanel.queue.titleOf(context.l10n),
         largeTitle: false,
-        onBack: () => context.leave(),
+        onBack: () => context.back(),
+        backSemanticsId: SemanticsIds.navBack,
         semanticsId: SemanticsIds.queueScreen,
         actions: <Widget>[
           if (queued)

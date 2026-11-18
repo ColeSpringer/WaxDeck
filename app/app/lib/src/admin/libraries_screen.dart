@@ -33,11 +33,8 @@ class LibrariesScreen extends ConsumerWidget {
       title: l10n.adminLibrariesTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.adminLibraries,
-      // No backSemanticsId: it would put the page's own handle on the
-      // back control too, and a locator matching two elements is a
-      // strict-mode failure in the suite rather than a choice between
-      // them. The console's back affordance is not steered by name.
       onBack: adminBack(context),
+      backSemanticsId: SemanticsIds.navBack,
       body: Padding(
         padding: sizeClass.gutter.add(
           const EdgeInsets.only(bottom: WaxSpace.s32),
@@ -292,7 +289,7 @@ class _LibraryMenu extends ConsumerWidget {
     final l10n = context.l10n;
     // The row is gone by the answer; the container outlives it.
     final container = ProviderScope.containerOf(context, listen: false);
-    final messenger = container.read(shellMessengerProvider.notifier);
+    final messenger = container.read(shellMessengerProvider);
     final confirmed = await showTypedConfirm(
       context,
       title: l10n.adminLibraryRemoveTitle(library.name),
@@ -349,7 +346,7 @@ class _MediaChoice extends ConsumerWidget {
     final l10n = context.l10n;
     // The row can be gone by the answer; the container outlives it.
     final container = ProviderScope.containerOf(context, listen: false);
-    final messenger = container.read(shellMessengerProvider.notifier);
+    final messenger = container.read(shellMessengerProvider);
     final books = media == 'audiobook';
     final confirmed = await showDialog<bool>(
       context: context,
@@ -431,12 +428,14 @@ class _MatchingChoice extends ConsumerWidget {
 
   Future<void> _set(BuildContext context, WidgetRef ref, String mode) async {
     final l10n = context.l10n;
+    // Read before the await: a refusal is said with the screen left too.
+    final messenger = ref.read(shellMessengerProvider);
     try {
       await ref
           .read(libraryMatchingProvider(library.pid).notifier)
           .setMode(mode);
     } on WaxDeckApiException catch (error) {
-      ref.read(shellMessengerProvider.notifier).show(explainError(l10n, error));
+      messenger.show(explainError(l10n, error));
     }
   }
 }
@@ -471,7 +470,7 @@ class _ProfileChoice extends ConsumerWidget {
     final l10n = context.l10n;
     // The row can be gone by the answer; the container outlives it.
     final container = ProviderScope.containerOf(context, listen: false);
-    final messenger = container.read(shellMessengerProvider.notifier);
+    final messenger = container.read(shellMessengerProvider);
     try {
       await container
           .read(repositoryProvider)
@@ -535,7 +534,7 @@ class _LibraryFlagSwitchState extends ConsumerState<_LibraryFlagSwitch> {
   Future<void> _flip(bool on) async {
     final l10n = context.l10n;
     final container = ProviderScope.containerOf(context, listen: false);
-    final messenger = container.read(shellMessengerProvider.notifier);
+    final messenger = container.read(shellMessengerProvider);
     final afterSave = widget.afterSave;
     setState(() => _set = on);
     try {
@@ -575,7 +574,7 @@ class _RescanButton extends ConsumerWidget {
 
   Future<void> _rescan(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     // Confirmed first, because the button sits on one row and the scan
     // covers everything; the dialog is also where the repair pass
     // lives. The dashboard's quick action stays plain - it never
@@ -697,7 +696,7 @@ class _AddLibraryFormState extends ConsumerState<_AddLibraryForm> {
   Future<void> _create() async {
     if (_busy) return;
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final name = _name.text.trim();
     final path = _path.text.trim();
     if (name.isEmpty || path.isEmpty) {

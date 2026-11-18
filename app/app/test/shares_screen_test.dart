@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/sharing/shares_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -50,6 +55,67 @@ Share _share(
 );
 
 void main() {
+  for (final left in <bool>[false, true]) {
+    testWidgets(
+      'a revoke refused ${left ? 'once the screen has gone' : 'while '
+                'it is up'} is said in the shell',
+      (tester) async {
+        const refusal = WaxDeckApiException(
+          code: 'unavailable',
+          message: 'the server is restarting',
+        );
+        final repo = FakeRepository()..shares.addAll([_share('sh-1')]);
+        final container = await pumpApp(
+          tester,
+          const SharesScreen(),
+          container: appContainer(repo: repo),
+        );
+        final gate = repo.revokeShareGate = Completer<void>();
+        repo.shareError = refusal;
+
+        await tester.tap(_byId(SemanticsIds.shareRevoke('sh-1')));
+        await tester.pump();
+        if (left) await leaveScreen(tester, container);
+        gate.complete();
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(
+          shellMessageText(container.read(shellMessagesProvider)),
+          explainError(AppLocalizationsEn(), refusal),
+        );
+      },
+    );
+  }
+
+  for (final left in <bool>[false, true]) {
+    testWidgets(
+      'a revoke answered ${left ? 'once the screen has gone' : 'while it '
+                'is up'} is confirmed in the shell',
+      (tester) async {
+        final repo = FakeRepository()..shares.addAll([_share('sh-1')]);
+        final container = await pumpApp(
+          tester,
+          const SharesScreen(),
+          container: appContainer(repo: repo),
+        );
+        final gate = repo.revokeShareGate = Completer<void>();
+
+        await tester.tap(_byId(SemanticsIds.shareRevoke('sh-1')));
+        await tester.pump();
+        if (left) await leaveScreen(tester, container);
+        gate.complete();
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(
+          shellMessageText(container.read(shellMessagesProvider)),
+          AppLocalizationsEn().sharingLinkRevoked,
+        );
+      },
+    );
+  }
+
   testWidgets('lists shares with target, kind, plays, and expiry', (
     tester,
   ) async {

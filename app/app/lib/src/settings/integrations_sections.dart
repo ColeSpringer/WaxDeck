@@ -6,8 +6,10 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/asked_from.dart';
 import '../shell/async_box_face.dart';
 import '../shell/in_flight.dart';
+import '../shell/navigation_history.dart';
 import '../shell/pending_actions.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -37,7 +39,7 @@ class ScrobblingSection extends ConsumerWidget {
     Scrobbler slot,
   ) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     if (slot.service == 'lastfm') {
       final scrobblers = ref.read(scrobblersProvider.notifier);
       final opener = ref.read(urlOpenerProvider);
@@ -68,7 +70,7 @@ class ScrobblingSection extends ConsumerWidget {
     Scrobbler slot,
   ) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final scrobblers = ref.read(scrobblersProvider.notifier);
     await ref.read(pendingActionsProvider.notifier).run(
       PendingAction.scrobbler(slot.service),
@@ -225,6 +227,7 @@ class _ListenBrainzDialogState extends ConsumerState<_ListenBrainzDialog> {
   final _tokenController = TextEditingController();
   final _apiUrlController = TextEditingController();
   var _busy = false;
+  String? _refusal;
 
   @override
   void dispose() {
@@ -236,22 +239,32 @@ class _ListenBrainzDialogState extends ConsumerState<_ListenBrainzDialog> {
   Future<void> _connect() async {
     final token = _tokenController.text.trim();
     if (token.isEmpty || _busy) return;
-    setState(() => _busy = true);
-    final navigator = Navigator.of(context);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    setState(() {
+      _busy = true;
+      _refusal = null;
+    });
+    // This dialog's own route: dismissed while the server answers, a pop
+    // would take the screen under it.
+    final from = AskedFrom.of(context);
     final l10n = context.l10n;
     final apiUrl = _apiUrlController.text.trim();
     try {
       await ref
           .read(scrobblersProvider.notifier)
           .connectListenBrainz(token, apiUrl: apiUrl.isEmpty ? null : apiUrl);
-      navigator.pop();
+      closeFinished(from.route);
     } on WaxDeckApiException catch (e) {
       // The server's own sentence rather than the code's: this is a
       // refusal of the token that was just typed, and the translation
       // for `invalid-request` would say only that something was wrong.
-      // The same rule the password and timezone dialogs follow.
-      messenger.show(explainRefusal(l10n, e), channel: _scrobbling);
+      // The same rule the password and timezone dialogs follow: in the
+      // dialog, which the shell's bar is not drawn over, or in the shell
+      // once it was dismissed.
+      from.refused(
+        explainRefusal(l10n, e),
+        inline: (refusal) => setState(() => _refusal = refusal),
+        channel: _scrobbling,
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -280,6 +293,8 @@ class _ListenBrainzDialogState extends ConsumerState<_ListenBrainzDialog> {
             helperText: l10n.settingsListenBrainzApiHelp,
             keyboardType: TextInputType.url,
           ),
+          if (_refusal case final refusal?)
+            _FormRefusal(refusal, key: const Key('listenbrainz-refusal')),
         ],
       ),
       actions: [
@@ -320,6 +335,7 @@ class _LastfmCredentialsDialogState
   final _apiKeyController = TextEditingController();
   final _secretController = TextEditingController();
   var _seeded = false;
+  String? _refusal;
 
   @override
   void dispose() {
@@ -335,12 +351,14 @@ class _LastfmCredentialsDialogState
   }
 
   Future<void> _save({required bool clear}) {
-    final navigator = Navigator.of(context);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    // This dialog's own route: dismissed while the server answers, a pop
+    // would take the screen under it.
+    final from = AskedFrom.of(context);
     final l10n = context.l10n;
     return runAs(
       clear ? _CredentialsWork.clear : _CredentialsWork.save,
       () async {
+        setState(() => _refusal = null);
         try {
           await ref
               .read(scrobblingAdminConfigProvider.notifier)
@@ -348,12 +366,16 @@ class _LastfmCredentialsDialogState
                 apiKey: clear ? '' : _apiKeyController.text.trim(),
                 secret: clear ? '' : _secretController.text.trim(),
               );
-          navigator.pop();
+          closeFinished(from.route);
         } on WaxDeckApiException catch (e) {
           // The server's own sentence, for the same reason the ListenBrainz
           // dialog keeps one: this refuses the pair that was just typed, and
-          // says which half is missing.
-          messenger.show(explainRefusal(l10n, e), channel: _scrobbling);
+          // says which half is missing. Under the pair, not either field.
+          from.refused(
+            explainRefusal(l10n, e),
+            inline: (refusal) => setState(() => _refusal = refusal),
+            channel: _scrobbling,
+          );
         }
       },
     );
@@ -390,6 +412,8 @@ class _LastfmCredentialsDialogState
                         : null,
                     obscureText: true,
                   ),
+                  if (_refusal case final refusal?)
+                    _FormRefusal(refusal, key: const Key('lastfm-refusal')),
                 ],
               );
             },
@@ -434,6 +458,22 @@ class _LastfmCredentialsDialogState
       ],
     );
   }
+}
+
+/// A dialog form's refusal, one line at its foot above the buttons.
+class _FormRefusal extends StatelessWidget {
+  const _FormRefusal(this.refusal, {super.key});
+
+  final String refusal;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: WaxSpace.s12),
+    child: WaxProse(
+      refusal,
+      style: WaxType.caption.copyWith(color: WaxColors.of(context).error),
+    ),
+  );
 }
 
 /// Discord rich presence: whether this desktop tells a Discord client
@@ -550,19 +590,19 @@ class AppPasswordsSection extends ConsumerWidget {
 
   Future<void> _create(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
     final label = await showDialog<String>(
       context: context,
       builder: (context) => const _AppPasswordLabelDialog(),
     );
     if (label == null || label.isEmpty || !context.mounted) return;
+    final from = AskedFrom.of(context);
     try {
       final created = await ref
           .read(appPasswordsProvider.notifier)
           .create(label);
-      if (!context.mounted) return;
-      await showDialog<void>(
-        context: context,
+      // Shown once, so wherever the visitor is by now, never dropped
+      // with a page they left meanwhile.
+      await from.showDialogOnScreen<void>(
         builder: (context) => AlertDialog(
           title: Text(l10n.settingsAppPasswordCreatedTitle),
           content: Column(
@@ -595,7 +635,7 @@ class AppPasswordsSection extends ConsumerWidget {
         ),
       );
     } on WaxDeckApiException catch (e) {
-      messenger.show(explainError(l10n, e));
+      from.messenger.show(explainError(l10n, e));
     }
   }
 
@@ -613,7 +653,7 @@ class AppPasswordsSection extends ConsumerWidget {
     AppPassword ap,
   ) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final pending = ref.read(pendingActionsProvider.notifier);
     final revoking = ref.read(appPasswordsProvider.notifier);
     final confirmed = await showDialog<bool>(
@@ -1132,6 +1172,7 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
 
   Future<void> _save() async {
     if (_busy) return;
+    final from = AskedFrom.of(context);
     final config = _buildConfig(context.l10n);
     if (config == null) return;
     setState(() {
@@ -1161,14 +1202,15 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
         muted: _muted,
         minIntervalSeconds: interval,
       );
-      if (mounted) Navigator.of(context).pop();
+      closeFinished(from.route);
     } on WaxDeckApiException catch (e) {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _error = explainRefusal(l10n, e);
-        });
-      }
+      // In the dialog, or in the shell once it was dismissed while the
+      // save was out.
+      if (mounted) setState(() => _busy = false);
+      from.refused(
+        explainRefusal(l10n, e),
+        inline: (refusal) => setState(() => _error = refusal),
+      );
     }
   }
 
@@ -1332,7 +1374,7 @@ class _TargetList extends ConsumerWidget {
     NotificationTarget target,
   ) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     await ref.read(pendingActionsProvider.notifier).run(
       PendingAction.notifyTest(target.pid),
       () async {
@@ -1368,7 +1410,7 @@ class _TargetList extends ConsumerWidget {
     NotificationTarget target,
   ) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final pending = ref.read(pendingActionsProvider.notifier);
     final confirmed = await showDialog<bool>(
       context: context,

@@ -389,7 +389,7 @@ void main() {
     // transform above it.
     expect(_pngSize(exporter.exports.single.png), (1080, 1080));
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Saved to Downloads',
     );
   });

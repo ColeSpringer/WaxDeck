@@ -175,7 +175,7 @@ void main() {
     await _settle();
     expect(h.container.read(nowPlayingProvider).error, isNotNull);
     expect(
-      shellMessageText(h.container.read(shellMessengerProvider)),
+      shellMessageText(h.container.read(shellMessagesProvider)),
       "Couldn't keep playing Prancing Pony Blues",
     );
   });

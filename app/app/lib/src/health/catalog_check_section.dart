@@ -68,7 +68,7 @@ class CatalogCheckSection extends ConsumerWidget {
 
   Future<void> _repair(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final router = GoRouter.of(context);
     final check = ref.read(catalogCheckProvider.notifier);
     final confirmed = await showDialog<bool>(
@@ -96,7 +96,7 @@ class CatalogCheckSection extends ConsumerWidget {
       message,
       actionLabel: l10n.commonOpenTasks,
       actionSemanticsId: SemanticsIds.openTasks,
-      onAction: () => router.pushInShell<void>(WaxRoute.tasks),
+      onAction: () => router.go(WaxRoute.tasks),
     );
     try {
       await check.repair();

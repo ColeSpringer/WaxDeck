@@ -81,6 +81,7 @@ class ServerAddressController extends Notifier<String?> {
     await store.clearToken();
     await store.writeServerAddress(address);
     state = address;
+    ref.read(serverAdoptionsProvider.notifier).count();
   }
 
   /// Drops the address, which leaves the connect screen empty.
@@ -88,6 +89,20 @@ class ServerAddressController extends Notifier<String?> {
     await ref.read(credentialStoreProvider).clearServerAddress();
     state = null;
   }
+}
+
+/// How many addresses have been adopted, the same one again included: a
+/// sign-in or setup form is keyed on it, so connecting always ends on a
+/// fresh one.
+final serverAdoptionsProvider = NotifierProvider<ServerAdoptions, int>(
+  ServerAdoptions.new,
+);
+
+class ServerAdoptions extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void count() => state++;
 }
 
 /// The base URL every transport derives from. Empty on web, where the
@@ -115,11 +130,19 @@ final serverConfiguredProvider = Provider<bool>(
 /// cascades.
 final repositoryProvider = Provider<WaxDeckRepository>((ref) {
   final dio = Dio()..interceptors.add(FontWarmupInterceptor());
+  final adapter = ref.watch(httpAdapterProvider);
+  if (adapter != null) dio.httpClientAdapter = adapter;
   // A rebuild (the server address moved) replaces the transport; the
-  // old one's socket pool goes with it instead of lingering.
-  ref.onDispose(dio.close);
+  // old one's socket pool goes with it instead of lingering. An injected
+  // adapter is its owner's, and the next build uses it again.
+  if (adapter == null) ref.onDispose(dio.close);
   return WaxDeckClient(baseUrl: ref.watch(serverBaseUrlProvider), dio: dio);
 });
+
+/// What the API transport sends through: null is Dio's own, which every
+/// build uses. A test answers here to run the real client over a fake
+/// server.
+final httpAdapterProvider = Provider<HttpClientAdapter?>((_) => null);
 
 /// Where the bearer token persists between launches. Web builds keep
 /// nothing: the HttpOnly session cookie is the credential there.
@@ -167,6 +190,20 @@ final mobileProvider = Provider<bool>(
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS),
+);
+
+/// Whether the keys and the mouse button that mean back are the app's to
+/// bind: a native build on Linux, Windows or macOS. On the web they are the
+/// browser's, which already steps its own history; a phone has the system
+/// back and the arrow. Wider than [desktopProvider], which is the set the
+/// app owns a window on. A provider for the same reason: a test says which
+/// machine it is standing on.
+final desktopBackProvider = Provider<bool>(
+  (ref) =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.linux ||
+          defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.macOS),
 );
 
 /// Incoming deep links, wrapped so widget code never touches app_links.

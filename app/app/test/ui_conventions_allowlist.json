@@ -9,7 +9,7 @@
     "prose-slot-args": 5
   },
   "../packages/waxdeck_ui/example/lib/pages/components_page.dart": {
-    "prose-slot-args": 25
+    "prose-slot-args": 26
   },
   "../packages/waxdeck_ui/example/lib/pages/foundations_page.dart": {
     "prose-slot-args": 9

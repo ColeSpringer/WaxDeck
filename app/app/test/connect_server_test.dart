@@ -10,9 +10,12 @@ import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/auth/server_address.dart';
 import 'package:waxdeck/src/downloads/downloads_controller.dart';
 import 'package:waxdeck/src/downloads/download_notices.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/l10n/off_tree.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -396,6 +399,44 @@ void main() {
       expect(probes, 0, reason: 'the field submits past the button');
       downloads.removeGate!.complete();
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('a forget that fails once the screen has gone says so in the '
+        'shell', (tester) async {
+      const refusal = WaxDeckApiException(code: 'io', message: 'busy');
+      final gate = Completer<void>();
+      final downloads =
+          FakeDownloads(
+              items: const [
+                DownloadedItem(
+                  pid: 'tr-A',
+                  sizeBytes: 1,
+                  files: 1,
+                  complete: true,
+                ),
+              ],
+            )
+            ..removeGate = gate
+            ..removeError = refusal;
+      addTearDown(downloads.dispose);
+      final container = await pump(tester, downloads: downloads);
+
+      await tester.tap(find.byKey(const Key(SemanticsIds.connectServerForget)));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key(SemanticsIds.connectServerForgetConfirm)),
+      );
+      await tester.pump();
+      await leaveScreen(tester, container);
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        shellMessageText(container.read(shellMessagesProvider)),
+        explainError(AppLocalizationsEn(), refusal),
+      );
+      expect(store.serverAddress, address);
     });
 
     testWidgets('a forget that fails says so and keeps the address', (

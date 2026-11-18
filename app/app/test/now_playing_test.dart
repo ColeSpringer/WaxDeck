@@ -1571,7 +1571,7 @@ void main() {
     );
     await pumpEventQueue();
     final raised = <ShellMessage>[];
-    h.container.listen(shellMessengerProvider, (_, next) {
+    h.container.listen(shellMessagesProvider, (_, next) {
       if (next != null) raised.add(next);
     });
 
@@ -1602,7 +1602,7 @@ void main() {
         ..loadFault = MediaFault.source;
       final radio = h.container.read(radioPlaybackProvider.notifier);
       // Tuned between the skip and the step it schedules.
-      h.container.listen(shellMessengerProvider, (_, next) {
+      h.container.listen(shellMessagesProvider, (_, next) {
         if (next == null) return;
         scheduleMicrotask(
           () => unawaited(
@@ -1931,7 +1931,7 @@ void main() {
         await pumpEventQueue();
         await pumpEventQueue();
 
-        final message = h.container.read(shellMessengerProvider);
+        final message = h.container.read(shellMessagesProvider);
         expect(message?.resolve(_l10n), _l10n.playerOfflineStart);
         expect(message?.actionLabelIn(_l10n), _l10n.commonRetry);
         expect(h.container.queueState.currentPid, _a, reason: 'never a skip');
@@ -1989,7 +1989,7 @@ void main() {
       await pumpEventQueue();
       await pumpEventQueue();
       expect(
-        h.container.read(shellMessengerProvider)?.resolve(_l10n),
+        h.container.read(shellMessagesProvider)?.resolve(_l10n),
         _l10n.playerOfflineStart,
       );
 
@@ -2239,7 +2239,7 @@ void main() {
       await pumpEventQueue();
       expect(h.container.read(nowPlayingProvider).error, isNotNull);
       expect(
-        h.container.read(shellMessengerProvider)?.resolve(_l10n),
+        h.container.read(shellMessagesProvider)?.resolve(_l10n),
         _l10n.playerCouldNotStart(testItem(_a).title),
         reason: 'it will not continue by itself, so it does not say so',
       );
@@ -2364,7 +2364,7 @@ void main() {
       expect(now.error, isNull, reason: 'the queue moved, so there is no pane');
       expect(now.session, isNotNull);
       expect(
-        h.container.read(shellMessengerProvider)?.resolve(_l10n),
+        h.container.read(shellMessagesProvider)?.resolve(_l10n),
         contains('Skipped'),
       );
 
@@ -2423,7 +2423,7 @@ void main() {
       expect(now.error, isNull);
       expect(now.session, isNotNull);
       expect(
-        h.container.read(shellMessengerProvider)?.resolve(_l10n),
+        h.container.read(shellMessagesProvider)?.resolve(_l10n),
         contains('Skipped'),
       );
 
@@ -2561,7 +2561,7 @@ void main() {
           await pumpEventQueue();
           await pumpEventQueue();
 
-          final message = h.container.read(shellMessengerProvider);
+          final message = h.container.read(shellMessagesProvider);
           expect(
             message?.resolve(_l10n),
             _l10n.playerCouldNotStart(testItem(_a).title),
@@ -2623,7 +2623,7 @@ void main() {
         // Every message the run raises, since the messenger holds only
         // the newest and what matters here is that they line up.
         final raised = <ShellMessage>[];
-        h.container.listen(shellMessengerProvider, (_, next) {
+        h.container.listen(shellMessagesProvider, (_, next) {
           if (next != null) raised.add(next);
         });
         h.container.queue.playNow(broken, source: _album);
@@ -2642,7 +2642,7 @@ void main() {
           h.container.read(nowPlayingProvider).error,
           isA<MediaLoadException>(),
         );
-        final gaveUp = h.container.read(shellMessengerProvider);
+        final gaveUp = h.container.read(shellMessagesProvider);
         expect(gaveUp?.resolve(_l10n), contains('Stopped after 3'));
         // On the channel the skips used, so the shell replaces the
         // count still standing rather than stacking a second bar over

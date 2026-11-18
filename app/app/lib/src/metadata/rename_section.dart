@@ -1,12 +1,116 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../music/music_controllers.dart';
 import '../providers.dart';
 import '../shell/async_box_face.dart';
+import '../shell/navigation_history.dart';
+import '../shell/routes.dart';
 import '../shell/shell_messages.dart';
 import 'metadata_form.dart';
+
+/// Where an edit's answer takes the page whose record it edited. Read from
+/// that page while it is mounted, before the server is asked, so the
+/// follow is the same once the pane, sheet or page that asked has gone.
+/// [pid] is the record's; [closing], a sheet that asked, closes as the
+/// follow is made. What it says is worded where it is drawn, in the
+/// locale then.
+class EditFollow {
+  EditFollow.of(BuildContext context, {required this.pid, this.closing})
+    : _router = GoRouter.of(context),
+      _from = pageIn(context),
+      _messenger = ShellMessenger.of(context);
+
+  final String pid;
+  final Route<Object?>? closing;
+  final GoRouter _router;
+  final PageId _from;
+  final ShellMessenger _messenger;
+
+  /// The record was merged into [survivor]. While the visitor is on the
+  /// page that asked or on another of the record's (any visit of its
+  /// editor, its album, artist or release group page), the survivor's
+  /// takes its place, saying [said]; otherwise one message offers the
+  /// survivor where they are. Either way no page of the record is shown
+  /// again: taken out from under the page on top, and every visit of it
+  /// forgotten. [also] goes under either message.
+  Future<void> merged(
+    String survivor, {
+    required String Function(AppLocalizations l10n) said,
+    List<String Function(AppLocalizations l10n)> also = const [],
+  }) async {
+    final to = WaxRoute.metadata(survivor);
+    final pages = _pagesOf(pid, survivor);
+    String? instead(String location) {
+      for (final (gone, kept) in pages) {
+        if (location == gone || location.startsWith('$gone/')) {
+          return kept + location.substring(gone.length);
+        }
+      }
+      return null;
+    }
+
+    String lines(AppLocalizations l10n, String first) =>
+        <String>[first, for (final line in also) line(l10n)].join('\n');
+    closeFinished(closing);
+    String? swapTo;
+    final on = await stillOnTop(_router, (page) {
+      swapTo = page == _from ? to : instead(page.location);
+      return swapTo != null;
+    });
+    if (on) {
+      _messenger.showLocalized((l10n) => lines(l10n, said(l10n)));
+      _swap(swapTo!);
+    }
+    final history = WaxHistory.of(_router);
+    history?.takeOutFromUnder(
+      (location, _) => instead(Uri.parse(location).path) != null,
+      instead: instead,
+    );
+    for (final (gone, kept) in pages) {
+      history?.forget(gone, instead: kept);
+    }
+    if (on) return;
+    _messenger.showLocalized(
+      (l10n) => lines(l10n, l10n.metadataMergedReady),
+      actionLabelOf: (l10n) => l10n.commonOpen,
+      onAction: () => unawaited(_router.pushInShell<void>(to)),
+    );
+  }
+
+  /// The pages of [gone], each with the page of [survivor] it stands for:
+  /// its editor, and for an album, artist or release group its own page.
+  static List<(String, String)> _pagesOf(String gone, String survivor) => [
+    (WaxRoute.metadata(gone), WaxRoute.metadata(survivor)),
+    for (final dimension in MusicDimension.values)
+      if (dimension.entityPrefix case final prefix?
+          when gone.startsWith(prefix))
+        (
+          WaxRoute.musicBucket(dimension, gone),
+          WaxRoute.musicBucket(dimension, survivor),
+        ),
+  ];
+
+  /// Opens [location], as the visitor asked: in place of the page while
+  /// they are still on it, else where they are.
+  Future<void> open(String location) async {
+    closeFinished(closing);
+    if (await stillOnTop(_router, (page) => page == _from)) {
+      _swap(location);
+    } else {
+      unawaited(_router.pushInShell<void>(location));
+    }
+  }
+
+  /// [WaxBack.swap] from under the router, as the page may have gone.
+  void _swap(String location) =>
+      _router.routerDelegate.navigatorKey.currentContext?.swap(location);
+}
 
 /// The copy one rename section draws.
 ///
@@ -36,8 +140,8 @@ class RenameSectionCopy {
   final String confirmBody;
 
   /// Shown when a taken name folded this entity into an incumbent and
-  /// the caller is about to follow it.
-  final String merged;
+  /// the caller is about to follow it, worded where it is drawn.
+  final String Function(AppLocalizations l10n) merged;
 
   /// Shown when the entity kept its row, given the member count the
   /// rename carried.
@@ -94,7 +198,7 @@ class EntityRenameSection extends ConsumerStatefulWidget {
     required this.ids,
     required this.busy,
     required this.onBusyChanged,
-    required this.onMerged,
+    required this.follow,
     required this.onRenamed,
     this.canApply = true,
     this.onDirtyChanged,
@@ -121,13 +225,15 @@ class EntityRenameSection extends ConsumerStatefulWidget {
   final bool busy;
   final ValueChanged<bool> onBusyChanged;
 
-  /// Where the surface goes when a taken name merged this entity away:
-  /// the survivor's pid. The caller owns the move because a pane in a
-  /// sheet has a sheet to close and a screen has a route to replace.
-  final ValueChanged<String> onMerged;
+  /// Where the surface goes when a taken name merged this entity away,
+  /// read as the rename is sent; none where the page it was opened from has
+  /// gone, and then the merge is only said. The caller owns the move
+  /// because a pane in a sheet has a sheet to close and a screen has a
+  /// route to replace.
+  final EditFollow? Function() follow;
 
   /// Called when the row survived, for whatever the caller has to
-  /// refetch.
+  /// refetch, whether or not this section is still up.
   final VoidCallback onRenamed;
 
   /// Extra precondition on the apply button, for a caller that knows
@@ -296,7 +402,10 @@ class _EntityRenameSectionState extends ConsumerState<EntityRenameSection> {
     );
     if (!(confirmed ?? false) || !mounted || widget.busy) return;
     widget.onBusyChanged(true);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
+    final copy = widget.copy;
+    final onRenamed = widget.onRenamed;
+    final follow = widget.follow();
     try {
       // The rename enumerates the members server-side, which is the
       // point: a client-drained list that stopped short would move the
@@ -314,30 +423,40 @@ class _EntityRenameSectionState extends ConsumerState<EntityRenameSection> {
             writeBack: _writeBack,
             force: true,
           );
+      final merged = result.outcome == EntityRenameOutcome.merged;
+      final warning = <String Function(AppLocalizations l10n)>[
+        if (result.writeBackFailures.isNotEmpty)
+          (l10n) => l10n.metadataWriteBackWarning,
+      ];
+      String said(String first) =>
+          <String>[first, for (final line in warning) line(l10n)].join('\n');
       // The write may land while the surface is being left - a merge
       // moves it, and a sheet can be closed under it. Reading through a
       // disposed ref throws past the catch, which only knows the
       // server's refusals.
-      if (!mounted) return;
-      for (final entry in staged.entries) {
-        _seeded[entry.key] = entry.value;
+      if (mounted) {
+        for (final entry in staged.entries) {
+          _seeded[entry.key] = entry.value;
+        }
+        _reportDirty();
       }
-      _reportDirty();
-      final merged = result.outcome == EntityRenameOutcome.merged;
-      messenger.show(
-        <String>[
-          merged ? widget.copy.merged : widget.copy.renamed(result.members),
-          if (result.writeBackFailures.isNotEmpty)
-            l10n.metadataWriteBackWarning,
-        ].join('\n'),
-      );
-      if (merged && result.mergedInto != null) {
-        widget.onMerged(result.mergedInto!);
+      // Followed whether or not this section is still up: what it renamed
+      // is gone.
+      if (result.mergedInto case final survivor? when merged) {
+        if (follow != null) {
+          unawaited(follow.merged(survivor, said: copy.merged, also: warning));
+        } else {
+          messenger.show(said(copy.merged(l10n)));
+        }
         return;
       }
-      widget.onRenamed();
+      // Said where the visitor is, this section up or not.
+      messenger.show(
+        said(merged ? copy.merged(l10n) : copy.renamed(result.members)),
+      );
+      onRenamed();
     } on WaxDeckApiException catch (e) {
-      if (mounted) messenger.show(explainRefusal(l10n, e));
+      messenger.show(explainRefusal(l10n, e));
     } finally {
       if (mounted) widget.onBusyChanged(false);
     }

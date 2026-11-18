@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'state.dart';
@@ -10,8 +12,12 @@ mixin FakeScrobbling on FakeRepositoryState implements ScrobblingApi {
   @override
   Future<List<Scrobbler>> listScrobblers() async => scrobblers;
 
+  /// Holds [connectListenBrainz] until completed.
+  Completer<void>? connectGate;
+
   @override
   Future<Scrobbler> connectListenBrainz(String token, {String? apiUrl}) async {
+    await connectGate?.future;
     final error = connectError;
     if (error != null) throw error;
     final connected = Scrobbler(

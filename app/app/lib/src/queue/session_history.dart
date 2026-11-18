@@ -133,7 +133,7 @@ class SessionHistorySection extends ConsumerWidget {
     if (!displaced) return;
     final undo = ref.read(queueControllerProvider).undo;
     ref
-        .read(shellMessengerProvider.notifier)
+        .read(shellMessengerProvider)
         .show(
           // "Restored", because restore's contract is put-it-back,
           // paused: nothing is playing when this shows.

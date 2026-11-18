@@ -157,6 +157,20 @@
   "@authSignInRejected": {
     "description": "Under the sign-in form when the server rejected the credentials just typed."
   },
+  "authSignupPendingNotice": "Request received: an administrator has to approve your account before you can sign in.",
+  "@authSignupPendingNotice": {
+    "description": "Said once the screen it was asked from was left, after a sign-up that needs approving."
+  },
+  "authSignupReady": "Your account {username} is ready: sign in with it.",
+  "@authSignupReady": {
+    "description": "Said once the screen it was asked from was left, after a sign-up that is active at once.",
+    "placeholders": {
+      "username": {
+        "type": "String",
+        "example": "sam"
+      }
+    }
+  },
   "authSsoFailed": "Single sign-on did not go through. Try again.",
   "@authSsoFailed": {
     "description": "Under the sign-in form when a single-sign-on round trip came back refused, whether the provider is unconfigured or the code was stale."

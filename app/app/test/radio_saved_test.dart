@@ -2,10 +2,13 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/radio/radio_saved_controller.dart';
 import 'package:waxdeck/src/radio/radio_saved_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
@@ -13,6 +16,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'app_host.dart';
 import 'fakes.dart';
+import 'router_stack.dart';
 
 RadioSavedSong _song({
   required String pid,
@@ -66,6 +70,41 @@ Future<ProviderContainer> _pump(
 }
 
 void main() {
+  for (final left in <bool>[false, true]) {
+    testWidgets(
+      'a removal refused ${left ? 'once the list has gone' : 'while '
+                'it is up'} is said in the shell',
+      (tester) async {
+        const refusal = WaxDeckApiException(
+          code: 'unavailable',
+          message: 'the server is restarting',
+        );
+        final gate = Completer<void>();
+        final repo = FakeRepository()
+          ..seedSavedSong(
+            _song(pid: 'rw-1', line: 'Salt Harbour - The Bree Trio'),
+          )
+          ..deleteSavedSongGate = gate.future
+          ..deleteSavedSongError = refusal;
+        final container = await _pump(tester, repo);
+
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.radioSavedRemove('rw-1')),
+        );
+        await tester.pump();
+        if (left) await leaveScreen(tester, container);
+        gate.complete();
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(
+          shellMessageText(container.read(shellMessagesProvider)),
+          explainError(AppLocalizationsEn(), refusal),
+        );
+      },
+    );
+  }
+
   group('the list while a page loads', () {
     // Fifty-two songs: the second page holds rw-1 and rw-0.
     ({ProviderContainer container, FakeRepository repo}) paged() {
@@ -515,6 +554,7 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.reviewIdentifyGroup),
       findsOneWidget,
     );
+    expect(pushesOn(routerOf(tester)), 0);
   });
 
   testWidgets('an unparsed announcement hands the whole line', (tester) async {

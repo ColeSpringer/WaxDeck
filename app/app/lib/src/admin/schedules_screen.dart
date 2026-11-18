@@ -28,6 +28,7 @@ class SchedulesScreen extends ConsumerWidget {
       largeTitle: false,
       semanticsId: SemanticsIds.adminSchedules,
       onBack: adminBack(context),
+      backSemanticsId: SemanticsIds.navBack,
       body: Padding(
         padding: sizeClass.gutter.add(
           const EdgeInsets.only(bottom: WaxSpace.s32),
@@ -131,7 +132,7 @@ class _ScheduleCardState extends ConsumerState<_ScheduleCard> {
     if (_busy) return;
     setState(() => _busy = true);
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     try {
       await ref
           .read(schedulesProvider.notifier)

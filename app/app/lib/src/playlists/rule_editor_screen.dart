@@ -9,6 +9,7 @@ import '../l10n/l10n.dart';
 import '../presenters/media_tiles.dart';
 import '../providers.dart';
 import '../shell/async_sliver_face.dart';
+import '../shell/navigation_history.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -340,8 +341,17 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
     if (_busy || _limitInvalid) return;
     setState(() => _busy = true);
     final router = GoRouter.of(context);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
+    // The editor's own page, which a save leaves only while it is still
+    // on top: a visitor who went elsewhere meanwhile keeps their screen,
+    // and the editor, done with, is never shown again.
+    final from = pageIn(context);
+    final args = GoRouterState.of(context).extra;
+    // Saved, Save stays off: on web the pop lands later, and a press
+    // before then would save again; done with elsewhere, it never comes
+    // back to be pressed.
+    var leaving = false;
     try {
       final rule = _draftRule();
       final editing = widget.editing;
@@ -354,21 +364,36 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
               visibility: widget.createShared ? 'shared' : null,
               rule: rule,
             );
-        // Only from the screen that asked: a back gesture during a slow
-        // save would otherwise pop whatever it landed on.
-        if (mounted) router.pop(created);
+        leaving = true;
+        await _leave(router, from, args, created);
       } else {
         final next = await ref
             .read(playlistDetailProvider(editing.pid).notifier)
             .replaceRule(rule);
-        if (mounted) router.pop(next);
+        leaving = true;
+        await _leave(router, from, args, next);
       }
     } on WaxDeckApiException catch (e) {
       // A rule somebody just wrote, so the server's own refusal: it
       // names the field or the shape it would not take.
       messenger.show(explainRefusal(l10n, e), channel: ShellChannel.playlists);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && !leaving) setState(() => _busy = false);
+    }
+  }
+
+  /// Closes the editor at [from] with [saved] where it is still on top,
+  /// and otherwise makes sure it is never shown again.
+  static Future<void> _leave(
+    GoRouter router,
+    PageId from,
+    Object? args,
+    Playlist saved,
+  ) async {
+    if (await stillOnTop(router, (page) => page == from)) {
+      await router.popPage(saved);
+    } else {
+      forgetFinished(router, from.location, args);
     }
   }
 
@@ -387,7 +412,8 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
     return WaxScaffold(
       title: l10n.playlistRuleEditorTitle(name),
       largeTitle: false,
-      onBack: () => context.leave(fallback: WaxRoute.playlists),
+      onBack: () => context.back(fallback: WaxRoute.playlists),
+      backSemanticsId: SemanticsIds.navBack,
       actions: <Widget>[
         WaxButton(
           label: l10n.commonSave,

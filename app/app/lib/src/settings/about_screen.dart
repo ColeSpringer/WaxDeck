@@ -62,7 +62,8 @@ class AboutScreen extends ConsumerWidget {
       title: l10n.aboutTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.aboutOpen,
-      onBack: () => context.leave(fallback: WaxRoute.settings),
+      onBack: () => context.back(fallback: WaxRoute.settings),
+      backSemanticsId: SemanticsIds.navBack,
       slivers: <Widget>[
         SliverPadding(
           padding: sizeClass.gutter,

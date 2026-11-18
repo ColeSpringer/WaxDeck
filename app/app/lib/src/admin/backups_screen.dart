@@ -4,6 +4,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/asked_from.dart';
 import '../shell/async_box_face.dart';
 import '../shell/pending_actions.dart';
 import '../shell/semantics_ids.dart';
@@ -24,7 +25,7 @@ class BackupsScreen extends ConsumerWidget {
 
   Future<void> _createBackup(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final container = ProviderScope.containerOf(context, listen: false);
     await container.read(pendingActionsProvider.notifier).run(
       PendingAction.backup,
@@ -61,7 +62,7 @@ class BackupsScreen extends ConsumerWidget {
     PickedAudioFile file,
   ) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final openRead = file.openRead;
     if (openRead == null) return;
     final container = ProviderScope.containerOf(context, listen: false);
@@ -83,10 +84,12 @@ class BackupsScreen extends ConsumerWidget {
 
   Future<void> _cancelRestore(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
+    // The container, not `ref`, past the await: the screen may be gone.
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
-      await ref.read(repositoryProvider).cancelStagedRestore();
-      ref.invalidate(stagedRestoreProvider);
+      await container.read(repositoryProvider).cancelStagedRestore();
+      container.invalidate(stagedRestoreProvider);
     } on WaxDeckApiException catch (e) {
       messenger.show(explainError(l10n, e));
     }
@@ -106,6 +109,7 @@ class BackupsScreen extends ConsumerWidget {
       largeTitle: false,
       semanticsId: SemanticsIds.adminBackups,
       onBack: adminBack(context),
+      backSemanticsId: SemanticsIds.navBack,
       // A sliver rather than a body: the drop target has to cover the
       // page to be a target at all, and the scaffold's body is an
       // adapter with no height of its own.
@@ -241,7 +245,7 @@ class _BackupRow extends ConsumerWidget {
 
   Future<void> _stageRestore(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -262,12 +266,17 @@ class _BackupRow extends ConsumerWidget {
       ),
     );
     if (confirmed != true || !context.mounted) return;
+    // Read before the await: the screen may be left while it stages, and
+    // the plan is what the admin asked to see, so it is shown wherever
+    // they are.
+    final from = AskedFrom.of(context);
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
-      final plan = await ref.read(repositoryProvider).stageRestore(backup.id);
-      ref.invalidate(stagedRestoreProvider);
-      if (!context.mounted) return;
-      await showDialog<void>(
-        context: context,
+      final plan = await container
+          .read(repositoryProvider)
+          .stageRestore(backup.id);
+      container.invalidate(stagedRestoreProvider);
+      await from.showDialogOnScreen<void>(
         builder: (_) => _RestorePlanDialog(plan: plan),
       );
     } on WaxDeckApiException catch (e) {
@@ -277,7 +286,9 @@ class _BackupRow extends ConsumerWidget {
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
+    // The container, not `ref`, past the awaits: the screen may be gone.
+    final container = ProviderScope.containerOf(context, listen: false);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -300,8 +311,8 @@ class _BackupRow extends ConsumerWidget {
     );
     if (confirmed != true) return;
     try {
-      await ref.read(repositoryProvider).deleteBackup(backup.id);
-      ref.invalidate(backupsProvider);
+      await container.read(repositoryProvider).deleteBackup(backup.id);
+      container.invalidate(backupsProvider);
     } on WaxDeckApiException catch (e) {
       messenger.show(explainError(l10n, e));
     }
@@ -532,7 +543,7 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
     if (count == null || mb == null) return;
     setState(() => _busy = true);
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     try {
       await ref
           .read(adminSettingsProvider.notifier)

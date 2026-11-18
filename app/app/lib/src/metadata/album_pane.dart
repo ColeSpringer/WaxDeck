@@ -68,16 +68,17 @@ class AlbumPane extends ConsumerStatefulWidget {
   const AlbumPane({
     super.key,
     required this.pid,
-    required this.onRegrouped,
+    required this.follow,
     this.onDirtyChanged,
   });
 
   final String pid;
 
-  /// Where the host takes the workbench once a rewrite regroups the
-  /// members: the album pid they landed on. The host owns the move
-  /// because a pane in a sheet has a sheet to close first.
-  final void Function(String newPid) onRegrouped;
+  /// Where the host takes the workbench once a write merges the release
+  /// away, read as the write is sent; none once the workbench has gone,
+  /// and then the merge is only said. The host owns the move because a
+  /// pane in a sheet has a sheet to close first.
+  final EditFollow? Function() follow;
 
   /// Reports whether either form on this pane holds anything unsaved,
   /// so a host that replaces the pane can ask before it discards
@@ -223,6 +224,10 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
 
   Widget _body(AlbumDetail album) {
     final l10n = context.l10n;
+    final pid = widget.pid;
+    // Through the container: a cover write may land once this pane has
+    // gone, and the album page Back lands on draws the source it reads.
+    final container = ProviderScope.containerOf(context, listen: false);
     final curation = ref.watch(albumCurationProvider(widget.pid)).value ?? {};
     final changed = _changed(album);
     return Semantics(
@@ -275,7 +280,7 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
               // grid knows nothing about: without this, clearing a
               // cover leaves the mark describing a picture that is
               // gone until the pane is left and re-entered.
-              onChanged: () => ref.invalidate(albumDetailProvider(widget.pid)),
+              onChanged: () => container.invalidate(albumDetailProvider(pid)),
             ),
             const SizedBox(height: WaxSpace.s24),
             _FieldSection(
@@ -372,8 +377,13 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
   Future<void> _save(Map<String, String> changed) async {
     if (_busy) return;
     setState(() => _busy = true);
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
+    final follow = widget.follow();
+    // The answer outlives this pane when the visitor leaves meanwhile; the
+    // page Back lands on may draw the same release.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final pid = widget.pid;
     try {
       final result = await ref
           .read(repositoryProvider)
@@ -386,34 +396,44 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
             force: _force,
           );
       // The save may land while this pane is being left - a merge below
-      // replaces the route, and the workbench can be popped under it.
-      // Reading through a disposed ref throws past the catch, which
-      // only knows the server's refusals.
-      if (!mounted) return;
-      // What was sent stops counting as typed-in, which is what lets the
-      // refetch below adopt it. Load-bearing where the server
-      // normalizes: type `0-36000-29145-2` and the stored value comes
-      // back `036000291452`, so text, stored, and the pre-save seed are
-      // three different strings - and the adopt rule reads that as an
-      // edit in flight and refuses to touch it. The field would then
-      // read dirty for ever, with Save re-sending the same un-normalized
-      // string on every press.
-      for (final field in changed.keys) {
-        _seeded[field] = changed[field]!;
+      // replaces the route, and the sheet or the workbench can be closed
+      // under it. Reading through a disposed ref throws past the catch,
+      // which only knows the server's refusals.
+      if (mounted) {
+        // What was sent stops counting as typed-in, which is what lets
+        // the refetch below adopt it. Load-bearing where the server
+        // normalizes: type `0-36000-29145-2` and the stored value comes
+        // back `036000291452`, so text, stored, and the pre-save seed
+        // are three different strings - and the adopt rule reads that
+        // as an edit in flight and refuses to touch it. The field would
+        // then read dirty for ever, with Save re-sending the same
+        // un-normalized string on every press.
+        for (final field in changed.keys) {
+          _seeded[field] = changed[field]!;
+        }
+        _reportDirty();
       }
-      _reportDirty();
       // An mbid clear is the one entity edit that can re-key the album
       // onto a heuristic twin, which deletes this pid: refetching it
-      // would put an error state under a "Saved" toast. The host moves
-      // the workbench instead, exactly as a merging rename does.
+      // would put an error state under a "Saved" toast. The workbench
+      // follows instead, exactly as for a merging rename, and whether or
+      // not this pane is still up.
       if (result.mergedInto case final survivor?) {
-        messenger.show(l10n.musicAlbumRewriteMerged);
-        widget.onRegrouped(survivor);
+        if (follow != null) {
+          unawaited(
+            follow.merged(
+              survivor,
+              said: (l10n) => l10n.musicAlbumRewriteMerged,
+            ),
+          );
+        } else {
+          messenger.show(l10n.musicAlbumRewriteMerged);
+        }
         return;
       }
-      ref
-        ..invalidate(albumDetailProvider(widget.pid))
-        ..invalidate(albumCurationProvider(widget.pid));
+      container
+        ..invalidate(albumDetailProvider(pid))
+        ..invalidate(albumCurationProvider(pid));
       messenger.show(l10n.musicAlbumEditorSaved);
     } on WaxDeckApiException catch (e) {
       // A locked field keeps the server's sentence, which names the
@@ -440,11 +460,14 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
     // scrolled that far.
     final members =
         ref.watch(albumDetailProvider(widget.pid)).value?.itemCount ?? 0;
+    final pid = widget.pid;
     final listing = (
       dimension: MusicDimension.albums,
-      segment: widget.pid,
+      segment: pid,
       domain: BrowseDomain.wholeLibrary,
     );
+    // Through the container: a rename may land once this pane has gone.
+    final container = ProviderScope.containerOf(context, listen: false);
     return EntityRenameSection(
       entityType: 'album',
       pid: widget.pid,
@@ -457,7 +480,7 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
         applyLabel: l10n.musicAlbumRewriteApply(members),
         confirmTitle: l10n.musicAlbumRewriteConfirmTitle,
         confirmBody: l10n.musicAlbumRewriteConfirmBody,
-        merged: l10n.musicAlbumRewriteMerged,
+        merged: (l10n) => l10n.musicAlbumRewriteMerged,
         renamed: l10n.musicAlbumRewriteRenamed,
       ),
       ids: RenameSectionIds(
@@ -474,9 +497,9 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
         _rewriteDirty = dirty;
         _reportDirty();
       },
-      onMerged: widget.onRegrouped,
-      onRenamed: () => ref
-        ..invalidate(albumDetailProvider(widget.pid))
+      follow: widget.follow,
+      onRenamed: () => container
+        ..invalidate(albumDetailProvider(pid))
         ..invalidate(musicItemsProvider(listing)),
     );
   }

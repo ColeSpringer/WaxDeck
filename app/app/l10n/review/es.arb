@@ -90,5 +90,7 @@
   "reviewTrackNumbered": "{number}. {title}",
   "reviewTrackWithArtist": "{track} ({artist})",
   "reviewTracksTitle": "Pistas",
+  "reviewUndo": "Deshacer",
+  "reviewUndone": "Decisión deshecha",
   "reviewUntitled": "Sin título"
 }

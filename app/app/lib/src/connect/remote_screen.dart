@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../shell/navigation_history.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -34,7 +35,8 @@ class RemoteControlScreen extends ConsumerWidget {
       return WaxScaffold(
         title: l10n.devicesRemoteTitle,
         largeTitle: false,
-        onBack: () => context.leave(),
+        onBack: () => context.back(),
+        backSemanticsId: SemanticsIds.navBack,
         slivers: <Widget>[
           SliverFillRemaining(
             hasScrollBody: false,
@@ -67,7 +69,8 @@ class _Remote extends ConsumerWidget {
     return WaxScaffold(
       title: remote.endpointNameIn(l10n),
       largeTitle: false,
-      onBack: () => context.leave(),
+      onBack: () => context.back(),
+      backSemanticsId: SemanticsIds.navBack,
       actions: <Widget>[
         WaxIconButton(
           glyph: WaxIcons.cast,
@@ -222,7 +225,11 @@ class _Remote extends ConsumerWidget {
     RemoteSessionController controller,
   ) async {
     final router = GoRouter.of(context);
-    if (await _report(context, controller.transferHere())) router.leave();
+    final from = pageOnTop(router);
+    if (await _report(context, controller.transferHere()) &&
+        await stillOnTop(router, (page) => page == from)) {
+      unawaited(router.leave());
+    }
   }
 
   Future<void> _stopThere(
@@ -230,7 +237,11 @@ class _Remote extends ConsumerWidget {
     RemoteSessionController controller,
   ) async {
     final router = GoRouter.of(context);
-    if (await _report(context, controller.stopThere())) router.leave();
+    final from = pageOnTop(router);
+    if (await _report(context, controller.stopThere()) &&
+        await stillOnTop(router, (page) => page == from)) {
+      unawaited(router.leave());
+    }
   }
 
   /// Runs [work], saying why it did nothing when it fails. True when it

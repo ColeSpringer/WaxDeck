@@ -78,6 +78,18 @@ class _FilesPicker extends _FolderPicker {
   }) => picked;
 }
 
+/// Answers a folder pick with what [picked] completes with.
+class _HeldFolderPicker extends _FolderPicker {
+  _HeldFolderPicker(this.picked) : super(const FolderPick());
+
+  final Future<FolderPick> picked;
+
+  @override
+  Future<FolderPick> pickAudioFolder({
+    UploadFormatSets formats = const UploadFormatSets(),
+  }) => picked;
+}
+
 class _ThrowingFolderPicker extends _FolderPicker {
   _ThrowingFolderPicker() : super(const FolderPick());
 
@@ -142,7 +154,7 @@ void main() {
       pickFolderAndUpload,
     );
 
-    final message = container.read(shellMessengerProvider);
+    final message = container.read(shellMessagesProvider);
     expect(message?.resolve(_l10n), contains('Audible'));
     expect(message?.resolve(_l10n), contains('DRM'));
     // Nothing survived the filter, so the media-type question never
@@ -167,7 +179,7 @@ void main() {
     );
 
     expect(
-      container.read(shellMessengerProvider)?.resolve(_l10n),
+      container.read(shellMessagesProvider)?.resolve(_l10n),
       _l10n.uploadsPickFolderFailed,
     );
     expect(
@@ -187,7 +199,7 @@ void main() {
     );
 
     expect(
-      container.read(shellMessengerProvider)?.resolve(_l10n),
+      container.read(shellMessagesProvider)?.resolve(_l10n),
       'Skipped 3 unsupported files',
     );
     expect(
@@ -213,7 +225,7 @@ void main() {
 
     expect(find.bySemanticsIdentifier(SemanticsIds.uploadMediaType), findsOne);
     final raised = <String>[];
-    container.listen(shellMessengerProvider, (_, next) {
+    container.listen(shellMessagesProvider, (_, next) {
       if (next != null) raised.add(next.resolve(_l10n));
     });
     await tester.tap(
@@ -241,10 +253,10 @@ void main() {
     );
     // The report holds until the dialog is gone: a toast raised under
     // a modal is hidden from the semantics tree and can expire there.
-    expect(container.read(shellMessengerProvider), isNull);
+    expect(container.read(shellMessagesProvider), isNull);
 
     final raised = <String>[];
-    container.listen(shellMessengerProvider, (_, next) {
+    container.listen(shellMessagesProvider, (_, next) {
       if (next != null) raised.add(next.resolve(_l10n));
     });
     await tester.tap(
@@ -269,10 +281,10 @@ void main() {
     );
     // Held until the dialog is gone, as the folder flow holds it.
     expect(find.bySemanticsIdentifier(SemanticsIds.uploadMediaType), findsOne);
-    expect(container.read(shellMessengerProvider), isNull);
+    expect(container.read(shellMessagesProvider), isNull);
 
     final raised = <String>[];
-    container.listen(shellMessengerProvider, (_, next) {
+    container.listen(shellMessagesProvider, (_, next) {
       if (next != null) raised.add(next.resolve(_l10n));
     });
     await tester.tap(
@@ -302,8 +314,30 @@ void main() {
     picked.complete([_file('book.aax'), _file('song.mp3')]);
     await tester.pumpAndSettle();
     expect(
-      container.read(shellMessengerProvider)?.resolve(_l10n),
+      container.read(shellMessagesProvider)?.resolve(_l10n),
       contains('Skipped 1 Audible file'),
+    );
+  });
+
+  testWidgets('a folder pick answered after its host left still names what '
+      'it dropped', (tester) async {
+    final container = appContainer(repo: _repo());
+    final picked = Completer<FolderPick>();
+    final picker = _HeldFolderPicker(picked.future);
+    await _mountOpener(
+      tester,
+      container,
+      (context, ref) => pickFolderAndUpload(context, ref, picker),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pump();
+    await leaveScreen(tester, container);
+
+    picked.complete(FolderPick(files: [_file('a.flac')], skippedDrm: 2));
+    await tester.pumpAndSettle();
+    expect(
+      container.read(shellMessagesProvider)?.resolve(_l10n),
+      contains('Skipped 2 Audible files'),
     );
   });
 
@@ -340,7 +374,7 @@ void main() {
     // Navigated away while the first file was on its way.
     await leaveScreen(tester, container);
     final raised = <String>[];
-    container.listen(shellMessengerProvider, (_, next) {
+    container.listen(shellMessagesProvider, (_, next) {
       if (next != null) raised.add(next.resolve(_l10n));
     });
 
@@ -386,7 +420,7 @@ void main() {
 
     expect(repo.acquisitionCalls, hasLength(1));
     expect(
-      container.read(shellMessengerProvider)?.resolve(_l10n),
+      container.read(shellMessagesProvider)?.resolve(_l10n),
       _l10n.uploadsAcquireQueued,
     );
   });
@@ -441,7 +475,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final message = container.read(shellMessengerProvider);
+      final message = container.read(shellMessagesProvider);
       expect(message?.resolve(_l10n), contains('Uploaded 2 files'));
       expect(message?.actionLabel, 'Open review');
       expect(message?.actionSemanticsId, SemanticsIds.uploadIdentifyingReview);
@@ -467,6 +501,6 @@ void main() {
     // Identify was off by account default: the import is synchronous
     // and the shelves move on their own, so a "waiting in review"
     // message would be a lie.
-    expect(container.read(shellMessengerProvider), isNull);
+    expect(container.read(shellMessagesProvider), isNull);
   });
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show ValueListenable, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show SynchronousFuture, ValueListenable, kIsWeb;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -32,7 +33,7 @@ import '../sharing/share_dialog.dart';
 import '../shell/commands.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
-import '../shell/signed_in_cover.dart';
+import '../shell/shell_messages.dart';
 import 'chapters.dart';
 import 'deck_bar_host.dart';
 import 'download_action.dart';
@@ -171,17 +172,14 @@ class PlayerScreen extends ConsumerWidget {
             },
           ),
       ],
-      // A Scaffold with nothing in it but the body, for the thing a
-      // Scaffold does that no other widget does: it is what
-      // `ScaffoldMessenger` presents into. The player is a route of its
-      // own over the shell, so the chrome's Scaffold is not an ancestor,
-      // and every refusal raised from here - a star that would not
-      // stick, a routed command an endpoint declined, a delete the
-      // server refused - asserts without one. The backdrop underneath
-      // paints the canvas, hence transparent.
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: WaxPlainTextStyle(child: _body(context, ref)),
+      // A Scaffold with nothing in it but the body: the Material the
+      // face's controls ink on. The backdrop underneath paints the
+      // canvas, hence transparent. The shell's messages are drawn over it.
+      child: ShellMessageArea(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          body: WaxPlainTextStyle(child: _body(context, ref)),
+        ),
       ),
     );
   }
@@ -348,7 +346,8 @@ class _PlayerShell extends ConsumerWidget {
 /// `maybeOf`, matching what the overflow's delete does with the router it
 /// captures: one policy for a player mounted outside a router, rather
 /// than a menu row that shrugs and a collapse button that throws.
-void leavePlayer(BuildContext context) => leaveWith(GoRouter.maybeOf(context));
+Future<void> leavePlayer(BuildContext context) =>
+    leaveWith(GoRouter.maybeOf(context));
 
 /// The same, for a caller that has to leave after work it awaited.
 ///
@@ -356,15 +355,10 @@ void leavePlayer(BuildContext context) => leaveWith(GoRouter.maybeOf(context));
 /// deleting the playing item finishes whenever the server answers, and
 /// by then the surface that asked may be gone. Null where the player is
 /// mounted outside a router at all, which is a test host rather than a
-/// running app, and where there is nowhere to leave to.
-void leaveWith(GoRouter? router) {
-  if (router == null) return;
-  if (router.canPop()) {
-    router.pop();
-    return;
-  }
-  router.go(WaxRoute.home);
-}
+/// running app, and where there is nowhere to leave to. Done once the
+/// player has gone, as [WaxLeave.leave] is.
+Future<void> leaveWith(GoRouter? router) =>
+    router?.leave() ?? SynchronousFuture<void>(null);
 
 /// The player while the queue has an entry: playing, loading, or
 /// standing where a start left it.
@@ -666,7 +660,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           (kIsWeb || ref.watch(desktopProvider)) &&
           ref.watch(playerArtworkCycleProvider) &&
           WaxMotion.of(context).animationsEnabled &&
-          SignedInCover.showing(context),
+          ShellMessageNest.showing(context),
     );
     // Ahead of a turn that is coming: a scheduled one, or more by hand.
     if (artworks.length > 1 && (_turning != null || _artIndex > 0)) {

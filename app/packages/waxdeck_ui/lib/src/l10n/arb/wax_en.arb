@@ -440,6 +440,10 @@
   "@lyricsLabel": {
     "description": "Accessible name of the lyrics pane."
   },
+  "messageClose": "Close",
+  "@messageClose": {
+    "description": "Accessible name of the close button on a message along the bottom of the screen that waits for its action rather than leaving on its own."
+  },
   "miniPlayerLabel": "Mini player",
   "@miniPlayerLabel": {
     "description": "Accessible name of the small always-on-top player window."

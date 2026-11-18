@@ -12,6 +12,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'app_host.dart';
 import 'fakes.dart';
+import 'router_stack.dart';
 import 'row_nodes.dart';
 import 'wax_finders.dart';
 
@@ -205,7 +206,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.fixHealthCalls.single.rule, 'missing-art');
-    final message = container.read(shellMessengerProvider);
+    final message = container.read(shellMessagesProvider);
     expect(shellMessageText(message), 'Fixing Missing cover art');
     expect(message?.actionSemanticsId, SemanticsIds.openTasks);
     expect(
@@ -226,6 +227,7 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.tasksScreen),
       findsOneWidget,
     );
+    expect(pushesOn(routerOf(tester)), 0);
   });
 
   testWidgets('a pass-backed fix stays busy through its re-check', (
@@ -272,7 +274,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'An enrichment pass is already running. Fix this when it ends.',
     );
     expect(_fixButton(tester, 'missing-art').busy, isFalse);
@@ -294,7 +296,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'The server or this library is read-only right now, so nothing can be changed.',
     );
     expect(_fixButton(tester, 'missing-art').busy, isFalse);
@@ -322,7 +324,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'A fix for Missing cover art is already running',
     );
     expect(_fixButton(tester, 'missing-art').busy, isTrue);
@@ -799,7 +801,7 @@ void main() {
 
     // The server's own count and reason, not "something changed first".
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       '1 of 2 could not be moved to the trash: permission denied',
     );
     expect(repo.listUpgradesCalls, greaterThan(reads));
@@ -1144,6 +1146,42 @@ void main() {
       );
     },
   );
+
+  testWidgets('a dry run with nothing to move answered once the screen was '
+      'left still says why', (tester) async {
+    _reducedMotion(tester);
+    final gate = Completer<void>();
+    final repo = _repo()
+      ..healthSummary = _pathSummary()
+      ..healthIssues = const [
+        HealthIssue(
+          pid: 'tr-5',
+          title: 'Stray',
+          mediaType: MediaType.music,
+          rules: ['path-mismatch'],
+        ),
+      ]
+      ..previewOrganizeGate = gate
+      ..organizePlanResult = const OrganizePlan(
+        profile: 'waxbin-native',
+        totalActions: 0,
+      );
+    final container = appContainer(repo: repo);
+    await _pumpIssues(tester, container);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.healthIssueFix('tr-5')),
+    );
+    await tester.pump();
+    await leaveScreen(tester, container);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      shellMessageText(container.read(shellMessagesProvider)),
+      'This file is already where the profile puts it.',
+    );
+  });
 
   testWidgets('an issue whose dry run has nothing to move says why', (
     tester,

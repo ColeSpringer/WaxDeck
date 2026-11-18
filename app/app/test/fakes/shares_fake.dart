@@ -23,6 +23,9 @@ mixin FakeShares on FakeRepositoryState implements SharesApi {
   /// Held open, [createShare] waits on it before answering.
   Completer<void>? createShareGate;
 
+  /// Holds [revokeShare] open, when set, until completed.
+  Completer<void>? revokeShareGate;
+
   /// Share links every account holds, answered to an `all: true` listing.
   /// Separate from [shares] so a test can prove which listing a screen
   /// asked for.
@@ -100,6 +103,7 @@ mixin FakeShares on FakeRepositoryState implements SharesApi {
 
   @override
   Future<void> revokeShare(String shareId) async {
+    await revokeShareGate?.future;
     final error = shareError;
     if (error != null) throw error;
     revokeShareCalls.add(shareId);

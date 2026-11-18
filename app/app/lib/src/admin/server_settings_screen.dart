@@ -30,6 +30,7 @@ class ServerSettingsScreen extends ConsumerWidget {
       largeTitle: false,
       semanticsId: SemanticsIds.adminSettingsSection,
       onBack: adminBack(context),
+      backSemanticsId: SemanticsIds.navBack,
       body: Padding(
         padding: sizeClass.gutter.add(
           const EdgeInsets.only(bottom: WaxSpace.s32),
@@ -75,7 +76,7 @@ class _Switches extends ConsumerWidget {
   ) async {
     // Taken before the write: a refusal has to be sayable even when the
     // section has been left, and `ref` past its widget throws.
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     try {
       await ref.read(adminSettingsProvider.notifier).edit(change);
@@ -182,7 +183,7 @@ class _TranscodingGroupState extends ConsumerState<_TranscodingGroup> {
     if (_busy) return;
     setState(() => _busy = true);
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     try {
       await ref
           .read(transcodingLimitsProvider.notifier)
@@ -397,7 +398,7 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
   Future<void> _save() async {
     if (_busy) return;
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     // Refused outright rather than falling back to the stored value and
     // still reporting success. One save writes both windows, so each
     // message names its own field.

@@ -1,7 +1,14 @@
 import type { Locator, Request } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { App, J, T, clickUntilRequested, retryCatalogBusy } from './driver';
-import { chooseFromMenu, clickThrough, typeInto, wheelIntoReach, wheelIntoView } from './driver/gestures';
+import { App, DEST, J, T, clickUntilRequested, retryCatalogBusy } from './driver';
+import {
+  chooseFromMenu,
+  clickOnceThrough,
+  clickThrough,
+  typeInto,
+  wheelIntoReach,
+  wheelIntoView,
+} from './driver/gestures';
 import type { components } from './api-types';
 import { SemanticsIds } from './semantics-ids';
 
@@ -198,8 +205,8 @@ test('a rule the server cannot fix says why, and one it can runs as a job', asyn
     expect(start.queued).toBe(lyrics!.failing);
 
     await app.admin.control(SemanticsIds.openTasks).click();
-    // Pushed over the screen it came from, as the other Tasks doors are,
-    // so the address bar keeps that screen's location.
+    // Gone to, as the other Tasks doors are: Tasks has a place in the
+    // chrome, so the address bar reads its own location.
     await expect(app.admin.control(SemanticsIds.tasksScreen)).toBeVisible({ timeout: T.nav });
     const row = app.admin.control(SemanticsIds.jobRow(start.jobPid!));
     await expect(row).toContainText('Enrichment');
@@ -263,6 +270,40 @@ test('the quality upgrades section answers once the library is analyzed', async 
       ),
     ).toBeVisible({ timeout: T.fetch });
   }
+});
+
+// The way Tasks once opened inside the Music tab: its door was a push
+// into whichever branch it was on, so Tasks, Home, then Music showed Tasks
+// under a /music address. The acquire toast's door is Music's own, and a
+// download it queues is a task, here one the stub source answers with
+// nothing, so it fails without touching the catalog.
+test('Tasks opened from Music is a place of its own, which Music and back never show', async ({
+  app,
+}) => {
+  const page = app.page;
+  await app.nav.enter('music');
+  await clickThrough(app.music.control(SemanticsIds.musicAdd), app.music.control(SemanticsIds.addFromUrl));
+  await clickThrough(app.music.control(SemanticsIds.addFromUrl), app.music.control(SemanticsIds.acquireUrl));
+  await typeInto(page, app.music.control(SemanticsIds.acquireUrl), 'http://127.0.0.1:4422/nothing-here');
+  const isAcquire = (r: Request) => r.url().endsWith('/acquisitions') && r.method() === 'POST';
+  const answered = page.waitForResponse((r) => isAcquire(r.request()), { timeout: T.fetch });
+  await clickUntilRequested(page, app.music.control(SemanticsIds.acquireSubmit), isAcquire);
+  expect((await answered).status(), 'the download should be queued').toBe(202);
+  await clickThrough(app.music.control(SemanticsIds.acquireTasks), app.admin.control(SemanticsIds.tasksScreen));
+  await app.nav.expectAt('tasks');
+
+  await app.nav.to('home');
+  // Pressed once: the first press is what is under test, and a retried click
+  // would be the second one that used to reach the hub.
+  await clickOnceThrough(app.shell.destination('music'), DEST.music.arrival(page));
+  await app.nav.expectAt('music');
+  await expect(app.admin.control(SemanticsIds.tasksScreen)).toBeHidden();
+
+  // Two steps back, each the screen its address says.
+  await app.nav.back('home');
+  await app.nav.expectAt('home');
+  await app.nav.back('tasks');
+  await app.nav.expectAt('tasks');
 });
 
 /// Runs a kind change through the API to done.

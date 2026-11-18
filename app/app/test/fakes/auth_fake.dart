@@ -12,6 +12,12 @@ mixin FakeAuth on FakeRepositoryState implements AuthApi {
   /// Thrown by [bootstrap] when set, to exercise the error path.
   WaxDeckApiException? bootstrapError;
 
+  /// Hold [login], [bootstrap] and [signup] open, when set, until
+  /// completed.
+  Completer<void>? loginGate;
+  Completer<void>? bootstrapGate;
+  Completer<void>? signupGate;
+
   /// Thrown by [refreshToken] when set, to exercise rotation failures.
   WaxDeckApiException? refreshError;
 
@@ -66,6 +72,7 @@ mixin FakeAuth on FakeRepositoryState implements AuthApi {
       password: password,
       displayName: displayName,
     ));
+    await bootstrapGate?.future;
     final error = bootstrapError;
     if (error != null) throw error;
     bootstrapNeeded = false;
@@ -90,6 +97,7 @@ mixin FakeAuth on FakeRepositoryState implements AuthApi {
       password: password,
       deviceName: deviceName,
     ));
+    await loginGate?.future;
     final error = loginError;
     if (error != null) throw error;
     return _signIn();
@@ -213,6 +221,7 @@ mixin FakeAuth on FakeRepositoryState implements AuthApi {
       displayName: displayName,
       inviteToken: inviteToken,
     ));
+    await signupGate?.future;
     final error = signupError;
     if (error != null) throw error;
     // An invite activates the account immediately; open signup queues it.

@@ -134,6 +134,7 @@ mixin FakeReview on FakeRepositoryState implements ReviewApi {
       action: action,
       candidateMbid: candidateMbid,
     ));
+    await decideReviewGate?.future;
     final error = reviewError;
     if (error != null) throw error;
     return ReviewDecideResult(entry: _decide(entryId, action));
@@ -144,7 +145,9 @@ mixin FakeReview on FakeRepositoryState implements ReviewApi {
     final error = reviewError;
     if (error != null) throw error;
     revertedReviewEntryIds.add(entryId);
-    final updated = _withStatus(_reviewEntryById(entryId), 'pending');
+    // Decided still, as the server leaves it: a revert is final, and the
+    // entry is out of the pending queue for good.
+    final updated = _withStatus(_reviewEntryById(entryId), 'reverted');
     reviewEntries = [
       for (final e in reviewEntries)
         if (e.id == entryId) updated else e,
@@ -160,6 +163,12 @@ mixin FakeReview on FakeRepositoryState implements ReviewApi {
   /// where the point is the server answering with something else.
   ReviewOverride? reidentifyStoresInstead;
 
+  /// Holds a [reidentifyReviewEntry] until completed.
+  Completer<void>? reidentifyGate;
+
+  /// Holds [decideReviewEntry] until completed, with the call recorded.
+  Completer<void>? decideReviewGate;
+
   @override
   Future<ReviewEntry> reidentifyReviewEntry(
     String entryId, {
@@ -167,6 +176,7 @@ mixin FakeReview on FakeRepositoryState implements ReviewApi {
     String? album,
     String? title,
   }) async {
+    await reidentifyGate?.future;
     final error = reviewError;
     if (error != null) throw error;
     reidentifyCalls.add((
@@ -259,11 +269,21 @@ mixin FakeReview on FakeRepositoryState implements ReviewApi {
   Future<LibraryMatching> getLibraryMatching(String libraryPid) async =>
       matchingModes[libraryPid] ?? const LibraryMatching(mode: 'auto');
 
+  /// Holds [setLibraryMatching] until completed.
+  Completer<void>? setLibraryMatchingGate;
+
+  /// Thrown by [setLibraryMatching] when set.
+  WaxDeckApiException? setLibraryMatchingError;
+
   @override
   Future<LibraryMatching> setLibraryMatching(
     String libraryPid,
     LibraryMatching matching,
-  ) async => matchingModes[libraryPid] = matching;
+  ) async {
+    await setLibraryMatchingGate?.future;
+    if (setLibraryMatchingError case final error?) throw error;
+    return matchingModes[libraryPid] = matching;
+  }
 
   /// Every bulk decision sent, in order.
   final decideBulkCalls = <({List<String> entryIds, String action})>[];

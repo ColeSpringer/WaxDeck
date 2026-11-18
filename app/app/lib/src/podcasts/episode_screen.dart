@@ -51,7 +51,7 @@ void seekLiveOrReport(
     return;
   }
   ref
-      .read(shellMessengerProvider.notifier)
+      .read(shellMessengerProvider)
       .show(
         context.l10n.podcastCueStartsAt(kind.name, formatCueTimestamp(ms)),
         channel: ShellChannel.episodes,
@@ -79,14 +79,14 @@ class EpisodeScreen extends ConsumerWidget {
     return WaxScaffold(
       title: episode?.title ?? l10n.podcastEpisodeFallbackTitle,
       largeTitle: false,
-      // Pops when something pushed this and goes to the show it belongs
-      // to when nothing did, so the arrow and the system gesture agree
-      // from either entry point. Without a show in the location there is
+      // Back to where the visitor was, the show it belongs to when
+      // nothing is recorded. Without a show in the location there is
       // nothing above but the hub: the detail that would name one has
       // not answered yet when the button is first there to press.
-      onBack: () => context.leave(
+      onBack: () => context.back(
         fallback: showPid == null ? WaxRoute.podcasts : WaxRoute.show(showPid!),
       ),
+      backSemanticsId: SemanticsIds.navBack,
       actions: const <Widget>[SearchAction()],
       slivers: <Widget>[
         AsyncSliverFace<EpisodeDetail>(

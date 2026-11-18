@@ -1,6 +1,16 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
+  "organizeApplied": "{count, plural, =1{1 file moved} other{{count} files moved}}",
+  "@organizeApplied": {
+    "description": "Said when a run applied from a screen the administrator has since left ends: how many files it moved.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "382"
+      }
+    }
+  },
   "organizeApply": "Apply",
   "@organizeApply": {
     "description": "Runs the move. Both the confirming button and the button that opens the confirmation."
@@ -244,6 +254,14 @@
   "organizeProfileDeleteBody": "A library laid out by it has to move to another profile first.",
   "@organizeProfileDeleteBody": {
     "description": "Body of the dialog confirming a profile delete."
+  },
+  "organizeProfileDeleteBuiltIn": "A built-in profile cannot be deleted.",
+  "@organizeProfileDeleteBuiltIn": {
+    "description": "Said when the server refuses a profile delete because the profile is a built-in one."
+  },
+  "organizeProfileDeleteInUse": "A library is still laid out by this profile. Move it to another profile first.",
+  "@organizeProfileDeleteInUse": {
+    "description": "Said when the server refuses a profile delete because a managed library still uses the profile."
   },
   "organizeProfileDeleteTitle": "Delete {name}?",
   "@organizeProfileDeleteTitle": {

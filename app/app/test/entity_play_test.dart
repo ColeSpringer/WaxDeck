@@ -169,7 +169,7 @@ void main() {
 
     unawaited(playPlaylistPid(ref, 'pl-1'));
     await tester.pump(const Duration(seconds: 1));
-    expect(container.read(shellMessengerProvider), isNotNull);
+    expect(container.read(shellMessagesProvider), isNotNull);
     expect(container.read(queueControllerProvider).isEmpty, isTrue);
   });
 }

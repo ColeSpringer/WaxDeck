@@ -6,6 +6,7 @@ import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlist_sync_controller.dart';
 import 'package:waxdeck/src/playlists/playlist_sync_sheet.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -354,6 +355,43 @@ void main() {
         matching: find.text('That is not here any more.'),
       ),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('a sync refused once its sheet is dismissed is said in the '
+      'shell', (tester) async {
+    final gate = Completer<void>();
+    final repo =
+        FakeRepository(
+            sessionState: const SessionState(authenticated: true, user: _admin),
+          )
+          ..playlistSyncError = const WaxDeckApiException(
+            code: 'not-found',
+            message: 'no binding',
+            statusCode: 404,
+          )
+          ..syncPlaylistSourceGate = gate;
+    final pl = await _manualPlaylist(repo);
+    repo.playlistSources[pl.pid] = _bound;
+    final container = _container(repo);
+    await _pump(tester, pl.pid, container);
+    await _openSheet(tester);
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncNow));
+    await tester.pump();
+
+    // Answered while the sheet is on its way out, still mounted.
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pump();
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSyncSheet),
+      findsNothing,
+    );
+    expect(
+      shellMessageText(container.read(shellMessagesProvider)),
+      'That is not here any more.',
     );
   });
 

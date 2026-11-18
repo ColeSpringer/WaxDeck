@@ -162,12 +162,13 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen>
 
   Future<void> _save() {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     return runAs(_GenreWork.save, () async {
       try {
         await ref.read(genreTreeProvider.notifier).save(_genres);
-        if (!mounted) return;
-        setState(() => _dirty = false);
+        // Said with the screen left meanwhile too, through the messenger
+        // read before the await.
+        if (mounted) setState(() => _dirty = false);
         messenger.show(l10n.adminGenreSaved);
       } on WaxDeckApiException catch (error) {
         // The vocabulary somebody just edited: the server names the node
@@ -195,16 +196,17 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen>
       cancelSemanticsId: SemanticsIds.confirmCancel,
     );
     if (!confirmed || !mounted) return;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     await runAs(_GenreWork.revert, () async {
       try {
         await ref.read(genreTreeProvider.notifier).save(const <GenreNode>[]);
-        if (!mounted) return;
-        setState(() {
-          _draft = null;
-          _selected = null;
-          _dirty = false;
-        });
+        if (mounted) {
+          setState(() {
+            _draft = null;
+            _selected = null;
+            _dirty = false;
+          });
+        }
         messenger.show(l10n.adminGenreReverted);
       } on WaxDeckApiException catch (error) {
         messenger.show(explainError(l10n, error));
@@ -214,19 +216,18 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen>
 
   Future<void> _normalize({required bool dryRun}) {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     // Hoisted: the offer outlives this screen.
     final router = GoRouter.of(context);
     // Each press queues a whole-catalog pass, so a second one waits.
     return runAs(dryRun ? _GenreWork.preview : _GenreWork.normalize, () async {
       try {
         await ref.read(repositoryProvider).normalizeGenres(dryRun: dryRun);
-        if (!mounted) return;
         messenger.show(
           dryRun ? l10n.adminGenreDryRunStarted : l10n.adminGenreNormalizing,
           actionLabel: l10n.adminOpenTasks,
           actionSemanticsId: SemanticsIds.adminAction('genre-tasks'),
-          onAction: () => router.pushInShell<void>(WaxRoute.tasks),
+          onAction: () => router.go(WaxRoute.tasks),
         );
       } on WaxDeckApiException catch (error) {
         messenger.show(explainError(l10n, error));
@@ -249,6 +250,7 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen>
       largeTitle: false,
       semanticsId: SemanticsIds.adminGenres,
       onBack: adminBack(context),
+      backSemanticsId: SemanticsIds.navBack,
       actions: <Widget>[
         WaxButton(
           label: l10n.commonSave,

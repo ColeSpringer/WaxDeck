@@ -9,12 +9,55 @@ import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'controls.dart';
 
+/// Where an app draws its messages on each of its pages, the way a
+/// Material Scaffold draws the snack bars of the messenger above it:
+/// every [WaxScaffold] under this hands its page to [present], inside the
+/// page's own semantics, and is drawn as [present] returns it; and its
+/// floating button to [clear], since a message rests above that button as
+/// a floating snack bar rested above Material's.
+class WaxPageMessages extends InheritedWidget {
+  const WaxPageMessages({
+    required this.present,
+    this.clear,
+    required super.child,
+    super.key,
+  });
+
+  /// [page] with the app's messages drawn over it.
+  final Widget Function(Widget page) present;
+
+  /// [button], along the bottom of a page, as something the app's
+  /// messages rest above. Null leaves it as it is.
+  final Widget Function(Widget button)? clear;
+
+  /// [page] as the [WaxPageMessages] above [context] presents it; [page]
+  /// itself with none.
+  static Widget around(BuildContext context, Widget page) {
+    final scope = context.dependOnInheritedWidgetOfExactType<WaxPageMessages>();
+    return scope == null ? page : scope.present(page);
+  }
+
+  /// [button] as the [WaxPageMessages] above [context] has messages clear
+  /// it; [button] itself with none.
+  static Widget clearing(BuildContext context, Widget button) {
+    final clear = context
+        .dependOnInheritedWidgetOfExactType<WaxPageMessages>()
+        ?.clear;
+    return clear == null ? button : clear(button);
+  }
+
+  @override
+  bool updateShouldNotify(WaxPageMessages oldWidget) =>
+      present != oldWidget.present || clear != oldWidget.clear;
+}
+
 /// The page scaffold every screen sits in.
 ///
 /// It owns the large-title app bar (which collapses on scroll), the
 /// gutters for the current size class, and the landmark structure
 /// assistive technology navigates by: a header, one main region, and a
-/// deck bar the shell supplies.
+/// deck bar the shell supplies. The app's messages are drawn over it
+/// through the [WaxPageMessages] above it.
 class WaxScaffold extends StatelessWidget {
   const WaxScaffold({
     required this.title,
@@ -47,8 +90,9 @@ class WaxScaffold extends StatelessWidget {
   final List<Widget>? slivers;
   final List<Widget> actions;
 
-  /// Supplied on pushed screens. Canonical destinations never show one:
-  /// they are reached from navigation, not from a stack.
+  /// Supplied on every screen but a root of the navigation, however it was
+  /// reached. A root is where a visitor starts from and has nothing behind
+  /// it, so it draws no arrow; which screens are roots is the app's call.
   final VoidCallback? onBack;
 
   /// The e2e handle for the back control, supplied by the caller.
@@ -144,99 +188,107 @@ class WaxScaffold extends StatelessWidget {
 
     return Semantics(
       identifier: semanticsId,
-      child: Scaffold(
-        backgroundColor: colors.canvas,
-        // Under the Scaffold's own Material, whose default text style eases
-        // into a new theme: a bare Text in the body would draw the old ink.
-        body: WaxPlainTextStyle(
-          child: Column(
-            children: <Widget>[
-              Expanded(
-                child: scrollable(
-                  CustomScrollView(
-                    controller: controller,
-                    // A pull needs somewhere to pull from: a page shorter
-                    // than its viewport does not scroll, and a scroll view
-                    // that cannot scroll never reports the overscroll the
-                    // indicator arms on. An empty home is exactly that page.
-                    physics: onRefresh == null
-                        ? null
-                        : const AlwaysScrollableScrollPhysics(),
-                    slivers: <Widget>[
-                      SliverAppBar(
-                        pinned: true,
-                        expandedHeight: largeTitle
-                            ? largeTitleHeight(context)
-                            : null,
-                        backgroundColor: colors.canvas,
-                        surfaceTintColor: Colors.transparent,
-                        automaticallyImplyLeading: false,
-                        leading: onBack == null
-                            ? null
-                            : WaxIconButton(
-                                glyph: WaxIcons.back,
-                                label: context.waxL10n.scaffoldBack,
-                                onPressed: onBack,
-                                semanticsId: backSemanticsId,
-                              ),
-                        titleSpacing: onBack == null
-                            ? sizeClass.gutter.horizontal / 2
-                            : 0,
-                        title: largeTitle
-                            ? null
-                            : Text(
-                                title,
-                                style: WaxType.titleScreen.copyWith(
-                                  color: colors.textPrimary,
+      child: WaxPageMessages.around(
+        context,
+        Scaffold(
+          backgroundColor: colors.canvas,
+          // Under the Scaffold's own Material, whose default text style eases
+          // into a new theme: a bare Text in the body would draw the old ink.
+          body: WaxPlainTextStyle(
+            child: Column(
+              children: <Widget>[
+                Expanded(
+                  child: scrollable(
+                    CustomScrollView(
+                      controller: controller,
+                      // A pull needs somewhere to pull from: a page shorter
+                      // than its viewport does not scroll, and a scroll view
+                      // that cannot scroll never reports the overscroll the
+                      // indicator arms on. An empty home is exactly that page.
+                      physics: onRefresh == null
+                          ? null
+                          : const AlwaysScrollableScrollPhysics(),
+                      slivers: <Widget>[
+                        SliverAppBar(
+                          pinned: true,
+                          expandedHeight: largeTitle
+                              ? largeTitleHeight(context)
+                              : null,
+                          backgroundColor: colors.canvas,
+                          surfaceTintColor: Colors.transparent,
+                          automaticallyImplyLeading: false,
+                          leading: onBack == null
+                              ? null
+                              : WaxIconButton(
+                                  glyph: WaxIcons.back,
+                                  label: context.waxL10n.scaffoldBack,
+                                  onPressed: onBack,
+                                  semanticsId: backSemanticsId,
                                 ),
-                              ),
-                        flexibleSpace: largeTitle
-                            ? FlexibleSpaceBar(
-                                expandedTitleScale: _titleScale(context),
-                                titlePadding: EdgeInsetsDirectional.only(
-                                  start: onBack == null
-                                      ? sizeClass.gutter.horizontal / 2
-                                      : WaxSpace.s48,
-                                  bottom: WaxSpace.s12,
-                                ),
-                                title: Text(
+                          titleSpacing: onBack == null
+                              ? sizeClass.gutter.horizontal / 2
+                              : 0,
+                          title: largeTitle
+                              ? null
+                              : Text(
                                   title,
-                                  style:
-                                      (sizeClass.hasSidebar
-                                              ? WaxType.titleScreenDesktop
-                                              : WaxType.titleScreen)
-                                          .copyWith(color: colors.textPrimary),
+                                  style: WaxType.titleScreen.copyWith(
+                                    color: colors.textPrimary,
+                                  ),
                                 ),
-                              )
-                            : null,
-                        actions: <Widget>[
-                          ...actions,
-                          SizedBox(width: sizeClass.gutter.horizontal / 2),
-                        ],
-                      ),
-                      if (body != null) SliverToBoxAdapter(child: body),
-                      ...?slivers,
-                    ],
+                          flexibleSpace: largeTitle
+                              ? FlexibleSpaceBar(
+                                  expandedTitleScale: _titleScale(context),
+                                  titlePadding: EdgeInsetsDirectional.only(
+                                    start: onBack == null
+                                        ? sizeClass.gutter.horizontal / 2
+                                        : WaxSpace.s48,
+                                    bottom: WaxSpace.s12,
+                                  ),
+                                  title: Text(
+                                    title,
+                                    style:
+                                        (sizeClass.hasSidebar
+                                                ? WaxType.titleScreenDesktop
+                                                : WaxType.titleScreen)
+                                            .copyWith(
+                                              color: colors.textPrimary,
+                                            ),
+                                  ),
+                                )
+                              : null,
+                          actions: <Widget>[
+                            ...actions,
+                            SizedBox(width: sizeClass.gutter.horizontal / 2),
+                          ],
+                        ),
+                        if (body != null) SliverToBoxAdapter(child: body),
+                        ...?slivers,
+                      ],
+                    ),
                   ),
                 ),
+                ?bottom,
+              ],
+            ),
+          ),
+          floatingActionButton: switch (floating) {
+            null => null,
+            // Keyed after the button, so the Scaffold still swaps two
+            // buttons as two; a key of its own, as the button's may be
+            // global.
+            final button => KeyedSubtree(
+              key: switch (button.key) {
+                null => null,
+                final key => ValueKey<Key>(key),
+              },
+              child: WaxPageMessages.clearing(
+                context,
+                WaxPlainTextStyle(child: button),
               ),
-              ?bottom,
-            ],
-          ),
+            ),
+          },
         ),
-        floatingActionButton: switch (floating) {
-          null => null,
-          // Keyed after the button, so the Scaffold still swaps two
-          // buttons as two; a key of its own, as the button's may be
-          // global.
-          final button => WaxPlainTextStyle(
-            key: switch (button.key) {
-              null => null,
-              final key => ValueKey<Key>(key),
-            },
-            child: button,
-          ),
-        },
       ),
     );
   }

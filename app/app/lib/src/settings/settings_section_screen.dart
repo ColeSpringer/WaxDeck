@@ -51,7 +51,8 @@ class SettingsSectionScreen extends ConsumerWidget {
       // No identifier of its own: the obvious one is the row's, and one
       // id naming two things means a retried click meant for the row
       // lands in the screen it already opened. The URL proves it.
-      onBack: () => context.leave(fallback: WaxRoute.settings),
+      onBack: () => context.back(fallback: WaxRoute.settings),
+      backSemanticsId: SemanticsIds.navBack,
       slivers: <Widget>[
         SliverPadding(
           padding:
@@ -923,7 +924,7 @@ class _ArtworkCacheRowState extends ConsumerState<_ArtworkCacheRow> {
   bool _clearing = false;
 
   Future<void> _clear() async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final cleared = context.l10n.settingsArtworkCacheCleared;
     setState(() => _clearing = true);
     try {

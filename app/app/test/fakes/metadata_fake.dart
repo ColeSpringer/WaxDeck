@@ -205,6 +205,10 @@ mixin FakeMetadata on FakeRepositoryState implements MetadataApi {
   /// recorded.
   Completer<void>? editItemMetadataGate;
 
+  /// Hold [editEntity] and [renameEntity] until completed.
+  Completer<void>? editEntityGate;
+  Completer<void>? renameEntityGate;
+
   @override
   Future<MetadataEditResult> editItemMetadata(
     String pid, {
@@ -412,6 +416,9 @@ mixin FakeMetadata on FakeRepositoryState implements MetadataApi {
   /// server performs. Null means the response carries none.
   String? bulkEditRegroupsTo;
 
+  /// Holds [bulkEditMetadata] until completed.
+  Completer<void>? bulkEditGate;
+
   @override
   Future<BulkEditResult> bulkEditMetadata({
     required List<String> itemPids,
@@ -420,6 +427,7 @@ mixin FakeMetadata on FakeRepositoryState implements MetadataApi {
     bool skipLocked = false,
     bool force = false,
   }) async {
+    await bulkEditGate?.future;
     final error = metadataError;
     if (error != null) throw error;
     bulkEditCalls.add((
@@ -587,12 +595,19 @@ mixin FakeMetadata on FakeRepositoryState implements MetadataApi {
     );
   }
 
+  /// Holds [clearItemArtwork] until completed.
+  Completer<void>? clearItemArtworkGate;
+
   @override
   Future<void> clearItemArtwork(String pid, {String role = 'front'}) async {
+    await clearItemArtworkGate?.future;
     clearItemArtworkCalls.add((pid: pid, role: role));
     artRoles.removeWhere((r) => r.role == role);
     if (role == 'front') artworkPids.remove(pid);
   }
+
+  /// Holds [setEntityArtwork] and [clearEntityArtwork] until completed.
+  Completer<void>? entityArtworkGate;
 
   @override
   Future<MetadataEditResult> setEntityArtwork(
@@ -602,6 +617,7 @@ mixin FakeMetadata on FakeRepositoryState implements MetadataApi {
     String role = 'front',
     bool writeBack = false,
   }) async {
+    await entityArtworkGate?.future;
     final error = metadataError;
     if (error != null) throw error;
     entityArtworkCalls.add((
@@ -618,6 +634,7 @@ mixin FakeMetadata on FakeRepositoryState implements MetadataApi {
     String entityPid, {
     String role = 'front',
   }) async {
+    await entityArtworkGate?.future;
     final error = metadataError;
     if (error != null) throw error;
     clearEntityArtworkCalls.add((entityType: entityType, entityPid: entityPid));
@@ -643,6 +660,9 @@ mixin FakeMetadata on FakeRepositoryState implements MetadataApi {
     return locked;
   }
 
+  /// Holds [setItemAcquisition] until completed.
+  Completer<void>? setItemAcquisitionGate;
+
   @override
   Future<MetadataEditResult> setItemAcquisition(
     String pid, {
@@ -655,6 +675,7 @@ mixin FakeMetadata on FakeRepositoryState implements MetadataApi {
     bool lock = true,
     bool force = false,
   }) async {
+    await setItemAcquisitionGate?.future;
     final error = metadataError;
     if (error != null) throw error;
     setItemAcquisitionCalls.add((
@@ -751,6 +772,7 @@ mixin FakeMetadata on FakeRepositoryState implements MetadataApi {
     bool lock = true,
     bool force = false,
   }) async {
+    await editEntityGate?.future;
     final error = metadataError;
     if (error != null) throw error;
     entityEdits.add((
@@ -861,6 +883,7 @@ mixin FakeMetadata on FakeRepositoryState implements MetadataApi {
     bool lock = true,
     bool force = false,
   }) async {
+    await renameEntityGate?.future;
     final error = metadataError;
     if (error != null) throw error;
     renameEntityCalls.add((

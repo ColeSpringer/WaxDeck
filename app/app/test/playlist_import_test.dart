@@ -92,6 +92,165 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('The Cardinal Waves - Neon'), findsOneWidget);
+    expect(raisedMessage(tester), isNull, reason: 'shown, not offered');
+  });
+
+  /// The text import run on [repo] with the server holding it, the
+  /// dialog still up: two of its three entries will have matched.
+  Future<void> importHeld(WidgetTester tester, FakeRepository repo) async {
+    repo.playlistImportResult = const PlaylistImportResult(
+      playlistPid: 'pl-01JZX5N8QW3F4V9T2B7KDNEW01',
+      name: 'Roadtrip',
+      requested: 3,
+      resolved: 2,
+      missing: [
+        PlaylistImportMiss(artist: 'The Cardinal Waves', title: 'Neon'),
+      ],
+      rungs: ResolveRungCounts(
+        essence: 0,
+        strongId: 1,
+        fingerprint: 0,
+        descriptive: 1,
+      ),
+    );
+    await _pump(tester, repo, const PlaylistsScreen());
+    await _openImport(tester, PlaylistImportSource.text);
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
+      'Nobody - Nothing\n',
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+    );
+    await tester.pump();
+  }
+
+  /// The report is not up, and the shell offers it; taken, it opens.
+  Future<void> offeredThenOpened(WidgetTester tester) async {
+    final report = find.bySemanticsIdentifier(
+      SemanticsIds.playlistImportReport,
+    );
+    expect(report, findsNothing, reason: 'not opened over where they went');
+    final offer = raisedMessage(tester);
+    expect(shellMessageText(offer), 'Import finished: 2 of 3 entries matched');
+    expect(offer?.actionLabelIn(AppLocalizationsEn()), 'Open');
+    await pressRaisedAction(tester);
+    expect(report, findsOneWidget);
+    expect(
+      find.text('Created "Roadtrip" with 2 of 3 entries.'),
+      findsOneWidget,
+    );
+  }
+
+  testWidgets('an import dismissed as it lands leaves the screen underneath, '
+      'and its report is offered there', (tester) async {
+    // Answered while the dialog is on its way out, still mounted: the
+    // visitor has left it, so the report waits on them.
+    final gate = Completer<void>();
+    final repo = FakeRepository(items: const [_track])
+      ..importPlaylistGate = gate;
+    await importHeld(tester, repo);
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pump();
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(PlaylistsScreen), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
+      findsNothing,
+    );
+    expect(repo.importPlaylistCalls, hasLength(1));
+    await offeredThenOpened(tester);
+    expect(find.byType(PlaylistsScreen), findsOneWidget);
+  });
+
+  for (final gone in <bool>[false, true]) {
+    testWidgets('an import dismissed while it runs, then refused, is said in '
+        'the shell ${gone ? 'once the dialog has gone' : 'as it leaves'}', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository(items: const [_track])
+        ..importPlaylistGate = gate
+        ..importPlaylistError = const WaxDeckApiException(
+          code: 'invalid-request',
+          message: 'line 1 is not "Artist - Title"',
+        );
+      await importHeld(tester, repo);
+      await tester.tapAt(const Offset(4, 4));
+      if (gone) {
+        await tester.pumpAndSettle();
+      } else {
+        await tester.pump();
+      }
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(PlaylistsScreen), findsOneWidget);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
+        findsNothing,
+      );
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'line 1 is not "Artist - Title"',
+      );
+    });
+  }
+
+  testWidgets('an import that lands once the visitor has left its screen '
+      'offers its report where they are, and opens it there', (tester) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository(items: const [_track])
+      ..importPlaylistGate = gate;
+    await importHeld(tester, repo);
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.byType(PlaylistsScreen))).pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(PlaylistsScreen), findsNothing);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(repo.importPlaylistCalls, hasLength(1));
+    await offeredThenOpened(tester);
+    expect(find.byType(PlaylistsScreen), findsNothing);
+  });
+
+  testWidgets('an import that lands once something was opened over its '
+      'dialog leaves that up, and offers its report', (tester) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository(items: const [_track])
+      ..importPlaylistGate = gate;
+    await importHeld(tester, repo);
+    unawaited(
+      showDialog<void>(
+        context: tester.element(find.byType(PlaylistsScreen)),
+        builder: (_) => const Text('Over it'),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    gate.complete();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Over it'), findsOneWidget, reason: 'it stays');
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
+      findsNothing,
+      reason: 'done with, taken out from under it',
+    );
+    Navigator.of(tester.element(find.text('Over it'))).pop();
+    await tester.pumpAndSettle();
+    await offeredThenOpened(tester);
   });
 
   testWidgets('a fully unmatched import reports no playlist', (tester) async {
@@ -578,6 +737,65 @@ void main() {
       gate.complete();
       await tester.pumpAndSettle();
     });
+
+    testWidgets('dismissed as it lands opens nothing, and leaves the screen '
+        'underneath', (tester) async {
+      // Answered while the dialog is on its way out, still mounted.
+      final repo = FakeRepository(items: const [_track]);
+      await check(tester, repo);
+      final gate = repo.nspImportGate = Completer<void>();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+      );
+      await tester.pump();
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pump();
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(PlaylistsScreen), findsOneWidget);
+      expect(find.byType(PlaylistScreen), findsNothing);
+      expect(repo.nspImports, hasLength(1));
+    });
+
+    for (final gone in <bool>[false, true]) {
+      testWidgets('dismissed while it imports, then refused, is said in the '
+          'shell ${gone ? 'once the dialog has gone' : 'as it leaves'}', (
+        tester,
+      ) async {
+        final repo = FakeRepository(items: const [_track]);
+        await check(tester, repo);
+        final gate = repo.nspImportGate = Completer<void>();
+        repo.nspImportError = const WaxDeckApiException(
+          code: 'invalid-request',
+          message: 'a playlist named "Loved and long" already exists',
+        );
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+        );
+        await tester.pump();
+        await tester.tapAt(const Offset(4, 4));
+        if (gone) {
+          await tester.pumpAndSettle();
+        } else {
+          await tester.pump();
+        }
+        gate.complete();
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.byType(PlaylistsScreen), findsOneWidget);
+        expect(
+          find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+          findsNothing,
+        );
+        expect(
+          shellMessageText(raisedMessage(tester)),
+          'a playlist named "Loved and long" already exists',
+        );
+      });
+    }
 
     testWidgets('with parts WaxDeck cannot read offers to drop them', (
       tester,

@@ -1,6 +1,6 @@
 // Search: one field throughout, wherever the layout puts it.
 
-import { Locator } from '@playwright/test';
+import { Locator, expect } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
@@ -36,6 +36,19 @@ export class Search extends Surface {
     const page = this.ctx.page;
     await typeInto(page, this.field(), query);
     await this.hit(expecting, 0).waitFor({ timeout: T.nav });
+  }
+
+  /// Type a query and wait for the screen to put it in the address bar,
+  /// which it does in place of the location it had once the query settles.
+  async refine(query: string): Promise<void> {
+    const page = this.ctx.page;
+    await typeInto(page, this.field(), query);
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get('q'), {
+        timeout: T.nav,
+        message: `the address bar should carry ${query}`,
+      })
+      .toBe(query);
   }
 
   /// Narrow to one group. A chip that covers nothing says so rather than

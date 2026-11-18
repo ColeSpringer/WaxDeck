@@ -21,7 +21,7 @@ class TrashScreen extends ConsumerWidget {
     TrashEntry entry,
   ) async {
     final l10n = context.l10n;
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final restoring = ref.read(trashProvider.notifier);
     // A second restore of one entry finds it gone and says so after the
     // first one's success.
@@ -46,7 +46,7 @@ class TrashScreen extends ConsumerWidget {
     WidgetRef ref,
     TrashEntry entry,
   ) async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -83,7 +83,7 @@ class TrashScreen extends ConsumerWidget {
   /// holding precisely because somebody might want them back, and it is
   /// one press away from the row that restores one.
   Future<void> _empty(BuildContext context, WidgetRef ref) async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     final confirmed = await showTypedConfirm(
       context,
@@ -132,6 +132,7 @@ class TrashScreen extends ConsumerWidget {
       largeTitle: false,
       semanticsId: SemanticsIds.adminTrash,
       onBack: adminBack(context),
+      backSemanticsId: SemanticsIds.navBack,
       actions: <Widget>[
         WaxButton(
           label: l10n.adminTrashEmptyAction,
@@ -274,7 +275,7 @@ class _ArtworkCacheCard extends ConsumerWidget {
   const _ArtworkCacheCard();
 
   Future<void> _clear(BuildContext context, WidgetRef ref) async {
-    final messenger = ref.read(shellMessengerProvider.notifier);
+    final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,

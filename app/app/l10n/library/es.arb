@@ -66,6 +66,8 @@
   "libraryKindFailedWhy": "No se ha podido hacer el cambio: {reason}",
   "libraryKindJoinedUnseen": "Ahora forma parte de un elemento de una biblioteca que no puedes abrir.",
   "libraryKindQueued": "Continúa en segundo plano",
+  "libraryKindReadyBook": "Ya es un audiolibro, listo para abrir",
+  "libraryKindReadyMusic": "Ya es música, lista para abrir",
   "libraryKindStillRunning": "Sigue cambiando. Síguelo en Tareas.",
   "libraryKindStoppedPlaying": "Ya está en el libro; reprodúcelo desde aquí",
   "libraryKindToBook": "Tratar como audiolibro",

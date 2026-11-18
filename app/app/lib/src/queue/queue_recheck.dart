@@ -110,7 +110,7 @@ class QueueRecheck {
     playback.dropCurrent();
     if (slot is! ItemSlot) return;
     container
-        .read(shellMessengerProvider.notifier)
+        .read(shellMessengerProvider)
         .showLocalized((l10n) => l10n.queuePlayingGone);
   }
 }

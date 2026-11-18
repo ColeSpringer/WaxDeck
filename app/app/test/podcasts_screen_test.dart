@@ -948,6 +948,74 @@ void main() {
     await landWhileClosing(tester, repo, gate);
   });
 
+  // Refused once the dialog was cancelled: the line it would have shown
+  // is leaving or gone, so the shell says it.
+  for (final directory in <bool>[false, true]) {
+    for (final gone in <bool>[false, true]) {
+      testWidgets('a ${directory ? 'directory match' : 'subscribe'} refused '
+          'once the dialog was cancelled is said in the shell '
+          '${gone ? 'once it has gone' : 'as it leaves'}', (tester) async {
+        final gate = Completer<void>();
+        final repo = FakeRepository()
+          ..subscribeGate = gate
+          ..subscribeError = const WaxDeckApiException(
+            code: 'invalid-request',
+            message: 'that address is not a feed',
+          )
+          ..podcastDirectoryEntries = const <PodcastDirectoryEntry>[
+            PodcastDirectoryEntry(
+              name: 'Pipeweed Economics',
+              feedUrl: 'https://pony.example/feed.xml',
+            ),
+          ];
+        await openDialogOverPage(tester, repo);
+        if (directory) {
+          await tester.enterText(
+            find.bySemanticsIdentifier(SemanticsIds.podcastSearchField),
+            'pipeweed',
+          );
+          await tester.tap(
+            find.bySemanticsIdentifier(SemanticsIds.podcastSearchRun),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.bySemanticsIdentifier(SemanticsIds.podcastSearchSubscribe(0)),
+          );
+        } else {
+          await _openUrlPath(tester);
+          await tester.enterText(
+            find.byKey(const Key('podcast-url-field')),
+            'https://pony.example/feed.xml',
+          );
+          await tester.tap(
+            find.bySemanticsIdentifier(SemanticsIds.podcastSubscribeConfirm),
+          );
+        }
+        await tester.pump();
+        await tester.tap(find.text('Cancel'));
+        if (gone) {
+          await tester.pumpAndSettle();
+        } else {
+          await tester.pump();
+        }
+        gate.complete();
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.byType(SubscribeDialog), findsNothing);
+        expect(find.text('Add one'), findsOneWidget);
+        expect(
+          shellMessageText(raisedMessage(tester)),
+          // A directory's feed is nothing anybody typed: the table's
+          // sentence. A URL is, so the server's.
+          directory
+              ? 'That request was not something the server could act on.'
+              : 'that address is not a feed',
+        );
+      });
+    }
+  }
+
   testWidgets('a directory row\'s Subscribe spins while it subscribes', (
     tester,
   ) async {

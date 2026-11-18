@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../shell/asked_from.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/paged_scroll.dart';
 import '../shell/semantics_ids.dart';
@@ -33,30 +34,24 @@ class _AdminSharesScreenState extends ConsumerState<AdminSharesScreen>
   @override
   void loadMore() => ref.read(adminSharesProvider.notifier).loadMore();
 
-  void _report(String message) {
-    ref
-        .read(shellMessengerProvider.notifier)
-        .show(message, channel: ShellChannel.shares);
-  }
-
   Future<void> _copy(Share share) async {
     final l10n = context.l10n;
+    final from = AskedFrom.of(context);
     await Clipboard.setData(
       ClipboardData(text: shareAbsoluteUrl(ref, share.url)),
     );
-    if (!mounted) return;
-    _report(l10n.adminShareCopied);
+    from.messenger.show(l10n.adminShareCopied, channel: ShellChannel.shares);
   }
 
   Future<void> _revoke(Share share) async {
     final l10n = context.l10n;
+    // Read now: the answer is said once the screen has gone too.
+    final from = AskedFrom.of(context);
     try {
       await ref.read(adminSharesProvider.notifier).revoke(share.pid);
-      if (!mounted) return;
-      _report(l10n.adminShareRevoked);
+      from.messenger.show(l10n.adminShareRevoked, channel: ShellChannel.shares);
     } on WaxDeckApiException catch (e) {
-      if (!mounted) return;
-      _report(explainError(l10n, e));
+      from.messenger.show(explainError(l10n, e), channel: ShellChannel.shares);
     }
   }
 
@@ -75,6 +70,7 @@ class _AdminSharesScreenState extends ConsumerState<AdminSharesScreen>
       semanticsId: SemanticsIds.adminShares,
       controller: pagedScroll,
       onBack: adminBack(context),
+      backSemanticsId: SemanticsIds.navBack,
       slivers: <Widget>[
         AsyncSliverFace<SharesState>(
           state: shares,

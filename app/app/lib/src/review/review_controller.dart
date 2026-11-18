@@ -157,8 +157,9 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState> {
     }
   }
 
-  /// Decides one entry and returns the server's warnings.
-  Future<List<String>> decide(
+  /// Decides one entry and returns the server's answer: the entry as
+  /// decided, and its warnings.
+  Future<ReviewDecideResult> decide(
     String entryId,
     String action, {
     String? candidateMbid,
@@ -170,8 +171,8 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState> {
           action: action,
           candidateMbid: candidateMbid,
         );
-    _refresh();
-    return result.warnings;
+    _refresh([entryId]);
+    return result;
   }
 
   /// Applies one action to many entries, reporting per-entry outcomes.
@@ -182,12 +183,20 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState> {
     final outcomes = await ref
         .read(repositoryProvider)
         .decideReviewBulk(entryIds, action: action);
-    _refresh();
+    _refresh([
+      for (final outcome in outcomes)
+        if (outcome.ok) outcome.entryId,
+    ]);
     return outcomes;
   }
 
-  void _refresh() {
+  /// Reads the queue again, and each of [decided]: a pane showing one
+  /// draws it decided now rather than once it is moved off.
+  void _refresh(List<String> decided) {
     if (!ref.mounted) return;
+    for (final id in decided) {
+      ref.invalidate(reviewEntryProvider(id));
+    }
     ref.invalidate(reviewStatsProvider);
     // Home's count must move with the decision, not wait for the user
     // stream: deciding the last entry and going home would otherwise
@@ -257,9 +266,12 @@ class ReviewEntryController extends AsyncNotifier<ReviewEntryDetail> {
   Future<ReviewEntryDetail> build() =>
       ref.watch(repositoryProvider).getReviewEntry(entryId);
 
-  /// Decides this entry and returns the server's warnings; the detail,
+  /// Decides this entry and returns the server's answer; the detail,
   /// the queue, and the stats all refetch.
-  Future<List<String>> decide(String action, {String? candidateMbid}) async {
+  Future<ReviewDecideResult> decide(
+    String action, {
+    String? candidateMbid,
+  }) async {
     final result = await ref
         .read(repositoryProvider)
         .decideReviewEntry(
@@ -268,10 +280,11 @@ class ReviewEntryController extends AsyncNotifier<ReviewEntryDetail> {
           candidateMbid: candidateMbid,
         );
     _refresh();
-    return result.warnings;
+    return result;
   }
 
-  /// Undoes an applied decision and returns the entry to pending.
+  /// Undoes an applied decision: the metadata it changed is restored and
+  /// the entry is marked reverted, which is final.
   Future<void> revert() async {
     await ref.read(repositoryProvider).revertReviewEntry(entryId);
     _refresh();

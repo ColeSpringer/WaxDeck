@@ -183,7 +183,7 @@ Future<void> _refresh(BuildContext context, String pid) async {
   final l10n = context.l10n;
   // The container rather than a widget's ref, which a card can outlive.
   final container = ProviderScope.containerOf(context, listen: false);
-  final messenger = container.read(shellMessengerProvider.notifier);
+  final messenger = container.read(shellMessengerProvider);
   try {
     final result = await container.read(repositoryProvider).refreshPodcast(pid);
     // New episodes change what the hub's tile and shelves say, and the
@@ -224,7 +224,7 @@ Future<void> playShowLatest(
 ) async {
   // Read before the awaits: the card may be gone when the answer lands,
   // and the play is honoured anyway.
-  final messenger = ref.read(shellMessengerProvider.notifier);
+  final messenger = ref.read(shellMessengerProvider);
   final l10n = context.l10n;
   final repository = ref.read(repositoryProvider);
   final playback = ref.read(nowPlayingProvider.notifier);
@@ -285,6 +285,9 @@ class ShowCoverSheet extends ConsumerWidget {
     final hasArtwork = roles.hasValue
         ? roles.value?.artSource != null
         : initialHasArtwork;
+    // Through the container: a cover write may land once this sheet is
+    // closed, and the show page under it draws the cover it reads.
+    final container = ProviderScope.containerOf(context, listen: false);
     return Padding(
       padding: EdgeInsets.only(
         left: WaxSpace.s16,
@@ -298,7 +301,7 @@ class ShowCoverSheet extends ConsumerWidget {
           hasArtwork: hasArtwork,
           entityType: 'podcast',
           domain: WaxDomain.podcasts,
-          onChanged: () => ref.invalidate(podcastDetailProvider(pid)),
+          onChanged: () => container.invalidate(podcastDetailProvider(pid)),
         ),
       ),
     );

@@ -9,7 +9,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'account_scoping_audit.dart';
 import 'account_scoping_cases.dart';
 import 'analysis_host.dart';
+import 'bare_pop_audit.dart';
+import 'bare_replace_audit.dart';
+import 'destination_push_audit.dart';
 import 'extension_tear_off_audit.dart';
+import 'page_messages_audit.dart';
 import 'theme_landing_audit.dart';
 
 void main() {
@@ -23,6 +27,10 @@ void main() {
   AnalysisHost shared() => host!;
   accountScopingAudit(shared);
   accountScopingCases(shared);
+  barePopAudit(shared);
+  bareReplaceAudit(shared);
+  destinationPushAudit(shared);
   extensionTearOffAudit(shared);
+  pageMessagesAudit(shared);
   themeLandingAudit(shared);
 }

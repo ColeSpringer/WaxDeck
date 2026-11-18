@@ -178,7 +178,7 @@ void main() {
     );
     expect(find.text('No folded names'), findsOneWidget);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       '"beatles" is unfolded',
     );
   });
@@ -249,7 +249,7 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.foldUnfoldConfirm),
     );
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'That name was unfolded already',
     );
     expect(
@@ -278,7 +278,7 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.foldUnfoldConfirm),
     );
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       AppLocalizationsEn().errorCatalogMaintenance,
     );
     expect(
@@ -315,7 +315,7 @@ void main() {
     await tester.pump();
     expect(repo.unfoldCalls.single.keys, ['beatles']);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       '"beatles" is unfolded',
     );
     gate.complete();
@@ -432,7 +432,7 @@ void main() {
     );
     expect(repo.unfoldCalls.single.keys, ['al:b']);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       '"joni - blue" (In Joni/Blue Three in Music) is unfolded',
     );
   });
@@ -550,7 +550,7 @@ void main() {
     );
     expect(repo.unfoldCalls.single.keys, ['al:b']);
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       '"joni - blue" ($folded, 2 of 2) is unfolded',
     );
   });
@@ -675,7 +675,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       'Merged 2 entries\n2 spellings now file under The Cardinal Waves',
     );
     for (final key in ['cardinal waves', 'cardinal waves!']) {
@@ -776,7 +776,7 @@ void main() {
     );
     await _tap(tester, find.bySemanticsIdentifier(SemanticsIds.foldsMore));
     expect(
-      shellMessageText(container.read(shellMessengerProvider)),
+      shellMessageText(container.read(shellMessagesProvider)),
       AppLocalizationsEn().errorCatalogMaintenance,
     );
     expect(
