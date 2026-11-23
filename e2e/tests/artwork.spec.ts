@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { crc32, deflateSync } from 'node:zlib';
 import { test, expect } from './fixtures';
 import { clickThrough } from './driver/gestures';
 
@@ -135,6 +136,159 @@ test('the full-screen artwork turns to the back cover', async ({ app }) => {
     }
   }
 });
+
+// A cover set on another device, reaching an index that is already open.
+//
+// Slow Signal is Long Division's artist and nobody else's, and no spec
+// reads that artist's picture; the scan gives it none, so clearing it
+// puts it back. The track is the one the test above sets the covers of,
+// in parallel: its writes name the track and its album, never the
+// artist, and it counts the track's own slots, which an artist's
+// picture is not one of. The write is the test's API hand, which is
+// another device as far as the page can tell, and this account sees the
+// whole catalog, so the server names the artist to it. What the page
+// then owes is a request: the artist's art URL, asked for again under a
+// tag.
+//
+// Twice, because the client gets there by two paths that end in that
+// same request. Named in a quiet catalog, the cover is dropped as its
+// name is heard. Named inside a stretch of changes too busy to follow
+// by name, as a scan or the rest of the suite can make one, it is asked
+// for with every other cover once the stretch ends. In order, on one
+// worker: each sets the same artist's picture, as the test after them
+// does.
+const ARTIST = 'Slow Signal';
+
+test.describe.serial('a cover set on another device is asked for again, under a new name, by an open artists index', () => {
+  for (const busy of [false, true]) {
+    test(busy ? 'inside a stretch too busy to follow by name, when it ends' : 'as its artist is named', async ({
+      app,
+      api,
+    }) => {
+      const track = await app.seed.item('Long Division');
+      const { artistPid } = await app.api.get('/items/{pid}', { path: { pid: track.pid } });
+      expect(artistPid, 'Long Division should be credited to an artist').toMatch(/^ar-/);
+      const artist = { entityType: 'artist', entityPid: artistPid! } as const;
+      const socket = await app.artwork.liveSocket();
+      try {
+        await app.nav.enter('artists');
+        await app.artwork.intoView(app.music.indexRow(ARTIST));
+        await socket.subscribed();
+
+        const asked = app.artwork.askedAfresh(artistPid!);
+        // With no pause before the write, so its name is heard in the
+        // window that ran over.
+        const said = busy ? socket.busy() : null;
+        const put = await api.raw.replace(
+          '/entities/{entityType}/{entityPid}/artwork',
+          readFileSync(coverSrc),
+          { path: artist, query: { role: 'front' } },
+        );
+        expect(put.status()).toBe(200);
+        const at = await asked;
+        if (said !== null) app.artwork.askedAtStretchEnd(said, at);
+      } finally {
+        // Unpinned, then cleared: the artist as the scan left it. Raw, so a
+        // failure above stays the one the run reports.
+        await app.api.raw.put('/entities/{entityType}/{entityPid}/artwork/lock', {
+          path: artist,
+          data: { locked: false },
+        });
+        await app.api.raw.delete('/entities/{entityType}/{entityPid}/artwork', {
+          path: artist,
+          query: { role: 'front' },
+        });
+      }
+    });
+  }
+
+  // A cover replaced while no page was open, reaching the next one.
+  //
+  // A page that heard a catalog change keeps where it heard it up to, and
+  // presents it when a page of the same browser next subscribes; the
+  // server answers with the names of what changed after it. So the first
+  // page draws a cover set while it is open (which is what it hears), and
+  // closes; the cover is replaced; a new page in the same browser opens
+  // the index and asks for the cover under a tag newer than the first
+  // page's, and is given the new picture. Without the position presented
+  // nothing names the artist, and the browser goes on drawing the copy it
+  // keeps for the day. In the group, for the artist it shares.
+  test('and by the next one the browser opens, when no page was open as it changed', async ({
+    app,
+    api,
+    tab,
+  }) => {
+    const track = await app.seed.item('Long Division');
+    const { artistPid } = await app.api.get('/items/{pid}', { path: { pid: track.pid } });
+    expect(artistPid, 'Long Division should be credited to an artist').toMatch(/^ar-/);
+    const artist = { entityType: 'artist', entityPid: artistPid! } as const;
+    const setCover = async (bytes: Buffer) => {
+      const put = await api.raw.replace('/entities/{entityType}/{entityPid}/artwork', bytes, {
+        path: artist,
+        query: { role: 'front' },
+      });
+      expect(put.status()).toBe(200);
+    };
+    try {
+      const socket = await app.artwork.liveSocket();
+      await app.nav.enter('artists');
+      await app.artwork.intoView(app.music.indexRow(ARTIST));
+      await socket.subscribed();
+      const drawn = app.artwork.coverAskedAfter(artistPid!, 0);
+      await setCover(solidPng([200, 40, 40]));
+      const first = await drawn;
+      await app.artwork.leave();
+
+      await setCover(readFileSync(coverSrc));
+      const back = await tab();
+      const told = await back.artwork.liveSocket();
+      const asked = back.artwork.coverAskedAfter(artistPid!, first.tag);
+      await back.nav.enter('artists');
+      // Named in answer to its subscribe: nothing changed after it opened,
+      // so no live frame can name the artist, and a tag raised for any
+      // other reason does not pass this.
+      await told.named(artistPid!);
+      await back.artwork.intoView(back.music.indexRow(ARTIST));
+      const again = await asked;
+      expect(again.body.equals(first.body), 'the returning page was given the picture it had').toBe(false);
+    } finally {
+      await app.api.raw.put('/entities/{entityType}/{entityPid}/artwork/lock', {
+        path: artist,
+        data: { locked: false },
+      });
+      await app.api.raw.delete('/entities/{entityType}/{entityPid}/artwork', {
+        path: artist,
+        query: { role: 'front' },
+      });
+    }
+  });
+});
+
+/// A square PNG of one colour, a cover unlike the TIFF one.
+function solidPng([r, g, b]: [number, number, number], size = 64): Buffer {
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const framed = Buffer.alloc(body.length + 8);
+    framed.writeUInt32BE(data.length, 0);
+    body.copy(framed, 4);
+    framed.writeUInt32BE(crc32(body), body.length + 4);
+    return framed;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(size, 0);
+  header.writeUInt32BE(size, 4);
+  header[8] = 8; // bits per channel
+  header[9] = 2; // truecolour
+  const row = Buffer.alloc(1 + 3 * size);
+  for (let x = 0; x < size; x++) row.set([r, g, b], 1 + 3 * x);
+  const pixels = Buffer.concat(Array.from({ length: size }, () => row));
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header),
+    chunk('IDAT', deflateSync(pixels)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
 
 // The shared podcast feed, the same one podcasts.spec subscribes to. A
 // show and its cover are catalog-wide; no other spec asserts the show's

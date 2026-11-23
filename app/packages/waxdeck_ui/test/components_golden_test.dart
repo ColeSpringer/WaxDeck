@@ -1065,6 +1065,59 @@ void main() {
     );
 
     goldenTest(
+      "the shell takes each of the window's insets once, where it stands",
+      fileName: 'shell_insets',
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          GoldenTestScenario(
+            name: 'tabs',
+            child: _themed(
+              WaxThemeVariant.dark,
+              const _UnderInsets(
+                size: Size(400, 640),
+                insets: EdgeInsets.fromLTRB(28, 24, 0, 20),
+              ),
+            ),
+          ),
+          GoldenTestScenario(
+            name: 'sidebar and a docked panel',
+            child: _themed(
+              WaxThemeVariant.dark,
+              const _UnderInsets(
+                size: Size(1000, 640),
+                insets: EdgeInsets.fromLTRB(44, 24, 24, 20),
+                panel: true,
+              ),
+            ),
+          ),
+          GoldenTestScenario(
+            name: 'rail, nothing playing, a page with a foot bar',
+            child: _themed(
+              WaxThemeVariant.dark,
+              const _UnderInsets(
+                size: Size(700, 640),
+                insets: EdgeInsets.fromLTRB(44, 24, 24, 20),
+                footed: true,
+              ),
+            ),
+          ),
+          GoldenTestScenario(
+            name: 'rail, nothing playing, rows cut at the gesture bar',
+            child: _themed(
+              WaxThemeVariant.dark,
+              const _UnderInsets(
+                size: Size(700, 640),
+                insets: EdgeInsets.fromLTRB(44, 24, 24, 20),
+                idle: true,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    goldenTest(
       'the shell says what the app is doing to itself',
       fileName: 'shell_surfaces',
       builder: () => GoldenTestGroup(
@@ -1283,4 +1336,153 @@ void main() {
       ),
     );
   });
+}
+
+/// The shell in a window of [size] whose status bar, gesture bar and
+/// cutouts take [insets], with a banner, the deck bar and a page (or,
+/// [footed], nothing playing and a page with a foot bar of its own; or,
+/// [idle], nothing playing and the page alone), and
+/// those insets washed over it: what stands in a wash is a surface, never
+/// a control or a line of text.
+class _UnderInsets extends StatelessWidget {
+  const _UnderInsets({
+    required this.size,
+    required this.insets,
+    this.panel = false,
+    this.footed = false,
+    this.idle = false,
+  });
+
+  final Size size;
+  final EdgeInsets insets;
+  final bool panel;
+  final bool footed;
+
+  /// Nothing playing, so the page's rows run to the gesture bar's line.
+  final bool idle;
+
+  @override
+  Widget build(BuildContext context) => MediaQuery(
+    data: MediaQuery.of(
+      context,
+    ).copyWith(size: size, padding: insets, viewPadding: insets),
+    child: SizedBox.fromSize(
+      size: size,
+      child: Stack(
+        children: <Widget>[
+          WaxShellFrame(
+            destinations: _destinations,
+            secondary: _secondaryEntries,
+            selected: 'music',
+            onSelect: (_) {},
+            onToggleCollapsed: () {},
+            banners: const <Widget>[
+              WaxBanner(
+                message: 'Reconnecting to the server.',
+                glyph: WaxIcons.offline,
+              ),
+            ],
+            bottom: footed || idle
+                ? null
+                : DeckBarOffer(
+                    title: 'Salt Harbour',
+                    subtitle: 'Nightjar',
+                    onResume: () {},
+                    onDismiss: () {},
+                  ),
+            panel: panel
+                ? WaxSidePanel(
+                    title: 'Queue',
+                    onClose: () {},
+                    child: ListView(
+                      children: const <Widget>[
+                        MediaListRow(data: _tile, playing: true),
+                        MediaListRow(data: _tile),
+                      ],
+                    ),
+                  )
+                : null,
+            content: WaxScaffold(
+              title: 'Albums',
+              largeTitle: false,
+              onBack: () {},
+              actions: <Widget>[
+                WaxIconButton(
+                  glyph: WaxIcons.search,
+                  label: 'Search',
+                  onPressed: () {},
+                ),
+              ],
+              fill: footed
+                  ? WaxFootedPane(
+                      body: ListView(
+                        children: <Widget>[
+                          for (var row = 0; row < 12; row++)
+                            const MediaListRow(data: _tile),
+                        ],
+                      ),
+                      foot: WaxFootBar(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Align(
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: WaxButton(
+                              label: 'Save',
+                              icon: WaxIcons.check,
+                              onPressed: () {},
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  : null,
+              slivers: footed
+                  ? null
+                  : <Widget>[
+                      SliverList.list(
+                        children: <Widget>[
+                          for (var row = 0; row < 12; row++)
+                            const MediaListRow(data: _tile),
+                        ],
+                      ),
+                    ],
+            ),
+          ),
+          IgnorePointer(
+            child: CustomPaint(size: size, painter: _InsetWash(insets)),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _InsetWash extends CustomPainter {
+  const _InsetWash(this.insets);
+
+  final EdgeInsets insets;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final wash = Paint()..color = const Color(0x66FF3D9A);
+    canvas
+      ..drawRect(Rect.fromLTWH(0, 0, size.width, insets.top), wash)
+      ..drawRect(
+        Rect.fromLTWH(
+          0,
+          size.height - insets.bottom,
+          size.width,
+          insets.bottom,
+        ),
+        wash,
+      )
+      ..drawRect(Rect.fromLTWH(0, 0, insets.left, size.height), wash)
+      ..drawRect(
+        Rect.fromLTWH(size.width - insets.right, 0, insets.right, size.height),
+        wash,
+      );
+  }
+
+  @override
+  bool shouldRepaint(_InsetWash oldDelegate) => oldDelegate.insets != insets;
 }

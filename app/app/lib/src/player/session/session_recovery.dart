@@ -78,19 +78,80 @@ extension _SessionRecovery on PlaybackSession {
     },
   );
 
-  /// One mint and load inside a load under way, at display position
-  /// [atMs] or the newest target a seek made meanwhile: the part holding
-  /// it for a book; the item otherwise, or the copy downloaded to this
-  /// device when the server is out of reach.
+  /// One load inside a load under way, at display position [atMs] or the
+  /// newest target a seek made meanwhile: the device copy where it plays
+  /// (see [start]); else minted, the part holding it for a book, the item
+  /// otherwise, or the copy downloaded to this device when the server is
+  /// out of reach. A copy passed over for the boost plays without it where
+  /// the boosted stream cannot be had, and one already playing where the
+  /// load is to land is left as it is.
   Future<void> _loadAt(int atMs) async {
+    final served = _boostServed;
+    _boostServed = false;
+    // The server's positions are placed on its own parts: a book's copy
+    // laid out otherwise streams while it answers.
+    final held = _copy;
+    if (held != null && _socketUp && !_matchesBook(held)) {
+      _copy = null;
+      _localParts = null;
+    }
+    final copy = _copy;
+    if (copy != null && _copyPlays) {
+      try {
+        await _loadCopy(copy, atMs);
+        return;
+      } on MediaLoadException {
+        if (_disposed) rethrow;
+        _copy = null;
+        _localParts = null;
+      }
+    }
+    final boosted = _copy;
+    if (boosted == null) {
+      await _loadMinted(atMs);
+      return;
+    }
+    final parts = _localParts;
+    final loadsBefore = _loadsBegun;
+    // Its parts resolve against the server while it answers.
+    if (_socketUp || served) _localParts = null;
+    try {
+      // The held copy is the fallback here, not a fresh lookup's.
+      await _loadMinted(atMs, fallback: false);
+    } on Object catch (e) {
+      if (_disposed || e is! WaxDeckApiException && e is! MediaLoadException) {
+        rethrow;
+      }
+      // Out of reach is not the server's word: the choice stands, for the
+      // next load.
+      if (e is WaxDeckApiException && !e.unreachable) _boostRefused = true;
+      // Nothing loaded over the copy playing, and the load meant to land
+      // inside it: a seek made meanwhile lands once this returns.
+      if (_loadsBegun == loadsBefore &&
+          _loaded &&
+          _info == null &&
+          _withinPart(_loadTarget ?? atMs)) {
+        _localParts = parts;
+        return;
+      }
+      final target = _pendingSeekMs ?? _loadTarget ?? atMs;
+      _pendingSeekMs = null;
+      await _loadCopy(boosted, target);
+    }
+  }
+
+  /// [_loadAt]'s minted road; [fallback] off leaves an unreachable server
+  /// to the caller instead of the download.
+  Future<void> _loadMinted(int atMs, {bool fallback = true}) async {
     if (_isBook) {
-      await _loadPartFor(atMs, newest: true);
+      await _loadPartFor(atMs, newest: true, fallback: fallback);
       return;
     }
     final (PlayInfo, int) minted;
     try {
       minted = await _mintNewest(atMs);
     } on WaxDeckApiException catch (e) {
+      if (!fallback) rethrow;
       final local = await _localFallback(e);
       if (_disposed) return;
       if (local == null) rethrow;
@@ -143,7 +204,8 @@ extension _SessionRecovery on PlaybackSession {
   /// when another mint can help: a stale or engine-down refusal, or a
   /// failure nobody explained. The server's other refusals (the transcode
   /// cap) and the file itself failing are said instead, never retried.
-  /// A timeline member and a downloaded file have nothing to mint.
+  /// A timeline member has nothing to mint. A device copy failing turns
+  /// to the server's stream, as one that will not load does.
   void _onMediaFailed(MediaFailure failure) {
     if (_disposed || !_loaded || _busy) return;
     if (!identical(PlaybackSession._engineOwners[engine], this)) return;
@@ -152,6 +214,18 @@ extension _SessionRecovery on PlaybackSession {
     final now = _display(engine.position).inMilliseconds;
     final last = _display(_lastPosition).inMilliseconds;
     final at = now > last ? now : last;
+    // A device copy failing as it plays turns to the server, as one
+    // failing to load does.
+    if (_info == null &&
+        _copy != null &&
+        _recoveries < PlaybackSession._recoveryBudget) {
+      _copy = null;
+      _localParts = null;
+      _recoveries++;
+      _recoveredAtMs = at;
+      unawaited(_recover(at, resume: failure.wasPlaying));
+      return;
+    }
     final refusal = failure.refusal;
     final curable = refusal != null
         ? _curedByMint(refusal)

@@ -202,6 +202,53 @@ void main() {
       expect(next.taskRetentionDays, 30);
       expect(next.radioExternalArt, isFalse);
     });
+
+    test('SubscriptionSettings changes the named fields, clears one to '
+        'null and keeps the rest', () {
+      const base = SubscriptionSettings(
+        retentionKeep: 3,
+        autoDownload: true,
+        autoDownloadFilter: EpisodeFilter(include: ['interview']),
+        folder: 'News',
+        private: true,
+        speed: 1.5,
+        trimSilence: true,
+        voiceBoost: false,
+        skipIntroSeconds: 30,
+        skipOutroSeconds: 45,
+      );
+
+      final next = base.copyWith(
+        speed: () => 1.25,
+        skipOutroSeconds: () => null,
+      );
+
+      expect(next.speed, 1.25);
+      expect(next.skipOutroSeconds, isNull);
+      expect(next.retentionKeep, 3);
+      expect(next.autoDownload, isTrue);
+      expect(next.autoDownloadFilter?.include, ['interview']);
+      expect(next.folder, 'News');
+      expect(next.private, isTrue);
+      expect(next.trimSilence, isTrue);
+      expect(next.voiceBoost, isFalse);
+      expect(next.skipIntroSeconds, 30);
+    });
+
+    test('BookSettings changes the named field, clears one to null and '
+        'keeps the rest', () {
+      const base = BookSettings(
+        speed: 1.5,
+        voiceBoost: true,
+        trimSilence: true,
+      );
+
+      final next = base.copyWith(voiceBoost: () => false, speed: () => null);
+
+      expect(next.voiceBoost, isFalse);
+      expect(next.speed, isNull);
+      expect(next.trimSilence, isTrue);
+    });
   });
 
   test(

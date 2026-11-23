@@ -265,11 +265,15 @@ void main() {
           .read(radioFavoritesProvider.notifier)
           .toggle('rs-2');
 
-      // The account changes under it, the way a sign-out does.
+      // The account changes under it, the way a sign-out does: the guest
+      // signs in, with a document of their own.
       repo
-        ..sessionState = const SessionState(authenticated: true, user: _other)
+        ..signsIn = _other
         ..prefs = const Prefs(radioFavorites: <String>['rs-9']);
-      container.invalidate(authControllerProvider);
+      final auth = container.read(authControllerProvider.notifier);
+      await auth.logout();
+      await auth.login(username: 'guest', password: 'pw');
+      expect(container.read(signedInAccountProvider), _other.id);
       container.invalidate(prefsControllerProvider);
       await container.read(prefsControllerProvider.future);
       await pending;
@@ -302,7 +306,7 @@ void main() {
         timezone: 'Europe/Madrid',
         radioFavorites: <String>['rs-9'],
       );
-    container.invalidate(authControllerProvider);
+    unawaited(container.read(authControllerProvider.notifier).refreshSession());
     await pumpEventQueue();
     await container.read(prefsControllerProvider.notifier).setLocale('es');
 
@@ -326,8 +330,7 @@ void main() {
         timezone: 'Europe/Madrid',
         radioFavorites: <String>['rs-9'],
       );
-    container.invalidate(authControllerProvider);
-    await container.read(authControllerProvider.future);
+    await container.read(authControllerProvider.notifier).refreshSession();
     await container.read(prefsControllerProvider.notifier).setLocale('es');
 
     expect(repo.prefs.timezone, 'Europe/Madrid');
@@ -352,7 +355,7 @@ void main() {
     repo
       ..sessionState = const SessionState(authenticated: true, user: _other)
       ..prefs = const Prefs(timezone: 'Europe/Madrid');
-    container.invalidate(authControllerProvider);
+    await container.read(authControllerProvider.notifier).refreshSession();
     await container.read(prefsControllerProvider.future);
     gate.complete();
     await lastAccount;
@@ -412,9 +415,12 @@ void main() {
 
       // A different account, with a document of its own.
       repo
-        ..sessionState = const SessionState(authenticated: true, user: _other)
+        ..signsIn = _other
         ..prefs = const Prefs(radioFavorites: <String>['rs-9']);
-      container.invalidate(authControllerProvider);
+      final auth = container.read(authControllerProvider.notifier);
+      await auth.logout();
+      await auth.login(username: 'guest', password: 'pw');
+      expect(container.read(signedInAccountProvider), _other.id);
       container.invalidate(prefsControllerProvider);
 
       final loaded = await container.read(prefsControllerProvider.future);
@@ -547,7 +553,7 @@ void main() {
         ..sessionState = const SessionState(authenticated: true, user: _other)
         ..prefs = const Prefs(pinned: ['AL-9']);
       h.engine.account = _other.id;
-      h.container.invalidate(authControllerProvider);
+      await h.container.read(authControllerProvider.notifier).refreshSession();
       final loaded = await h.container.read(prefsControllerProvider.future);
       await h.engine.flushOutbox();
 

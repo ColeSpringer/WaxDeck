@@ -105,14 +105,58 @@ Every entry carries a gate tag saying what actually blocks it:
   server cannot read the document at all, so preference surfaces draw
   their defaults and a change waits for the first read. A mirror of the
   document beside the outbox would close it.
+- `[in-repo]` **A show's or a book's playback settings changed with the
+  server out of reach are kept for the playing session only.** A speed or
+  voice-boost choice that cannot be stored is kept in memory, heard at
+  once, and written over a fresh read of the stored settings when the
+  server answers; if the item changes, the account signs out or the app
+  closes first, the choice is gone and the next episode or start plays
+  the stored settings. The outbox (which already carries play states,
+  ratings, bookmarks and preference patches across restarts) would carry
+  it with a settings-patch kind replayed as a fresh read and a write of
+  the changed fields.
 
 - `[in-repo]` **A persistent server error on an outbox entry makes the
   sync socket flap.** Reconcile drops the channel on any failure but a
   401, and the backoff resets on every successful connect, so an entry
   the server keeps answering with a 5xx reconnects the engine about every
-  second for as long as it keeps failing. Whether such an entry should
-  drop the socket at all, or be parked and retried on its own clock, is
-  the open question.
+  second for as long as it keeps failing, and each reconnect reads as
+  the server coming back: the screens leave their offline state and the
+  player takes it as a return, once an attempt. Whether such an entry
+  should drop the socket at all, or be parked and retried on its own
+  clock, is the open question.
+
+- `[in-repo]` **Lists are read again for changes their first read already
+  saw.** A cold start after the catalog moved reads Home's lists twice: they
+  are read as they are built, then the server's answer to the position the
+  client last acted on names what changed since, which those reads already
+  show, and nothing tells the client which, so the pass it prompts reads
+  each open list again. A reconnect after changes made while away reads
+  them three times within seconds: Home's online lists are built, the
+  answer's pass reads them, and the reconnect walk's own report of the same
+  changes lands inside the pacing window and reads them once more. (A
+  reconnect with nothing changed reads each list once.) Telling them apart
+  needs a position stamped on each read, or the server answering a
+  subscribe that presents no cursor with where it stands, and the walk's
+  report folded into the answer's pass.
+
+- `[in-repo]` **A mirror can name the wrong account for its catalog
+  position.** The mirror records which account its server cursor was
+  pulled for, and a process that starts on a mirror another account
+  walked last presents no catalog position. That record is written by the
+  server half of a walk, so a walk whose catalog half landed and whose
+  server half failed leaves it naming the account before; a later start
+  as that account presents the other's position, the server cannot serve
+  it, and the client evicts its covers once. The catalog cursor carrying
+  its own account would close it, which is a mirror schema change.
+
+- `[in-repo]` **On the web a reconnect reads the lists built on the
+  listener's own plays once more, whatever changed.** The web keeps no
+  user cursor (it has no mirror), so nothing tells it whether plays were
+  made elsewhere while it was away, and its catch-up reads in-progress,
+  never played, rediscover and most played again at every reconnect. A
+  server answer to a presented user cursor, as `unchanged` answers the
+  catalog's, would let it skip them.
 
 - `[in-repo]` **The play-state mirror belongs to the server, not the
   account.** Signing out keeps `mirror_play_states`; only forgetting the
@@ -140,6 +184,15 @@ Every entry carries a gate tag saying what actually blocks it:
   and settings surface shipped; the client still needs the
   distributor plugin wrapped behind a WaxDeck-owned interface and a
   real device to verify against. Blocked on hardware access.
+- `[in-repo]` **The Android Auto tree draws no covers.** Its entries
+  carry an id, a title and a subtitle. The offline mirror now hands each
+  summary the cover pinned for it, so the tree has a picture to offer
+  for every downloaded item, but a head unit takes art only as a
+  `content://` URI the app serves, never a file path or a URL that
+  needs the session's token. Building it is an art field on the browse
+  entry, the handler's mapping of it, and a content provider over the
+  pinned files; a media browser on the emulator can show the provider
+  answering.
 - `[in-repo]` **An artist screen has no biography.** "Appears on" landed
   on the `credit-artist` browse dimension. The biography still needs an
   enrichment field nothing writes yet: artist art filled the pictures
@@ -265,6 +318,17 @@ Every entry carries a gate tag saying what actually blocks it:
   `app/app/test/flutter_test_config.dart` fails any widget test that
   leaves such a change. Wanted from Flutter: compare the identifier with
   the rest.
+
+- `[in-repo]` **The audiobook journey once failed to open a book from the
+  hub.** One run of `audiobooks.spec.ts` ("a multi-part book resumes at the
+  right chapter across devices") in 37 whole runs: a click on the book
+  card's caption completed as the pointer entered the card, and no book
+  read or navigation followed before the step's time ran out; the hub was
+  re-reading its lists every few seconds under the other workers' catalog
+  changes. The rerun passed. The card keeps one tap target across hover,
+  so the hover itself is not it. Whether a press on the web can be lost as
+  the pointer enters a card, or the driver's budget runs short when a
+  first attempt spends most of it bringing the card into reach, is open.
 
 ## Connect and casting
 
@@ -507,10 +571,44 @@ Every entry carries a gate tag saying what actually blocks it:
 
   **The negative cache's own limit, for whoever touches it next.** It is
   cleared by a catalog invalidation, by a cover editor's `evict`, and by
-  sign-out. Nothing else - so a cover that appears while the app is open
-  and the sync channel is down stays a monogram until the channel
-  reconnects and invalidates. That is the same window every other cached
-  view has, and it closes the same way.
+  sign-out. An invalidation follows every row a cover can come from:
+  items and shows, and artist, album, release-group, genre and series
+  rows as well, which is what lets a portrait the enrichment pass
+  fetched land on an open index. Nothing else clears it - so a cover that appears
+  while the app is open and the sync channel is down stays a monogram
+  until the channel reconnects and invalidates. That is the same window
+  every other cached view has, and it closes the same way.
+- `[upstream]` **A replaced cover can keep drawing the old picture until
+  its cache expires.** An art URL names the entity, not the bytes, and
+  the response is fresh for a day and may be served stale for a week
+  more, so a client drops its copy only when it is told to. The cover
+  editors tell this client; the catalog invalidation tells the others.
+  It names the entities whose rows changed, the album beside each
+  changed track, the tracks beside each changed album and the episodes
+  beside a show whose cover was set in the editor, or it says that
+  entities changed which it does not name (for one, more than it can
+  carry, or an account that is sent no names). A client drops every
+  picture of a named entity as it is named, for as long as the
+  invalidations of one five-second window name at most 64 entities
+  between them, the most one carries, and none says entities went
+  unnamed. Past either the stretch is busy and is not followed by name:
+  at the end of the first window that stays within both, the client
+  asks for every cover afresh, once, the ones pinned for offline
+  included, and a session that ends before then asks at its next start.
+  So a cover changed in a busy stretch, a scan above all, draws the old
+  picture until a window after the stretch slows. A client that was
+  away is told on its return: it presents the catalog position it last
+  heard, and the server answers with what changed after it, by the same
+  rules. A playlist's cover follows the playlist's own change on the
+  user stream. One case keeps the old picture until the cache expires,
+  a cover derived from a row the change log did not name: an album
+  drawing a member track's cover after that track was deleted or moved
+  away; a track, album or artist with no picture of its own drawing its
+  release group's, its artist's or its first genre's after that one
+  changed; a track drawing a sibling's cover through its album; an
+  episode drawing a cover that came with its show's feed. Blocker: a
+  version on the art URL needs WaxBin to expose one
+  (`docs/upstream-requests.md`, "Art has no version a URL can carry").
 - `[in-repo]` **Clip cards for episode shares are not built.** The
   year-in-review cards render, export, and now draw their top artists'
   covers. A clip card is the same shape of

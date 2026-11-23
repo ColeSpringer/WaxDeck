@@ -91,6 +91,7 @@ type TopList struct {
 
 // ListenLogEntry is one session of the per-device log.
 type ListenLogEntry struct {
+	SessionID string
 	PID       string
 	Title     string
 	Artist    string
@@ -593,6 +594,7 @@ func (l *Reads) ListenLog(ctx context.Context, uc *UserCtx, client, cursor strin
 	out := ListenLogPage{Sessions: make([]ListenLogEntry, 0, len(rows))}
 	for _, r := range rows {
 		e := ListenLogEntry{
+			SessionID: r.SessionID,
 			PID:       prefixForMediaType(r.MediaType) + "-" + r.ItemPID,
 			MediaType: r.MediaType,
 			StartedAt: r.StartedAt,

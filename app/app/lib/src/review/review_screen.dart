@@ -57,10 +57,13 @@ class ReviewSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Measured, not the window's size class: the shell sidebar and the
-    // console list take ~500px before this screen starts.
+    // console list take ~500px before this screen starts, and the queue
+    // and the entry take the window's side insets inside theirs.
     return LayoutBuilder(
       builder: (context, constraints) {
-        final twoPane = constraints.maxWidth >= _twoPaneMinWidth;
+        final twoPane =
+            constraints.maxWidth - MediaQuery.paddingOf(context).horizontal >=
+            _twoPaneMinWidth;
         if (openEntryId != null && !twoPane) {
           return ReviewEntryScreen(entryId: openEntryId!);
         }
@@ -138,6 +141,9 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
   /// [stored] is read in `build` and passed down rather than watched
   /// here: this runs from a `LayoutBuilder`, which builds during layout
   /// rather than during the build that owns this ref.
+  ///
+  /// [available] here and in [_listMax] is the room inside the side
+  /// insets, and the widths are the list's own inside them.
   double _listWidth(double available, int stored) {
     final room = available - WaxSplitter.hitWidth;
     final wanted =
@@ -588,25 +594,19 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
   }
 
   /// The queue once the read a decision started has landed, or as it
-  /// stands when that read fails: Riverpod retries a failed read on its
-  /// own, and the pane does not wait out the backoff.
+  /// stands when that read fails. Not the first state to stop loading: a
+  /// next page that lands ahead of that read is one, with the rows from
+  /// before the decision.
   ///
-  /// Heard on the container: this screen can go before the read lands (a
-  /// window narrowed to one pane, a move elsewhere), and its own listens
-  /// close with it, uncalled.
+  /// Listened to on the container meanwhile: this screen can go before
+  /// the read lands (a window narrowed to one pane, a move elsewhere),
+  /// and a queue nobody listens to reads nothing.
   Future<List<ReviewEntry>> _landedQueue() async {
-    final now = ref.read(reviewQueueProvider);
-    if (!now.isLoading) return now.value?.entries ?? const [];
-    final landed = Completer<List<ReviewEntry>>();
-    final sub = ProviderScope.containerOf(context, listen: false).listen(
-      reviewQueueProvider,
-      (_, next) {
-        if (landed.isCompleted || (next.isLoading && !next.hasError)) return;
-        landed.complete(next.value?.entries ?? const []);
-      },
-    );
+    final container = ProviderScope.containerOf(context, listen: false);
+    final sub = container.listen(reviewQueueProvider, (_, _) {});
     try {
-      return await landed.future;
+      final queue = container.read(reviewQueueProvider.notifier);
+      return (await queue.refreshed())?.entries ?? const [];
     } finally {
       sub.close();
     }
@@ -672,44 +672,81 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
             }),
           ),
         ],
-        // A filling sliver, not a body: the list needs a bounded height
-        // and a scroll position of its own for j/k to move by arithmetic.
-        slivers: <Widget>[
-          SliverFillRemaining(
-            hasScrollBody: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: sizeClass.gutter.left,
-                    vertical: WaxSpace.s8,
-                  ),
-                  child: const _FilterChips(),
+        // The page's own foot bar, so the fill above it is handed none of
+        // the bottom inset.
+        bottom: _selecting
+            ? _BulkBar(
+                count: _checked.length,
+                // Held while any entry it would send has a decision out,
+                // its own included.
+                busy:
+                    busy ||
+                    _checked.any(
+                      (id) => pending.contains(PendingAction.reviewEntry(id)),
+                    ),
+                busyBy: (action) => busyBy(_bulkWork(action)),
+                onDecide: _decideBulk,
+              )
+            : null,
+        // A fill, not a body: the list needs a bounded height and a scroll
+        // position of its own for j/k to move by arithmetic. Each part
+        // takes the window's insets on the edges it stands against: the
+        // chips both sides, the list its start and foot and, alone, its
+        // end, the pane its end and foot.
+        fill: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            SafeArea(
+              top: false,
+              bottom: false,
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: sizeClass.gutter.left,
+                  vertical: WaxSpace.s8,
                 ),
-                Expanded(
-                  // One position in the tree either way: moving the
-                  // list rebuilds its Scrollable, and a fresh scroll
-                  // position starts at the top.
-                  child: LayoutBuilder(
-                    builder: (context, constraints) => Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        SizedBox(
-                          width: widget.openEntryId == null
-                              ? constraints.maxWidth
-                              : _listWidth(constraints.maxWidth, seamAt),
-                          child: _queue(sizeClass),
+                child: const _FilterChips(),
+              ),
+            ),
+            Expanded(
+              // One position in the tree either way: moving the list
+              // rebuilds its Scrollable, and a fresh scroll position
+              // starts at the top.
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // The floors hold for what the queue and the entry get
+                  // once each has taken the side inset it stands against.
+                  final insets = MediaQuery.paddingOf(context);
+                  final room = constraints.maxWidth - insets.horizontal;
+                  final seam = _listWidth(room, seamAt);
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      SizedBox(
+                        width: widget.openEntryId == null
+                            ? constraints.maxWidth
+                            : seam +
+                                  (Directionality.of(context) ==
+                                          TextDirection.rtl
+                                      ? insets.right
+                                      : insets.left),
+                        child: WaxInsetsTaken(
+                          end: widget.openEntryId != null,
+                          child: SafeArea(top: false, child: _queue(sizeClass)),
                         ),
-                        if (widget.openEntryId case final open?) ...<Widget>[
-                          // The seam only exists where there are two
-                          // panes, which is also why there is none on a
-                          // phone: below the threshold the entry takes
-                          // the screen and there is nothing to divide.
-                          WaxSplitter(
-                            position: _listWidth(constraints.maxWidth, seamAt),
+                      ),
+                      if (widget.openEntryId case final open?) ...<Widget>[
+                        // The seam only exists where there are two panes,
+                        // which is also why there is none on a phone: below
+                        // the threshold the entry takes the screen and there
+                        // is nothing to divide.
+                        SafeArea(
+                          top: false,
+                          left: false,
+                          right: false,
+                          child: WaxSplitter(
+                            position: seam,
                             min: ReviewSurface.listMin,
-                            max: _listMax(constraints.maxWidth),
+                            max: _listMax(room),
                             semanticsId: SemanticsIds.reviewSplitter,
                             onChanged: (width) =>
                                 setState(() => _dragging = width),
@@ -724,30 +761,21 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
                               ref.read(reviewListWidthProvider.notifier).set(0);
                             },
                           ),
-                          Expanded(child: _pane(open)),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                if (_selecting)
-                  _BulkBar(
-                    count: _checked.length,
-                    // Held while any entry it would send has a decision
-                    // out, its own included.
-                    busy:
-                        busy ||
-                        _checked.any(
-                          (id) =>
-                              pending.contains(PendingAction.reviewEntry(id)),
                         ),
-                    busyBy: (action) => busyBy(_bulkWork(action)),
-                    onDecide: _decideBulk,
-                  ),
-              ],
+                        Expanded(
+                          child: WaxInsetsTaken(
+                            start: true,
+                            child: _pane(open),
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -839,9 +867,10 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
   }
 }
 
-/// The bulk decision bar, over the list rather than under the whole
-/// page: the pane beside it keeps its own decision bar, and two bars
-/// across the bottom of one screen read as one control with four verbs.
+/// The bulk decision bar, along the page's foot while selecting, under
+/// the queue and any pane beside it: it decides the checked rows, and the
+/// pane keeps its own decision bar, standing on this one, for the entry
+/// it shows.
 class _BulkBar extends StatelessWidget {
   const _BulkBar({
     required this.count,
@@ -861,41 +890,48 @@ class _BulkBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    return Container(
+    // On the page's foot: its surface runs under the insets there, its
+    // contents keep clear of them.
+    return ColoredBox(
       color: colors.surface2,
-      padding: const EdgeInsets.symmetric(
-        horizontal: WaxSpace.s16,
-        vertical: WaxSpace.s8,
-      ),
-      child: Row(
-        children: <Widget>[
-          Text(
-            context.l10n.reviewSelectedCount(count),
-            style: WaxType.label.copyWith(color: colors.textSecondary),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: WaxSpace.s16,
+            vertical: WaxSpace.s8,
           ),
-          const Spacer(),
-          WaxButton(
-            label: context.l10n.reviewActionApprove,
-            kind: WaxButtonKind.text,
-            semanticsId: SemanticsIds.reviewBulkApprove,
-            busy: busyBy('approve'),
-            onPressed: busy ? null : () => onDecide('approve'),
+          child: Row(
+            children: <Widget>[
+              Text(
+                context.l10n.reviewSelectedCount(count),
+                style: WaxType.label.copyWith(color: colors.textSecondary),
+              ),
+              const Spacer(),
+              WaxButton(
+                label: context.l10n.reviewActionApprove,
+                kind: WaxButtonKind.text,
+                semanticsId: SemanticsIds.reviewBulkApprove,
+                busy: busyBy('approve'),
+                onPressed: busy ? null : () => onDecide('approve'),
+              ),
+              WaxButton(
+                label: context.l10n.reviewActionAsIs,
+                kind: WaxButtonKind.text,
+                semanticsId: SemanticsIds.reviewBulkAsIs,
+                busy: busyBy('as-is'),
+                onPressed: busy ? null : () => onDecide('as-is'),
+              ),
+              WaxButton(
+                label: context.l10n.reviewActionSkip,
+                kind: WaxButtonKind.text,
+                semanticsId: SemanticsIds.reviewBulkSkip,
+                busy: busyBy('skip'),
+                onPressed: busy ? null : () => onDecide('skip'),
+              ),
+            ],
           ),
-          WaxButton(
-            label: context.l10n.reviewActionAsIs,
-            kind: WaxButtonKind.text,
-            semanticsId: SemanticsIds.reviewBulkAsIs,
-            busy: busyBy('as-is'),
-            onPressed: busy ? null : () => onDecide('as-is'),
-          ),
-          WaxButton(
-            label: context.l10n.reviewActionSkip,
-            kind: WaxButtonKind.text,
-            semanticsId: SemanticsIds.reviewBulkSkip,
-            busy: busyBy('skip'),
-            onPressed: busy ? null : () => onDecide('skip'),
-          ),
-        ],
+        ),
       ),
     );
   }

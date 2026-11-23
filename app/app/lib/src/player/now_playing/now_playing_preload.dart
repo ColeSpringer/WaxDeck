@@ -40,7 +40,13 @@ mixin _NowPlayingPreload on _NowPlayingCore, _NowPlayingPark {
   Future<void> _reconcilePreload() async {
     final next = ref.read(queueControllerProvider).nextEntry;
     final armed = _preload;
-    if (armed != null && armed.entry.queueId == next?.queueId) return;
+    final went = _copyWent;
+    _copyWent = null;
+    if (armed != null &&
+        armed.entry.queueId == next?.queueId &&
+        armed != went) {
+      return;
+    }
     if (armed != null) {
       // Cleared first, forgotten second: a clear that throws leaves the
       // engine holding the item, and the record has to say so or a
@@ -65,7 +71,10 @@ mixin _NowPlayingPreload on _NowPlayingCore, _NowPlayingPark {
     // bytes. Ahead of the window check because a timeline engine has no
     // window - crossing is the server's arrangement, not a caller's.
     if (_feeder.holds(session)) {
-      _preload = await _feeder.armNext(ref.read(queueControllerProvider));
+      final armed = await _feeder.armNext(ref.read(queueControllerProvider));
+      _preload = armed == null
+          ? null
+          : (entry: armed.entry, info: armed.info, copy: null);
       return;
     }
     // An engine with no window drops whatever this prepares, and
@@ -73,9 +82,23 @@ mixin _NowPlayingPreload on _NowPlayingCore, _NowPlayingPark {
     // track. It advances on `completed` instead, which is the same path
     // a queue's last item takes.
     if (!_engine.canPreload) return;
-    // Too early to mint a stream URL, or no length to measure against.
+    // Too early to arm (a minted stream URL would age), or no length to
+    // measure against.
     final remaining = session.mediaDuration - session.displayPosition;
     if (remaining <= Duration.zero || remaining > kPreloadLead) return;
+    // A downloaded next track is armed from its file: nothing minted,
+    // nothing asked of the server, and no bytes spent, so no metered check.
+    if (_uncopiedNext != next.queueId) {
+      final downloads = ref.read(downloadManagerProvider);
+      final copy = await _copyOf(downloads, next.pid);
+      if (!ref.mounted) return;
+      if (copy != null) {
+        await _armCopy(next, copy, downloads!);
+        return;
+      }
+      _uncopiedNext = next.queueId;
+      if (downloads != null) _watchDownload(downloads, next);
+    }
     // Asked at the moment of arming rather than held as state, and not
     // recorded as a refusal: a listener who walks indoors mid-track gets
     // the gapless crossing, and one who walks out does not. Refusing by
@@ -135,7 +158,75 @@ mixin _NowPlayingPreload on _NowPlayingCore, _NowPlayingPark {
     // the window re-runs the reconcile, which drops it, and a crossing
     // that beats the reconcile still knows by identity which entry it
     // walked into.
-    _preload = (entry: next, info: info);
+    _preload = (entry: next, info: info, copy: null);
+  }
+
+  /// The device copy of [pid] where one is downloaded whole as one file.
+  Future<LocalPlayback?> _copyOf(
+    DownloadManagerPort? downloads,
+    String pid,
+  ) async {
+    final copy = await downloads?.localFor(pid);
+    return copy != null && copy.parts.length == 1 ? copy : null;
+  }
+
+  /// Arms [next] from [copy], its file on this device, and watches its
+  /// download (see [_watchDownload]).
+  Future<void> _armCopy(
+    QueueEntry next,
+    LocalPlayback copy,
+    DownloadManagerPort downloads,
+  ) async {
+    final item = await _resolve(next.pid);
+    if (!ref.mounted) return;
+    if (!_admitsPreload(item)) {
+      _refusedNext = next.queueId;
+      return;
+    }
+    if (ref.read(queueControllerProvider).nextEntry?.queueId != next.queueId) {
+      return;
+    }
+    final end = copy.spanEndMs;
+    await _engine.preloadNext(
+      Uri.file(copy.parts.first.path).toString(),
+      clipStart: copy.spanStartMs == null
+          ? null
+          : Duration(milliseconds: copy.spanStartMs!),
+      // An open end plays to the file's end, as a start of the copy does.
+      clipEnd: end == null || end <= 0 ? null : Duration(milliseconds: end),
+    );
+    // Recorded as what the engine holds, for the reason given below.
+    _preload = (entry: next, info: null, copy: copy);
+    _watchDownload(downloads, next);
+  }
+
+  /// Watches [next]'s download while it is next: a download that ends
+  /// (complete, failed, or stopped) under the copy armed for it drops that
+  /// and arms what the store then holds; a refresh in progress or a pause
+  /// leaves the armed file, which stays in place until the refresh lands.
+  /// A download completing for it, found without one, looks it up again.
+  void _watchDownload(DownloadManagerPort downloads, QueueEntry next) {
+    if (_watchedNext == next.queueId) return;
+    _watchedNext = next.queueId;
+    unawaited(_downloadWatch?.cancel());
+    _downloadWatch = downloads.progress.where((p) => p.pid == next.pid).listen((
+      progress,
+    ) {
+      if (!ref.mounted) return;
+      final armed = _preload;
+      final ended = progress.complete || progress.failed || progress.stopped;
+      if (armed != null &&
+          armed.copy != null &&
+          armed.entry.queueId == next.queueId) {
+        if (!ended) return;
+        _copyWent = armed;
+      } else if (progress.complete && _uncopiedNext == next.queueId) {
+        _uncopiedNext = null;
+      } else {
+        return;
+      }
+      unawaited(_syncPreload());
+    });
   }
 
   /// Gapless is a music affordance, and both sides of a crossing have to

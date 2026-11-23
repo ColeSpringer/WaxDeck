@@ -226,6 +226,52 @@ void main() {
     expect(engine.playing, isFalse);
   });
 
+  testWidgets('the sheet lifts its field and buttons above the keyboard', (
+    tester,
+  ) async {
+    const pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
+    final repo = FakeRepository(items: [testItem(pid)]);
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    tester.view
+      ..physicalSize = const Size(390, 844)
+      ..devicePixelRatio = 1
+      ..viewPadding = const FakeViewPadding(bottom: 34)
+      ..padding = const FakeViewPadding(bottom: 34);
+    addTearDown(tester.view.reset);
+    await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
+      container: _container(repo, engine, _FakeClock()),
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
+    await tester.pumpAndSettle();
+
+    // The keyboard up, as the engine reports it: the padding it covers
+    // drops out.
+    tester.view
+      ..viewInsets = const FakeViewPadding(bottom: 300)
+      ..padding = FakeViewPadding.zero;
+    await tester.pumpAndSettle();
+
+    const keyboardTop = 844.0 - 300;
+    for (final finder in [
+      find.bySemanticsIdentifier(SemanticsIds.sleepTimerCustomField),
+      find.bySemanticsIdentifier(SemanticsIds.sleepTimerCustomStart),
+      for (final minutes in const [5, 15, 30, 60])
+        find.byKey(ValueKey(SemanticsIds.sleepTimer(minutes))),
+    ]) {
+      expect(
+        tester.getRect(finder).bottom,
+        lessThanOrEqualTo(keyboardTop),
+        reason: '$finder',
+      );
+    }
+  });
+
   testWidgets('end-of-chapter mode pauses at the chapter boundary', (
     tester,
   ) async {

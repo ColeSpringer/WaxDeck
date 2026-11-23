@@ -112,7 +112,7 @@ extension _SessionMedia on PlaybackSession {
 
   /// Points the display timeline at what the engine now holds, in one
   /// step: the stream it was minted from ([info]; none for a timeline
-  /// member or a downloaded file, which nothing here can mint again),
+  /// member, which nothing here can mint again, or a device copy),
   /// where a cut stream begins, the loaded media's length, and where a
   /// part sits in its book.
   void _moveTimeline({
@@ -164,10 +164,14 @@ extension _SessionMedia on PlaybackSession {
 
   /// Play-info for this item at display position [atMs]: the part holding
   /// it for a book, and for a stream the server cannot range, a stream cut
-  /// to begin there.
+  /// to begin there. The boost is the listener's choice this session where
+  /// they made one, else the server's to resolve: the stored setting, else
+  /// this device's default (spoken word), sent only when on.
   Future<PlayInfo> _mint(int atMs) => repository.getPlayInfo(
     item.pid,
     positionMs: _isBook ? atMs : (atMs > 0 ? atMs : null),
+    voiceBoost: _boostChosen ? voiceBoost.value : null,
+    voiceBoostDefault: isSpokenWord && defaultVoiceBoost ? true : null,
     maxBitrateKbps: maxBitrateKbps,
     hls: _hls,
   );
@@ -207,29 +211,64 @@ extension _SessionMedia on PlaybackSession {
   /// without it, so any failure just leaves the defaults in place.
   Future<void> _loadConfig() async {
     try {
+      await _readConfig();
+    } on WaxDeckApiException {
+      // Defaults apply; the player still plays.
+    }
+    // A session let go, or whose engine another took, shows nothing more.
+    if (_disposed || !_ownsEngine) return;
+    _applyConfig();
+  }
+
+  /// Reads the per-show or per-book playback config and holds it. Failed
+  /// for want of the server, the choices waiting are kept for its return,
+  /// at which a config never answered is asked again.
+  Future<void> _readConfig() async {
+    final first = !_configAnswered;
+    try {
       final it = item;
       if (item.mediaType == MediaType.podcast && it is EpisodeSummary) {
         final detail = await repository.getPodcast(it.showPid);
         _showSettings = detail.settings;
       } else if (_isBook) {
         final detail = await repository.getBook(item.pid);
-        _book = detail;
+        _book ??= detail;
         _bookSettings = detail.settings;
+      } else {
+        return;
       }
-    } on WaxDeckApiException {
-      // Defaults apply; the player still plays.
+    } on WaxDeckApiException catch (e) {
+      if (first) _configFailed = e.unreachable;
+      if (e.unreachable) _keepWaiting();
+      rethrow;
     }
+    _configAnswered = true;
+    _configFailed = false;
+  }
+
+  /// Trim and boost from the item's stored settings, this device's
+  /// defaults where it has none; what the listener set on this session
+  /// stands over both.
+  void _applyConfig() {
     // The device default is the seam behind the stored choice, spoken
     // word only: music has neither a trim chip nor a boost to open
     // with, so a default left on must not leak onto it.
     final fallbackTrim = isSpokenWord && defaultTrimSilence;
-    final fallbackBoost = isSpokenWord && defaultVoiceBoost;
-    trimEnabled.value = _isBook
-        ? (_bookSettings?.trimSilence ?? fallbackTrim)
-        : (_showSettings?.trimSilence ?? fallbackTrim);
+    if (!_trimChosen) {
+      trimEnabled.value = _isBook
+          ? (_bookSettings?.trimSilence ?? fallbackTrim)
+          : (_showSettings?.trimSilence ?? fallbackTrim);
+    }
+    _applyBoost();
+  }
+
+  /// The boost half of [_applyConfig].
+  void _applyBoost() {
+    if (_boostChosen) return;
+    final fallback = isSpokenWord && defaultVoiceBoost;
     voiceBoost.value = _isBook
-        ? (_bookSettings?.voiceBoost ?? fallbackBoost)
-        : (_showSettings?.voiceBoost ?? fallbackBoost);
+        ? (_bookSettings?.voiceBoost ?? fallback)
+        : (_showSettings?.voiceBoost ?? fallback);
   }
 
   /// The item's own remembered rate, and this device's default behind
@@ -286,7 +325,8 @@ extension _SessionMedia on PlaybackSession {
   /// (single-file items resolve to the whole file with partStartMs 0).
   /// [newest] folds in what arrives while the mint is out, for a load
   /// under way (see [_mintNewest]). Never plays: whatever runs it says
-  /// how it lands.
+  /// how it lands. [fallback] off leaves an unreachable server to the
+  /// caller.
   ///
   /// The fallback to downloaded parts is here rather than at the call
   /// sites, so every crossing gets it: a seek, a chapter tap, the deck
@@ -294,7 +334,11 @@ extension _SessionMedia on PlaybackSession {
   ///
   /// Rethrows for parts that cannot be placed on a timeline, which is
   /// [start]'s own offline branch to answer: it has the mirror position.
-  Future<void> _loadPartFor(int bookMs, {bool newest = false}) async {
+  Future<void> _loadPartFor(
+    int bookMs, {
+    bool newest = false,
+    bool fallback = true,
+  }) async {
     final held = _localParts;
     if (held != null) {
       await _loadLocalPartFor(held, bookMs);
@@ -306,6 +350,7 @@ extension _SessionMedia on PlaybackSession {
           ? await _mintNewest(bookMs)
           : (await _mint(bookMs), bookMs);
     } on WaxDeckApiException catch (e) {
+      if (!fallback) rethrow;
       final local = await _localFallback(e);
       if (_disposed) return;
       // The newest target the failed mint was folding in.
@@ -326,9 +371,10 @@ extension _SessionMedia on PlaybackSession {
     // Let go while the part was resolving: loading it now would put this
     // book over whatever took the engine.
     if (_disposed) return;
-    // The first load has no map yet, whatever part it names (a book in
-    // one file names none, which reads the same as the part before it).
-    final samePart = _loadsBegun > 0 && minted.$1.partIndex == _partIndex;
+    // Until a load lands there is no map, whatever part it names (a book
+    // in one file names none, which reads the same as the part before
+    // it), and a downloaded copy that would not load landed none.
+    final samePart = _loaded && minted.$1.partIndex == _partIndex;
     // The timeline state moves only once the part's media is in the
     // engine. Written before the load, every checkpoint fired inside it
     // - and the load's own stop publishes a pause, whose checkpoint is
@@ -358,12 +404,14 @@ extension _SessionMedia on PlaybackSession {
   /// The state it sets is the state play-info sets, which is what makes
   /// everything above it - the display timeline, checkpoints in book
   /// milliseconds, a seek that leaves the part, the roll into the next
-  /// one - behave offline exactly as it does online. No skip map is
-  /// fetched: trimming needs a server, and this branch is the one that
-  /// has none.
+  /// one - behave on the device's parts exactly as on the server's. Its
+  /// skip map is the server's, asked as the stream's road asks for it.
   Future<void> _loadLocalPartFor(LocalPlayback local, int bookMs) async {
     final at = local.partAt(bookMs);
     final inPartMs = bookMs - at.startMs;
+    // The map is per part, so the same part loaded again keeps the one it
+    // has, as on the stream's road.
+    final samePart = _loaded && at.index == _partIndex;
     // State follows the media, the same ordering as the online path and
     // for the same arithmetic: this is the one branch whose part-shifted
     // checkpoint no server write would ever correct - a downloaded part
@@ -380,21 +428,83 @@ extension _SessionMedia on PlaybackSession {
       partCount: local.parts.length,
       partStartMs: at.startMs,
     );
-    _skipSpans = const [];
     _lastJumpedSpan = -1;
+    if (!samePart) {
+      _skipSpans = const [];
+      _skipMapRetried = false;
+      // Wherever the stream's road would ask; out of reach, only once the
+      // server has answered this session.
+      if (trimEnabled.value && (_configAnswered || _socketUp)) {
+        unawaited(_loadSkipMap());
+      }
+    }
     _lastPosition = engine.position;
   }
 
-  /// Loads the one file of [local] at display position [atMs]: a track,
-  /// an episode, a book that is one file, or the first file of a book
-  /// whose stored parts cannot be placed on its timeline.
-  Future<void> _loadLocalFile(LocalPlayback local, int atMs) async {
+  /// Whether a held copy plays rather than the boosted stream: the boost
+  /// off, or refused this session.
+  bool get _copyPlays => !_boostOn || _boostRefused;
+
+  /// Whether [local] can stand in for the server's stream: one file, or
+  /// parts that can be placed on the item's timeline.
+  bool _fits(LocalPlayback local) => local.parts.length == 1 || local.sequenced;
+
+  /// Whether this item plays with voice boost, which only the server's
+  /// minted stream carries: the listener's choice this session, else the
+  /// show's or book's stored setting, else this device's default (spoken
+  /// word), as the mint asks for it.
+  bool get _boostOn {
+    if (_boostChosen) return voiceBoost.value;
+    final stored = _isBook
+        ? _bookSettings?.voiceBoost
+        : _showSettings?.voiceBoost;
+    return stored ?? (isSpokenWord && defaultVoiceBoost);
+  }
+
+  /// Whether [copy] is laid out as the server's book is, where the server
+  /// said: its positions and chapters are placed on its own parts, which a
+  /// book imported again since its download no longer shares.
+  bool _matchesBook(LocalPlayback copy) {
+    final held = _book;
+    if (!_isBook || held == null) return true;
+    if (!copy.sequenced) return held.parts.length <= 1;
+    final parts = <BookPart>[];
+    var startMs = 0;
+    for (var i = 0; i < copy.parts.length; i++) {
+      final durationMs = copy.parts[i].durationMs!;
+      parts.add(BookPart(index: i, startMs: startMs, durationMs: durationMs));
+      startMs += durationMs;
+    }
+    return _sameParts(held.parts, parts);
+  }
+
+  /// Loads the device copy [local] at display position [atMs]: the part
+  /// holding it for a book whose parts can be placed, the one file
+  /// otherwise.
+  Future<void> _loadCopy(LocalPlayback local, int atMs) async {
+    if (_isBook && local.sequenced) {
+      _localParts = local;
+      await _loadLocalPartFor(local, atMs);
+    } else {
+      await _loadLocalFile(local, atMs);
+    }
+  }
+
+  /// The length of [local]'s one file as the engine will play it.
+  int _fileLengthMs(LocalPlayback local) {
     // A carved item's file duration is the whole rip's, and the engine
     // is about to be clipped to the window: the loaded media is the
     // item's own length.
     final span = local.spanStartMs != null && (local.spanEndMs ?? 0) > 0
         ? local.spanEndMs! - local.spanStartMs!
         : null;
+    return span ?? local.parts.first.durationMs ?? item.durationMs;
+  }
+
+  /// Loads the one file of [local] at display position [atMs]: a track,
+  /// an episode, a book that is one file, or the first file of a book
+  /// whose stored parts cannot be placed on its timeline.
+  Future<void> _loadLocalFile(LocalPlayback local, int atMs) async {
     // Downloaded originals carry the same window; clipping here is what
     // makes an offline carved track play as itself instead of the whole
     // rip.
@@ -412,13 +522,52 @@ extension _SessionMedia on PlaybackSession {
           : Duration(milliseconds: local.spanEndMs!),
     );
     if (_disposed) return;
-    _moveTimeline(
-      durationMs: span ?? local.parts.first.durationMs ?? item.durationMs,
-    );
+    _moveTimeline(durationMs: _fileLengthMs(local));
   }
 
-  /// The downloaded original, but only for failures that smell like
-  /// unreachability; a real API rejection (404, 401) propagates.
+  /// What the sync engine says of the server's reach, for a start that may
+  /// take its position from the mirror instead: its socket up; a failure
+  /// behind it ([SyncStatus.retrying]: a connect that failed, a link that
+  /// dropped, a session opened from memory because the server did not
+  /// answer); or neither, a first connect still out. Null where the mirror
+  /// is not in question: no engine to say (the server is asked as always,
+  /// a copy playing all the same), no downloads, or a timeline member,
+  /// whose stream the server minted for its queue.
+  _Reach? get _reach {
+    final engine = sync;
+    if (engine == null || downloads == null || timeline != null) return null;
+    final status = engine.current;
+    if (engine.started && status.online) return _Reach.up;
+    return status.retrying ? _Reach.out : _Reach.unknown;
+  }
+
+  /// Whether nothing says the server is out of reach: the sync engine's
+  /// socket up, or no engine to say.
+  bool get _socketUp {
+    final reach = _reach;
+    return reach == null || reach == _Reach.up;
+  }
+
+  /// The server's config, landed after a start that took the downloaded
+  /// copy: taken up where the session changes it in place, the rate unless
+  /// the listener chose one, and trimming, whose chip [_loadConfig] set as
+  /// it landed, stored settings or none. The intro skip is a start position
+  /// and voice boost a minted stream's, so the intro waits for the next
+  /// start and the boost for the next load; nothing moves the listener.
+  Future<void> _adoptLateConfig() async {
+    if (_disposed || !_loaded || !_configAnswered || !_ownsEngine) return;
+    if (!_speedChosen) await engine.setSpeed(_configuredSpeed());
+    if (_disposed) return;
+    if (trimEnabled.value && _skipSpans.isEmpty) unawaited(_loadSkipMap());
+  }
+
+  /// Whether the engine is still this session's to drive.
+  bool get _ownsEngine =>
+      identical(PlaybackSession._engineOwners[engine], this);
+
+  /// The downloaded original, for media the server was to supply, but only
+  /// for failures that smell like unreachability; a real API rejection
+  /// (404, 401) propagates.
   Future<LocalPlayback?> _localFallback(WaxDeckApiException e) async {
     final port = downloads;
     if (port == null) return null;
@@ -426,6 +575,9 @@ extension _SessionMedia on PlaybackSession {
     return port.localFor(item.pid);
   }
 }
+
+/// What is known of the server's reach at a start (see `_reach`).
+enum _Reach { up, unknown, out }
 
 /// Whether another mint could make [error] go away: a refusal that says
 /// so, or a failure the server never explained. Not one the load

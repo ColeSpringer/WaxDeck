@@ -11,10 +11,12 @@ import '../music/music_controllers.dart';
 import '../providers.dart';
 import '../settings/settings_registry.dart';
 import '../shell/async_box_face.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/forbidden_page.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import '../sync/catalog_writes.dart';
 import 'artwork_manager.dart';
 import 'rename_section.dart';
 
@@ -255,8 +257,7 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
     final messenger = ref.read(shellMessengerProvider);
     final l10n = context.l10n;
     final follow = EditFollow.of(context, pid: widget.pid);
-    final container = ProviderScope.containerOf(context, listen: false);
-    final curationKey = _curationKey;
+    final writes = ref.read(catalogWritesProvider);
     try {
       final result = await ref
           .read(repositoryProvider)
@@ -283,16 +284,22 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
           }
         }
       }
-      container.invalidate(entityCurationProvider(curationKey));
+      // The editor's stored fields are among the reads this sweeps.
+      writes.landed();
       // An mbid clear is the one edit that can re-key the entity onto a
       // heuristic twin, which deletes this pid. Follow the survivor
       // rather than leaving the screen on a row that is gone, whether or
       // not the screen is still up.
       if (result.mergedInto case final survivor?) {
         unawaited(
-          follow.merged(survivor, said: (l10n) => l10n.musicAlbumEditorSaved),
+          follow.merged(
+            survivor,
+            said: (l10n) => l10n.musicAlbumEditorSaved,
+            folded: result.folded,
+          ),
         );
       } else {
+        unawaited(follow.folded(result.folded));
         messenger.show(l10n.musicAlbumEditorSaved);
       }
     } on WaxDeckApiException catch (e) {
@@ -314,7 +321,6 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
     final artist = widget.entity == EditableEntity.artist;
     // Through the container: a rename may land once this screen has gone.
     final container = ProviderScope.containerOf(context, listen: false);
-    final curationKey = _curationKey;
     return EntityRenameSection(
       entityType: widget.entity.wire,
       pid: widget.pid,
@@ -341,9 +347,8 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
       busy: _busy,
       onBusyChanged: (busy) => setState(() => _busy = busy),
       follow: () => EditFollow.of(context, pid: widget.pid),
-      onRenamed: () => container
-        ..invalidate(entityCurationProvider(curationKey))
-        ..invalidate(_entityNameProvider(seedKey)),
+      // The title's own read, which no other screen holds.
+      onRenamed: () => container.invalidate(_entityNameProvider(seedKey)),
     );
   }
 
@@ -395,33 +400,54 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
     });
     // One member item names the entity; a read still loading names
     // the screen after the editor instead of blanking the title.
-    final name = ref
-        .watch(_entityNameProvider((entity: widget.entity, pid: widget.pid)))
-        .value;
+    final named = ref.watch(
+      _entityNameProvider((entity: widget.entity, pid: widget.pid)),
+    );
+    final name = named.value;
+    // With no member listed under it, whether the entity is there is its
+    // card's to say, as on its page: one that answered nothing is gone
+    // (deleted or merged away elsewhere), and one still being read is
+    // waited for. A card read that failed says neither, and the form stays.
+    final card = named.hasValue && !named.hasError && name == null
+        ? ref.watch(entityCardProvider(widget.pid))
+        : null;
+    final unproven = card == null || card.hasError
+        ? null
+        : unprovenEntityFace(
+            context,
+            card,
+            errorTitle: l10n.metadataLoadError,
+            onRetry: () => ref.invalidate(entityCardProvider(widget.pid)),
+          );
     return WaxScaffold(
       title: name ?? l10n.metadataTitle,
       largeTitle: false,
       semanticsId: SemanticsIds.entityEditor,
       onBack: () => context.back(fallback: WaxRoute.music),
       backSemanticsId: SemanticsIds.navBack,
-      body: switch (curation) {
-        // Value first, like the album pane: the form holds typing
-        // nobody else has a copy of, and the failure of a refetch still
-        // reaches the person through the save.
-        AsyncValue(value: final rows?) => SingleChildScrollView(
-          padding: const EdgeInsets.all(WaxSpace.s16),
-          child: _body(rows),
-        ),
-        AsyncValue(hasError: true) => Padding(
-          padding: const EdgeInsets.all(WaxSpace.s16),
-          child: AsyncFailureCard.from(
-            curation,
-            title: l10n.metadataLoadError,
-            onRetry: () => ref.invalidate(entityCurationProvider(_curationKey)),
-          ),
-        ),
-        _ => const SkeletonShapes(shape: SkeletonShape.list),
-      },
+      // The pages' own face for it, which is a sliver, in place of the form.
+      slivers: unproven == null ? null : <Widget>[unproven],
+      body: unproven != null
+          ? null
+          : switch (curation) {
+              // Value first, like the album pane: the form holds typing
+              // nobody else has a copy of, and the failure of a refetch
+              // still reaches the person through the save.
+              AsyncValue(value: final rows?) => SingleChildScrollView(
+                padding: const EdgeInsets.all(WaxSpace.s16),
+                child: _body(rows),
+              ),
+              AsyncValue(hasError: true) => Padding(
+                padding: const EdgeInsets.all(WaxSpace.s16),
+                child: AsyncFailureCard.from(
+                  curation,
+                  title: l10n.metadataLoadError,
+                  onRetry: () =>
+                      ref.invalidate(entityCurationProvider(_curationKey)),
+                ),
+              ),
+              _ => const SkeletonShapes(shape: SkeletonShape.list),
+            },
     );
   }
 

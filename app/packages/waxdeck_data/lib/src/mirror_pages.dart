@@ -10,11 +10,15 @@ const _mirrorCursorPrefix = 'mirror:';
 
 bool isMirrorCursor(String cursor) => cursor.startsWith(_mirrorCursorPrefix);
 
+/// One page of the mirror's items. [artUrlFor] mints the art URL of an
+/// item whose cover is pinned on disk; left out, by a reader that draws
+/// nothing, no summary carries one.
 Future<ItemPage> mirrorItemsPage(
   MirrorDatabase db, {
   MediaType? mediaType,
   String? cursor,
   int limit = 60,
+  String Function(String pid)? artUrlFor,
 }) async {
   var offset = 0;
   if (cursor != null && isMirrorCursor(cursor)) {
@@ -31,27 +35,51 @@ Future<ItemPage> mirrorItemsPage(
   }
   final rows = await query.get();
   final hasMore = rows.length > limit;
-  final page = rows.take(limit).toList();
   return ItemPage(
-    items: [
-      for (final r in page)
-        ItemSummary(
-          pid: r.pid,
-          mediaType: MediaType.values.firstWhere(
-            (m) => m.wireName == r.mediaType,
-            orElse: () => MediaType.music,
-          ),
-          title: r.title,
-          artist: r.artist,
-          album: r.album,
-          sortKey: r.sortKey,
-          durationMs: r.durationMs,
-          // No artUrl offline: the grid's placeholder renders instead of
-          // a dead request.
-        ),
-    ],
+    items: await _summaries(db, rows.take(limit).toList(), artUrlFor),
     nextCursor: hasMore ? '$_mirrorCursorPrefix${offset + limit}' : null,
   );
+}
+
+/// [rows] as summaries. Given [artUrlFor], each carries the art URL of
+/// the cover pinned for it on disk, and none where nothing is: a
+/// placeholder rather than a request that may have nobody to answer it.
+/// The URL is minted for the row's own pid at the server's address now,
+/// not read off the pin: a pin keeps the URL its bytes came from, which
+/// names the old pid after a kind change and the old host after the
+/// server moved, and the store finds a pin by its pid alone.
+Future<List<ItemSummary>> _summaries(
+  MirrorDatabase db,
+  List<MirrorItem> rows,
+  String Function(String pid)? artUrlFor,
+) async {
+  if (rows.isEmpty) return const <ItemSummary>[];
+  final pinned = <String>{};
+  if (artUrlFor != null) {
+    final t = db.artworkPins;
+    final held = db.selectOnly(t, distinct: true)
+      ..addColumns([t.pid])
+      ..where(t.pid.isIn([for (final r in rows) r.pid]));
+    pinned.addAll([for (final row in await held.get()) row.read(t.pid)!]);
+  }
+  return [
+    for (final r in rows)
+      ItemSummary(
+        pid: r.pid,
+        mediaType: MediaType.values.firstWhere(
+          (m) => m.wireName == r.mediaType,
+          orElse: () => MediaType.music,
+        ),
+        title: r.title,
+        artist: r.artist,
+        album: r.album,
+        sortKey: r.sortKey,
+        durationMs: r.durationMs,
+        artUrl: artUrlFor != null && pinned.contains(r.pid)
+            ? artUrlFor(r.pid)
+            : null,
+      ),
+  ];
 }
 
 /// Pids of items with every file on disk, newest first. Feeds the Auto
@@ -105,22 +133,16 @@ Future<String?> mirrorRenamedPid(MirrorDatabase db, String pid) async {
   return now == pid ? null : now;
 }
 
-/// One mirror row by pid, for hydrating id lists into entries.
-Future<ItemSummary?> mirrorItemByPid(MirrorDatabase db, String pid) async {
+/// One mirror row by pid, for hydrating id lists into entries, its art
+/// URL as [mirrorItemsPage] mints one.
+Future<ItemSummary?> mirrorItemByPid(
+  MirrorDatabase db,
+  String pid, {
+  String Function(String pid)? artUrlFor,
+}) async {
   final row = await (db.select(
     db.mirrorItems,
   )..where((t) => t.pid.equals(pid))).getSingleOrNull();
   if (row == null) return null;
-  return ItemSummary(
-    pid: row.pid,
-    mediaType: MediaType.values.firstWhere(
-      (m) => m.wireName == row.mediaType,
-      orElse: () => MediaType.music,
-    ),
-    title: row.title,
-    artist: row.artist,
-    album: row.album,
-    sortKey: row.sortKey,
-    durationMs: row.durationMs,
-  );
+  return (await _summaries(db, [row], artUrlFor)).single;
 }

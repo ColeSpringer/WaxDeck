@@ -23,11 +23,32 @@ abstract interface class WaxDeckRepository implements WaxDeckApi, MediaUrlsApi {
   String get baseUrl;
 
   /// Bearer token applied to every request. [login], [bootstrap],
-  /// [oidcExchange], and [refreshToken] set it; native clients persist it
-  /// and restore it here before the startup session probe. Web builds
-  /// leave it null and rely on the HttpOnly session cookie.
+  /// [oidcExchange], and [refreshToken] set it: the first three unless a
+  /// sign-out was asked while they were out, the last only while the
+  /// token it was asked with is still the one held; native clients
+  /// persist it and restore it here before the startup session probe. Web
+  /// builds leave it null and rely on the HttpOnly session cookie.
   abstract String? authToken;
+
+  /// Ends the session [token] presents, as [logout] ends the one this
+  /// client holds, and moves no credential this client holds: for a
+  /// sign-in's answer whose session is not to be kept.
+  Future<void> logoutToken(String token);
 }
+
+/// A repository that says when the server answers it, as [WaxDeckClient]
+/// does.
+abstract interface class ServerAnswers {
+  /// Called with the next answer the server itself gives any call but a
+  /// session read, which whoever asked it hears: a result, or an error in
+  /// the server's own words. Forgotten as it is called, so it hears one
+  /// answer.
+  abstract void Function()? onNextAnswer;
+}
+
+/// Carries the credentials a call presents in place of those held when it
+/// is sent: a `(bearer, csrf)` record, either null. Set through `extra`.
+const String _presenting = 'waxdeck-presenting';
 
 /// Marks a call whose server side does its whole job before the
 /// response line, so the ordinary receive budget would call a healthy
@@ -82,7 +103,14 @@ abstract class _WaxDeckTransport {
               ..connectTimeout = Duration.zero
               ..receiveTimeout = Duration.zero;
           }
-          _applyAuth(options.headers, options.method);
+          if (options.extra[_presenting] case (
+            final String? bearer,
+            final String? csrf,
+          )) {
+            _present(options.headers, options.method, bearer, csrf);
+          } else {
+            _applyAuth(options.headers, options.method);
+          }
           handler.next(options);
         },
       ),
@@ -98,10 +126,26 @@ abstract class _WaxDeckTransport {
   String? _authToken;
   String? _csrfToken;
 
-  /// Moves at every sign-in and sign-out, so a session probe that was out
-  /// across one keeps its answer's CSRF token, the old session's, to
-  /// itself.
+  /// Moves at every sign-in and sign-out, and whenever the bearer is set
+  /// to another, so a session probe that was out across one keeps its
+  /// answer's CSRF token, the old session's, to itself, and a rotation
+  /// keeps its token.
   var _credentials = 0;
+
+  /// Moves at every sign-out: the bearer dropped, or [logout] asked. A
+  /// sign-in sent before one is answered and not taken up: its session is
+  /// nobody's to present.
+  var _signOuts = 0;
+
+  /// [ServerAnswers.onNextAnswer].
+  void Function()? onNextAnswer;
+
+  void _answerHeard() {
+    final hear = onNextAnswer;
+    if (hear == null) return;
+    onNextAnswer = null;
+    hear();
+  }
 
   /// Puts this client's credential on an outgoing request.
   ///
@@ -117,12 +161,18 @@ abstract class _WaxDeckTransport {
   /// Cookie-authenticated mutations (web after a reload: no bearer in
   /// memory, the HttpOnly cookie authenticates) must echo the CSRF token
   /// from login/getSession. Bearer requests are exempt.
-  void _applyAuth(Map<String, dynamic> headers, String method) {
-    final token = _authToken;
+  void _applyAuth(Map<String, dynamic> headers, String method) =>
+      _present(headers, method, _authToken, _csrfToken);
+
+  void _present(
+    Map<String, dynamic> headers,
+    String method,
+    String? token,
+    String? csrf,
+  ) {
     if (token != null && !headers.containsKey('Authorization')) {
       headers['Authorization'] = 'Bearer $token';
     }
-    final csrf = _csrfToken;
     if (token == null &&
         csrf != null &&
         _isMutation(method) &&
@@ -180,12 +230,23 @@ abstract class _WaxDeckTransport {
   }
 
   /// Runs [body], mapping transport failures to the structured error model.
-  Future<T> _guard<T>(Future<T> Function() body) async {
+  /// The server's answer, a result or an error in its own words, is said
+  /// to [onNextAnswer] unless [heard] is false.
+  Future<T> _guard<T>(Future<T> Function() body, {bool heard = true}) async {
+    final T result;
     try {
-      return await body();
+      result = await body();
     } on DioException catch (e) {
-      throw apiExceptionFromDio(e);
+      final error = apiExceptionFromDio(e);
+      if (heard &&
+          error.statusCode != null &&
+          !error.code.startsWith('transport')) {
+        _answerHeard();
+      }
+      throw error;
     }
+    if (heard) _answerHeard();
+    return result;
   }
 
   /// [response]'s body through [read], [at] naming it in errors. An answer
@@ -221,7 +282,8 @@ abstract class _WaxDeckTransport {
 
 /// [WaxDeckRepository] over the calls generated from the API spec, one
 /// mixin per tag, with the methods the generator leaves to hand.
-class WaxDeckClient extends _WaxDeckCalls implements WaxDeckRepository {
+class WaxDeckClient extends _WaxDeckCalls
+    implements WaxDeckRepository, ServerAnswers {
   /// [baseUrl] is the server origin. On web builds pass an empty string:
   /// relative URLs resolve against the single origin serving the SPA.
   ///
@@ -299,7 +361,11 @@ class WaxDeckClient extends _WaxDeckCalls implements WaxDeckRepository {
   @override
   String? get authToken => _authToken;
   @override
-  set authToken(String? token) => _authToken = token;
+  set authToken(String? token) {
+    if (token != _authToken) _credentials++;
+    if (token == null && _authToken != null) _signOuts++;
+    _authToken = token;
+  }
 
   /// Adopts a login-shaped answer: reads its CSRF token, which the model
   /// leaves out, and decodes the result, then keeps the CSRF token and, on
@@ -328,6 +394,11 @@ class WaxDeckClient extends _WaxDeckCalls implements WaxDeckRepository {
     return result;
   }
 
+  /// A sign-in's answer, taken up unless a sign-out was asked since the
+  /// count [asked] was taken.
+  LoginResult _signedIn(Map<String, Object?> json, int asked) =>
+      asked == _signOuts ? _adoptLogin(json) : decodeLoginResult(json, _wire);
+
   /// True in browser builds. Detected via library availability so this
   /// pure-Dart package needs no Flutter dependency.
   static const _isWebBuild = bool.fromEnvironment('dart.library.js_interop');
@@ -338,6 +409,7 @@ class WaxDeckClient extends _WaxDeckCalls implements WaxDeckRepository {
     required String password,
     String? displayName,
   }) => _guard(() async {
+    final asked = _signOuts;
     final response = await _bootstrap(
       body: BootstrapRequest(
         username: username,
@@ -348,7 +420,7 @@ class WaxDeckClient extends _WaxDeckCalls implements WaxDeckRepository {
     return _decode(
       response,
       'bootstrap',
-      (v, at) => _adoptLogin(wireObject(v, at)),
+      (v, at) => _signedIn(wireObject(v, at), asked),
     );
   });
 
@@ -358,6 +430,7 @@ class WaxDeckClient extends _WaxDeckCalls implements WaxDeckRepository {
     required String password,
     String? deviceName,
   }) => _guard(() async {
+    final asked = _signOuts;
     final response = await _login(
       body: LoginRequest(
         username: username,
@@ -368,7 +441,7 @@ class WaxDeckClient extends _WaxDeckCalls implements WaxDeckRepository {
     return _decode(
       response,
       'login',
-      (v, at) => _adoptLogin(wireObject(v, at)),
+      (v, at) => _signedIn(wireObject(v, at), asked),
     );
   });
 
@@ -390,24 +463,40 @@ class WaxDeckClient extends _WaxDeckCalls implements WaxDeckRepository {
       if (asked == _credentials) _csrfToken = csrfToken;
       return session;
     });
-  });
+  }, heard: false);
 
+  /// Rotates the credential held. A rotation the credentials moved under
+  /// while it was out, a sign-out or another sign-in, is answered and not
+  /// adopted: its token is nobody's to send.
   @override
   Future<LoginResult> refreshToken() => _guard(() async {
+    final asked = _credentials;
     final response = await _refreshToken();
-    return _decode(
-      response,
-      'refreshToken',
-      (v, at) => _adoptLogin(wireObject(v, at)),
-    );
+    return _decode(response, 'refreshToken', (v, at) {
+      final json = wireObject(v, at);
+      return asked == _credentials
+          ? _adoptLogin(json)
+          : decodeLoginResult(json, _wire);
+    });
   });
 
   @override
+  Future<void> logoutToken(String token) => _guard(() async {
+    await _logout(extra: {_presenting: (token, null)});
+  });
+
+  /// Ends the session this client holds as it is asked, and clears what it
+  /// presented: credentials taken up while the request was out are not
+  /// this sign-out's.
+  @override
   Future<void> logout() => _guard(() async {
-    await _logout();
+    final token = _authToken;
+    final csrf = _csrfToken;
+    _signOuts++;
+    await _logout(extra: {_presenting: (token, csrf)});
     _credentials++;
-    _authToken = null;
-    _csrfToken = null;
+    if (_authToken == token) _authToken = null;
+    if (_csrfToken == csrf) _csrfToken = null;
   });
 
   @override
@@ -416,6 +505,7 @@ class WaxDeckClient extends _WaxDeckCalls implements WaxDeckRepository {
     String? verifier,
     String? deviceName,
   }) => _guard(() async {
+    final asked = _signOuts;
     final response = await _exchangeOidcCode(
       body: OidcExchangeRequest(
         code: code,
@@ -426,7 +516,7 @@ class WaxDeckClient extends _WaxDeckCalls implements WaxDeckRepository {
     return _decode(
       response,
       'exchangeOidcCode',
-      (v, at) => _adoptLogin(wireObject(v, at)),
+      (v, at) => _signedIn(wireObject(v, at), asked),
     );
   });
 

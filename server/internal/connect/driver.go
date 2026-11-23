@@ -53,6 +53,24 @@ type DriverEvent struct {
 	Finished   bool
 	Fatal      bool
 	Err        error
+	// Load is the load or seek the observation describes, numbered as
+	// the driver's LoadCounter numbers them. Zero is a driver that does
+	// not say, and its observations are all read as current.
+	Load uint64
+}
+
+// LoadCounter is the optional capability of a driver that numbers what
+// moves its playback - each load and each seek the device takes - and
+// stamps each event with the one it describes. Events queue between the
+// driver and the session, so a report from before a reload or a seek
+// can reach the session after the command set the position itself; the
+// session drops an event older than CurrentLoad. A driver counts a
+// command no later than the call returns, which is before the session
+// writes, and does not count one the device refused: the media it
+// still plays is what its reports go on describing. CurrentLoad is
+// called under the session lock and must not block.
+type LoadCounter interface {
+	CurrentLoad() uint64
 }
 
 // EndpointTarget describes the endpoint a load is being rendered for.

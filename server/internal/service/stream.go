@@ -659,10 +659,16 @@ func (l *Playback) DirectPlayInfo(ctx context.Context, uc *UserCtx, apiItemPID, 
 	return out, nil
 }
 
-// EffectiveVoiceBoost resolves the caller's stored voice-boost setting
-// for an item: the subscription setting for a podcast episode, the
-// book settings for an audiobook, false elsewhere.
-func (l *Playback) EffectiveVoiceBoost(ctx context.Context, uc *UserCtx, apiItemPID string) bool {
+// EffectiveVoiceBoost resolves whether a stream of an item is minted
+// with voice boost: explicit wins where given; else the caller's stored
+// setting, the subscription's for a podcast episode or the book's for an
+// audiobook; else fallback, the caller's default, where none is stored
+// (an episode of a show the caller does not follow has none). False for
+// anything else.
+func (l *Playback) EffectiveVoiceBoost(ctx context.Context, uc *UserCtx, apiItemPID string, explicit *bool, fallback bool) bool {
+	if explicit != nil {
+		return *explicit
+	}
 	prefix, pid, ok := parseAPIPID(apiItemPID)
 	if !ok {
 		return false
@@ -674,15 +680,27 @@ func (l *Playback) EffectiveVoiceBoost(ctx context.Context, uc *UserCtx, apiItem
 			return false
 		}
 		sub, err := l.db.SubscriptionFor(ctx, uc.ID, string(det.Episode.PodcastPID))
+		switch {
+		case errors.Is(err, wdb.ErrNotFound):
+			return fallback
+		case err != nil:
+			return false
+		case sub.VoiceBoost != nil:
+			return *sub.VoiceBoost
+		}
+		return fallback
+	case PrefixBook, PrefixTrack:
+		// Either prefix reaches a book, whose setting holds while it is
+		// one; the catalog is asked only when the answer would be on.
+		bs, err := l.db.BookSettingsFor(ctx, uc.ID, string(pid))
 		if err != nil {
 			return false
 		}
-		return sub.VoiceBoost != nil && *sub.VoiceBoost
-	case PrefixBook, PrefixTrack:
-		// Either prefix reaches a book, whose setting holds while it is
-		// one; the catalog is asked only when a setting is on.
-		bs, err := l.db.BookSettingsFor(ctx, uc.ID, string(pid))
-		if err != nil || bs.VoiceBoost == nil || !*bs.VoiceBoost {
+		on := fallback
+		if bs.VoiceBoost != nil {
+			on = *bs.VoiceBoost
+		}
+		if !on {
 			return false
 		}
 		it, err := l.lib.Get(ctx, pid)

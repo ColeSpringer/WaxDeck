@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -52,6 +53,25 @@ import 'wax_finders.dart';
 const _user = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
 
 const _track = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
+
+/// The window's insets as the engine reports them: [view] the view
+/// padding, a keyboard [keyboard] high, and the padding what the keyboard
+/// leaves of the view padding, side by side.
+void _engineInsets(
+  WidgetTester tester,
+  FakeViewPadding view, {
+  double keyboard = 0,
+}) {
+  tester.view
+    ..viewPadding = view
+    ..viewInsets = FakeViewPadding(bottom: keyboard)
+    ..padding = FakeViewPadding(
+      left: view.left,
+      top: view.top,
+      right: view.right,
+      bottom: math.max(0, view.bottom - keyboard),
+    );
+}
 
 ProviderContainer _signedInContainer() => appContainer(
   repo: FakeRepository(
@@ -136,21 +156,19 @@ void main() {
 
   group('with no bar to clear a message rests where a floating snack bar '
       'rests', () {
-    /// The whole app in a window of [size] with the view's insets as
-    /// given, and something playing, so the deck bar is up.
+    /// The whole app in a window of [size] with the view padding [insets]
+    /// and a keyboard [keyboard] high, and something playing, so the deck
+    /// bar is up.
     Future<ProviderContainer> pumpPlaying(
       WidgetTester tester,
       Size size, {
-      FakeViewPadding padding = FakeViewPadding.zero,
-      FakeViewPadding viewPadding = FakeViewPadding.zero,
-      FakeViewPadding viewInsets = FakeViewPadding.zero,
+      FakeViewPadding insets = FakeViewPadding.zero,
+      double keyboard = 0,
     }) async {
       tester.view
         ..physicalSize = size
-        ..devicePixelRatio = 1
-        ..padding = padding
-        ..viewPadding = viewPadding
-        ..viewInsets = viewInsets;
+        ..devicePixelRatio = 1;
+      _engineInsets(tester, insets, keyboard: keyboard);
       addTearDown(tester.view.reset);
       final container = _signedInContainer();
       await pumpWholeApp(tester, container: container, disableAnimations: true);
@@ -286,38 +304,202 @@ void main() {
       await stop(tester, container);
     });
 
-    testWidgets("on a phone with a bottom inset, the inset above the pane's "
-        'foot', (tester) async {
+    testWidgets("on a phone with a bottom inset, on the pane's foot: the "
+        'tabs have taken it', (tester) async {
       const inset = FakeViewPadding(bottom: 34);
       final container = await pumpPlaying(
         tester,
         const Size(390, 844),
-        padding: inset,
-        viewPadding: inset,
+        insets: inset,
       );
       final bar = await show(tester, container);
 
-      // The tab bar keeps the inset under it, and the pane's own Scaffold
-      // keeps it again above its foot.
       expect(tester.getRect(find.byType(WaxNavBar)).bottom, 844);
-      expect(bar.bottom, pane(tester).bottom - 34 - 10);
+      expect(bar.bottom, pane(tester).bottom - 10);
       await stop(tester, container);
     });
 
-    testWidgets("with the keyboard up, the keyboard's height above the pane's "
-        'foot', (tester) async {
+    testWidgets("beside the sidebar with a bottom inset, on the pane's foot: "
+        'the dock has taken it', (tester) async {
+      const inset = FakeViewPadding(bottom: 30);
+      final container = await pumpPlaying(
+        tester,
+        const Size(1600, 1000),
+        insets: inset,
+      );
+      final bar = await show(tester, container);
+
+      final dock = tester.getRect(find.byType(DeckBarHost));
+      expect(dock.bottom, 1000);
+      expect(pane(tester).bottom, dock.top);
+      expect(bar.bottom, dock.top - 10);
+      await stop(tester, container);
+    });
+
+    testWidgets('beside the rail with a bottom inset and nothing playing, the '
+        "inset above the pane's foot", (tester) async {
+      tester.view
+        ..physicalSize = const Size(700, 900)
+        ..devicePixelRatio = 1;
+      _engineInsets(tester, const FakeViewPadding(bottom: 30));
+      addTearDown(tester.view.reset);
+      final container = _signedInContainer();
+      await pumpWholeApp(tester, container: container, disableAnimations: true);
+      final bar = await show(tester, container);
+
+      expect(find.byType(DeckBarHost), findsNothing);
+      expect(pane(tester).bottom, 900);
+      expect(bar.bottom, 900 - 30 - 10);
+    });
+
+    testWidgets("beside the sidebar with the keyboard up, on the keyboard's "
+        'top', (tester) async {
+      final container = await pumpPlaying(
+        tester,
+        const Size(1600, 1000),
+        insets: const FakeViewPadding(bottom: 30),
+        keyboard: 300,
+      );
+      final bar = await show(tester, container);
+
+      expect(bar.bottom, 1000 - 300 - 10);
+      await stop(tester, container);
+    });
+
+    testWidgets("on a phone with nothing playing and the keyboard up, on the "
+        "keyboard's top", (tester) async {
+      tester.view
+        ..physicalSize = const Size(390, 844)
+        ..devicePixelRatio = 1;
+      _engineInsets(tester, const FakeViewPadding(bottom: 34), keyboard: 300);
+      addTearDown(tester.view.reset);
+      final container = _signedInContainer();
+      await pumpWholeApp(tester, container: container, disableAnimations: true);
+      final bar = await show(tester, container);
+
+      expect(find.byType(DeckBarHost), findsNothing);
+      expect(bar.bottom, 844 - 300 - 10);
+    });
+
+    testWidgets("on a phone with the keyboard up, on the keyboard's top: the "
+        'dock and the tabs under it are not counted again', (tester) async {
       final container = await pumpPlaying(
         tester,
         const Size(390, 844),
-        viewPadding: const FakeViewPadding(bottom: 34),
-        viewInsets: const FakeViewPadding(bottom: 300),
+        insets: const FakeViewPadding(bottom: 34),
+        keyboard: 300,
       );
       final bar = await show(tester, container);
 
-      expect(bar.bottom, pane(tester).bottom - 300 - 10);
+      expect(bar.bottom, 844 - 300 - 10);
       expect(bar.left, 15);
       await stop(tester, container);
     });
+
+    for (final entry in <String, (Size, double)>{
+      'on a phone': (const Size(390, 844), 34),
+      'beside the sidebar': (const Size(1600, 1000), 30),
+    }.entries) {
+      final (size, inset) = entry.value;
+
+      testWidgets("${entry.key}, with a keyboard shorter than what is below "
+          "the pane, on the pane's foot: the inset under it is not counted "
+          'again', (tester) async {
+        final container = await pumpPlaying(
+          tester,
+          size,
+          insets: FakeViewPadding(bottom: inset),
+        );
+        await show(tester, container);
+        final foot = pane(tester).bottom;
+        final tabs = find.byType(WaxNavBar);
+        // Short of the gesture bar, then over it but short of the tabs
+        // (or of the dock beside the sidebar), then between the tabs and
+        // the dock on them.
+        final keyboards = <double>[
+          inset / 2,
+          if (tester.any(tabs)) ...<double>[
+            tester.getRect(tabs).height - 10,
+            tester.getRect(tabs).height + 10,
+          ] else
+            size.height - foot - 10,
+        ];
+        for (final keyboard in keyboards) {
+          _engineInsets(
+            tester,
+            FakeViewPadding(bottom: inset),
+            keyboard: keyboard,
+          );
+          await tester.pumpAndSettle();
+          expect(pane(tester).bottom, foot, reason: 'keyboard $keyboard');
+          expect(
+            tester
+                .getRect(
+                  find
+                      .ancestor(
+                        of: find.text('Scan started'),
+                        matching: find.byType(Material),
+                      )
+                      .first,
+                )
+                .bottom,
+            foot - 10,
+            reason: 'keyboard $keyboard',
+          );
+        }
+        await stop(tester, container);
+      });
+    }
+
+    for (final entry in <String, Size>{
+      'beside the rail': const Size(700, 900),
+      'beside the sidebar': const Size(1600, 1000),
+    }.entries) {
+      final size = entry.value;
+
+      testWidgets("${entry.key} with nothing playing, a keyboard rising "
+          "through the gesture bar never takes a message below the page's "
+          'foot', (tester) async {
+        const inset = FakeViewPadding(bottom: 30);
+        tester.view
+          ..physicalSize = size
+          ..devicePixelRatio = 1;
+        _engineInsets(tester, inset);
+        addTearDown(tester.view.reset);
+        final container = _signedInContainer();
+        await pumpWholeApp(
+          tester,
+          container: container,
+          disableAnimations: true,
+        );
+        await show(tester, container);
+        expect(find.byType(DeckBarHost), findsNothing);
+
+        for (final keyboard in const <double>[0, 10, 20, 29, 30, 40]) {
+          _engineInsets(tester, inset, keyboard: keyboard);
+          await tester.pumpAndSettle();
+          final foot = tester
+              .getRect(
+                find
+                    .descendant(
+                      of: find.byType(StatefulNavigationShell),
+                      matching: find.byType(CustomScrollView),
+                    )
+                    .first,
+              )
+              .bottom;
+          final message = tester.getRect(
+            find
+                .ancestor(
+                  of: find.text('Scan started'),
+                  matching: find.byType(Material),
+                )
+                .first,
+          );
+          expect(message.bottom, foot - 10, reason: 'keyboard $keyboard');
+        }
+      });
+    }
 
     testWidgets('inside the side insets of a pane that has them', (
       tester,
@@ -326,12 +508,13 @@ void main() {
       final container = await pumpPlaying(
         tester,
         const Size(1300, 600),
-        padding: notch,
-        viewPadding: notch,
+        insets: notch,
       );
       final bar = await show(tester, container);
 
-      expect(bar.left, pane(tester).left + 44 + 15);
+      // The sidebar stands against the start edge and has taken that
+      // inset; the end one is the pane's.
+      expect(bar.left, pane(tester).left + 15);
       expect(bar.right, pane(tester).right - 44 - 15);
       expect(bar.bottom, pane(tester).bottom - 10);
       await stop(tester, container);
@@ -344,8 +527,7 @@ void main() {
       final container = await pumpPlaying(
         tester,
         const Size(390, 844),
-        padding: inset,
-        viewPadding: inset,
+        insets: inset,
       );
       container.read(routerProvider).push<void>(WaxRoute.nowPlaying);
       await tester.pumpAndSettle();

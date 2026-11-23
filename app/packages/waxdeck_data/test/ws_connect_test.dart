@@ -29,6 +29,69 @@ void main() {
     );
   });
 
+  test('an attempt past its deadline is aborted, not left open', () async {
+    // Left in flight, the attempt finishes its upgrade whenever the
+    // server gets round to it, and is a second sync socket until closed.
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    final held = <Socket>[];
+    final ended = Completer<void>();
+    // Once: a reset reports an error and then done.
+    void end() {
+      if (!ended.isCompleted) ended.complete();
+    }
+
+    server.listen((socket) {
+      held.add(socket);
+      socket.listen((_) {}, onDone: end, onError: (Object _) => end());
+    });
+    addTearDown(() {
+      for (final s in held) {
+        s.destroy();
+      }
+    });
+
+    await expectLater(
+      connectWebSocket(
+        'ws://127.0.0.1:${server.port}/api/v1/sync/live',
+        connectDeadline: const Duration(milliseconds: 300),
+      ),
+      throwsA(isA<TimeoutException>()),
+    );
+    expect(held, hasLength(1));
+    await expectLater(
+      ended.future.timeout(const Duration(seconds: 2)),
+      completes,
+      reason: 'the server still holds the connection open',
+    );
+  });
+
+  test('an upgraded socket outlives the client that opened it', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      // Slow to answer, so the client holds an unanswered upgrade a while.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      final socket = await WebSocketTransformer.upgrade(request);
+      socket.listen(socket.add);
+    });
+
+    final channel = await connectWebSocket(
+      'ws://127.0.0.1:${server.port}/api/v1/sync/live',
+    );
+    addTearDown(channel.sink.close);
+    final replies = StreamIterator<dynamic>(channel.stream);
+    for (final frame in <String>['one', 'two']) {
+      channel.sink.add(frame);
+      expect(
+        await replies.moveNext().timeout(const Duration(seconds: 2)),
+        true,
+      );
+      expect(replies.current, frame);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+  });
+
   test('a refused connection fails rather than hanging', () async {
     // Nothing is listening: the platform refuses immediately, and the
     // deadline is not what reports it.

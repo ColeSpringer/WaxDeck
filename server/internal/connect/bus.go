@@ -809,6 +809,10 @@ func (s *Service) onDriverEvent(sessionID string, gen int, ev DriverEvent) {
 		s.cfg.InvalidatePlayer()
 		return
 	}
+	if lc, ok := sess.driver.(LoadCounter); ok && ev.Load != 0 && ev.Load < lc.CurrentLoad() {
+		s.mu.Unlock()
+		return
+	}
 
 	now := ev.At
 	if now.IsZero() {

@@ -18,9 +18,9 @@ import (
 // upgrades and never speaks; the write deadline bounds a peer that
 // stopped reading; pings keep intermediaries from reaping
 // idle-but-live sockets. The outbound queue bounds a slow reader:
-// invalidations cannot overflow (three flags), and command-bus frames
-// are best-effort or answer-or-close, so a full queue means the
-// connection is dead anyway.
+// invalidations cannot overflow (flags and one bounded set of pids), and
+// command-bus frames are best-effort or answer-or-close, so a full queue
+// means the connection is dead anyway.
 const (
 	wsSubscribeDeadline = 5 * time.Second
 	wsWriteDeadline     = 10 * time.Second
@@ -34,10 +34,10 @@ const (
 // refused.
 const wsSessionEnded = websocket.StatusCode(4401)
 
-// wsSubscribeFrame is the client's first frame. Cursors are opaque and
-// unused by the transport: their validity is judged by the sync
-// endpoints; their presence just prompts an immediate invalidate so a
-// returning client pulls once.
+// wsSubscribeFrame is the client's first frame. A catalog cursor is
+// answered with what changed after it; a server cursor's presence just
+// prompts an immediate invalidate, its validity judged by the sync
+// endpoint.
 type wsSubscribeFrame struct {
 	CatalogSince string   `json:"catalogSince"`
 	ServerSince  string   `json:"serverSince"`
@@ -162,10 +162,11 @@ func (s *Server) ServeWS(hub *events.Hub) http.HandlerFunc {
 
 		// A returning client (any cursor presented) gets one immediate
 		// invalidate per subscribed topic: pulling is cheap and a no-op
-		// when current, and it closes the offline gap without the
-		// transport judging cursor validity.
+		// when current, and it closes the offline gap. The catalog's names
+		// what changed after the cursor, read here on the socket's own
+		// goroutine under its own bound.
 		if sub.CatalogSince != "" {
-			conn.Mark(events.TypeInvalidate, events.TopicCatalog)
+			conn.MarkCatalogSince(sub.CatalogSince)
 		}
 		if sub.ServerSince != "" {
 			conn.Mark(events.TypeInvalidate, events.TopicUser)

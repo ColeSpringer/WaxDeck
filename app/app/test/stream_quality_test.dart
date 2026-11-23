@@ -27,6 +27,9 @@ class _FakeConnectivity implements ConnectivityPort {
 
   @override
   Stream<ConnectionCost> get costs => _controller.stream;
+
+  @override
+  Stream<void> get returns => const Stream<void>.empty();
 }
 
 ProviderContainer _container({

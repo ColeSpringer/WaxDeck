@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -10,9 +11,50 @@ import '../library/item_menu.dart';
 import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
 import '../presenters/media_tiles.dart';
+import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+
+/// A computed list's rows: the answer as it was handed over, then the
+/// same items as the catalog has them each time a sweep reads it again.
+/// Keyed on the answer itself, so one per list pushed.
+final trackListRowsProvider = AsyncNotifierProvider.autoDispose
+    .family<TrackListRows, List<ItemSummary>, List<ItemSummary>>(
+      TrackListRows.new,
+    );
+
+class TrackListRows extends AsyncNotifier<List<ItemSummary>> {
+  TrackListRows(this.answer);
+
+  final List<ItemSummary> answer;
+
+  late List<ItemSummary> _held = answer;
+
+  @override
+  Future<List<ItemSummary>> build() async {
+    // The answer was read a moment ago: opening the list asks nothing.
+    if (ref.isFirstBuild) return _held;
+    final repository = ref.read(repositoryProvider);
+    final pids = {for (final row in _held) row.pid}.toList();
+    final now = <String, ItemSummary>{};
+    try {
+      for (var at = 0; at < pids.length; at += itemLookupCap) {
+        final resolved = await repository.resolveItems(
+          pids.sublist(at, math.min(at + itemLookupCap, pids.length)),
+        );
+        for (final item in resolved.items) {
+          now[ulidOf(item.pid)] = item;
+        }
+      }
+    } on WaxDeckApiException {
+      // Says nothing of the rows: they stand until the next sweep.
+      return _held;
+    }
+    // In the answer's order; one the lookup does not name stays as held.
+    return _held = [for (final row in _held) now[ulidOf(row.pid)] ?? row];
+  }
+}
 
 /// A computed list of playable tracks (an instant mix or a
 /// similar-tracks answer) in play order, with the answering engine
@@ -46,6 +88,8 @@ class TrackListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final store = ref.watch(artworkStoreProvider);
     final l10n = context.l10n;
+    final items =
+        ref.watch(trackListRowsProvider(this.items)).value ?? this.items;
     final windows = PlayWindows.ofItems(items);
     return WaxScaffold(
       title: title,

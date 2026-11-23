@@ -2219,6 +2219,17 @@ components:
             edited group.
           items:
             type: string
+        folded:
+          type: array
+          default: []
+          description: >
+            The other albums and release groups an entity edit dissolved
+            by re-keying the entity, which only an `mbid` clear does, each
+            with the one its members now sit on. Empty for every other
+            edit, when none was dissolved, and when they could not be
+            read; the edit stands either way.
+          items:
+            $ref: "#/components/schemas/FoldedEntity"
 
     MetadataCommit:
       type: object
@@ -2822,6 +2833,17 @@ components:
             new anchor or title implies a group the album was not in.
           items:
             type: string
+        folded:
+          type: array
+          default: []
+          description: >
+            The other albums and release groups this rename dissolved,
+            each with the one its members now sit on: an artist merged
+            into another folds a release whose title the survivor
+            already has. Empty when none did, and when they could not
+            be read; the rename stands either way.
+          items:
+            $ref: "#/components/schemas/FoldedEntity"
         members:
           type: integer
           description: How many items carried the rename.
@@ -2837,6 +2859,23 @@ components:
           description: Files whose tags could not be updated.
           items:
             $ref: "#/components/schemas/WriteBackFailure"
+
+    FoldedEntity:
+      type: object
+      description: >
+        An album or release group a write dissolved, and the one of the
+        same kind that its members now sit on. The first pid no longer
+        answers; talk about `into` instead.
+      required: [pid, into]
+      properties:
+        pid:
+          type: string
+          description: The dissolved album (`al-`) or release group (`rg-`).
+          example: al-01JZX5N8QW3F4V9T2B7KD3M9R6
+        into:
+          type: string
+          description: The surviving album or release group.
+          example: al-01JZX5N8QW3F4V9T2B7KD3M9R7
 
     EntityCuration:
       type: object

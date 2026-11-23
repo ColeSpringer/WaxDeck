@@ -8,8 +8,11 @@ import 'browser_settings_store.dart';
 ///
 /// Not `sessionStorage` - a preference that forgets itself when the tab
 /// closes is the in-memory notifier this store replaced.
-class _LocalStorage implements BrowserStorage {
-  const _LocalStorage();
+///
+/// Read at each call, never held: where storage is denied the getter
+/// itself throws, and every caller already guards a call.
+class BrowserLocalStorage implements BrowserStorage {
+  const BrowserLocalStorage();
 
   @override
   String? getItem(String key) => web.window.localStorage.getItem(key);
@@ -28,4 +31,4 @@ class _LocalStorage implements BrowserStorage {
 /// desktop-shaped surface that most wants a collapsed sidebar is the one
 /// running in a browser.
 ClientSettingsStore createClientSettingsStore(MirrorDatabase? db) =>
-    BrowserClientSettingsStore(const _LocalStorage());
+    BrowserClientSettingsStore(const BrowserLocalStorage());

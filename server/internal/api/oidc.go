@@ -168,6 +168,7 @@ func (s *Server) ExchangeOidcCode(ctx context.Context, req ExchangeOidcCodeReque
 	}
 	return ExchangeOidcCode200JSONResponse(LoginResponse{
 		User: userJSON(acct.User), Token: created.Token, CsrfToken: created.CSRFToken,
+		SessionId: created.Session.ID,
 	}), nil
 }
 

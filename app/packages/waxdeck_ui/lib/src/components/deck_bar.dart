@@ -215,21 +215,29 @@ class DeckBar extends StatelessWidget {
           color: colors.surface1,
           border: Border(top: BorderSide(color: colors.hairline)),
         ),
-        child: SizedBox(
-          height: compact
-              ? WaxShellMetrics.deckBarCompactHeight
-              : WaxShellMetrics.deckBarExpandedHeight,
-          // Its own Material, inside the surface rather than around it:
-          // the bar is mounted straight into the shell's frame, where
-          // there is none, and the ink under the house controls has to
-          // land on top of the bar's own background rather than behind
-          // it.
-          child: Material(
-            type: MaterialType.transparency,
-            animationDuration: Duration.zero,
-            child: compact
-                ? _compact(context, colors)
-                : _expanded(context, colors),
+        // The window's insets under the bar's own surface, where the frame
+        // leaves them to the bar (it runs the full width at the foot); the
+        // controls stand inside them. The bottom one through a keyboard
+        // too, as the tabs keep it.
+        child: SafeArea(
+          top: false,
+          maintainBottomViewPadding: true,
+          child: SizedBox(
+            height: compact
+                ? WaxShellMetrics.deckBarCompactHeight
+                : WaxShellMetrics.deckBarExpandedHeight,
+            // Its own Material, inside the surface rather than around it:
+            // the bar is mounted straight into the shell's frame, where
+            // there is none, and the ink under the house controls has to
+            // land on top of the bar's own background rather than behind
+            // it.
+            child: Material(
+              type: MaterialType.transparency,
+              animationDuration: Duration.zero,
+              child: compact
+                  ? _compact(context, colors)
+                  : _expanded(context, colors),
+            ),
           ),
         ),
       ),
@@ -1026,80 +1034,85 @@ class DeckBarOffer extends StatelessWidget {
           color: colors.surface1,
           border: Border(top: BorderSide(color: colors.hairline)),
         ),
-        child: SizedBox(
-          // The height the live bar would stand at in this window, not
-          // the compact one everywhere. The offer occupies the deck
-          // slot and is replaced by the bar the moment it is accepted,
-          // so a fixed 64 was a strip that grew to 88 under the
-          // listener's cursor - and, at sidebar width, an offer visibly
-          // shorter than the thing it was offering to bring back.
-          height: (sizeClass ?? WaxSizeClass.of(context)).hasSidebar
-              ? WaxShellMetrics.deckBarExpandedHeight
-              : WaxShellMetrics.deckBarCompactHeight,
-          // See [DeckBar]: the offer stands in the same slot, with the
-          // same lack of a Material around it.
-          child: Material(
-            type: MaterialType.transparency,
-            animationDuration: Duration.zero,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
-              child: Row(
-                children: <Widget>[
-                  ArtworkImage(
-                    size: 48,
-                    artwork: artwork,
-                    monogram: title,
-                    placeholder: domain == WaxDomain.radio
-                        ? ArtworkPlaceholder.wordmark
-                        : ArtworkPlaceholder.initials,
-                    shape: shape,
-                    domain: domain,
-                  ),
-                  const SizedBox(width: WaxSpace.s12),
-                  Expanded(
-                    child: ExcludeSemantics(
-                      // The bar's own title block, down to the
-                      // scrolling: what is offered back is named the
-                      // way what is playing is named, so accepting the
-                      // offer changes the buttons and nothing else.
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          WaxMarqueeText(
-                            title,
-                            style: WaxType.titleItem.copyWith(
-                              color: colors.textPrimary,
-                            ),
-                          ),
-                          if (caption != null)
+        // See [DeckBar]: the insets under the surface.
+        child: SafeArea(
+          top: false,
+          maintainBottomViewPadding: true,
+          child: SizedBox(
+            // The height the live bar would stand at in this window, not
+            // the compact one everywhere. The offer occupies the deck
+            // slot and is replaced by the bar the moment it is accepted,
+            // so a fixed 64 was a strip that grew to 88 under the
+            // listener's cursor - and, at sidebar width, an offer visibly
+            // shorter than the thing it was offering to bring back.
+            height: (sizeClass ?? WaxSizeClass.of(context)).hasSidebar
+                ? WaxShellMetrics.deckBarExpandedHeight
+                : WaxShellMetrics.deckBarCompactHeight,
+            // See [DeckBar]: the offer stands in the same slot, with the
+            // same lack of a Material around it.
+            child: Material(
+              type: MaterialType.transparency,
+              animationDuration: Duration.zero,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
+                child: Row(
+                  children: <Widget>[
+                    ArtworkImage(
+                      size: 48,
+                      artwork: artwork,
+                      monogram: title,
+                      placeholder: domain == WaxDomain.radio
+                          ? ArtworkPlaceholder.wordmark
+                          : ArtworkPlaceholder.initials,
+                      shape: shape,
+                      domain: domain,
+                    ),
+                    const SizedBox(width: WaxSpace.s12),
+                    Expanded(
+                      child: ExcludeSemantics(
+                        // The bar's own title block, down to the
+                        // scrolling: what is offered back is named the
+                        // way what is playing is named, so accepting the
+                        // offer changes the buttons and nothing else.
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
                             WaxMarqueeText(
-                              caption,
-                              style: WaxType.caption.copyWith(
-                                color: colors.textSecondary,
+                              title,
+                              style: WaxType.titleItem.copyWith(
+                                color: colors.textPrimary,
                               ),
                             ),
-                        ],
+                            if (caption != null)
+                              WaxMarqueeText(
+                                caption,
+                                style: WaxType.caption.copyWith(
+                                  color: colors.textSecondary,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: WaxSpace.s8),
-                  WaxButton(
-                    label: resumeLabel ?? l10n.deckBarResume,
-                    kind: WaxButtonKind.tonal,
-                    icon: WaxIcons.play,
-                    onPressed: onResume,
-                    semanticsId: resumeSemanticsId,
-                  ),
-                  WaxIconButton(
-                    glyph: WaxIcons.close,
-                    label: l10n.deckBarNotNow,
-                    size: 18,
-                    onPressed: onDismiss,
-                    semanticsId: dismissSemanticsId,
-                  ),
-                ],
+                    const SizedBox(width: WaxSpace.s8),
+                    WaxButton(
+                      label: resumeLabel ?? l10n.deckBarResume,
+                      kind: WaxButtonKind.tonal,
+                      icon: WaxIcons.play,
+                      onPressed: onResume,
+                      semanticsId: resumeSemanticsId,
+                    ),
+                    WaxIconButton(
+                      glyph: WaxIcons.close,
+                      label: l10n.deckBarNotNow,
+                      size: 18,
+                      onPressed: onDismiss,
+                      semanticsId: dismissSemanticsId,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

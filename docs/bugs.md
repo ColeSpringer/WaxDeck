@@ -18,10 +18,6 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 [10-31-26] When listening to music, you can get audiobooks as part of your queue. When listening to music, you should get music (same with the others).
 
-[11-04-26] When editing artist and using the rename feature, the save does not fully work. It updates in the edit screen but when you go back to the specific artist screen it has not updated the name. It does seem to work for the actual files associated with the artist, just not within the UI? Maybe it's a cache problem? UPDATE: It was updated after i went to different screens and came back to the artist section under music. It probably is a cache issue.
-
-[11-04-26] Artist thumbnails are not updating. I thought this was working before?
-
 [11-04-26] Tracks downloaded from youtube are not given an album if they are not matched with a musicbrainz source. It should default to something like (title - Single) or something like that for the album when download from youtube and with no match from musicbrainz (including if a user skips the matching step or just marks as unoffical).
 
 [11-04-26] When trying to download a music playlist from youtube, there is not good feedback. If you go to the tasks section, it just says URL download and "Running" but you can't see exactly what its doing or even any progess. You also can't tell if its stuck or doing anything at all. There is also no option to cancel the action (this specifically might be a bigger problem outside of just playlist download and probably is the case for all tasks). NOTE: after waiting awhile i think it didn't work at all. Again, I can't see it updating anything but the playlist is not very large and there is no notice of any of the tracks having been downloaded. (playlist used: https://www.youtube.com/playlist?list=PLdmuawL0MnTd9DVQjap6ZEPHC8gYwUS2C). UPDATE: the playlist was private. we should not even accept private playlists and should give an obvious error message or popup. We should only accept lists we have access to (and videos). we should still have been able to cancel the neverending task (and had better feedback/visuals on what was happening, errors, stuck, whatever). UPDATE 2: The download eventually failed with the error message "URL is a playlist; use Enumerate". Pointless message. Doesn't tell the user anything useful.
@@ -31,5 +27,3 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 [11-04-26] In listening stats under top we should include small images next to the list items. At least for artists and albums. Also, what the hell is shows supposed to be? Where are books and podcasts?
 
 [11-04-26] "Treat as audiobook" seems to only be an option for music files but the option is not given to all of them? If its an audiobook users should just be selecting that on import or download. Probably get rid of this
-
-[11-13-26] Going to genre, clicking on the "No genre" genre, editing a track to give it a genre, then hitting the in app back button, you will still see the track you gave a genre to in the no genre category.

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/metadata/artwork_manager.dart' show ArtSlot;
+import 'package:waxdeck/src/artwork/art_slot.dart';
 import 'package:waxdeck/src/player/player_artwork_set.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 

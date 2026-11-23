@@ -63,6 +63,9 @@ mixin FakePlayback on FakeRepositoryState implements PlaybackApi {
   /// The hls each [getPlayInfo] call carried, in order.
   final List<bool?> playInfoHls = [];
 
+  /// The voice boost asks each [getPlayInfo] call carried, in order.
+  final List<({bool? voiceBoost, bool? voiceBoostDefault})> playInfoBoosts = [];
+
   /// Whether a call that says it plays HLS is handed a re-encode as the
   /// item's own HLS presentation; false answers it as a server whose
   /// engine renders no HLS does.
@@ -94,6 +97,7 @@ mixin FakePlayback on FakeRepositoryState implements PlaybackApi {
     String pid, {
     int? positionMs,
     bool? voiceBoost,
+    bool? voiceBoostDefault,
     int? maxBitrateKbps,
     bool? hls,
   }) async {
@@ -102,6 +106,10 @@ mixin FakePlayback on FakeRepositoryState implements PlaybackApi {
     playInfoCalls.add((pid: pid, positionMs: positionMs));
     playInfoMaxBitrates.add(maxBitrateKbps);
     playInfoHls.add(hls);
+    playInfoBoosts.add((
+      voiceBoost: voiceBoost,
+      voiceBoostDefault: voiceBoostDefault,
+    ));
     await playInfoGate?.future;
     if (playInfoFailures.isNotEmpty) {
       final failure = playInfoFailures.removeAt(0);

@@ -568,23 +568,24 @@ func (c *conn) connectTransport(transportID string) error {
 }
 
 // mediaCall runs one media namespace round trip and returns the first
-// status of the MEDIA_STATUS reply (nil when the reply carries none).
-func (c *conn) mediaCall(ctx context.Context, dest string, build func(requestID int) any) (*mediaStatus, error) {
+// status of the MEDIA_STATUS reply (nil when the reply carries none),
+// with the reply's place in arrival order.
+func (c *conn) mediaCall(ctx context.Context, dest string, build func(requestID int) any) (*mediaStatus, uint64, error) {
 	in, err := c.roundTrip(ctx, dest, NamespaceMedia, build)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if err := replyError(in.raw); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	var msg mediaStatusMessage
 	if err := json.Unmarshal(in.raw, &msg); err != nil {
-		return nil, fmt.Errorf("castv2: decoding media status: %w", err)
+		return nil, 0, fmt.Errorf("castv2: decoding media status: %w", err)
 	}
 	if len(msg.Status) == 0 {
-		return nil, nil
+		return nil, in.seq, nil
 	}
-	return &msg.Status[0], nil
+	return &msg.Status[0], in.seq, nil
 }
 
 // pollMediaStatus fires a GET_STATUS without waiting for the reply,

@@ -438,8 +438,16 @@ components:
     ListenLogEntry:
       type: object
       description: One recorded listen session.
-      required: [pid, mediaType, startedAt, msPlayed, finished, client, source]
+      required: [sessionId, pid, mediaType, startedAt, msPlayed, finished, client, source]
       properties:
+        sessionId:
+          type: string
+          description: >
+            The session's own id, unique within the caller's log: the
+            one its client reported, or one the server minted for a
+            session it recorded itself (a scrobble, an import, a radio
+            tune-in).
+          example: 01JZX5N8QW3F4V9T2B7KD3M9R6
         pid:
           type: string
           description: The item that was played.

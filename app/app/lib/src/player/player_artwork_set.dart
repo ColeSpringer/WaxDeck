@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../artwork/art_slot.dart';
 import '../artwork/artwork_providers.dart';
-import '../metadata/artwork_manager.dart' show ArtSlot;
 
 /// One picture the full-screen player can turn to: a slot the item or its
 /// album holds.

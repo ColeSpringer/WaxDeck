@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/stats/stats_screen.dart';
+import 'package:waxdeck/src/sync/catalog_reads.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -295,6 +296,7 @@ void main() {
     final repo = _statsRepo()
       ..listenLog = [
         ListenLogEntry(
+          sessionId: 'log-1',
           pid: 'tr-01JZX5N8QW3F4V9T2B7KDLOG001',
           title: 'Prancing Pony Blues',
           artist: 'The Bree Trio',
@@ -306,6 +308,7 @@ void main() {
           source: 'live',
         ),
         ListenLogEntry(
+          sessionId: 'log-2',
           pid: 'tr-01JZX5N8QW3F4V9T2B7KDLOG002',
           title: 'Pipeweed Economics',
           artist: 'Barliman Butterbur',
@@ -342,6 +345,45 @@ void main() {
     expect(find.text('Pipeweed Economics'), findsOneWidget);
   });
 
+  testWidgets('two listens of one item from one start and one client are '
+      'two rows', (tester) async {
+    // An untimed scrobble naming a song twice records two sessions alike
+    // in all but their ids.
+    final repo = _statsRepo()
+      ..listenLog = [
+        for (final id in ['twice-a', 'twice-b'])
+          ListenLogEntry(
+            sessionId: id,
+            pid: 'tr-01JZX5N8QW3F4V9T2B7KDLOG001',
+            title: 'Prancing Pony Blues',
+            artist: 'The Bree Trio',
+            mediaType: StatsMediaType.music,
+            startedAt: DateTime.utc(2026, 7, 20, 12),
+            msPlayed: 214000,
+            finished: true,
+            client: 'subsonic',
+            source: 'live',
+          ),
+      ];
+    final container = appContainer(repo: repo);
+    await pumpApp(tester, const StatsScreen(), container: container);
+
+    await tester.scrollUntilVisible(
+      find.bySemanticsIdentifier(SemanticsIds.openListenLog),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.openListenLog));
+    await tester.pumpAndSettle();
+    expect(find.text('Prancing Pony Blues'), findsNWidgets(2));
+
+    // Read again where it stands, as a catalog write's sweep does.
+    container.read(catalogQuietFanOutProvider).sweep();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Prancing Pony Blues'), findsNWidgets(2));
+  });
+
   testWidgets('the log draws a station as radio', (tester) async {
     // A radio row carries no client - the server measured it rather
     // than a device reporting it - and its media type is one the item
@@ -350,6 +392,7 @@ void main() {
     final repo = _statsRepo()
       ..listenLog = [
         ListenLogEntry(
+          sessionId: 'log-3',
           pid: 'rs-01JZX5N8QW3F4V9T2B7KDSTN001',
           title: 'Bree Radio',
           mediaType: StatsMediaType.radio,

@@ -222,6 +222,7 @@ class _PerCaller extends FakeRepository {
   }) async => ListenLogPage(
     sessions: [
       ListenLogEntry(
+        sessionId: 's-$_who',
         pid: 'tr-$_who',
         mediaType: StatsMediaType.music,
         startedAt: _at,

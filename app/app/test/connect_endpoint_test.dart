@@ -625,6 +625,41 @@ void main() {
     );
   });
 
+  test('a routed rate is answered once the rate changed, not after the '
+      'show\'s speed is stored', () async {
+    // The controlling device gives up on a command after ten seconds, and
+    // a settings store can wait on a server slower than that.
+    const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
+    const episodePid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
+    final h = _build(
+      items: [testEpisode(episodePid)],
+      seed: (repo) => repo
+        ..addSubscription(testShow(showPid))
+        ..episodesByShow[showPid] = [testEpisode(episodePid)],
+    );
+    await _cmd(
+      h,
+      'load',
+      args: {
+        'itemPids': [episodePid],
+        'index': 0,
+      },
+    );
+    final stored = Completer<void>();
+    h.repo.putSubscriptionSettingsGate = stored;
+
+    await _cmd(h, 'set-rate', id: 'e2', args: {'rate': 1.5});
+    await pumpEventQueue();
+    final result = _ofType(h.sent, 'cmd-result').last;
+    expect(result['id'], 'e2');
+    expect(result['ok'], isTrue);
+    expect(h.engine.speed, closeTo(1.5, 0.001));
+
+    stored.complete();
+    await pumpEventQueue();
+    expect(h.repo.subscriptions[showPid]?.settings.speed, closeTo(1.5, 0.001));
+  });
+
   test('a routed rate on music writes nothing back', () async {
     // Music has no stored speed, so a rate set on a track lapses at the
     // next track exactly as a locally set one does.

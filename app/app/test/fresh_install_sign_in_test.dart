@@ -107,7 +107,12 @@ class _Server implements HttpClientAdapter {
       ('GET', '/auth/session') => (200, {'authenticated': false}),
       ('POST', '/auth/login') => (
         200,
-        {'user': _user, 'token': 'token', 'csrfToken': 'csrf'},
+        {
+          'user': _user,
+          'token': 'token',
+          'csrfToken': 'csrf',
+          'sessionId': 'se-1',
+        },
       ),
       ('GET', '/player/sessions/history') => (200, {'sessions': <Object?>[]}),
       _ => (404, {'code': 'not-found', 'message': 'not found'}),

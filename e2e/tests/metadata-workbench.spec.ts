@@ -9,13 +9,17 @@ import { SemanticsIds } from './semantics-ids';
 
 type EntityFold = components['schemas']['EntityFold'];
 
-// The release workbench journey: import an album of this run's own
-// through the upload pipeline, open its workbench, edit one member in
-// the pane, bulk-write the pair, and rename the release - which
-// regroups its members onto a fresh album pid and takes the workbench
-// with them. Everything mutated here entered the library through this
-// spec's own account, so no shared fixture is renamed out from under a
-// sibling worker.
+// Two journeys over an album of this run's own, imported through the
+// upload pipeline. The release workbench: open it, edit one member in
+// the pane, bulk-write the pair, and rename the release in place. The
+// artist: credit the pair to a name of the run's own, rename that artist
+// from their page, and read the new name on the page and in the index
+// behind it. Everything mutated here entered the library through this
+// spec, so no shared fixture is renamed out from under a sibling worker.
+
+// In order, in one worker: the second journey takes the pair the first
+// imported. Not serial mode: either reads green or red on its own.
+test.describe.configure({ mode: 'default' });
 
 const uploadSrc = (name: string) =>
   path.join(__dirname, '..', '.run', 'upload-src', name);
@@ -115,6 +119,13 @@ async function importOwnAlbum(
   return { albumPid, trackPids };
 }
 
+/// The run's own pair, imported once a worker: a second import of the
+/// same audio is a duplicate the stack holds for review. A journey run
+/// alone imports it itself.
+let own: Promise<{ albumPid: string; trackPids: string[] }> | undefined;
+const ownAlbum = (app: App, stamp: string) =>
+  (own ??= importOwnAlbum(app, stamp));
+
 /// Every folded name, all pages of it.
 async function allFolds(app: App): Promise<EntityFold[]> {
   const folds: EntityFold[] = [];
@@ -132,7 +143,7 @@ async function allFolds(app: App): Promise<EntityFold[]> {
 test('the workbench edits a member, bulk-writes the pair, and renames the release in place', async ({ app, page }) => {
   test.setTimeout(J.journey);
   const stamp = Date.now().toString(36);
-  const { albumPid, trackPids } = await importOwnAlbum(app, stamp);
+  const { albumPid, trackPids } = await ownAlbum(app, stamp);
 
   await app.metadata.openWorkbench(albumPid);
   // The release opens on its own pane: the album entity form.
@@ -311,6 +322,83 @@ test('the workbench edits a member, bulk-writes the pair, and renames the releas
   if (groupFolds.length > 0) {
     await app.api.post('/library/folds/unfold', {
       data: { entityType: 'release-group', keys: groupFolds.map((f) => f.key) },
+    });
+  }
+});
+
+test('an artist renamed from their page reads under the new name on the page and in the index behind it', async ({ app }) => {
+  test.setTimeout(J.journey);
+  const stamp = Date.now().toString(36);
+  const { trackPids } = await ownAlbum(app, stamp);
+
+  // An artist of this run's own, since an artist is keyed by name and
+  // the fixture's is every run's: the pair is credited to a name only
+  // this run has, which makes the artist the rename below is free to
+  // move. Named to file at the top of the index.
+  const artist = `A Workbench Artist ${stamp}`;
+  const artistRenamed = `A Workbench Renamed ${stamp}`;
+  for (const pid of trackPids) {
+    await retryCatalogBusy(() =>
+      app.api.patch('/items/{pid}/metadata', {
+        path: { pid },
+        data: { fields: { artist } },
+      }),
+    );
+  }
+  const creditOf = async (pid: string) =>
+    (await app.api.tryGet('/items/{pid}', { path: { pid } }))?.artist ?? '';
+  await expect
+    .poll(() => creditOf(trackPids[0]), {
+      timeout: T.fetch,
+      message: 'the pair should be credited to the run\'s own artist',
+    })
+    .toBe(artist);
+
+  // Index, the artist's page from its row, the editor from the page's
+  // overflow: the page was opened with the row's label, and both it and
+  // the index stay mounted under the editor.
+  await app.nav.enter('artists');
+  await app.music.openArtist(artist);
+  await app.music.editEntity(app.metadata.entityEditor());
+  const renameField = app.metadata.control(SemanticsIds.entityRenameField('name'));
+  await app.metadata.intoView(renameField);
+  await app.metadata.type(renameField, artistRenamed);
+  const renameApply = app.metadata.control(SemanticsIds.entityRenameApply);
+  const renameConfirm = app.metadata.control(SemanticsIds.entityRenameConfirm);
+  await app.metadata.intoView(renameApply);
+  await clickThrough(renameApply, renameConfirm);
+  await clickToward(renameConfirm, { gone: renameConfirm });
+  for (const pid of trackPids) {
+    await expect
+      .poll(() => creditOf(pid), {
+        timeout: T.fetch,
+        message: 'the rename should move every crediting track',
+      })
+      .toBe(artistRenamed);
+  }
+
+  // Back on the artist's page: titled by the artist as they are now,
+  // not by the label the page was opened with.
+  await app.nav.arrow(app.music.entityShuffle());
+  await expect(app.music.text(artistRenamed)).toBeVisible({ timeout: T.assert });
+  await expect(app.music.text(artist)).toHaveCount(0, { timeout: T.assert });
+
+  // And the index behind it lists them under the new name.
+  await app.nav.arrow(app.music.control(SemanticsIds.indexSort));
+  await expect(
+    app.music.indexRow(artistRenamed),
+    'the index row should take the new name',
+  ).toHaveCount(1, { timeout: T.fetch });
+  await expect(app.music.indexRow(artist)).toHaveCount(0, { timeout: T.assert });
+
+  // The rename locks what it writes, so the old name folds into the
+  // artist; released, as the release's was.
+  const artistFolds = (await allFolds(app)).filter(
+    (f) => f.entityType === 'artist' && f.entityName === artistRenamed,
+  );
+  if (artistFolds.length > 0) {
+    await app.api.post('/library/folds/unfold', {
+      data: { entityType: 'artist', keys: artistFolds.map((f) => f.key) },
     });
   }
 });

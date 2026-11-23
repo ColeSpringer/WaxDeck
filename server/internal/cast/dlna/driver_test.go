@@ -186,6 +186,95 @@ func TestDriverPositionAndVolumeEvents(t *testing.T) {
 	}
 }
 
+// TestDriverStampsTheLoadEachReportDescribes: a report the poll made
+// before a reload can reach the session after the reload set the
+// position itself, so each report names its load and the driver says
+// which load is the newest, for the session to drop the rest.
+func TestDriverStampsTheLoadEachReportDescribes(t *testing.T) {
+	r := testrenderer.Start(t)
+	d := dialDriver(t, r)
+	ctx := context.Background()
+	items := testItems(2)
+	lc, ok := any(d).(connect.LoadCounter)
+	if !ok {
+		t.Fatal("the driver does not number its loads")
+	}
+
+	if err := d.Load(ctx, items, 0, 0, true); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	first := waitEvent(t, d, "playing the first load", func(ev connect.DriverEvent) bool { return ev.Playing && ev.Index == 0 })
+	if err := d.Load(ctx, items, 1, 0, true); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	second := waitEvent(t, d, "playing the reload", func(ev connect.DriverEvent) bool { return ev.Playing && ev.Index == 1 })
+	if first.Load == 0 || first.Load >= lc.CurrentLoad() || second.Load != lc.CurrentLoad() {
+		t.Fatalf("reports name loads %d and %d with load %d current, want the first older and the second current",
+			first.Load, second.Load, lc.CurrentLoad())
+	}
+}
+
+// TestDriverPollFromBeforeASeekNamesTheLoadBefore: a poll that read the
+// renderer before a seek can report after the session wrote the seek's
+// position, so it must not be stamped as describing what the seek made.
+func TestDriverPollFromBeforeASeekNamesTheLoadBefore(t *testing.T) {
+	r := testrenderer.Start(t)
+	d := dialDriver(t, r)
+	ctx := context.Background()
+	if err := d.Load(ctx, testItems(1), 0, 0, true); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	waitEvent(t, d, "playing", func(ev connect.DriverEvent) bool { return ev.Playing })
+
+	reached, release := r.HoldNextPositionRead()
+	t.Cleanup(release)
+	select {
+	case <-reached:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the poll never read the position")
+	}
+	for len(d.Events()) > 0 {
+		<-d.Events()
+	}
+	if err := d.SeekTo(ctx, 20_000); err != nil {
+		t.Fatalf("seek: %v", err)
+	}
+	release()
+	ev := waitEvent(t, d, "the held poll's report", func(connect.DriverEvent) bool { return true })
+	if ev.PositionMS >= 20_000 {
+		t.Fatalf("the held poll reads %dms, want the playhead from before the seek", ev.PositionMS)
+	}
+	if ev.Load >= d.CurrentLoad() {
+		t.Fatalf("a poll that read the renderer before the seek names load %d with %d current, want an older one",
+			ev.Load, d.CurrentLoad())
+	}
+}
+
+// TestDriverFailedLoadKeepsReportingWhatPlays: a renderer that refuses a
+// URI plays on what it had, and the poll is what tells the session so,
+// that item's end included.
+func TestDriverFailedLoadKeepsReportingWhatPlays(t *testing.T) {
+	r := testrenderer.Start(t)
+	d := dialDriver(t, r)
+	ctx := context.Background()
+	items := testItems(2)
+	if err := d.Load(ctx, items[:1], 0, 0, true); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	waitEvent(t, d, "playing", func(ev connect.DriverEvent) bool { return ev.Playing })
+
+	r.FaultNextSetURI(714, "Illegal MIME-type")
+	if err := d.Load(ctx, items[1:], 0, 0, true); err == nil {
+		t.Fatal("a load the renderer refused succeeded")
+	}
+	r.Advance(10 * time.Second)
+	waitEvent(t, d, "a report on the item still playing", func(ev connect.DriverEvent) bool {
+		return ev.Playing && ev.PositionMS >= 10_000
+	})
+	r.Advance(21 * time.Second)
+	waitEvent(t, d, "the item still playing finishing", func(ev connect.DriverEvent) bool { return ev.Finished })
+}
+
 func TestDriverSelfAdvanceAndFinish(t *testing.T) {
 	r := testrenderer.Start(t)
 	d := dialDriver(t, r)

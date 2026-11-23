@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/trash_screen.dart';
+import 'package:waxdeck/src/music/entity_facts.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -22,6 +25,15 @@ class _HeldRestore extends FakeRepository {
     asked++;
     await release.future;
     return super.restoreTrashEntry(trashId);
+  }
+}
+
+final class _Invalidations extends ProviderObserver {
+  final seen = <ProviderBase<Object?>>{};
+
+  @override
+  void didDisposeProvider(ProviderObserverContext context) {
+    seen.add(context.provider);
   }
 }
 
@@ -311,4 +323,37 @@ void main() {
     await tester.pumpAndSettle();
     expect(empty().busy, isFalse);
   });
+
+  // What leaves the trash for good is a catalog write: a read held open
+  // elsewhere, the files an item lists among them, follows it.
+  for (final (what, purge) in [
+    ('emptying the trash', false),
+    ('purging one entry', true),
+  ]) {
+    testWidgets('$what has every open read of the catalog read again', (
+      tester,
+    ) async {
+      final repo = FakeRepository();
+      repo.trashEntries.addAll([_entry('ts-1'), _entry('ts-2')]);
+      final swept = _Invalidations();
+      final container = appContainer(repo: repo, observers: [swept]);
+      final files = itemFilesProvider('tr-1');
+      container
+        ..listen(trashProvider, (_, _) {})
+        ..listen(files, (_, _) {});
+      await tester.pump();
+      swept.seen.clear();
+
+      final trash = container.read(trashProvider.notifier);
+      if (purge) {
+        await trash.purge('ts-1');
+      } else {
+        await trash.empty();
+      }
+
+      expect(swept.seen, containsAll([trashProvider, files]));
+      // The reads the sweep prompted.
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+  }
 }

@@ -116,6 +116,10 @@ type driver struct {
 	closed     bool
 	cancelPoll context.CancelFunc
 	pollDone   chan struct{}
+	// load numbers the loads and seeks the renderer took, stamped on
+	// every report so the session can drop what describes playback one
+	// of them has since moved.
+	load uint64
 }
 
 // Idle reports whether the renderer is free to be taken over. Setting
@@ -154,22 +158,33 @@ func (d *driver) Load(ctx context.Context, items []connect.MediaItem, index int,
 	if index < 0 || index >= len(items) {
 		return fmt.Errorf("dlna: load index %d out of range for %d items", index, len(items))
 	}
-	d.stopPoll()
+	polling := d.stopPoll()
 	d.mu.Lock()
-	if d.closed {
-		d.mu.Unlock()
+	closed := d.closed
+	d.mu.Unlock()
+	if closed {
 		return fmt.Errorf("dlna: driver is closed")
 	}
+
+	item := items[index]
+	if err := d.cl.setURI(ctx, item.URL, didlLite(item)); err != nil {
+		// Refused, the renderer plays on what it had, and the poll goes
+		// on reporting that under the load it already was.
+		if polling {
+			d.startPoll()
+		}
+		return err
+	}
+	d.mu.Lock()
 	d.items = slices.Clone(items)
 	d.index = index
 	d.played = false
 	d.finished = false
+	d.load++
 	d.mu.Unlock()
-
-	item := items[index]
-	if err := d.cl.setURI(ctx, item.URL, didlLite(item)); err != nil {
-		return err
-	}
+	// The renderer holds this load now, so it is what the poll reports
+	// whatever fails next.
+	defer d.startPoll()
 	if play {
 		if err := d.cl.play(ctx); err != nil {
 			return err
@@ -181,7 +196,6 @@ func (d *driver) Load(ctx context.Context, items []connect.MediaItem, index int,
 		}
 	}
 	d.setNext(ctx, items, index)
-	d.startPoll()
 	return nil
 }
 
@@ -203,7 +217,15 @@ func (d *driver) Pause(ctx context.Context) error { return d.cl.pause(ctx) }
 func (d *driver) Stop(ctx context.Context) error  { return d.cl.stop(ctx) }
 
 func (d *driver) SeekTo(ctx context.Context, positionMS int64) error {
-	return d.cl.seek(ctx, positionMS)
+	if err := d.cl.seek(ctx, positionMS); err != nil {
+		return err
+	}
+	// A seek moves playback as a load does: a poll that began before the
+	// renderer took it reports the playhead it left.
+	d.mu.Lock()
+	d.load++
+	d.mu.Unlock()
+	return nil
 }
 
 func (d *driver) SetVolume(ctx context.Context, volume float64) error {
@@ -217,6 +239,13 @@ func (d *driver) SetRate(context.Context, float64) error {
 }
 
 func (d *driver) Events() <-chan connect.DriverEvent { return d.events }
+
+// CurrentLoad is the number of the newest load or seek the renderer took.
+func (d *driver) CurrentLoad() uint64 {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.load
+}
 
 // AcceptedFormats reports the renderer's Sink media types, so the
 // resolver can serve something better than the mp3 floor when the
@@ -258,8 +287,8 @@ func (d *driver) startPoll() {
 
 // stopPoll cancels the running poll worker and waits it out, so the
 // caller can mutate driver state or close the events channel without
-// racing an emit.
-func (d *driver) stopPoll() {
+// racing an emit. It reports whether one was running.
+func (d *driver) stopPoll() bool {
 	d.mu.Lock()
 	cancel, done := d.cancelPoll, d.pollDone
 	d.cancelPoll, d.pollDone = nil, nil
@@ -270,6 +299,7 @@ func (d *driver) stopPoll() {
 	if done != nil {
 		<-done
 	}
+	return cancel != nil
 }
 
 // poll observes the renderer once per interval until canceled. Five
@@ -307,6 +337,11 @@ func (d *driver) poll(ctx context.Context) {
 // item list is this driver's job unless the renderer honored the next
 // slot itself.
 func (d *driver) observe(ctx context.Context, tick int) (connect.DriverEvent, error) {
+	// Stamped before the reads: what they return may predate a seek the
+	// renderer takes while they are on the wire.
+	d.mu.Lock()
+	load := d.load
+	d.mu.Unlock()
 	state, err := d.cl.transportState(ctx)
 	if err != nil {
 		return connect.DriverEvent{}, err
@@ -366,6 +401,7 @@ func (d *driver) observe(ctx context.Context, tick int) (connect.DriverEvent, er
 		Index:      index,
 		PositionMS: positionMS,
 		Finished:   justFinished,
+		Load:       load,
 	}
 
 	if tick%volumeEvery == 0 {

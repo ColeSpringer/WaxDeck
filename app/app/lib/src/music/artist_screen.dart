@@ -58,8 +58,8 @@ class ArtistScreen extends ConsumerWidget {
 
   final String pid;
 
-  /// The name the caller had. A hint: a shared link carries none and the
-  /// screen names itself from the tracks it loads.
+  /// The name the caller had, read when the page was opened: it holds
+  /// the title until the artist's card answers, and where it does not.
   final String? label;
 
   MusicListing get _listing => (
@@ -79,10 +79,10 @@ class ArtistScreen extends ConsumerWidget {
     final items = state.value?.items ?? const <ItemSummary>[];
     // Never from an item. A track's artist field is its *credit* - "Dom
     // Kennedy feat. Ty Dolla $ign" - and the first row of a catalogue
-    // is no more this artist's name than any other row is. The caller's
-    // label where there is one; the entity's own card where a link
-    // arrived without it.
-    final artist = label ?? ref.watch(entityCardProvider(pid)).value?.title;
+    // is no more this artist's name than any other row is. The entity's
+    // own card, which a rename reaches; the caller's label until it
+    // answers.
+    final artist = ref.watch(entityCardProvider(pid)).value?.title ?? label;
     final name = artist ?? l10n.musicArtistUnknownName;
     // The listing answers an empty page for any key, so an empty one says
     // nothing about whether the artist is there; their card does, and the

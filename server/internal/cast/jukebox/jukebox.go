@@ -143,7 +143,7 @@ func (d *driver) playLoop(ctx context.Context, gen int) {
 			d.playing = false
 			d.mu.Unlock()
 			if finished {
-				d.emit(connect.DriverEvent{At: time.Now(), Playing: false, Index: last, PositionMS: endMS, Finished: true})
+				d.emitFrom(ctx, connect.DriverEvent{At: time.Now(), Playing: false, Index: last, PositionMS: endMS, Finished: true})
 			}
 			return
 		}
@@ -158,7 +158,7 @@ func (d *driver) playLoop(ctx context.Context, gen int) {
 		}
 		if err != nil {
 			d.cfg.Log.Warn("jukebox item failed", "pid", item.PID, "err", err)
-			d.emit(connect.DriverEvent{At: time.Now(), Playing: false, Index: index, Fatal: true, Err: err})
+			d.emitFrom(ctx, connect.DriverEvent{At: time.Now(), Playing: false, Index: index, Fatal: true, Err: err})
 			return
 		}
 		d.mu.Lock()
@@ -174,7 +174,7 @@ func (d *driver) playLoop(ctx context.Context, gen int) {
 		// nothing loaded, and the loop's own finished event above is
 		// what says the queue ran out.
 		if next < loaded {
-			d.emit(connect.DriverEvent{At: time.Now(), Playing: true, Index: next, PositionMS: 0})
+			d.emitFrom(ctx, connect.DriverEvent{At: time.Now(), Playing: true, Index: next, PositionMS: 0})
 		}
 	}
 }
@@ -385,7 +385,7 @@ func (d *driver) pump(ctx context.Context, src io.Reader, dst io.Writer, startMS
 				d.mu.Unlock()
 				if time.Since(lastEvent) >= time.Second {
 					lastEvent = time.Now()
-					d.emit(connect.DriverEvent{At: time.Now(), Playing: true, Index: index, PositionMS: pos})
+					d.emitFrom(ctx, connect.DriverEvent{At: time.Now(), Playing: true, Index: index, PositionMS: pos})
 				}
 			}
 		}
@@ -466,12 +466,19 @@ func scalePCM16(b []byte, vol float64) {
 	}
 }
 
-func (d *driver) emit(ev connect.DriverEvent) {
+func (d *driver) emit(ev connect.DriverEvent) { d.emitFrom(context.Background(), ev) }
+
+// emitFrom stamps ev with the current load and delivers it, unless ctx,
+// a play loop's, has ended: Load cancels the loop it replaces under the
+// same lock it bumps gen under, so what that loop reports after is
+// never stamped as the new load's.
+func (d *driver) emitFrom(ctx context.Context, ev connect.DriverEvent) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.closed {
+	if d.closed || ctx.Err() != nil {
 		return
 	}
+	ev.Load = uint64(d.gen)
 	select {
 	case d.events <- ev:
 	default:
@@ -546,6 +553,13 @@ func (d *driver) SetRate(context.Context, float64) error {
 }
 
 func (d *driver) Events() <-chan connect.DriverEvent { return d.events }
+
+// CurrentLoad is the number of the newest Load begun; a seek is one.
+func (d *driver) CurrentLoad() uint64 {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return uint64(d.gen)
+}
 
 func (d *driver) Close() error {
 	d.mu.Lock()

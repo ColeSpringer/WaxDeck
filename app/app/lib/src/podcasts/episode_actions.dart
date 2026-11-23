@@ -9,6 +9,7 @@ import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../shell/pending_actions.dart';
 import '../shell/shell_messages.dart';
+import '../sync/catalog_writes.dart';
 import 'podcast_shelves.dart';
 import 'podcasts_controller.dart';
 
@@ -143,15 +144,17 @@ class EpisodeActions {
     final l10n = context.l10n;
     final (:container, :messenger) = _asked(context);
     final pid = episode.pid;
+    final writes = container.read(catalogWritesProvider);
     try {
       if (showPid != null) {
+        // The listing's own remove says it landed.
         await container
             .read(episodesProvider(showPid!).notifier)
             .removeEpisodeDownload(pid);
       } else {
         await container.read(repositoryProvider).removeEpisodeDownload(pid);
+        writes.landed();
       }
-      _refreshOthers(container, episode);
       _report(messenger, l10n.podcastRemovedFromServer);
     } on WaxDeckApiException catch (e) {
       _report(messenger, explainError(l10n, e));

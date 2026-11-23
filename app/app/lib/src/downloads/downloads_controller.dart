@@ -5,6 +5,8 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../auth/auth_controller.dart';
+import '../providers.dart';
 import '../settings/client_prefs.dart';
 import '../sync/sync_providers.dart';
 
@@ -116,13 +118,19 @@ class DownloadsController extends AsyncNotifier<DownloadsState> {
     if (port == null) return DownloadsState.empty;
     final db = ref.watch(mirrorDatabaseProvider);
     final sync = ref.watch(syncEngineProvider);
+    // A pinned cover is drawn under the address the server has now, and
+    // by the account it was pinned for: a sign-out clears the pins.
+    ref.watch(signedInAccountProvider);
+    final artUrlFor = ref.watch(repositoryProvider).artUrlFor;
     final records = await port.stored();
     final entries = <DownloadEntry>[];
     for (final record in records) {
       entries.add(
         DownloadEntry(
           record: record,
-          item: db == null ? null : await mirrorItemByPid(db, record.pid),
+          item: db == null
+              ? null
+              : await mirrorItemByPid(db, record.pid, artUrlFor: artUrlFor),
           progress: await sync?.localPlayState(record.pid),
         ),
       );

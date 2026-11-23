@@ -1841,78 +1841,68 @@ class MetadataSaveBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    final layout = WaxLayout.of(context);
     final l10n = context.l10n;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.surface1,
-        border: Border(
-          top: BorderSide(color: colors.hairline, width: layout.hairlineWidth),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Semantics(
-          container: true,
-          explicitChildNodes: true,
-          identifier: SemanticsIds.metadataSaveBar,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: WaxSpace.s16,
-              vertical: WaxSpace.s12,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                if (writeBackFailures.isNotEmpty) ...<Widget>[
-                  WaxBanner(
-                    message: l10n.metadataWriteBackWarning,
-                    tone: WaxBannerTone.caution,
-                    semanticsId: SemanticsIds.metadataWritebackWarning,
-                    onDismiss: onDismissFailures,
-                  ),
-                  const SizedBox(height: WaxSpace.s8),
-                  // Which file and why is the content of the warning, so
-                  // it stays on screen rather than passing as a message.
-                  // Bounded: this slot sits outside the page's scroll,
-                  // and a library box with forty unreachable files must
-                  // not push the form (and Save itself) off screen.
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 160),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: writeBackFailures.length,
-                      itemBuilder: (context, index) {
-                        final failure = writeBackFailures[index];
-                        return Text(
-                          l10n.metadataWriteBackFailure(
-                            failure.path ?? failure.filePid,
-                            failure.reason,
-                          ),
-                          style: WaxType.monoData.copyWith(
-                            color: colors.textSecondary,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: WaxSpace.s8),
-                ],
-                Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: WaxButton(
-                    label: count == 0
-                        ? l10n.commonSave
-                        : l10n.metadataSaveChanges(count),
-                    icon: WaxIcons.check,
-                    semanticsId: saveSemanticsId,
-                    busy: saving,
-                    onPressed: count == 0 || busy ? null : onSave,
+    return WaxFootBar(
+      child: Semantics(
+        container: true,
+        explicitChildNodes: true,
+        identifier: SemanticsIds.metadataSaveBar,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: WaxSpace.s16,
+            vertical: WaxSpace.s12,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              if (writeBackFailures.isNotEmpty) ...<Widget>[
+                WaxBanner(
+                  message: l10n.metadataWriteBackWarning,
+                  tone: WaxBannerTone.caution,
+                  semanticsId: SemanticsIds.metadataWritebackWarning,
+                  onDismiss: onDismissFailures,
+                ),
+                const SizedBox(height: WaxSpace.s8),
+                // Which file and why is the content of the warning, so
+                // it stays on screen rather than passing as a message.
+                // Bounded: this slot sits outside the page's scroll,
+                // and a library box with forty unreachable files must
+                // not push the form (and Save itself) off screen.
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 160),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: writeBackFailures.length,
+                    itemBuilder: (context, index) {
+                      final failure = writeBackFailures[index];
+                      return Text(
+                        l10n.metadataWriteBackFailure(
+                          failure.path ?? failure.filePid,
+                          failure.reason,
+                        ),
+                        style: WaxType.monoData.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      );
+                    },
                   ),
                 ),
+                const SizedBox(height: WaxSpace.s8),
               ],
-            ),
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: WaxButton(
+                  label: count == 0
+                      ? l10n.commonSave
+                      : l10n.metadataSaveChanges(count),
+                  icon: WaxIcons.check,
+                  semanticsId: saveSemanticsId,
+                  busy: saving,
+                  onPressed: count == 0 || busy ? null : onSave,
+                ),
+              ),
+            ],
           ),
         ),
       ),

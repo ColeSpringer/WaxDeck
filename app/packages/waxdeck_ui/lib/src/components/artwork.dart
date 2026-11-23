@@ -74,7 +74,14 @@ class ArtworkImage extends StatelessWidget {
       };
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    // Asked again when the app says the cover changed, whatever holds
+    // this does not build again for it.
+    listenable: artwork?.replaced ?? const _NeverReplaced(),
+    builder: (context, _) => _draw(context),
+  );
+
+  Widget _draw(BuildContext context) {
     final colors = WaxColors.of(context);
     final motion = WaxMotion.of(context);
     final radius = cornerRadius(shape, size);
@@ -97,28 +104,16 @@ class ArtworkImage extends StatelessWidget {
     if (image == null) {
       content = fallback();
     } else {
-      content = Image(
+      final cover = artwork?.cover;
+      content = _Picture(
+        // Per cover, so a slot handed another one starts with nothing held.
+        key: cover == null ? null : ValueKey<String>(cover),
         image: image,
+        keeps: cover != null,
         fit: shape == ArtworkShape.portrait ? BoxFit.contain : BoxFit.cover,
-        width: size,
-        height: size,
-        frameBuilder: (context, child, frame, wasSync) {
-          // The child is always built and its opacity animates when the
-          // first frame lands. Returning an opaque AnimatedOpacity only
-          // once the frame arrives builds it at its target value, which
-          // is a fade that never runs.
-          if (wasSync) return child;
-          // The matte behind this is already the container's, so the
-          // fade needs no fill of its own: adding one repaints the
-          // clipped corners a shade differently.
-          return AnimatedOpacity(
-            opacity: frame == null ? 0 : 1,
-            duration: motion.standard,
-            curve: WaxMotion.emphasized,
-            child: child,
-          );
-        },
-        errorBuilder: (context, _, _) => fallback(),
+        size: size,
+        fade: motion.standard,
+        fallback: fallback,
       );
     }
 
@@ -178,6 +173,82 @@ class ArtworkImage extends StatelessWidget {
         ? Semantics(image: true, label: semanticLabel, child: art)
         // Artwork beside a title says nothing a screen reader needs twice.
         : ExcludeSemantics(child: art);
+  }
+}
+
+/// Artwork nothing replaces: there is nobody to hear from.
+class _NeverReplaced implements Listenable {
+  const _NeverReplaced();
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
+}
+
+/// The picture itself. One that names its cover ([keeps]) stays drawn
+/// while another provider for that cover loads; any other is dropped the
+/// moment its provider changes.
+class _Picture extends StatefulWidget {
+  const _Picture({
+    required this.image,
+    required this.keeps,
+    required this.fit,
+    required this.size,
+    required this.fade,
+    required this.fallback,
+    super.key,
+  });
+
+  final ImageProvider image;
+  final bool keeps;
+  final BoxFit fit;
+  final double size;
+  final Duration fade;
+  final Widget Function() fallback;
+
+  @override
+  State<_Picture> createState() => _PictureState();
+}
+
+class _PictureState extends State<_Picture> {
+  /// Whether a picture of this cover has reached the screen.
+  bool _shown = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Image(
+      image: widget.image,
+      gaplessPlayback: widget.keeps,
+      fit: widget.fit,
+      width: widget.size,
+      height: widget.size,
+      frameBuilder: (context, child, frame, wasSync) {
+        // Written while building, with no setState, on purpose: only a
+        // later build reads it, and that build is already on its way
+        // when the provider changes.
+        if (frame != null) _shown = true;
+        // The child is always built and its opacity animates when the
+        // first frame lands. Returning an opaque AnimatedOpacity only
+        // once the frame arrives builds it at its target value, which
+        // is a fade that never runs.
+        if (wasSync) return child;
+        // A provider that changes takes the frame count back to none
+        // while the kept picture is still the child.
+        final drawn = frame != null || (widget.keeps && _shown);
+        // The matte behind this is already the container's, so the
+        // fade needs no fill of its own: adding one repaints the
+        // clipped corners a shade differently.
+        return AnimatedOpacity(
+          opacity: drawn ? 1 : 0,
+          duration: widget.fade,
+          curve: WaxMotion.emphasized,
+          child: child,
+        );
+      },
+      errorBuilder: (context, _, _) => widget.fallback(),
+    );
   }
 }
 

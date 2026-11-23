@@ -6,17 +6,15 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
 import '../admin/admin_providers.dart';
+import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
 import '../auth/auth_controller.dart';
-import '../books/books_controller.dart';
-import '../books/series_controller.dart';
-import '../books/series_merge.dart';
+import '../books/book_screen.dart';
 import '../connect/connect_providers.dart';
 import '../downloads/downloads_controller.dart';
+import '../downloads/held_covers.dart';
 import '../health/health_controller.dart';
 import '../home/home_shelves.dart';
-import '../metadata/metadata_controller.dart';
-import '../music/music_controllers.dart';
 import '../organize/organize_screen.dart';
 import '../player/entity_play_state_controller.dart';
 import '../player/play_progress.dart';
@@ -33,8 +31,12 @@ import '../shell/lifecycle_banners.dart';
 import '../shell/server_health.dart';
 import '../tools/tool_tasks_provider.dart';
 import '../uploads/uploads_controller.dart';
+import 'catalog_cursor.dart';
+import 'catalog_reads.dart';
+import 'catalog_writes.dart';
 import 'live_invalidations.dart';
 import 'network_back/network_back.dart';
+import 'refresh_in_place.dart';
 import 'refresh_pacing.dart';
 import 'server_event_bus.dart';
 import 'session_doubt.dart';
@@ -45,13 +47,33 @@ import 'sync_providers.dart';
 /// reports a change about once a second, and every shelf an open home
 /// holds is a catalog read; the first change after a quiet spell still
 /// lands at once.
-const kCatalogRefreshWindow = Duration(seconds: 5);
+const kCatalogRefreshWindow = kRefreshWindow;
 
 /// The same for the user stream. Longer than the pacer's default because
 /// this client's own writes come back on it (a star, a rating, a mark)
 /// and nothing on a report says whose write it was, so the window holds
 /// for every report; the first after a quiet spell still lands at once.
 const kUserRefreshWindow = Duration(seconds: 5);
+
+/// Whether the session follows the event channel straight, with no
+/// mirror: the web build's way. The platform decides; a test can too.
+final liveListenerProvider = Provider<bool>((ref) => kIsWeb);
+
+/// Each time the browser says the network is back; never, natively.
+final networkReturnsProvider = Provider<Stream<void>>(
+  (ref) => networkReturns(),
+);
+
+/// The sockets that listener opens, for as long as its binder lives.
+final liveChannelFactoryProvider = Provider.autoDispose<EventsChannelFactory>((
+  ref,
+) {
+  final repository = ref.watch(repositoryProvider);
+  return eventsChannelFactory(
+    baseUrl: ref.watch(serverBaseUrlProvider),
+    token: () => repository.authToken,
+  );
+});
 
 /// Binds the sync machinery to the authenticated subtree: watched by the
 /// signed-in UI, disposed on sign-out. Native starts the engine and
@@ -72,61 +94,18 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       .whereType<FirstBuildObserver>()
       .firstOrNull;
 
-  final catalogFanOut = InvalidationFanOut(
-    container: ref.container,
-    firstBuilds: firstBuilds,
-    // Covers appear as part of the catalog changing - a scan reading
-    // embedded art, enrichment landing, another device writing one -
-    // and the store has been remembering which ones answered 404 so it
-    // can draw the monogram without asking again. Those answers are
-    // exactly what a catalog change can falsify, and this is the only
-    // signal that sees it: the cover editors call `evict`, and nothing
-    // else does.
-    prelude: () => ref.read(artworkStoreProvider).forgetAbsences(),
-    providers: [
-      // The home shelves are all catalog reads: what was added, what is
-      // sealed, what is worth going back to. A scan lands on every one
-      // of them at once. The probe is not here; see [_reprobeWhileEmpty].
-      ...homeCatalogShelfProviders,
-      // The music hub's shelves are the same reads scoped to one medium.
-      ...musicShelfProviders,
-      booksProvider,
-      // The series a book's tags name are a catalog fact too, and the
-      // books hub stays mounted as a shell branch - so without this a
-      // scan that lands a new series leaves the shelf drawing the old
-      // set until the app is relaunched.
-      bookSeriesProvider,
-      bookSeriesShelfProvider,
-      bookSeriesCountProvider,
-      // What is downloaded is local, but who each row is comes from the
-      // mirror, so a retitled item has to reach an open manager.
-      downloadsProvider,
-      // A feed refresh that adds episodes is a catalog change, and the
-      // hub's shelves are the surface that is about what just arrived.
-      upNextEpisodesProvider,
-      latestEpisodesProvider,
-    ],
-    families: [
-      // Shows and episodes are catalog entities too: a server-side fetch
-      // flipping an episode to downloaded must reach an open show screen.
-      podcastDetailProvider,
-      episodesProvider,
-      episodeDetailProvider,
-      // A catalog change can shift any smart playlist's evaluation.
-      playlistDetailProvider,
-      // Applied review decisions and enrichment rewrite item metadata
-      // server-side; an open editor must refetch what it shows.
-      metadataControllerProvider,
-      // An open series screen is a catalog read like a show's.
-      bookSeriesDetailProvider,
-      // The hubs' tile counts, which a scan or an import moves.
-      musicIndexCountProvider,
-    ],
-  );
+  // Every catalog read, in the one registry a local write sweeps too.
+  final catalogFanOut = ref.watch(catalogFanOutProvider);
+  final owed = ref.watch(owedDepthsProvider);
+  final failedRefreshes = ref.watch(failedRefreshesProvider);
 
   final userFanOut = InvalidationFanOut(
     container: ref.container,
     firstBuilds: firstBuilds,
+    // The queue pages, so a pass refreshes it in place.
+    pagedProviders: [reviewQueueProvider],
+    owed: owed,
+    failed: failedRefreshes,
     providers: [
       // The shelves that are per-user selections: what the caller
       // played, starred, rated, or has never opened. A play-state change
@@ -170,6 +149,9 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       playProgressProvider,
       playlistDetailProvider,
       reviewEntryProvider,
+      // Where the caller left off in a book, which another device's play
+      // moves.
+      bookResumeProvider,
     ],
   );
 
@@ -236,11 +218,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   // that finds its files gone, a delete made on another device), so once
   // a run of catalog changes goes quiet it is asked again: once a run,
   // not once a pass.
-  final probeFanOut = InvalidationFanOut(
-    container: ref.container,
-    firstBuilds: firstBuilds,
-    providers: [libraryHasAnythingProvider],
-  );
+  final probeFanOut = ref.watch(probeFanOutProvider);
   final probeOnceQuiet = QuietRefresh(
     fanOut: probeFanOut.sweep,
     retry: probeFanOut.retry,
@@ -272,19 +250,105 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     quiet: kCatalogRefreshWindow,
   );
 
+  // A pass re-reads a paged listing's head alone, so a change made
+  // elsewhere to a row past it shows here: the loaded extent, read once
+  // a run of catalog changes goes quiet. Once a run, not once a pass:
+  // a long listing is a request a page.
+  final pagedOnceQuiet = QuietRefresh(
+    fanOut: () => catalogFanOut.sweepPaged(CatalogRefresh.loaded),
+    retry: catalogFanOut.retryPaged,
+    quiet: kCatalogRefreshWindow,
+  );
+
+  // What a catalog frame says of the entities that changed, as covers
+  // this client drops before the refresh the frame prompts rebuilds a
+  // row. The store keys a replacement by its entity, so the front's URL
+  // stands for every picture the entity can hold, and a colour is only
+  // read off a front. The store notes the replacement before its first
+  // await; what it drops after that fails alone.
+  final container = ref.container;
+  final covers = NamedCovers(
+    replaced: (pid) {
+      final url = container.read(repositoryProvider).artUrlFor(pid);
+      unawaited(
+        container.read(artworkStoreProvider).evict(url).catchError((
+          Object error,
+        ) {
+          debugPrint('named cover: the cached cover did not clear: $error');
+        }),
+      );
+      container.read(paletteCacheProvider).forget(url);
+    },
+    owed: () => container.read(artworkStoreProvider).oweEvictAll(),
+    // Nothing is swept for it: every cover on screen hears the store and
+    // asks again by itself, and one not on screen asks when it is built.
+    allReplaced: () {
+      unawaited(
+        container.read(artworkStoreProvider).evictAll().catchError((
+          Object error,
+        ) {
+          debugPrint('named covers: the cached covers did not clear: $error');
+        }),
+      );
+      container.read(paletteCacheProvider).clear();
+    },
+  );
+
+  // The reads that audit the catalog are asked once a run of changes
+  // goes quiet, never on a pass of it.
+  final quietFanOut = ref.watch(catalogQuietFanOutProvider);
+  final auditsOnceQuiet = QuietRefresh(
+    fanOut: quietFanOut.sweep,
+    retry: quietFanOut.retry,
+    quiet: kCatalogRefreshWindow,
+  );
+
+  // The same for the review queue under the user topic's hints: an
+  // entry decided elsewhere past the head a pass re-reads stays listed
+  // without it.
+  final reviewFanOut = InvalidationFanOut(
+    container: ref.container,
+    firstBuilds: firstBuilds,
+    providers: [reviewQueueProvider],
+    pagedProviders: [reviewQueueProvider],
+    owed: owed,
+  );
+  final reviewOnceQuiet = QuietRefresh(
+    fanOut: () => reviewFanOut.sweep(CatalogRefresh.loaded),
+    retry: reviewFanOut.retry,
+    quiet: kUserRefreshWindow,
+  );
+
+  // A write's lookup is asked again with the pass it is owed, echo or not.
+  var redrawOwed = false;
+  bool catalogPass(CatalogRefresh depth) {
+    if (redrawOwed) {
+      redrawOwed = false;
+      unawaited(recheck.redraw());
+    }
+    final applied = catalogFanOut.sweep(depth);
+    // Otherwise only what a write left alone on its first build.
+    final probed = _probeReadsEmpty(container)
+        ? probeFanOut.sweep()
+        : probeFanOut.retry();
+    // The audits are never swept here: only what was left alone.
+    final audits = quietFanOut.retry();
+    return probed && applied && audits;
+  }
+
   // Both transports hand their hints to the same pacers: the fan-out
   // is what a hint costs, and running it on every one of them is what
   // starved a screen still on its first build.
-  final container = ref.container;
   final catalog = PacedRefresh(
-    fanOut: () {
-      final applied = catalogFanOut.sweep();
-      if (!_probeReadsEmpty(container)) return applied;
-      return probeFanOut.sweep() && applied;
-    },
+    // A hint's pass reads the head: the quiet edge reads the loaded
+    // extent once the run ends. The pass a write is owed, echo or not,
+    // reads that far itself, since the run may not end for a long while.
+    fanOut: () => catalogPass(CatalogRefresh.head),
+    owed: () => catalogPass(CatalogRefresh.loaded),
     retry: () {
       final applied = catalogFanOut.retry();
-      return probeFanOut.retry() && applied;
+      final audits = quietFanOut.retry();
+      return probeFanOut.retry() && applied && audits;
     },
     window: kCatalogRefreshWindow,
   );
@@ -308,7 +372,38 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     probeOnceQuiet.hint();
     countsOnceQuiet.hint();
     queueOnceQuiet.hint();
+    pagedOnceQuiet.hint();
+    auditsOnceQuiet.hint();
   }
+
+  // The server said nothing in the catalog changed after the cursor a
+  // reconnect presented: what was read is current, but a read that failed
+  // meanwhile is asked again, at once, as a write's run is, the reads a
+  // run's quiet edge asks included. Neither kind is a first build, so
+  // nothing is deferred.
+  void catalogCurrent() {
+    catalogFanOut.sweepUnhealthy();
+    probeFanOut.sweepUnhealthy();
+    countsFanOut.sweepUnhealthy();
+    quietFanOut.sweepUnhealthy();
+    // One under way may yet miss; asked now, it runs once more after.
+    if (recheck.missedLast || recheck.running) unawaited(recheck.run());
+  }
+
+  void userHint() {
+    user.hint();
+    reviewOnceQuiet.hint();
+  }
+
+  // The pass a write made here is owed, for [CatalogWrites.landed] to
+  // ask of this session's pacer.
+  void catalogOwed() {
+    redrawOwed = true;
+    catalog.owe();
+  }
+
+  final writes = ref.read(catalogWritesProvider)..bindPass(catalogOwed);
+  ref.onDispose(() => writes.unbindPass(catalogOwed));
 
   final jobs = PacedRefresh(fanOut: jobsFanOut.sweep, retry: jobsFanOut.retry);
   final health = PacedRefresh(
@@ -352,17 +447,42 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     probeOnceQuiet.dispose();
     countsOnceQuiet.dispose();
     queueOnceQuiet.dispose();
+    pagedOnceQuiet.dispose();
+    auditsOnceQuiet.dispose();
+    reviewOnceQuiet.dispose();
+    covers.dispose();
   });
 
   // A walk that lost its place, or a catch-up that may have lost changes,
   // cannot say by kind what changed, a `server` marker included.
   void everyStateTopic() {
-    user.hint();
+    userHint();
     entities.hint();
     jobs.hint();
     health.hint();
     libraries.hint();
     container.invalidate(serverHealthProvider);
+  }
+
+  // The same reads, only those not current: a link that came back with
+  // nothing to report leaves one that failed meanwhile in its error.
+  final serverHealthFanOut = InvalidationFanOut(
+    container: ref.container,
+    firstBuilds: firstBuilds,
+    providers: [serverHealthProvider],
+  );
+  void stateUnhealthy() {
+    for (final fanOut in [
+      userFanOut,
+      entityFanOut,
+      jobsFanOut,
+      healthFanOut,
+      tasksFanOut,
+      librariesFanOut,
+      serverHealthFanOut,
+    ]) {
+      fanOut.sweepUnhealthy();
+    }
   }
 
   // Held for the session: what the stream last said about each item is
@@ -385,7 +505,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       // position.
       final item = playStateControllerProvider(state.pid);
       if (container.exists(item)) container.invalidate(item);
-      user.hint();
+      userHint();
     } else {
       positions.hint();
     }
@@ -409,6 +529,31 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     },
   );
   ref.onDispose(doubt.dispose);
+
+  // The platform says the network came back. A socket that outlived the
+  // outage brings no reconnect, so what failed meanwhile is read again
+  // here. One down, or on its way up, is hurried, and its reconnect reads
+  // what failed once the session it rides answers: read here first, a
+  // read could find the session handed to another account. With no
+  // socket at all nothing else reads them, so they are read here.
+  bool Function()? socketBack;
+  void networkBack() {
+    if (!(socketBack?.call() ?? true)) return;
+    catalogCurrent();
+    stateUnhealthy();
+  }
+
+  final browserReturns = ref
+      .watch(networkReturnsProvider)
+      .listen((_) => networkBack());
+  final transportReturns = ref
+      .watch(connectivityProvider)
+      .returns
+      .listen((_) => networkBack());
+  ref.onDispose(() {
+    unawaited(browserReturns.cancel());
+    unawaited(transportReturns.cancel());
+  });
 
   final engine = ref.watch(syncEngineProvider);
   // Every server event this session observes, by kind, from whichever
@@ -435,12 +580,15 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
         if (event.playState case final state?) {
           onPlayState(state);
         } else {
-          user.hint();
+          userHint();
         }
       case 'entity-state':
         entities.hint();
+      case 'playlist':
+        _playlistCoversReplaced(container, event.pid);
+        userHint();
       default:
-        user.hint();
+        userHint();
     }
   });
   ref.onDispose(eventSub.cancel);
@@ -460,7 +608,11 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   }, fireImmediately: true);
   final tick = ref.read(userStreamTickProvider.notifier);
   if (engine != null) {
+    // What a frame says of names is on its stream before its pull
+    // starts, so it is heard ahead of the change that pull ends in.
+    final namedSub = engine.catalogNamed.listen(covers.heard);
     final catalogSub = engine.catalogChanged.listen((_) => catalogHint());
+    final currentSub = engine.catalogCurrent.listen((_) => catalogCurrent());
     // The mirror has stored the state by the time it says so, and says
     // it with the state. An artist or album marker stores nothing, entity
     // state being a live read.
@@ -471,6 +623,21 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
         entities.hint();
       }
     });
+    // Each time the socket comes up: a cover drawn off a pin still owed
+    // its refresh asks the server, whatever holds the pin walk back, and
+    // a download with no cover pinned gets one. A walk that finds nothing
+    // of the user's makes no pass, so what failed meanwhile is asked here.
+    final reachSub = engine.status
+        .map((status) => status.online)
+        .distinct()
+        .where((online) => online)
+        .listen((_) {
+          container.read(artworkStoreProvider).serverReached();
+          unawaited(pinHeldCovers(container));
+          stateUnhealthy();
+        });
+    socketBack = engine.networkBack;
+    ref.onDispose(reachSub.cancel);
     // An item whose audio the server cannot give back takes its download
     // and its pinned artwork with it. Of the tombstones only `removed`
     // reaches this stream: trash tombstones the mirror row as well and
@@ -562,7 +729,16 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       sender: engine.sendControl,
       routeControl: (handler) => engine.onControlFrame = handler,
     );
-    engine.onConnected = connect.onConnected;
+    engine.onConnected = () {
+      connect.onConnected();
+      // The server is reached: a session a start opened on from memory is
+      // the server's to confirm, or to end. One the server answered is
+      // not read again here.
+      if (ref.mounted &&
+          ref.read(authControllerProvider.notifier).unconfirmed) {
+        doubt.ask().ignore();
+      }
+    };
     engine.onAuthExpired = () => doubt.ask().ignore();
     engine.onSessionInDoubt = () => doubt.ask().ignore();
     // A refused request stops the engine. Once the session is seen to
@@ -579,6 +755,8 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       restart = Timer(restartAfter.take(), () async {
         await engine.beforeSync(() async {});
         restarting = false;
+        // Not told the server is out of reach: this runs only once it has
+        // answered for the session, and the stop cleared what was known.
         if (ref.mounted && !engine.started) unawaited(engine.start());
       });
     };
@@ -591,21 +769,30 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     // account that queued it. Read, not watched: this binder lives inside
     // one session, and the preference controller keeps the name current.
     engine.account = ref.read(signedInAccountProvider);
-    engine.start();
+    // A session opened from memory is a server already found out of reach.
+    engine.start(
+      unreached: ref.read(authControllerProvider.notifier).unconfirmed,
+    );
     ref.onDispose(() {
+      namedSub.cancel();
       catalogSub.cancel();
+      currentSub.cancel();
       stateSub.cancel();
       removedSub.cancel();
       engine.stop();
     });
     return;
   }
-  if (kIsWeb) {
-    final repository = ref.watch(repositoryProvider);
+  if (ref.watch(liveListenerProvider)) {
+    final server = ref.watch(serverBaseUrlProvider);
     final live = LiveInvalidations(
-      channelFactory: eventsChannelFactory(
-        baseUrl: ref.watch(serverBaseUrlProvider),
-        token: () => repository.authToken,
+      channelFactory: ref.watch(liveChannelFactoryProvider),
+      // Read, not watched, as the engine's account is: this binder lives
+      // inside one session.
+      cursor: CatalogCursor(
+        storage: ref.read(catalogCursorStorageProvider),
+        server: server,
+        account: ref.read(signedInAccountProvider),
       ),
       onCatalog: catalogHint,
       // An invalidation frame carries no detail, so the tick walks the
@@ -632,6 +819,9 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     // that left, whose screens go.
     live.onSessionInDoubt = () async =>
         await doubt.ask() != SessionRecheck.left;
+    // Said in the same turn as the frame's `onCatalog`, and before it.
+    live.onCatalogNamed = covers.heard;
+    live.onCatalogCurrent = catalogCurrent;
     live.onPlayer = connect.onPlayerInvalidate;
     live.onRadio = radio.hint;
     // The web listener has no status of its own to read, so it reports
@@ -644,16 +834,140 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     // silently never happen and the banner would stand over the login
     // screen of the next session.
     final link = ref.read(liveLinkProvider.notifier);
-    final returns = networkReturns().listen((_) => live.networkBack());
+    socketBack = live.networkBack;
     live.start();
     ref.onDispose(() {
-      unawaited(returns.cancel());
       live.stop();
       // A session that ended is not a client with a broken connection.
-      link.forget();
+      // After the disposal: no provider may be changed inside another's
+      // lifecycle, and a container gone by then has no banner to clear.
+      Future.microtask(link.forget).ignore();
     });
   }
 });
+
+/// The most entities one catalog invalidation names: the contract's
+/// bound on its `pids`.
+const kCatalogFrameNames = 64;
+
+/// What catalog invalidations do to covers, by what they say of the
+/// entities that changed.
+///
+/// A frame names the entities whose rows changed, not the covers that
+/// did, and a scan names a frameful several times a second or says only
+/// that entities went unnamed. So busy is a rate. Time runs in windows of
+/// [window], the first opening at the first word heard after none. While
+/// a window has named no more than a single frame can and carried no
+/// unnamed marker, each name is told replaced as it is heard, ahead of
+/// the refresh its frame prompts. Past either the stretch is busy:
+/// every cover is owed a fresh ask and nothing is told by name, window
+/// after window, until one stays within the bound and carries no marker.
+/// At that window's end every cover is asked afresh, one time, and the
+/// stretch is over.
+class NamedCovers {
+  NamedCovers({
+    required this.replaced,
+    required this.owed,
+    required this.allReplaced,
+    this.window = kCatalogRefreshWindow,
+  });
+
+  /// The pictures of one named entity changed.
+  final void Function(String pid) replaced;
+
+  /// A stretch became busy: every cover is owed a fresh ask, which a
+  /// session that ends first never makes.
+  final void Function() owed;
+
+  /// A busy stretch ended: every cover is asked afresh.
+  final void Function() allReplaced;
+
+  final Duration window;
+
+  /// The open window's end; null between windows.
+  Timer? _end;
+
+  /// What the open window has named, counted no further than past the
+  /// bound.
+  final _named = <String>{};
+
+  /// Whether the open window heard that entities went unnamed.
+  var _unnamed = false;
+  var _busy = false;
+  var _disposed = false;
+
+  bool get _over => _unnamed || _named.length > kCatalogFrameNames;
+
+  /// What a frame said, before the refresh it prompts. A name heard
+  /// again is told again: its cover may have been replaced again.
+  void heard(CatalogNames names) {
+    if (_disposed) return;
+    _end ??= Timer(window, _close);
+    if (!_over) {
+      _named.addAll(names.pids);
+      _unnamed = names.unnamed;
+    }
+    if (_busy) return;
+    if (_over) {
+      _busy = true;
+      owed();
+      return;
+    }
+    names.pids.forEach(replaced);
+  }
+
+  void _close() {
+    final over = _over;
+    _named.clear();
+    _unnamed = false;
+    if (_busy && over) {
+      _end = Timer(window, _close);
+      return;
+    }
+    _end = null;
+    if (!_busy) return;
+    _busy = false;
+    allReplaced();
+  }
+
+  /// Ignores every later call, for a session that ended. What a busy
+  /// stretch owed stays owed.
+  void dispose() {
+    _disposed = true;
+    _end?.cancel();
+    _end = null;
+  }
+}
+
+/// A playlist changed, on this device or another: its picture is minted
+/// by this server at one URL for as long as the playlist lasts, whatever
+/// it holds, so it is told replaced. A change that names no playlist
+/// tells every one held, there being few.
+void _playlistCoversReplaced(ProviderContainer container, String? pid) {
+  final repository = container.read(repositoryProvider);
+  final Iterable<String> urls;
+  if (pid != null) {
+    urls = [repository.artUrlFor(pid)];
+  } else if (container.exists(playlistsProvider)) {
+    urls = [
+      for (final playlist
+          in container.read(playlistsProvider).value ?? const <Playlist>[])
+        ?playlist.artUrl,
+    ];
+  } else {
+    return;
+  }
+  final store = container.read(artworkStoreProvider);
+  final palettes = container.read(paletteCacheProvider);
+  for (final url in urls) {
+    unawaited(
+      store.evict(url).catchError((Object error) {
+        debugPrint('playlist cover: the cached cover did not clear: $error');
+      }),
+    );
+    palettes.forget(url);
+  }
+}
 
 /// Whether home's probe last said the library is empty, which opens it
 /// to every catalog pass.

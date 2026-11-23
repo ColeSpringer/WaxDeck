@@ -28,18 +28,24 @@ Future<WebSocketChannel> connectWebSocket(
   String? authToken,
   Duration connectDeadline = _connectDeadline,
 }) async {
-  final pending = WebSocket.connect(
-    url,
-    headers: {if (authToken != null) 'Authorization': 'Bearer $authToken'},
-  );
+  // A client of its own, so closing it aborts this attempt and nothing
+  // else: a connect still pending and an upgrade not yet answered. An
+  // upgraded socket is detached from it and outlives it.
+  final client = HttpClient();
   final WebSocket socket;
   try {
+    final pending = WebSocket.connect(
+      url,
+      headers: {if (authToken != null) 'Authorization': 'Bearer $authToken'},
+      customClient: client,
+    );
     socket = await pending.timeout(
       connectDeadline,
       onTimeout: () {
-        // The future is abandoned, not cancelled - there is no cancelling
-        // it - so the socket it may still produce is closed rather than
-        // left open with nobody reading it.
+        // Closing the client cannot reach a tunnel still opening through
+        // a proxy, nor an upgrade answered and mid-detach at the deadline
+        // (the client lets go of it before the socket arrives); whichever
+        // lands is closed.
         unawaited(pending.then((late) => late.close()).catchError((_) {}));
         throw TimeoutException('the sync channel did not finish connecting');
       },
@@ -47,6 +53,8 @@ Future<WebSocketChannel> connectWebSocket(
   } on WebSocketException catch (e) {
     if (e.httpStatusCode case final status?) throw UpgradeRefused(status);
     rethrow;
+  } finally {
+    client.close(force: true);
   }
   socket.pingInterval = _pingInterval;
   return IOWebSocketChannel(socket);

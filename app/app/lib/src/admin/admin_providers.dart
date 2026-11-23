@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../notifications/notifications_controller.dart';
 import '../providers.dart';
+import '../sync/catalog_writes.dart';
 
 /// Server-wide switches (signup, read-only, backup retention). Shared by
 /// the server settings section and the backups screen's retention
@@ -251,7 +252,10 @@ class GenreTreeController extends AsyncNotifier<GenreTree> {
   /// and returns the instance to the shipped default, which is the
   /// contract's own "revert" and why this takes no separate verb.
   Future<void> save(List<GenreNode> genres) async {
+    final writes = ref.read(catalogWritesProvider);
     final stored = await ref.read(repositoryProvider).putGenreTree(genres);
+    // The vocabulary is what the genre index groups by.
+    writes.landed();
     state = AsyncData(stored);
   }
 }
@@ -290,22 +294,26 @@ class TrashController extends AsyncNotifier<TrashList> {
   }
 
   Future<void> restore(String trashId) async {
+    final writes = ref.read(catalogWritesProvider);
     await ref.read(repositoryProvider).restoreTrashEntry(trashId);
-    if (!ref.mounted) return;
-    ref.invalidateSelf();
+    // What came back is in the listings again, this one's included.
+    writes.landed();
   }
 
   Future<TrashEmptyResult> empty() async {
+    final writes = ref.read(catalogWritesProvider);
     final result = await ref.read(repositoryProvider).emptyTrash();
-    if (ref.mounted) ref.invalidateSelf();
+    // What was purged is gone from this list and from an item's files.
+    writes.landed();
     return result;
   }
 
   Future<int> purge(String trashId) async {
+    final writes = ref.read(catalogWritesProvider);
     final reclaimed = await ref
         .read(repositoryProvider)
         .purgeTrashEntry(trashId);
-    if (ref.mounted) ref.invalidateSelf();
+    writes.landed();
     return reclaimed;
   }
 }

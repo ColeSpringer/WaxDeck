@@ -89,13 +89,21 @@ class LoginRequest {
 
 /// Established session plus a bearer token for native clients.
 class LoginResult {
-  const LoginResult({required this.user, required this.token});
+  const LoginResult({
+    required this.user,
+    required this.token,
+    required this.sessionId,
+  });
 
   final WaxDeckUser user;
 
   /// Opaque bearer token equivalent to the session cookie. Native clients store
   /// it in the OS keychain; web clients ignore it and rely on the cookie.
   final String token;
+
+  /// Id of the session the answer established, or for a token rotation the
+  /// session rotated, as the device list names it (`DeviceSession.id`).
+  final String sessionId;
 }
 
 /// A one-time OIDC completion code to redeem for a session.

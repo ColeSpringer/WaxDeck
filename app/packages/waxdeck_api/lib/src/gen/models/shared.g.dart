@@ -215,22 +215,35 @@ class WsErrorFrame {
 
 /// One server-to-client frame on the WebSocket event channel (transport in
 /// `api/events.md`). An `invalidate` frame tells the client the named topic
-/// moved: for `catalog` pull `/sync/catalog` and for `user` pull `/sync/server`
-/// from the client's own cursor; for `player` pull `/player/endpoints` and
+/// moved, except a `catalog` one carrying `unchanged`, which asks for nothing:
+/// for `catalog` pull `/sync/catalog` and for `user` pull `/sync/server` from
+/// the client's own cursor; for `player` pull `/player/endpoints` and
 /// `/player/sessions`, and for `radio` - the station's song or cover moved -
 /// re-read `/radio/stations/{pid}/play-info` for the station being listened to,
 /// all of which always return current truth (no cursor); a client tuned to
 /// nothing ignores `radio`. Invalidations are coalesced server-side, so one
-/// frame can cover many changes, and carry no data, so a redundant pull is
-/// harmless. A `resync` frame means continuity was lost for the named stream,
-/// or for every stream when `topic` is absent (client queue overflow, pruned
-/// history, a replaced catalog): drop the affected mirror halves, re-mirror
-/// through the sync endpoints, then close the socket, reconnect, and
-/// resubscribe with the fresh cursors. `resync` never names `player` or `radio`
-/// (there is nothing to replay). `type` and `topic` are strings, not closed
-/// enums; clients must ignore frames whose `type` they do not recognize.
+/// frame can cover many changes, and carry no entity data, so a redundant pull
+/// is harmless; a `catalog` invalidation may name the entities that changed in
+/// `pids`, which tells a client what it holds of them is stale and never
+/// replaces the pull, say in `unnamed` that entities changed which it does not
+/// name, or say in `unchanged` that nothing in the catalog changed after the
+/// cursor a subscribe presented. A `resync` frame means continuity was lost for
+/// the named stream, or for every stream when `topic` is absent (client queue
+/// overflow, pruned history, a replaced catalog): drop the affected mirror
+/// halves, re-mirror through the sync endpoints, then close the socket,
+/// reconnect, and resubscribe with the fresh cursors. `resync` never names
+/// `player` or `radio` (there is nothing to replay). `type` and `topic` are
+/// strings, not closed enums; clients must ignore frames whose `type` they do
+/// not recognize.
 class WsEventFrame {
-  const WsEventFrame({required this.type, this.topic});
+  const WsEventFrame({
+    required this.type,
+    this.topic,
+    this.pids,
+    this.unnamed,
+    this.unchanged,
+    this.since,
+  });
 
   /// Frame discriminator: `invalidate` or `resync`.
   final String type;
@@ -239,6 +252,94 @@ class WsEventFrame {
   /// Always present on `invalidate`; on `resync` its absence means every
   /// stream.
   final String? topic;
+
+  /// On a `catalog` invalidation, the pids of the entities that changed, in API
+  /// form (`tr-...`, `al-...`): items, albums, artists, release groups, series
+  /// and podcast shows. A changed track names its album beside it, whose cover
+  /// can be the track's, and none of the album's other tracks. A changed album
+  /// names its tracks beside it, and a podcast show whose cover was set or
+  /// cleared through the API its episodes: they draw its cover when they have
+  /// none of their own, and those in the trash are left out. An album or show
+  /// that is gone names none, and so does a show that changed any other way, a
+  /// cover that came with its feed included. A changed artist or release group
+  /// names nothing beside it. An item is named with its kind's prefix as it is
+  /// now, and one that is gone with the track prefix whatever its kind was, so
+  /// a client matches an item by what follows the prefix; any named entity may
+  /// already be gone. The list names the entities whose cached copies, covers
+  /// above all, a client should drop. It is not everything the frame covers: a
+  /// change to something that has no pid, a genre for one, is named nowhere,
+  /// and the client pulls `/sync/catalog` and refreshes its listings either
+  /// way, as on every `catalog` invalidation but one carrying `unchanged`. A
+  /// `catalog` invalidation without `pids` or `unchanged` means anything in the
+  /// catalog may have changed, and `unnamed` says whether entities are known to
+  /// have. A connection whose account is not an administrator and has `granted`
+  /// library access, a tag rule, or `explicitContent` off is sent only the
+  /// names it may see, decided as each frame is sent: an item it may see; an
+  /// album, release group or artist that an item it may see, named in the same
+  /// frame, belongs to; and a podcast show when it may see the podcast library
+  /// and, with `explicitContent` off, an episode named in the same frame says
+  /// the show is not marked explicit. An item that is gone, an album or release
+  /// group whose items named in the frame it may see none of, and a show it may
+  /// not see are left out. Where the frame does not decide whether the account
+  /// may see a name (an album or release group with no item of it named, an
+  /// artist that no item it may see named in the frame belongs to, a series,
+  /// or, with `explicitContent` off, a show with no episode of it named), that
+  /// account's frame carries `unnamed` in place of `pids`. A frame that names
+  /// nothing such an account may see carries neither. No other frame carries
+  /// `pids`.
+  final List<String>? pids;
+
+  /// On a `catalog` invalidation, true when entities of the kinds `pids` names
+  /// changed and the frame does not name them, so everything a client cached of
+  /// any entity, covers above all, may be stale. The server sends it when the
+  /// entities to name, those named beside a changed one included, are more than
+  /// fit in `pids`; when it could not read which entities changed; when a
+  /// `resync` or a catalog repair was coalesced with the changes, in either
+  /// order; in answer to a subscribe whose `catalogSince` it cannot serve; and,
+  /// in place of `pids`, to a connection whose account could not be read as the
+  /// frame was sent or for which it cannot decide whether a name may be seen
+  /// (see `pids`). Never false: it is absent on a frame that carries `pids`, on
+  /// one sent only for a change the server has nothing to name for (a genre, a
+  /// catalog repair) or for changes an earlier frame already named, on one
+  /// whose names the account may see none of, on one answering a subscribe
+  /// whose `catalogSince` nothing that has a pid changed after, and on every
+  /// frame of another topic or type. Any other invalidation that names nothing
+  /// and is coalesced with changes leaves their `pids` in the frame. A
+  /// `catalog` invalidation with neither `pids` nor `unnamed` tells a client
+  /// nothing about which entities changed, and asks for the pull and a refresh
+  /// of listings like any other unless it carries `unchanged`.
+  final bool? unnamed;
+
+  /// On a `catalog` invalidation, true when the frame answers only a
+  /// subscribe's `catalogSince` and nothing in the catalog changed after that
+  /// cursor: no entity the frame would name or leave unnamed, and nothing that
+  /// has no pid, a genre for one. What changes only users' own state (plays,
+  /// stars, ratings, bookmarks, queues, playlists), files, libraries, jobs or
+  /// accounts does not count: no live `catalog` invalidation is sent for those
+  /// either. It is the one `catalog` invalidation that asks a client for no
+  /// pull and no refresh: what it holds from that cursor is current. It covers
+  /// only what changed after the cursor presented, which is why that cursor is
+  /// the `since` of the last `catalog` invalidation the client acted on (or,
+  /// before it has acted on any, a `nextSince` it read all its listings after)
+  /// and not where a later pull left a mirror: a pull moves past changes it
+  /// does not show. Never false: it is absent on a frame that carries `pids` or
+  /// `unnamed`; on the answer when anything in the catalog changed after the
+  /// cursor or the server cannot serve it; when a live change, any other
+  /// `catalog` invalidation, or a `resync` was coalesced with the answer, in
+  /// either order; and on every frame of another topic or type.
+  final bool? unchanged;
+
+  /// On a `catalog` invalidation, the catalog position the frame covers up to:
+  /// an opaque catalog cursor of the form `/sync/catalog` hands out as
+  /// `nextSince`, minted for the connection's account. A frame that covers
+  /// several changes carries the newest position among them. A client that
+  /// acted on the frame presents it as `catalogSince` on a later subscribe to
+  /// be told what changed after it. A mirror keeps the `nextSince` its own
+  /// pulls hand it: a frame announces changes and delivers none, so a mirror
+  /// that pulled from `since` would skip them. Absent when the server could not
+  /// read the account as the frame was sent, and on every frame of another
+  /// topic or type.
+  final String? since;
 }
 
 /// Client-to-server clock probe for NTP-style offset estimation (unrelated to
@@ -369,17 +470,41 @@ class WsSessionReportFrame {
 
 /// The WebSocket subscribe frame, sent by the client as the first message on
 /// the event channel (transport in `api/events.md`); `cmd`, `watch`, `tune`,
-/// `register-endpoint` and `ping` follow it. Clients pass the cursors their
-/// mirror is at; a client with no mirror yet omits them, receives only live
-/// invalidations, and snapshots through the sync endpoints (before or after
-/// subscribing; both orders are sound because invalidations carry no data).
+/// `register-endpoint` and `ping` follow it. Clients pass the cursors they
+/// hold: as `serverSince` the one their mirror is at, and as `catalogSince` the
+/// one that field describes. A client with neither omits them, receives only
+/// live invalidations, and snapshots through the sync endpoints (before or
+/// after subscribing; both orders are sound because invalidations carry no
+/// entity data).
 class WsSubscribeFrame {
   const WsSubscribeFrame({this.catalogSince, this.serverSince, this.topics});
 
-  /// The client's opaque catalog change cursor.
+  /// The client's opaque catalog change cursor: the `since` of the last
+  /// `catalog` invalidation it acted on, or, before it has acted on any, a
+  /// `nextSince` it read all its listings after. Not where a later pull left a
+  /// mirror: a pull moves past changes it does not show, so an answer to that
+  /// position does not tell of them. On a connection that takes the `catalog`
+  /// topic the server answers it at once with one `catalog` invalidation that
+  /// tells what changed after the cursor as a live one tells it: `pids` names
+  /// the entities whose rows changed after it, by the rules `pids` follows on
+  /// every frame, except that a show also names its episodes when the server
+  /// cannot tell whether its cover was what changed (a change from before the
+  /// server last started, or one behind many cover changes). `unnamed` is sent
+  /// in place of names when more changed than `pids` holds, when the server
+  /// could not read what changed in time, when it cannot decide for the account
+  /// whether it may see a name (as on a live frame), and when the server cannot
+  /// serve the cursor (another server's, an earlier catalog generation's, one
+  /// older than the history it keeps or from before what the account may see
+  /// last changed, or not a cursor), which a pull of `/sync/catalog` from it
+  /// refuses. The frame carries neither when nothing that has a pid changed
+  /// after the cursor, and then asks for a pull and a refresh of listings as
+  /// any other `catalog` invalidation does, unless it carries `unchanged`:
+  /// nothing in the catalog changed after the cursor. Its `since` is where it
+  /// covers up to.
   final String? catalogSince;
 
-  /// The client's opaque server change cursor.
+  /// The client's opaque server change cursor; on a connection that takes the
+  /// `user` topic the server answers it at once with a `user` invalidation.
   final String? serverSince;
 
   /// Topics to receive (`catalog`, `user`, `player`, `radio`). Omit for all

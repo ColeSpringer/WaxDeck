@@ -95,8 +95,8 @@ type driver struct {
 	transportSeq   uint64
 	mediaSessionID int
 	// loadSeq is where the load that this media state belongs to went
-	// out, so a status the device sent about the session before it
-	// cannot be folded in as this one.
+	// out, or where the newest seek's reply came back, so a status the
+	// device sent before either cannot be folded in as describing it.
 	loadSeq        uint64
 	itemIDs        []int
 	loaded         bool
@@ -104,6 +104,29 @@ type driver struct {
 	lastIndex      int
 	lastPlaying    bool
 	lastPositionMS int64
+
+	// load numbers the loads and seeks the device has taken, stamped on
+	// every event so the session can drop what describes playback one of
+	// them has since moved.
+	load uint64
+	// replacedSession is the media session the newest load replaced. A
+	// status the device sent before it read the LOAD can arrive after
+	// the LOAD went out, past loadSeq; it still names that session.
+	replacedSession int
+
+	// op numbers the loads and seeks begun. While the newest one's reply
+	// is outstanding (holdFor), media statuses are held: only the reply
+	// says which of them describe what the device now plays.
+	op      uint64
+	holdFor uint64
+	held    []heldStatus
+}
+
+// heldStatus is a media status the pump read while a reply was due, and
+// when it read it.
+type heldStatus struct {
+	u  statusUpdate
+	at time.Time
 }
 
 // mediaInfoFor maps one item onto the wire shape.
@@ -214,7 +237,7 @@ func (d *driver) receiverPlaying(ctx context.Context, app receiverApp) (bool, st
 	if err := d.conn.connectTransport(app.TransportID); err != nil {
 		return false, ""
 	}
-	st, err := d.conn.mediaCall(ctx, app.TransportID, func(id int) any {
+	st, _, err := d.conn.mediaCall(ctx, app.TransportID, func(id int) any {
 		return getStatusRequest{Type: "GET_STATUS", RequestID: id}
 	})
 	if err != nil || st == nil {
@@ -255,30 +278,20 @@ func (d *driver) Load(ctx context.Context, items []connect.MediaItem, index int,
 	if err != nil {
 		return err
 	}
-	// Load-scoped state resets before the request goes out: the
-	// reply's statuses race the reply itself through the pump, and a
-	// PLAYING observed there must count for this load. Everything the
-	// connection read before this point describes what the load is
-	// about to replace, whichever session it named.
+	// Nothing load-scoped changes until the device has taken the load:
+	// a refused one leaves the old media playing, and everything about
+	// it must stand. Statuses read meanwhile wait for the reply.
 	d.mu.Lock()
-	d.loadSeq = d.conn.observed()
-	d.loaded = true
-	d.played = false
-	d.itemIDs = nil
-	d.lastIndex = 0
-	if len(items) > 1 {
-		d.lastIndex = index
-	}
-	// What was asked for, until the device says otherwise: a receiver
-	// status carries these two forward, and the previous session's
-	// playhead is not this one's.
-	d.lastPlaying = play
-	d.lastPositionMS = positionMS
+	d.op++
+	op := d.op
+	d.holdFor = op
+	sent := d.conn.observed()
+	replaced := d.mediaSessionID
 	d.mu.Unlock()
 	startSeconds := float64(positionMS) / 1000
 	var st *mediaStatus
 	if len(items) == 1 {
-		st, err = d.conn.mediaCall(ctx, transport, func(id int) any {
+		st, _, err = d.conn.mediaCall(ctx, transport, func(id int) any {
 			return loadRequest{
 				Type:        "LOAD",
 				RequestID:   id,
@@ -292,7 +305,7 @@ func (d *driver) Load(ctx context.Context, items []connect.MediaItem, index int,
 		for i, item := range items {
 			qItems[i] = queueLoadItem{Media: mediaInfoFor(item), Autoplay: true}
 		}
-		st, err = d.conn.mediaCall(ctx, transport, func(id int) any {
+		st, _, err = d.conn.mediaCall(ctx, transport, func(id int) any {
 			return queueLoadRequest{
 				Type:        "QUEUE_LOAD",
 				RequestID:   id,
@@ -303,22 +316,49 @@ func (d *driver) Load(ctx context.Context, items []connect.MediaItem, index int,
 			}
 		})
 	}
+	d.mu.Lock()
 	if err != nil {
-		return fmt.Errorf("castv2: loading media: %w", err)
-	}
-	if st != nil {
-		d.mu.Lock()
-		if st.MediaSessionID != 0 {
-			d.mediaSessionID = st.MediaSessionID
-		}
-		if len(st.Items) > 0 {
-			d.itemIDs = d.itemIDs[:0]
-			for _, it := range st.Items {
-				d.itemIDs = append(d.itemIDs, it.ItemID)
-			}
+		// What was held is the media still playing.
+		if d.holdFor == op {
+			d.releaseLocked()
 		}
 		d.mu.Unlock()
+		return fmt.Errorf("castv2: loading media: %w", err)
 	}
+	// Everything the connection read before the LOAD went out describes
+	// what it replaced, whichever session it named.
+	d.load++
+	d.loadSeq = max(d.loadSeq, sent)
+	d.replacedSession = replaced
+	d.loaded = true
+	d.played = st != nil && (st.PlayerState == statePlaying || st.PlayerState == stateBuffering)
+	d.itemIDs = nil
+	d.lastIndex = 0
+	if len(items) > 1 {
+		d.lastIndex = index
+	}
+	// What was asked for, until the device says otherwise: a receiver
+	// status carries these two forward, and the previous session's
+	// playhead is not this one's.
+	d.lastPlaying = play
+	d.lastPositionMS = positionMS
+	if st != nil {
+		if st.MediaSessionID != 0 {
+			// A device that kept the id across the load leaves it
+			// nothing to tell old from new by; arrival order has to do.
+			if st.MediaSessionID == replaced {
+				d.replacedSession = 0
+			}
+			d.mediaSessionID = st.MediaSessionID
+		}
+		for _, it := range st.Items {
+			d.itemIDs = append(d.itemIDs, it.ItemID)
+		}
+	}
+	if d.holdFor == op {
+		d.releaseLocked()
+	}
+	d.mu.Unlock()
 	if len(items) > 1 && !play {
 		return d.Pause(ctx)
 	}
@@ -335,7 +375,7 @@ func (d *driver) mediaVerb(ctx context.Context, verb string) error {
 	if err != nil {
 		return err
 	}
-	_, err = d.conn.mediaCall(ctx, transport, func(id int) any {
+	_, _, err = d.conn.mediaCall(ctx, transport, func(id int) any {
 		return mediaCommandRequest{Type: verb, RequestID: id, MediaSessionID: session}
 	})
 	if err != nil {
@@ -360,7 +400,12 @@ func (d *driver) SeekTo(ctx context.Context, positionMS int64) error {
 	if err != nil {
 		return err
 	}
-	_, err = d.conn.mediaCall(ctx, transport, func(id int) any {
+	d.mu.Lock()
+	d.op++
+	op := d.op
+	d.holdFor = op
+	d.mu.Unlock()
+	_, seq, err := d.conn.mediaCall(ctx, transport, func(id int) any {
 		return seekRequest{
 			Type:           "SEEK",
 			RequestID:      id,
@@ -369,6 +414,18 @@ func (d *driver) SeekTo(ctx context.Context, positionMS int64) error {
 			ResumeState:    "PLAYBACK_START",
 		}
 	})
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if err == nil {
+		// A seek moves playback as a load does. What the device said
+		// before its answer is about the playhead it left.
+		d.load++
+		d.loadSeq = max(d.loadSeq, seq-1)
+		d.lastPositionMS = positionMS
+	}
+	if d.holdFor == op {
+		d.releaseLocked()
+	}
 	if err != nil {
 		return fmt.Errorf("castv2: seek: %w", err)
 	}
@@ -386,6 +443,13 @@ func (d *driver) SetRate(ctx context.Context, rate float64) error {
 }
 
 func (d *driver) Events() <-chan connect.DriverEvent { return d.events }
+
+// CurrentLoad is the number of the newest load or seek the device took.
+func (d *driver) CurrentLoad() uint64 {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.load
+}
 
 // Close is teardown, not a playback verb: no STOP is sent, the device
 // keeps playing what it was told to, and only the channel goes away.
@@ -449,7 +513,6 @@ func (d *driver) handleStatus(u statusUpdate) {
 	now := time.Now()
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	ev := connect.DriverEvent{At: now}
 	switch {
 	case u.receiver != nil:
 		// A vanished app (someone stopped it from the device side)
@@ -462,10 +525,14 @@ func (d *driver) handleStatus(u statusUpdate) {
 			d.mediaSessionID = 0
 			d.loaded = false
 		}
-		ev.Playing = d.lastPlaying
-		ev.Index = d.lastIndex
-		ev.PositionMS = d.lastPositionMS
-		ev.Volume = u.receiver.Volume.Level
+		d.emit(connect.DriverEvent{
+			At:         now,
+			Load:       d.load,
+			Playing:    d.lastPlaying,
+			Index:      d.lastIndex,
+			PositionMS: d.lastPositionMS,
+			Volume:     u.receiver.Volume.Level,
+		})
 	case u.media != nil:
 		if u.seq <= d.loadSeq {
 			// The previous session, answering a question asked before
@@ -473,39 +540,62 @@ func (d *driver) handleStatus(u statusUpdate) {
 			// the wrong ones to carry forward.
 			return
 		}
-		ms := u.media
-		if ms.MediaSessionID != 0 {
-			d.mediaSessionID = ms.MediaSessionID
+		if d.holdFor != 0 {
+			d.held = append(d.held, heldStatus{u: u, at: now})
+			return
 		}
-		if len(ms.Items) > 0 {
-			d.itemIDs = d.itemIDs[:0]
-			for _, it := range ms.Items {
-				d.itemIDs = append(d.itemIDs, it.ItemID)
-			}
+		d.applyMediaLocked(u.media, now)
+	}
+}
+
+// releaseLocked ends the hold and folds in, in arrival order, what the
+// arrival fence now passes; d.mu held.
+func (d *driver) releaseLocked() {
+	held := d.held
+	d.held, d.holdFor = nil, 0
+	for _, h := range held {
+		if h.u.seq > d.loadSeq {
+			d.applyMediaLocked(h.u.media, h.at)
 		}
-		if ms.CurrentItemID != 0 {
-			for i, id := range d.itemIDs {
-				if id == ms.CurrentItemID {
-					d.lastIndex = i
-					break
-				}
-			}
-		}
-		playing := ms.PlayerState == statePlaying || ms.PlayerState == stateBuffering
-		if playing {
-			d.played = true
-		}
-		d.lastPlaying = playing
-		d.lastPositionMS = int64(ms.CurrentTime * 1000)
-		ev.Playing = playing
-		ev.Index = d.lastIndex
-		ev.PositionMS = d.lastPositionMS
-		// Finished only after something played: receivers report IDLE
-		// before the first load too, and that must not end a session.
-		ev.Finished = ms.PlayerState == stateIdle && ms.IdleReason == idleFinished && d.played
-	default:
+	}
+}
+
+// applyMediaLocked folds one media status into driver state and emits
+// the observation; d.mu held.
+func (d *driver) applyMediaLocked(ms *mediaStatus, now time.Time) {
+	if ms.MediaSessionID != 0 && ms.MediaSessionID == d.replacedSession {
 		return
 	}
+	ev := connect.DriverEvent{At: now, Load: d.load}
+	if ms.MediaSessionID != 0 {
+		d.mediaSessionID = ms.MediaSessionID
+	}
+	if len(ms.Items) > 0 {
+		d.itemIDs = d.itemIDs[:0]
+		for _, it := range ms.Items {
+			d.itemIDs = append(d.itemIDs, it.ItemID)
+		}
+	}
+	if ms.CurrentItemID != 0 {
+		for i, id := range d.itemIDs {
+			if id == ms.CurrentItemID {
+				d.lastIndex = i
+				break
+			}
+		}
+	}
+	playing := ms.PlayerState == statePlaying || ms.PlayerState == stateBuffering
+	if playing {
+		d.played = true
+	}
+	d.lastPlaying = playing
+	d.lastPositionMS = int64(ms.CurrentTime * 1000)
+	ev.Playing = playing
+	ev.Index = d.lastIndex
+	ev.PositionMS = d.lastPositionMS
+	// Finished only after something played: receivers report IDLE
+	// before the first load too, and that must not end a session.
+	ev.Finished = ms.PlayerState == stateIdle && ms.IdleReason == idleFinished && d.played
 	d.emit(ev)
 }
 

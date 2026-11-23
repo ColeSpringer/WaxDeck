@@ -14,6 +14,10 @@ import (
 
 	"github.com/colespringer/waxdeck/fixtures"
 	"github.com/colespringer/waxdeck/server/internal/cast/castv2/testreceiver"
+	"github.com/colespringer/waxdeck/server/internal/cast/dlna"
+	"github.com/colespringer/waxdeck/server/internal/cast/dlna/testrenderer"
+	"github.com/colespringer/waxdeck/server/internal/connect"
+	"github.com/colespringer/waxdeck/server/internal/supervise"
 )
 
 // wsClient is a test-side command-bus client: one socket, a reader
@@ -1080,6 +1084,198 @@ func TestBookPlaysOnDeviceEndpoint(t *testing.T) {
 	if after.Index != 0 || after.PositionMs < 8000 || after.PositionMs > 9000 {
 		t.Fatalf("session reads entry %d at %dms, want the book entry near 8000", after.Index, after.PositionMs)
 	}
+}
+
+// reportGate stands between a driver and the session reading it, so a
+// test decides when the device's reports arrive: the session reads out,
+// and the driver's own channel holds what it reported meanwhile.
+type reportGate struct {
+	connect.Driver
+	out chan connect.DriverEvent
+}
+
+func (g *reportGate) Events() <-chan connect.DriverEvent { return g.out }
+
+func (g *reportGate) CurrentLoad() uint64 { return g.Driver.(connect.LoadCounter).CurrentLoad() }
+
+// deliver hands ev to the session and returns once it has been folded
+// in: out is unbuffered, so the second send completes only after the
+// session pump has finished with the first.
+func (g *reportGate) deliver(t *testing.T, ev connect.DriverEvent) {
+	t.Helper()
+	for range 2 {
+		select {
+		case g.out <- ev:
+		case <-time.After(10 * time.Second):
+			t.Fatal("the session stopped reading the endpoint's reports")
+		}
+	}
+}
+
+// TestBookSeekOutlivesAReportFromThePartItLeft: the device's report on
+// the load a seek replaced can reach the session after the seek has
+// reloaded the device and set the position itself. It describes
+// playback that no longer exists, and folding it in put the listener
+// back at the start of the book.
+func TestBookSeekOutlivesAReportFromThePartItLeft(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ctx := context.Background()
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	books := h.items(t, "?mediaType=audiobook")
+	if len(books.Items) != 1 {
+		t.Fatalf("audiobooks = %d, want the fixture's one", len(books.Items))
+	}
+
+	recv := testreceiver.Start(t)
+	dev := recv.Device()
+	dial := dev.Dial(h.group, nil)
+	var gate atomic.Pointer[reportGate]
+	ep, err := h.connect.EndpointOnline(ctx, "cast", dev.Key(), "Kitchen speaker", recv.Addr(), true, false,
+		func(ctx context.Context) (connect.Driver, error) {
+			d, err := dial(ctx)
+			if err != nil {
+				return nil, err
+			}
+			g := &reportGate{Driver: d, out: make(chan connect.DriverEvent)}
+			gate.Store(g)
+			return g, nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sess struct{ Id string }
+	pPost(t, h, "/api/v1/player/sessions", h.token, map[string]any{
+		"endpointId": ep.ID,
+		"itemPids":   []string{books.Items[0].Pid},
+	}, http.StatusCreated, &sess)
+	g := gate.Load()
+
+	// The device's media report on the first load: part one, at its
+	// start. Receiver reports carry volume and are let go.
+	var stale connect.DriverEvent
+	for found := false; !found; {
+		select {
+		case stale = <-g.Driver.Events():
+			found = stale.Volume == nil
+		case <-time.After(10 * time.Second):
+			t.Fatal("the device never reported on the first load")
+		}
+	}
+	if stale.Index != 0 || stale.PositionMS != 0 {
+		t.Fatalf("the first load's report reads item %d at %dms, want part one at 0", stale.Index, stale.PositionMS)
+	}
+
+	controller := dialWS(t, h, h.token)
+	controller.send(map[string]any{"type": "cmd", "id": "s1", "sessionId": sess.Id, "verb": "seek", "positionMs": 8000})
+	controller.expect("ack")
+	if n := len(recv.Loads()); n != 2 {
+		t.Fatalf("receiver got %d loads, want the seek to have reloaded it", n)
+	}
+	g.deliver(t, stale)
+
+	var after struct {
+		Index      int
+		PositionMs int64
+	}
+	pGet(t, h, "/api/v1/player/sessions/"+sess.Id, h.token, &after)
+	if after.Index != 0 || after.PositionMs < 8000 || after.PositionMs > 9000 {
+		t.Fatalf("session reads entry %d at %dms, want the book entry near 8000", after.Index, after.PositionMs)
+	}
+}
+
+// gatedDevice is a device endpoint for a gated test: its registry key,
+// its address, and how to dial it under the harness's group.
+type gatedDevice struct {
+	kind, key, address string
+	dial               func(*supervise.Group) connect.DialFunc
+}
+
+// seekOutlivesAReportFromBeforeIt plays one track on a gated device
+// endpoint, holds the device's first report on it, seeks, and hands the
+// session that report once the seek is acknowledged: the report
+// describes the playhead the seek moved away from, and folding it in
+// sent the scrubber back until the device next reported.
+func seekOutlivesAReportFromBeforeIt(t *testing.T, dev gatedDevice, report func(connect.DriverEvent) bool) {
+	h := newHarness(t)
+	ctx := context.Background()
+	var track ItemSummary
+	for _, it := range h.items(t, "").Items {
+		if it.Title == "Delta Song" {
+			track = it
+		}
+	}
+	if track.Pid == "" {
+		t.Fatal("the demo library has no Delta Song, the longest of its tracks")
+	}
+
+	dial := dev.dial(h.group)
+	var gate atomic.Pointer[reportGate]
+	ep, err := h.connect.EndpointOnline(ctx, dev.kind, dev.key, "Kitchen speaker", dev.address, true, false,
+		func(ctx context.Context) (connect.Driver, error) {
+			d, err := dial(ctx)
+			if err != nil {
+				return nil, err
+			}
+			g := &reportGate{Driver: d, out: make(chan connect.DriverEvent)}
+			gate.Store(g)
+			return g, nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sess struct{ Id string }
+	pPost(t, h, "/api/v1/player/sessions", h.token, map[string]any{
+		"endpointId": ep.ID,
+		"itemPids":   []string{track.Pid},
+	}, http.StatusCreated, &sess)
+	g := gate.Load()
+
+	var stale connect.DriverEvent
+	for found := false; !found; {
+		select {
+		case stale = <-g.Driver.Events():
+			found = report(stale)
+		case <-time.After(10 * time.Second):
+			t.Fatal("the device never reported on the load")
+		}
+	}
+
+	controller := dialWS(t, h, h.token)
+	controller.send(map[string]any{"type": "cmd", "id": "s1", "sessionId": sess.Id, "verb": "seek", "positionMs": 2500})
+	controller.expect("ack")
+	g.deliver(t, stale)
+
+	var after struct {
+		Index      int
+		PositionMs int64
+	}
+	pGet(t, h, "/api/v1/player/sessions/"+sess.Id, h.token, &after)
+	if after.Index != 0 || after.PositionMs < 2500 || after.PositionMs > 3500 {
+		t.Fatalf("session reads entry %d at %dms, want the track near the seek's 2500", after.Index, after.PositionMs)
+	}
+}
+
+func TestCastSeekOutlivesAReportFromBeforeIt(t *testing.T) {
+	t.Parallel()
+	recv := testreceiver.Start(t)
+	dev := recv.Device()
+	seekOutlivesAReportFromBeforeIt(t, gatedDevice{kind: "cast", key: dev.Key(), address: recv.Addr(),
+		dial: func(g *supervise.Group) connect.DialFunc { return dev.Dial(g, nil) }},
+		// Receiver reports carry volume and are let go.
+		func(ev connect.DriverEvent) bool { return ev.Volume == nil })
+}
+
+func TestRendererSeekOutlivesAReportFromBeforeIt(t *testing.T) {
+	t.Parallel()
+	rend := testrenderer.Start(t)
+	dev := dlna.Device{Location: rend.Location()}
+	seekOutlivesAReportFromBeforeIt(t, gatedDevice{kind: "dlna", key: "udn-1", address: rend.Location(),
+		dial: func(g *supervise.Group) connect.DialFunc { return dev.Dial(g, nil) }},
+		func(ev connect.DriverEvent) bool { return ev.Playing })
 }
 
 // A timeline's items are fixed when it is minted, so its token carries

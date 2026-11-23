@@ -51,7 +51,20 @@ func (s *Server) editResultJSON(ctx context.Context, uc *service.UserCtx, o serv
 		moved := append([]string{}, o.MovedAlbums...)
 		out.MovedAlbums = &moved
 	}
+	out.Folded = foldedJSON(o.Folded)
 	return out
+}
+
+// foldedJSON renders the releases a write dissolved; nil when none did.
+func foldedJSON(folded []service.FoldedDTO) *[]FoldedEntity {
+	if len(folded) == 0 {
+		return nil
+	}
+	out := make([]FoldedEntity, 0, len(folded))
+	for _, f := range folded {
+		out = append(out, FoldedEntity{Pid: f.PID, Into: f.Into})
+	}
+	return &out
 }
 
 // writeBackFailuresJSON renders a write-back's failures as the caller
@@ -786,6 +799,7 @@ func (s *Server) RenameEntity(ctx context.Context, req RenameEntityRequestObject
 		moved := append([]string{}, out.MovedAlbums...)
 		res.MovedAlbums = &moved
 	}
+	res.Folded = foldedJSON(out.Folded)
 	if fs := s.writeBackFailuresJSON(ctx, uc, out.Failures); len(fs) > 0 {
 		res.Failures = &fs
 	}

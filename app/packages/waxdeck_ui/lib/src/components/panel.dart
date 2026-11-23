@@ -72,8 +72,11 @@ class WaxSidePanel extends StatelessWidget {
         child: Material(
           type: MaterialType.transparency,
           animationDuration: Duration.zero,
+          // Against the end edge, which is the left in a right-to-left
+          // locale: that inset is the panel's, the start one is not.
           child: SafeArea(
-            left: false,
+            left: Directionality.of(context) == TextDirection.rtl,
+            right: Directionality.of(context) == TextDirection.ltr,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[

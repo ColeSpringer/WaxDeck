@@ -10,6 +10,7 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'auth_controller.dart';
+import 'reach_again.dart';
 
 /// First-run setup: creates the server's first administrator. Shown by the
 /// root gate instead of the login form while the server has no accounts;
@@ -50,14 +51,17 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     });
     try {
       final displayName = _displayName.text.trim();
-      await ref
+      final shown = await ref
           .read(authControllerProvider.notifier)
           .bootstrap(
             username: _username.text.trim(),
             password: _password.text,
             displayName: displayName.isEmpty ? null : displayName,
           );
-      // On success the root gate unmounts this screen; nothing else to do.
+      // On success the root gate unmounts this screen. Overtaken before it
+      // showed, the form is as it was before the press: whatever came
+      // instead may have left nobody signed in.
+      if (!shown && mounted) setState(() => _submitting = false);
     } on WaxDeckApiException catch (e) {
       // A refusal of what was just typed keeps the server's words: under
       // the form while this page is still there, else through the shell.
@@ -73,6 +77,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(reachAgainProvider);
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     return ShellMessageArea(

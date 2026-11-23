@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/rendering.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -442,6 +444,91 @@ class _NavItemState extends State<_NavItem> {
   }
 }
 
+/// [child] clear of the window's insets on every side but the end: what
+/// the rail and the sidebar need, standing against the start edge, which
+/// is the right-hand one in a right-to-left locale.
+class _StartSafeArea extends StatelessWidget {
+  const _StartSafeArea({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    return SafeArea(left: !rtl, right: rtl, child: child);
+  }
+}
+
+/// [child] told the window's insets on the given sides are spent, because
+/// something drawn between it and that edge has taken them.
+class _InsetsTaken extends StatelessWidget {
+  const _InsetsTaken({
+    this.top = false,
+    this.left = false,
+    this.right = false,
+    this.bottom = false,
+    required this.child,
+  });
+
+  final bool top;
+  final bool left;
+  final bool right;
+  final bool bottom;
+  final Widget child;
+
+  // Off the view padding too: the engine leaves the part of an inset a
+  // keyboard covers out of the padding alone, and Material places
+  // floating things by the view padding.
+  @override
+  Widget build(BuildContext context) => MediaQuery(
+    data: MediaQuery.of(context)
+        .removePadding(
+          removeTop: top,
+          removeLeft: left,
+          removeRight: right,
+          removeBottom: bottom,
+        )
+        .removeViewPadding(
+          removeTop: top,
+          removeLeft: left,
+          removeRight: right,
+          removeBottom: bottom,
+        ),
+    child: child,
+  );
+}
+
+/// [child], the pane, handed only the part of the keyboard that reaches
+/// above its own foot: the keyboard rises from the window's foot, which is
+/// the frame's, over whatever the frame draws below the pane, and that part
+/// of it is already out of the pane's way.
+///
+/// Laid out rather than measured: the pane's height is its constraint in
+/// the pass that lays out what is below it, so no frame draws the page
+/// with the whole keyboard first.
+class _KeyboardShare extends StatelessWidget {
+  const _KeyboardShare({required this.frameHeight, required this.child});
+
+  final double frameHeight;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final media = MediaQuery.of(context);
+      final below = frameHeight - constraints.maxHeight;
+      return MediaQuery(
+        data: media.copyWith(
+          viewInsets: media.viewInsets.copyWith(
+            bottom: math.max(0, media.viewInsets.bottom - below),
+          ),
+        ),
+        child: child,
+      );
+    },
+  );
+}
+
 /// Bottom tabs: the compact shell's navigation.
 ///
 /// It sits below the deck bar and above the system inset, and it never
@@ -494,8 +581,12 @@ class WaxNavBar extends StatelessWidget {
             ),
           ),
         ),
+        // Through a keyboard as well: it covers the inset rather than
+        // taking it, and the tabs keep their height under it so the
+        // page's foot does not drop while the keyboard rises.
         child: SafeArea(
           top: false,
+          maintainBottomViewPadding: true,
           child: SizedBox(
             height: heightFor(context),
             child: Row(
@@ -578,8 +669,7 @@ class WaxNavRail extends StatelessWidget {
             ),
           ),
         ),
-        child: SafeArea(
-          right: false,
+        child: _StartSafeArea(
           child: SizedBox(
             width: WaxShellMetrics.railWidth,
             child: Column(
@@ -984,8 +1074,7 @@ class _WaxSidebarState extends State<WaxSidebar> {
             ),
           ),
         ),
-        child: SafeArea(
-          right: false,
+        child: _StartSafeArea(
           child: SizedBox(
             width: collapsed
                 ? WaxShellMetrics.railWidth
@@ -1264,6 +1353,11 @@ class WaxShellFrame extends StatefulWidget {
 
   /// The deck bar. Full width below everything, except on compact where
   /// it sits above the tabs.
+  ///
+  /// Null whenever it would draw nothing: below the rail and the sidebar,
+  /// a bar takes the window's bottom inset under its own surface and the
+  /// chrome above it is told so, while an empty slot leaves the inset to
+  /// the chrome.
   final Widget? bottom;
 
   /// The right panel. Docked beside the content on [WaxSizeClass.wide]
@@ -1345,8 +1439,14 @@ class _WaxShellFrameState extends State<WaxShellFrame> {
     );
   }
 
+  // Through its own height: the pane is handed the keyboard less what
+  // the frame draws below it, which this pass lays out.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => _frame(context, constraints.maxHeight),
+  );
+
+  Widget _frame(BuildContext context, double height) {
     final destinations = widget.destinations;
     final secondary = widget.secondary;
     final selected = widget.selected;
@@ -1356,6 +1456,9 @@ class _WaxShellFrameState extends State<WaxShellFrame> {
     final banners = widget.banners;
     final sizeClass = widget.sizeClass ?? WaxSizeClass.of(context);
     final colors = WaxColors.of(context);
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    final insets = MediaQuery.paddingOf(context);
+    final endInset = rtl ? insets.left : insets.right;
 
     // The content is its own semantics region, and that is load-bearing
     // rather than decorative. Every route inside it carries a
@@ -1377,25 +1480,48 @@ class _WaxShellFrameState extends State<WaxShellFrame> {
     // frame: the chrome is where a visitor is going, and pushing the
     // sidebar and the rail down every time the socket blinks would move
     // the navigation under their cursor.
-    Widget withBanners(Widget content) => banners.isEmpty
-        ? content
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              ...banners,
-              Expanded(child: content),
-            ],
-          );
+    //
+    // On top of the content they take the window's top inset, which the
+    // page's own bar takes otherwise; the content is told it is spent, so
+    // the bar is not pushed down by it a second time.
+    //
+    // One shape with banners or without, so a banner coming or going does
+    // not remount the content and a side panel in it.
+    Widget withBanners(Widget content) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (banners.isEmpty)
+          const SizedBox.shrink()
+        else
+          SafeArea(
+            bottom: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: banners,
+            ),
+          ),
+        Expanded(
+          child: _InsetsTaken(top: banners.isNotEmpty, child: content),
+        ),
+      ],
+    );
 
     // Traversal order is shell, then content, then deck bar, which is the
     // order the children are listed in below.
     Widget middle = FocusScope(node: _content, child: region(widget.content));
+    // The panel stands against the end edge and takes that inset itself,
+    // as [WaxSidePanel] does, on top of its own width.
     if (panel != null) {
       if (sizeClass.docksPanel) {
         middle = Row(
           children: <Widget>[
-            Expanded(child: middle),
-            SizedBox(width: WaxShellMetrics.rightPanelWidth, child: panel),
+            Expanded(
+              child: _InsetsTaken(left: rtl, right: !rtl, child: middle),
+            ),
+            SizedBox(
+              width: WaxShellMetrics.rightPanelWidth + endInset,
+              child: panel,
+            ),
           ],
         );
       } else if (sizeClass.hasSidebar) {
@@ -1412,20 +1538,29 @@ class _WaxShellFrameState extends State<WaxShellFrame> {
               top: 0,
               bottom: 0,
               end: 0,
-              width: WaxShellMetrics.rightPanelWidth,
+              width: WaxShellMetrics.rightPanelWidth + endInset,
               child: panel,
             ),
           ],
         );
       }
     }
-    final pane = Expanded(child: withBanners(middle));
+    // Beside the rail or the sidebar, the start inset is the chrome's; on
+    // a phone the bottom one is the tabs'.
+    final pane = Expanded(
+      child: _KeyboardShare(
+        frameHeight: height,
+        child: sizeClass.isCompact
+            ? _InsetsTaken(bottom: true, child: withBanners(middle))
+            : _InsetsTaken(left: !rtl, right: rtl, child: withBanners(middle)),
+      ),
+    );
 
     final Widget body = switch (sizeClass) {
       WaxSizeClass.compact => Column(
         children: <Widget>[
           pane,
-          ?bottom,
+          if (bottom != null) _InsetsTaken(bottom: true, child: bottom),
           WaxNavBar(
             destinations: destinations,
             selected: selected,
@@ -1437,23 +1572,26 @@ class _WaxShellFrameState extends State<WaxShellFrame> {
       WaxSizeClass.medium => Column(
         children: <Widget>[
           Expanded(
-            child: Row(
-              children: <Widget>[
-                WaxNavRail(
-                  destinations: destinations,
-                  selected: selected,
-                  onSelect: onSelect,
-                  secondary: secondary,
-                  account: _accountButton(
-                    labelled: false,
-                    // The rail's own overflow lists them.
-                    listsSecondary: true,
+            child: _InsetsTaken(
+              bottom: bottom != null,
+              child: Row(
+                children: <Widget>[
+                  WaxNavRail(
+                    destinations: destinations,
+                    selected: selected,
+                    onSelect: onSelect,
+                    secondary: secondary,
+                    account: _accountButton(
+                      labelled: false,
+                      // The rail's own overflow lists them.
+                      listsSecondary: true,
+                    ),
+                    semanticsId: widget.navSemanticsId,
+                    overflowSemanticsId: widget.overflowSemanticsId,
                   ),
-                  semanticsId: widget.navSemanticsId,
-                  overflowSemanticsId: widget.overflowSemanticsId,
-                ),
-                pane,
-              ],
+                  pane,
+                ],
+              ),
             ),
           ),
           ?bottom,
@@ -1462,25 +1600,28 @@ class _WaxShellFrameState extends State<WaxShellFrame> {
       WaxSizeClass.expanded || WaxSizeClass.wide => Column(
         children: <Widget>[
           Expanded(
-            child: Row(
-              children: <Widget>[
-                WaxSidebar(
-                  destinations: destinations,
-                  selected: selected,
-                  onSelect: onSelect,
-                  secondary: secondary,
-                  header: widget.sidebarHeader,
-                  collapsed: widget.collapsed,
-                  onToggleCollapsed: widget.onToggleCollapsed,
-                  collapseSemanticsId: widget.collapseSemanticsId,
-                  account: _accountButton(
-                    labelled: false,
-                    listsSecondary: true,
+            child: _InsetsTaken(
+              bottom: bottom != null,
+              child: Row(
+                children: <Widget>[
+                  WaxSidebar(
+                    destinations: destinations,
+                    selected: selected,
+                    onSelect: onSelect,
+                    secondary: secondary,
+                    header: widget.sidebarHeader,
+                    collapsed: widget.collapsed,
+                    onToggleCollapsed: widget.onToggleCollapsed,
+                    collapseSemanticsId: widget.collapseSemanticsId,
+                    account: _accountButton(
+                      labelled: false,
+                      listsSecondary: true,
+                    ),
+                    semanticsId: widget.navSemanticsId,
                   ),
-                  semanticsId: widget.navSemanticsId,
-                ),
-                pane,
-              ],
+                  pane,
+                ],
+              ),
             ),
           ),
           ?bottom,
@@ -1519,10 +1660,10 @@ class _WaxShellFrameState extends State<WaxShellFrame> {
           // the order a screen reader walks, and the order the web build
           // lays its elements out in. Directional, because the chrome it
           // skips is at the start edge and that is the right-hand side in
-          // a right-to-left locale.
+          // a right-to-left locale; inside that corner's insets.
           PositionedDirectional(
-            top: 0,
-            start: 0,
+            top: insets.top,
+            start: rtl ? insets.right : insets.left,
             child: Semantics(
               container: true,
               sortKey: const OrdinalSortKey(0),

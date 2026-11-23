@@ -42,9 +42,10 @@ final artworkPaletteProvider = FutureProvider.autoDispose
       final cache = ref.watch(paletteCacheProvider);
       if (cache.holds(artUrl)) return cache.recall(artUrl);
 
-      final bytes = await ref
-          .watch(artworkStoreProvider)
-          .bytesFor(artUrl, artworkPaletteSize);
+      // Heard before the read: a colour read off a pin goes when the
+      // store names that cover anew.
+      final store = ref.watch(artworkStoreProvider)..onRenamed(cache.forget);
+      final bytes = await store.bytesFor(artUrl, artworkPaletteSize);
       WaxPalette? palette;
       if (bytes != null && bytes.isNotEmpty) {
         try {

@@ -138,7 +138,7 @@ func TestTreatAnAlbumAsAnAudiobook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !h.svc.Playback.EffectiveVoiceBoost(ctx, uc, tracks[0]) {
+	if !h.svc.Playback.EffectiveVoiceBoost(ctx, uc, tracks[0], nil, false) {
 		t.Fatal("the old track pid plays the book without its stored voice boost")
 	}
 }

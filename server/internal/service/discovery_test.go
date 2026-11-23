@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/colespringer/waxbin"
+	"github.com/colespringer/waxbin/enrich"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/source"
 	"github.com/colespringer/waxdeck/fixtures"
@@ -40,6 +41,8 @@ type catalogFixtureOptions struct {
 	logs io.Writer
 	// sources is Config.SourceProviders.
 	sources []source.Provider
+	// enrichers is Config.EnrichmentProviders.
+	enrichers []enrich.Provider
 }
 
 func newCatalogFixtureWith(t *testing.T, opts catalogFixtureOptions) (context.Context, *Library, *UserCtx) {
@@ -93,11 +96,12 @@ func newCatalogFixtureWith(t *testing.T, opts catalogFixtureOptions) (context.Co
 	}
 	group := supervise.NewGroup(log)
 	svc, err := Open(ctx, Config{
-		DataDir:          dataDir,
-		Roots:            []Root{{Name: "lib", Path: libDir}},
-		Logger:           log,
-		WorkerLocalPaths: opts.workerLocalPaths,
-		SourceProviders:  opts.sources,
+		DataDir:             dataDir,
+		Roots:               []Root{{Name: "lib", Path: libDir}},
+		Logger:              log,
+		WorkerLocalPaths:    opts.workerLocalPaths,
+		SourceProviders:     opts.sources,
+		EnrichmentProviders: opts.enrichers,
 	}, store, group)
 	if err != nil {
 		t.Fatal(err)

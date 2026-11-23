@@ -96,6 +96,7 @@ class BookWindowFeed extends ValueNotifier<Duration> {
   final ValueNotifier<BookWindow> _window = ValueNotifier(_nothing);
 
   PlaybackSession? _session;
+  BookDetail? _detail;
   BookTimelineScope? _scope;
   StreamSubscription<Duration>? _feed;
   Duration _at = Duration.zero;
@@ -114,8 +115,11 @@ class BookWindowFeed extends ValueNotifier<Duration> {
   /// nothing.
   void follow(PlaybackSession? session, BookTimelineScope scope) {
     final moved = !identical(session, _session);
-    if (!moved && scope == _scope) return;
+    // The session's book read again, its chapter marks with it.
+    final reread = !identical(session?.book, _detail);
+    if (!moved && scope == _scope && !reread) return;
     _scope = scope;
+    _detail = session?.book;
     if (moved) {
       _session = session;
       unawaited(_feed?.cancel());

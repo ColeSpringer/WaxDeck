@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
@@ -93,14 +94,20 @@ class AsyncSliverFace<T> extends StatelessWidget {
 /// read that answered nothing is that last answer, as final as a refusal:
 /// the entity reads drop what they cannot answer for (unknown, merged
 /// away, out of the caller's sight). Null once the read has found it,
-/// when the page draws itself, an empty listing and all.
+/// when the page draws itself, an empty listing and all, unless a later
+/// read was told it is not there: a value held from before says nothing
+/// then, and the page is gone as it is to a read that never found it.
 Widget? unprovenEntityFace<T extends Object>(
   BuildContext context,
   AsyncValue<T?> read, {
   required String errorTitle,
   required VoidCallback onRetry,
 }) {
-  if (read.value != null) return null;
+  final gone = switch (read.error) {
+    WaxDeckApiException(isNotFound: true) => true,
+    _ => false,
+  };
+  if (read.value != null && !gone) return null;
   return switch (resolveAsyncFace(read)) {
     final AsyncFaceFailed<T?> failed => SliverFillRemaining(
       hasScrollBody: false,

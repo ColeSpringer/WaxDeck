@@ -9,10 +9,13 @@ import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/books/books_controller.dart';
 import 'package:waxdeck/src/books/books_screen.dart';
 import 'package:waxdeck/src/books/series_screen.dart';
-import 'package:waxdeck/src/l10n/formats.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
+import 'package:waxdeck/src/player/playback_session.dart';
+import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/tools/tasks_screen.dart';
 import 'package:waxdeck/src/tools/tool_tasks_provider.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -95,6 +98,68 @@ class _UnreachableBooks extends FakeRepository {
         code: 'transport',
         message: 'connection refused',
       );
+}
+
+/// A server whose book read fails while [bookReadError] is set.
+class _BookReadFails extends FakeRepository {
+  WaxDeckApiException? bookReadError;
+
+  @override
+  Future<BookDetail> getBook(String pid) async {
+    if (bookReadError case final error?) throw error;
+    return super.getBook(pid);
+  }
+}
+
+/// The rate the slider carrying [id] reads out.
+String? _shownSpeed(WidgetTester tester, String id) =>
+    tester.getSemantics(find.bySemanticsIdentifier(id)).value;
+
+/// The switch in the settings row keyed [key].
+Finder _settingsSwitch(String key) =>
+    find.descendant(of: find.byKey(Key(key)), matching: find.byType(WaxSwitch));
+
+/// One step up on the slider carrying [id], as a screen reader takes it.
+void _stepUp(WidgetTester tester, String id) =>
+    _step(tester, id, SemanticsAction.increase);
+
+/// One step down, as [_stepUp] takes one up.
+void _stepDown(WidgetTester tester, String id) =>
+    _step(tester, id, SemanticsAction.decrease);
+
+void _step(WidgetTester tester, String id, SemanticsAction action) =>
+    tester.binding.performSemanticsAction(
+      SemanticsActionEvent(
+        type: action,
+        nodeId: tester.getSemantics(find.bySemanticsIdentifier(id)).id,
+        viewId: tester.view.viewId,
+      ),
+    );
+
+/// The player's own writer storing [speed] for the book, as a tap on its
+/// speed sheet does.
+Future<void> _playerStores(
+  WidgetTester tester,
+  FakeRepository repo,
+  double speed,
+) async {
+  final session = PlaybackSession(
+    repository: repo,
+    engine: FakeEngine(),
+    item: const ItemSummary(
+      pid: bookPid,
+      mediaType: MediaType.audiobook,
+      title: 'There And Back Again',
+      durationMs: 3600000,
+    ),
+    clientId: 'test',
+  );
+  await session.start(autoplay: false);
+  await session.setSpeed(speed);
+  for (var i = 0; i < 10; i++) {
+    await tester.pump();
+  }
+  await session.dispose();
 }
 
 /// An administrator's repository that counts the task list's reads.
@@ -557,6 +622,185 @@ void main() {
     expect(saved.pid, bookPid);
     expect(saved.settings.trimSilence, isTrue);
     expect(saved.settings.speed, closeTo(1.05, 0.001));
+    semantics.dispose();
+  });
+
+  testWidgets('a rate the player stored while the settings sheet stood '
+      'open survives the sheet saving a trim', (tester) async {
+    final repo = _repo();
+    await _pump(tester, repo);
+    await _tap(tester, SemanticsIds.bookSettingsOpen);
+
+    await _playerStores(tester, repo, 1.5);
+    expect(repo.storedBookSettings[bookPid]?.speed, 1.5);
+    await tester.tap(_settingsSwitch('book-settings-trim'));
+    await tester.pump();
+    await _tap(tester, SemanticsIds.bookSettingsSave);
+
+    final saved = repo.putBookSettingsCalls.last.settings;
+    expect(saved.speed, 1.5);
+    expect(saved.trimSilence, isTrue);
+  });
+
+  for (final field in ['speed', 'boost', 'trim']) {
+    testWidgets('a change another device made while the settings sheet '
+        'stood open survives the sheet saving its $field', (tester) async {
+      final repo = _repo();
+      await _pump(tester, repo);
+      final semantics = tester.ensureSemantics();
+      await _tap(tester, SemanticsIds.bookSettingsOpen);
+
+      // Every field but the one the sheet changes.
+      repo.storedBookSettings[bookPid] = BookSettings(
+        speed: field == 'speed' ? null : 1.5,
+        voiceBoost: field == 'boost' ? null : true,
+        trimSilence: field == 'trim' ? null : true,
+      );
+      switch (field) {
+        case 'speed':
+          _stepUp(tester, SemanticsIds.bookSettingsSpeed);
+        case 'boost':
+          await tester.tap(_settingsSwitch('book-settings-boost'));
+        case 'trim':
+          await tester.tap(_settingsSwitch('book-settings-trim'));
+      }
+      await tester.pump();
+      await _tap(tester, SemanticsIds.bookSettingsSave);
+
+      final saved = repo.putBookSettingsCalls.single.settings;
+      expect(saved.speed, field == 'speed' ? closeTo(1.05, 0.001) : 1.5);
+      expect(saved.voiceBoost, isTrue);
+      expect(saved.trimSilence, isTrue);
+      semantics.dispose();
+    });
+  }
+
+  testWidgets('a settings save that cannot read the stored settings writes '
+      'nothing, keeps the sheet up and says why', (tester) async {
+    const unreachable = WaxDeckApiException(
+      code: 'transport',
+      message: 'connection refused',
+    );
+    final repo = _BookReadFails()..books[bookPid] = testBook(bookPid);
+    final container = await _pump(tester, repo);
+    await _tap(tester, SemanticsIds.bookSettingsOpen);
+
+    repo.bookReadError = unreachable;
+    await tester.tap(_settingsSwitch('book-settings-trim'));
+    await tester.pump();
+    await _tap(tester, SemanticsIds.bookSettingsSave);
+
+    expect(repo.putBookSettingsCalls, isEmpty);
+    expect(find.byType(BookSettingsSheet), findsOneWidget);
+    expect(
+      shellMessageText(container.read(shellMessagesProvider)),
+      explainError(AppLocalizationsEn(), unreachable),
+    );
+  });
+
+  testWidgets('the settings sheet shows the stored settings once they are '
+      'read, what the screen had drawn until then', (tester) async {
+    final repo = _repo();
+    await _pump(tester, repo);
+    final semantics = tester.ensureSemantics();
+    await _playerStores(tester, repo, 1.5);
+    final read = repo.getBookGate = Completer<void>();
+    await _tap(tester, SemanticsIds.bookSettingsOpen);
+    expect(
+      _shownSpeed(tester, SemanticsIds.bookSettingsSpeed),
+      AppLocalizationsEn().formatSpeed(1.0),
+      reason: 'nothing waits on the read',
+    );
+
+    read.complete();
+    await tester.pumpAndSettle();
+    expect(
+      _shownSpeed(tester, SemanticsIds.bookSettingsSpeed),
+      AppLocalizationsEn().formatSpeed(1.5),
+    );
+    semantics.dispose();
+  });
+
+  for (final moved in [false, true]) {
+    testWidgets('with nothing stored the settings sheet draws the device '
+        'defaults playback uses, and stores '
+        '${moved ? 'what was moved' : 'nothing for them left alone'}', (
+      tester,
+    ) async {
+      final repo = _repo();
+      final container = await _pump(tester, repo);
+      container.read(bookSpeedProvider.notifier).set(1.5);
+      container.read(trimSilenceDefaultProvider.notifier).set(true);
+      container.read(voiceBoostDefaultProvider.notifier).set(true);
+      final semantics = tester.ensureSemantics();
+      await _tap(tester, SemanticsIds.bookSettingsOpen);
+      expect(
+        _shownSpeed(tester, SemanticsIds.bookSettingsSpeed),
+        AppLocalizationsEn().formatSpeed(1.5),
+      );
+      expect(
+        tester.widget<WaxSwitch>(_settingsSwitch('book-settings-trim')).value,
+        isTrue,
+      );
+      expect(
+        tester.widget<WaxSwitch>(_settingsSwitch('book-settings-boost')).value,
+        isTrue,
+      );
+
+      if (moved) {
+        for (var i = 0; i < 10; i++) {
+          _stepDown(tester, SemanticsIds.bookSettingsSpeed);
+          await tester.pump();
+        }
+        expect(
+          _shownSpeed(tester, SemanticsIds.bookSettingsSpeed),
+          AppLocalizationsEn().formatSpeed(1.0),
+        );
+        await tester.tap(_settingsSwitch('book-settings-trim'));
+        await tester.pump();
+      }
+      await _tap(tester, SemanticsIds.bookSettingsSave);
+
+      final saved = repo.putBookSettingsCalls.single.settings;
+      if (moved) {
+        expect(saved.speed, closeTo(1.0, 0.001));
+        expect(saved.trimSilence, isFalse);
+      } else {
+        expect(saved.speed, isNull);
+        expect(saved.trimSilence, isNull);
+      }
+      expect(saved.voiceBoost, isNull);
+      semantics.dispose();
+    });
+  }
+
+  testWidgets('a settings field changed before the stored settings are read '
+      'keeps what was chosen there; the others take what is stored', (
+    tester,
+  ) async {
+    final repo = _repo();
+    await _pump(tester, repo);
+    final semantics = tester.ensureSemantics();
+    await _playerStores(tester, repo, 1.5);
+    await repo.putBookSettings(
+      bookPid,
+      const BookSettings(speed: 1.5, trimSilence: true),
+    );
+    final read = repo.getBookGate = Completer<void>();
+    await _tap(tester, SemanticsIds.bookSettingsOpen);
+    _stepUp(tester, SemanticsIds.bookSettingsSpeed);
+    await tester.pump();
+
+    read.complete();
+    await tester.pumpAndSettle();
+    expect(
+      _shownSpeed(tester, SemanticsIds.bookSettingsSpeed),
+      AppLocalizationsEn().formatSpeed(1.05),
+    );
+    expect(
+      tester.widget<WaxSwitch>(_settingsSwitch('book-settings-trim')).value,
+      isTrue,
+    );
     semantics.dispose();
   });
 

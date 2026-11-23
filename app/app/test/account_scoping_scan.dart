@@ -129,6 +129,79 @@ Future<List<String>> breachesIn(
   return [...await scan.errors(), ...breaches];
 }
 
+/// The scan's reading of `lib/`, for an audit with a rule of its own over
+/// the same builds and the same following of references (see the library
+/// comment for both).
+class LibReads {
+  LibReads._(this._scan);
+
+  static Future<LibReads> open(
+    AnalysisHost host,
+    Iterable<String> files,
+  ) async => LibReads._(await _Scan.open(host, files));
+
+  final _Scan _scan;
+
+  /// Each provider the files declare, with the elements [wanted] picks
+  /// among what its build refers to, however deep: null when the scan
+  /// cannot tell its build, [unknown] then saying why. The class a
+  /// function provider holds is not read whole here: only what its
+  /// create callback runs or refers to. A notifier is: every member its
+  /// class runs as itself, whether or not its build names it, since what
+  /// any of them reads is the provider's state. With each, every body
+  /// read on the way, a closure or a declaration. What [stop] picks is
+  /// referred to and not followed.
+  Future<List<ProviderReads>> providers(
+    bool Function(Element) wanted, {
+    bool Function(Element)? stop,
+  }) async {
+    final found = <ProviderReads>[];
+    for (final (:path, :variable, autoDispose: _, :build)
+        in await _scan.declared()) {
+      final read = <AstNode>{};
+      found.add((
+        path: path,
+        variable: variable,
+        unknown: build is _Build ? null : '$build',
+        picked: build is _Build
+            ? await _scan.picked(
+                [...build.roots, ...await _scan.members(build.chain)],
+                build.chain,
+                wanted,
+                read: read,
+                stop: stop,
+              )
+            : null,
+        read: read,
+      ));
+    }
+    return found;
+  }
+
+  /// What [node], a declaration of this package, refers to itself,
+  /// closures and local functions included: the elements, and the
+  /// declarations of this package the scan follows them to.
+  Future<({Set<Element> elements, List<AstNode> declarations})> step(
+    AstNode node,
+  ) => _scan.step(node);
+
+  /// The declaration of [element] when this package declares it.
+  Future<AstNode?> declaration(Element element) => _scan.declaration(element);
+
+  /// One line per unit of `lib/` the scan resolved that does not compile.
+  Future<List<String>> errors() => _scan.errors();
+}
+
+/// A provider, what was picked among its build's references, and the
+/// bodies read to find them.
+typedef ProviderReads = ({
+  String path,
+  TopLevelVariableElement variable,
+  String? unknown,
+  Set<Element>? picked,
+  Set<AstNode> read,
+});
+
 /// Generated sources under `lib/`.
 const _generated = [
   'lib/src/l10n/gen/',
@@ -145,6 +218,15 @@ bool _scanned(String path) =>
 /// A provider: why its build is unknown, or whether it is kept alive and
 /// reads the repository unkeyed.
 typedef _Verdict = ({String path, String name, String? unknown, bool breach});
+
+/// A provider as declared: its build is a [_Build], or why the scan cannot
+/// tell it.
+typedef _Declared = ({
+  String path,
+  TopLevelVariableElement variable,
+  bool autoDispose,
+  Object build,
+});
 
 /// A build: where it starts, the lookup order of the notifier class it
 /// runs on (empty for a function provider), and what only reading starts
@@ -210,38 +292,51 @@ class _Scan {
 
   AnalysisSession get session => host.session;
 
-  /// Each provider [files] declare.
-  Future<List<_Verdict>> verdicts() async {
-    final found = <_Verdict>[];
+  /// Each provider [files] declare, with the Riverpod call that creates
+  /// it and its build, or why the scan cannot tell it.
+  Future<List<_Declared>> declared() async {
+    final found = <_Declared>[];
     for (final path in files.where(_scanned)) {
       final unit = await session.getUnitElement(host.absolute(path));
       if (unit is! UnitElementResult) throw StateError('cannot read $path');
       for (final fragment in unit.fragment.topLevelVariables) {
         final variable = fragment.element;
         if (!_isProvider(variable.type)) continue;
-        final name = variable.name!;
         final creation = _creation(
           (await declaration(variable) as VariableDeclaration?)?.initializer,
         );
-        final build = creation == null
-            ? 'Riverpod does not create it'
-            : await buildOf(variable, creation.arguments);
-        if (build is! _Build) {
-          found.add((path: path, name: name, unknown: '$build', breach: false));
-          continue;
-        }
-        final autoDispose = creation!.autoDispose;
-        final reached = await reach(build, keepAlive: autoDispose);
         found.add((
           path: path,
-          name: name,
-          unknown: null,
-          breach:
-              (!autoDispose || reached.keepsAlive) &&
-              (variable == _repository || reached.reads) &&
-              !await keyed(build),
+          variable: variable,
+          autoDispose: creation?.autoDispose ?? false,
+          build: creation == null
+              ? 'Riverpod does not create it'
+              : await buildOf(variable, creation.arguments),
         ));
       }
+    }
+    return found;
+  }
+
+  /// Each provider [files] declare.
+  Future<List<_Verdict>> verdicts() async {
+    final found = <_Verdict>[];
+    for (final (:path, :variable, :autoDispose, :build) in await declared()) {
+      final name = variable.name!;
+      if (build is! _Build) {
+        found.add((path: path, name: name, unknown: '$build', breach: false));
+        continue;
+      }
+      final reached = await reach(build, keepAlive: autoDispose);
+      found.add((
+        path: path,
+        name: name,
+        unknown: null,
+        breach:
+            (!autoDispose || reached.keepsAlive) &&
+            (variable == _repository || reached.reads) &&
+            !await keyed(build),
+      ));
     }
     return found;
   }
@@ -400,6 +495,66 @@ class _Scan {
       }
     }
     return (reads: reads, keepsAlive: keepsAlive);
+  }
+
+  /// The elements [wanted] picks among what [roots] refer to, however
+  /// deep, followed as [reach] follows a build, but not into what [stop]
+  /// picks. Every body read on the way is added to [read].
+  Future<Set<Element>> picked(
+    List<_Item> roots,
+    List<InterfaceElement> chain,
+    bool Function(Element) wanted, {
+    Set<AstNode>? read,
+    bool Function(Element)? stop,
+  }) async {
+    final found = <Element>{};
+    final seen = <Object>{};
+    final queue = [...roots];
+    while (queue.isNotEmpty) {
+      final item = queue.removeLast();
+      if (!seen.add((item.node, item.self, item.holder))) continue;
+      read?.add(item.node);
+      for (final ref in _visit(item, ranOnly: false).refs) {
+        if (wanted(ref.element)) found.add(ref.element);
+        if (stop != null && stop(ref.element)) continue;
+        queue.addAll(await _follow(ref, item, chain, keys: false));
+      }
+    }
+    return found;
+  }
+
+  /// The members a notifier of [chain] runs as itself: every concrete
+  /// instance method, getter and setter its class, and the mixins and
+  /// superclasses of this package under it, declare.
+  Future<List<_Item>> members(List<InterfaceElement> chain) async => [
+    for (final (index, holder) in chain.indexed)
+      if (_ours(holder.library))
+        for (final member in <ExecutableElement>[
+          ...holder.methods,
+          ...holder.getters,
+          ...holder.setters,
+        ])
+          if (!member.isStatic &&
+              !member.isAbstract &&
+              !(member is PropertyAccessorElement && member.isOriginVariable))
+            if (await declaration(member) case final node?)
+              (node: node, self: true, holder: index, refs: const <Element>{}),
+  ];
+
+  /// One step of [picked] from [node], read as any object's code.
+  Future<({Set<Element> elements, List<AstNode> declarations})> step(
+    AstNode node,
+  ) async {
+    final item = _item(node);
+    final elements = <Element>{};
+    final declarations = <AstNode>[];
+    for (final ref in _visit(item, ranOnly: false).refs) {
+      elements.add(ref.element);
+      for (final next in await _follow(ref, item, const [], keys: false)) {
+        declarations.add(next.node);
+      }
+    }
+    return (elements: elements, declarations: declarations);
   }
 
   /// Whether [build] watches the account on its own `Ref` as part of

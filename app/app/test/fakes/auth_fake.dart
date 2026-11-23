@@ -18,6 +18,9 @@ mixin FakeAuth on FakeRepositoryState implements AuthApi {
   Completer<void>? bootstrapGate;
   Completer<void>? signupGate;
 
+  /// Holds [oidcExchange], when set, until completed.
+  Completer<void>? oidcExchangeGate;
+
   /// Thrown by [refreshToken] when set, to exercise rotation failures.
   WaxDeckApiException? refreshError;
 
@@ -35,6 +38,13 @@ mixin FakeAuth on FakeRepositoryState implements AuthApi {
 
   int refreshCalls = 0;
 
+  /// The tokens [logoutToken] was asked to end, in order.
+  final List<String> tokenLogouts = [];
+
+  /// Who a sign-in by password signs in; the fake's own administrator
+  /// while unset.
+  WaxDeckUser? signsIn;
+
   static const _user = WaxDeckUser(
     id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
     username: 'admin',
@@ -45,14 +55,52 @@ mixin FakeAuth on FakeRepositoryState implements AuthApi {
   /// session it opens reports.
   bool serverReadOnly = false;
 
-  LoginResult _signIn({WaxDeckUser user = _user, String token = 'test-token'}) {
+  /// Moves as the client's count of its credentials does: at every
+  /// sign-in and sign-out, and whenever the bearer is set to another.
+  var _credentials = 0;
+
+  /// Moves as the client's count of its sign-outs does: when the bearer is
+  /// dropped, and when a sign-out is asked.
+  var _signOuts = 0;
+
+  @override
+  set authToken(String? token) {
+    if (token != super.authToken) _credentials++;
+    if (token == null && super.authToken != null) _signOuts++;
+    super.authToken = token;
+  }
+
+  /// What a sign-in asked at the count [asked] answers: as the client, one
+  /// a sign-out was asked since is answered and not taken up.
+  LoginResult _signInAsked(
+    int asked, {
+    WaxDeckUser user = _user,
+    String token = 'test-token',
+  }) => asked == _signOuts
+      ? _signIn(user: user, token: token, session: 'se-$token')
+      : LoginResult(user: user, token: token, sessionId: 'se-$token');
+
+  /// Signs in on [token], whose session the reads after it name [session];
+  /// its answer names it as the server's does, a rotation the one it
+  /// rotated.
+  LoginResult _signIn({
+    WaxDeckUser user = _user,
+    String token = 'test-token',
+    String? session,
+  }) {
     sessionState = SessionState(
       authenticated: true,
       user: user,
       serverReadOnly: serverReadOnly,
+      sessionId: session,
     );
-    authToken = token;
-    return LoginResult(user: user, token: token);
+    _credentials++;
+    super.authToken = token;
+    return LoginResult(
+      user: user,
+      token: token,
+      sessionId: session ?? 'se-$token',
+    );
   }
 
   @override
@@ -67,6 +115,7 @@ mixin FakeAuth on FakeRepositoryState implements AuthApi {
     required String password,
     String? displayName,
   }) async {
+    final asked = _signOuts;
     bootstrapCalls.add((
       username: username,
       password: password,
@@ -76,7 +125,8 @@ mixin FakeAuth on FakeRepositoryState implements AuthApi {
     final error = bootstrapError;
     if (error != null) throw error;
     bootstrapNeeded = false;
-    return _signIn(
+    return _signInAsked(
+      asked,
       user: WaxDeckUser(
         id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
         username: username,
@@ -92,6 +142,7 @@ mixin FakeAuth on FakeRepositoryState implements AuthApi {
     required String password,
     String? deviceName,
   }) async {
+    final asked = _signOuts;
     loginCalls.add((
       username: username,
       password: password,
@@ -100,7 +151,7 @@ mixin FakeAuth on FakeRepositoryState implements AuthApi {
     await loginGate?.future;
     final error = loginError;
     if (error != null) throw error;
-    return _signIn();
+    return _signInAsked(asked, user: signsIn ?? _user);
   }
 
   /// Holds every session read until completed, when set: the session
@@ -113,18 +164,39 @@ mixin FakeAuth on FakeRepositoryState implements AuthApi {
     return sessionState;
   }
 
+  /// Holds [refreshToken] open, when set, until completed.
+  Completer<void>? refreshGate;
+
   @override
   Future<LoginResult> refreshToken() async {
     refreshCalls++;
+    final asked = _credentials;
+    if (refreshGate case final gate?) await gate.future;
     final error = refreshError;
     if (error != null) throw error;
-    return _signIn(token: 'rotated-token');
+    // As the client: a rotation its credentials moved under while it was
+    // out is answered and not taken up, even with the same bearer back.
+    if (_credentials != asked) {
+      return LoginResult(
+        user: sessionState.user ?? _user,
+        token: 'rotated-token',
+        sessionId: sessionState.sessionId ?? 'se-rotated-token',
+      );
+    }
+    return _signIn(token: 'rotated-token', session: sessionState.sessionId);
   }
 
   @override
   Future<void> logout() async {
+    _signOuts++;
     sessionState = const SessionState(authenticated: false);
-    authToken = null;
+    _credentials++;
+    super.authToken = null;
+  }
+
+  /// [WaxDeckRepository.logoutToken]: answered, and only recorded.
+  Future<void> logoutToken(String token) async {
+    tokenLogouts.add(token);
   }
 
   @override
@@ -187,12 +259,14 @@ mixin FakeAuth on FakeRepositoryState implements AuthApi {
     String? verifier,
     String? deviceName,
   }) async {
+    final asked = _signOuts;
     oidcExchangeCalls.add((
       code: code,
       verifier: verifier,
       deviceName: deviceName,
     ));
-    return _signIn(token: 'oidc-token');
+    await oidcExchangeGate?.future;
+    return _signInAsked(asked, token: 'oidc-token');
   }
 
   /// Thrown by [signup] when set.

@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/artwork/art_slot.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/library/item_kind.dart';
 import 'package:waxdeck/src/metadata/artwork_manager.dart';
@@ -185,6 +187,92 @@ void main() {
     // The four slots with nothing in them read as empty, not inherited:
     // only the front cover walks the chain.
     expect(find.text('Empty'), findsNWidgets(4));
+  });
+
+  group("the save bar on the page's foot", () {
+    final bar = find.byType(WaxFootBar);
+    Finder contents() =>
+        find.bySemanticsIdentifier(SemanticsIds.metadataSaveBar);
+    final form = find.descendant(
+      of: find.byType(MetadataPane),
+      matching: find.byType(SingleChildScrollView),
+    );
+
+    /// The window's insets as the engine reports them: the view padding,
+    /// a keyboard [keyboard] high, and what it leaves of the padding.
+    void engine(
+      WidgetTester tester, {
+      double left = 0,
+      double right = 0,
+      double bottom = 0,
+      double keyboard = 0,
+    }) {
+      tester.view
+        ..viewPadding = FakeViewPadding(
+          left: left,
+          right: right,
+          bottom: bottom,
+        )
+        ..viewInsets = FakeViewPadding(bottom: keyboard)
+        ..padding = FakeViewPadding(
+          left: left,
+          right: right,
+          bottom: math.max(0, bottom - keyboard),
+        );
+    }
+
+    testWidgets("its surface reaches the window's edges, its controls and "
+        'the form above it clear of the insets', (tester) async {
+      engine(tester, left: 40, right: 30, bottom: 20);
+      await _pump(tester, _container(_repo()));
+      await tester.pumpAndSettle();
+
+      final box = tester.getRect(bar);
+      expect((box.left, box.right, box.bottom), (0.0, 800.0, 3000.0));
+      final inner = tester.getRect(contents());
+      expect((inner.left, inner.right, inner.bottom), (40.0, 770.0, 2980.0));
+      final above = tester.getRect(form);
+      expect((above.left, above.right, above.bottom), (40.0, 770.0, box.top));
+    });
+
+    testWidgets('a keyboard opening and closing through the gesture bar '
+        'leaves it on the foot the frame after each step', (tester) async {
+      const inset = 30.0;
+      engine(tester, bottom: inset);
+      await _pump(tester, _container(_repo()));
+      await tester.pumpAndSettle();
+
+      for (final keyboard in const <double>[
+        2, 18, 40, 120, 300, 120, 40, 18, 7, 2, 0, //
+      ]) {
+        engine(tester, bottom: inset, keyboard: keyboard);
+        await tester.pump();
+        expect(
+          tester.getRect(bar).bottom,
+          3000 - keyboard,
+          reason: 'its surface, keyboard $keyboard',
+        );
+        expect(
+          tester.getRect(contents()).bottom,
+          3000 - math.max(keyboard, inset),
+          reason: 'its controls, keyboard $keyboard',
+        );
+      }
+    });
+
+    testWidgets('a cutout moving to the other side at the same size moves '
+        'its controls clear of the new one the frame after', (tester) async {
+      engine(tester, left: 40, bottom: 20);
+      await _pump(tester, _container(_repo()));
+      await tester.pumpAndSettle();
+      engine(tester, right: 40, bottom: 20);
+      await tester.pump();
+
+      final box = tester.getRect(bar);
+      expect((box.left, box.right), (0.0, 800.0));
+      final inner = tester.getRect(contents());
+      expect((inner.left, inner.right), (0.0, 760.0));
+    });
   });
 
   testWidgets('the origin row is one ink press that opens the sheet', (

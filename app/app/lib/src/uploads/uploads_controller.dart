@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
 import '../providers.dart';
+import '../sync/refresh_in_place.dart';
 import 'file_picker_port.dart';
 import 'local_file_reader.dart';
 import 'upload_phase.dart';
@@ -244,8 +246,14 @@ class UploadsState {
   );
 }
 
-/// Lists upload sessions and drives the create, chunk, complete flow.
-class UploadsController extends AsyncNotifier<UploadsState> {
+/// One listed session, with when this client read it.
+typedef ListedUpload = ({UploadSession session, Duration readAt});
+
+/// Lists upload sessions, refreshed in place (a sweep reads again what
+/// is loaded, where the list stands), and drives the create, chunk,
+/// complete flow.
+class UploadsController extends AsyncNotifier<UploadsState>
+    with RefreshedInPlace<ListedUpload, UploadsState> {
   static const pageSize = 50;
 
   /// Chunk size for the resumable transfer loop: 1 MiB. Also the most
@@ -261,93 +269,126 @@ class UploadsController extends AsyncNotifier<UploadsState> {
   /// stops.
   static const chunkRetries = 3;
 
-  var _generation = 0;
-
   /// The send this client runs for each upload. A discard takes it away
   /// before its delete goes, which stops that send at its next step.
   final _sends = <String, Object>{};
 
+  /// The caller's own allowance, from the freshest page read.
+  UploadQuota? _quota;
+
+  /// What the server answered, read by read, until the list shows it:
+  /// the transfers it has caught up with are retired then, and not
+  /// before, so no reader sees an entry gone while the old row shows.
+  /// Only these rows: a row held may be this client's own copy.
+  final _answered = <({List<UploadSession> rows, bool complete})>[];
+
   @override
-  Future<UploadsState> build() async {
-    _generation++;
-    // Keyed on the account: the repository moves only with the server,
-    // and the next account starts from its own first page.
-    ref.watch(signedInAccountProvider);
-    final generation = _generation;
-    final clock = ref.read(monotonicClockProvider);
-    final page = await ref
-        .watch(repositoryProvider)
-        .listUploads(limit: pageSize);
-    final readAt = clock();
-    if (generation == _generation) {
-      // Once the page is committed, so no reader sees the entry gone
-      // while the old row still shows.
-      late final void Function() stop;
-      stop = listenSelf((_, next) {
-        if (!identical(next.value?.uploads, page.uploads)) return;
-        stop();
-        _retireCaughtUp(page.uploads, complete: page.nextCursor == null);
-      });
-    }
-    return UploadsState(
-      uploads: page.uploads,
-      nextCursor: page.nextCursor,
-      quota: page.quota,
-      readAt: {for (final u in page.uploads) u.id: readAt},
-    );
+  ProviderBase<Object?> get self => uploadsProvider;
+
+  @override
+  int get pageRows => pageSize;
+
+  @override
+  int? get walkLimit => 1;
+
+  @override
+  Object rowKey(ListedUpload row) => row.session.id;
+
+  @override
+  UploadsState shape(
+    PagedRows<ListedUpload> held, {
+    required bool loadingMore,
+  }) => UploadsState(
+    uploads: [for (final row in held.rows) row.session],
+    nextCursor: held.nextCursor,
+    quota: _quota,
+    loadingMore: loadingMore,
+    readAt: {for (final row in held.rows) row.session.id: row.readAt},
+  );
+
+  @override
+  void startingOver() {
+    _quota = null;
+    _answered.clear();
   }
 
-  Future<void> loadMore() async {
-    final current = state.value;
-    if (current == null || !current.hasMore || current.loadingMore) return;
-    final generation = _generation;
-    state = AsyncData(current.copyWith(loadingMore: true));
-    // What the await answers lands on the list as it stands then: a
-    // transfer moves or drops its row meanwhile, and the page must not
-    // undo that.
-    UploadsState now() => state.value ?? current;
+  @override
+  Future<PagedRows<ListedUpload>> readRows({
+    required int want,
+    String? from,
+    int? maxPages,
+    bool Function()? stop,
+  }) async {
+    final repository = ref.read(repositoryProvider);
     final clock = ref.read(monotonicClockProvider);
-    try {
-      final page = await ref
-          .read(repositoryProvider)
-          .listUploads(cursor: current.nextCursor, limit: pageSize);
-      if (generation != _generation) return;
-      final readAt = clock();
-      final live = now();
-      // A row already held keeps its copy here, which is the newer.
-      final held = {for (final u in live.uploads) u.id};
-      final added = [
-        for (final u in page.uploads)
-          if (!held.contains(u.id)) u,
-      ];
-      state = AsyncData(
-        live.copyWith(
-          uploads: [...live.uploads, ...added],
-          nextCursor: () => page.nextCursor,
-          quota: page.quota ?? live.quota,
-          loadingMore: false,
-          readAt: {...live.readAt, for (final u in added) u.id: readAt},
-        ),
-      );
-      // Only rows the server just answered and the list now shows: a held
-      // row may be this client's own copy.
-      _retireCaughtUp(added);
-    } on WaxDeckApiException {
-      // An expected transport or server error. Keep what we have;
-      // scrolling near the end again retries.
-      if (generation != _generation) return;
-      state = AsyncData(now().copyWith(loadingMore: false));
-    } catch (_) {
-      // Anything else is a defect, not a hiccup: a decode failure,
-      // a bad cast. Release the paging guard first - loadingMore is
-      // what keeps two fetches from racing, so leaving it set would
-      // wedge paging permanently and silently - then let the error
-      // reach the app's error handler instead of vanishing here.
-      if (generation == _generation) {
-        state = AsyncData(now().copyWith(loadingMore: false));
-      }
-      rethrow;
+    // A read the listing was replaced under (another account's, a list
+    // started over) records nothing: its rows are dropped, and so is what
+    // it says beside them.
+    bool stands() => stop?.call() != true;
+    final read = await walkRows<ListedUpload>(
+      (cursor) async {
+        final page = await repository.listUploads(
+          cursor: cursor,
+          limit: pageSize,
+        );
+        if (stands()) _quota = page.quota ?? _quota;
+        final readAt = clock();
+        return (
+          rows: [
+            for (final session in page.uploads)
+              (session: session, readAt: readAt),
+          ],
+          nextCursor: page.nextCursor,
+        );
+      },
+      want: want,
+      from: from,
+      maxPages: maxPages,
+      stop: stop,
+    );
+    if (stands()) {
+      _answered.add((
+        rows: [for (final row in read.rows) row.session],
+        complete: from == null && read.nextCursor == null,
+      ));
     }
+    return read;
+  }
+
+  @override
+  Future<UploadsState> build() {
+    // Keyed on the account: the repository moves only with the server,
+    // and the next account starts from its own first page.
+    final account = ref.watch(signedInAccountProvider);
+    final repository = ref.watch(repositoryProvider);
+    listenSelf((_, next) => _retireShown(next.value));
+    return buildInPlace(source: (account, repository));
+  }
+
+  /// Fetches the next page and appends it. No-op while a fetch is
+  /// running or once the last page was reached.
+  Future<void> loadMore() => loadMoreInPlace();
+
+  /// Retires what the reads the list now shows have caught up with, and
+  /// lets go of every read up to the newest of them.
+  void _retireShown(UploadsState? shown) {
+    if (shown == null || _answered.isEmpty) return;
+    final listed = Set<UploadSession>.identity()..addAll(shown.uploads);
+    var through = -1;
+    for (final (at, read) in _answered.indexed) {
+      final rows = [
+        for (final session in read.rows)
+          if (listed.contains(session)) session,
+      ];
+      final empty = read.rows.isEmpty && read.complete && shown.uploads.isEmpty;
+      if (rows.isEmpty && !empty) continue;
+      through = at;
+      _retireCaughtUp(
+        rows,
+        complete: read.complete && rows.length == read.rows.length,
+      );
+    }
+    if (through >= 0) _answered.removeRange(0, through + 1);
   }
 
   /// Uploads one picked file, dispatching on how its bytes are
@@ -897,14 +938,12 @@ class UploadsController extends AsyncNotifier<UploadsState> {
       if (current == null || !current.uploads.any((u) => u.id == id)) {
         continue;
       }
-      state = AsyncData(
-        current.copyWith(
-          uploads: [
-            for (final u in current.uploads)
-              if (u.id == id) session else u,
-          ],
-          readAt: {...current.readAt, id: clock()},
-        ),
+      final readAt = clock();
+      rewriteInPlace(
+        (rows) => [
+          for (final row in rows)
+            row.session.id == id ? (session: session, readAt: readAt) : row,
+        ],
       );
       _retireCaughtUp([session]);
     }
@@ -912,16 +951,11 @@ class UploadsController extends AsyncNotifier<UploadsState> {
 
   void _drop(String uploadId) {
     if (!ref.mounted) return;
-    final current = state.value;
-    if (current == null) return;
-    state = AsyncData(
-      current.copyWith(
-        uploads: [
-          for (final u in current.uploads)
-            if (u.id != uploadId) u,
-        ],
-        readAt: {...current.readAt}..remove(uploadId),
-      ),
+    rewriteInPlace(
+      (rows) => [
+        for (final row in rows)
+          if (row.session.id != uploadId) row,
+      ],
     );
   }
 
@@ -940,23 +974,13 @@ class UploadsController extends AsyncNotifier<UploadsState> {
 
   void _upsert(UploadSession session) {
     if (!ref.mounted) return;
-    final current = state.value;
-    if (current == null) return;
-    final present = current.uploads.any((u) => u.id == session.id);
-    state = AsyncData(
-      current.copyWith(
-        uploads: present
-            ? [
-                for (final u in current.uploads)
-                  if (u.id == session.id) session else u,
-              ]
-            : [session, ...current.uploads],
-        readAt: {
-          ...current.readAt,
-          session.id: ref.read(monotonicClockProvider)(),
-        },
-      ),
-    );
+    final row = (session: session, readAt: ref.read(monotonicClockProvider)());
+    rewriteInPlace((rows) {
+      final present = rows.any((r) => r.session.id == session.id);
+      return present
+          ? [for (final r in rows) r.session.id == session.id ? row : r]
+          : [row, ...rows];
+    });
   }
 }
 

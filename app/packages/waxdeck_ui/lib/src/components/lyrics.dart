@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/wax_l10n.dart';
@@ -22,6 +22,14 @@ class LyricLine {
 
   final Duration at;
   final String text;
+
+  /// By value: the same words read again are the same line.
+  @override
+  bool operator ==(Object other) =>
+      other is LyricLine && other.at == at && other.text == text;
+
+  @override
+  int get hashCode => Object.hash(at, text);
 }
 
 /// The words, following playback where they can.
@@ -124,13 +132,12 @@ class _LyricsViewState extends State<LyricsView> {
     // A new track's words arrive with the old track's highlight, and its
     // position is somewhere else entirely.
     //
-    // By identity, which puts a requirement on the caller: hand this the
-    // same list while it is the same words. A caller mapping a wire
-    // model inline builds a new list every rebuild, and every one of
-    // them would read as a new track here - dragging a reader who had
-    // scrolled away back to the playhead and taking the button that
-    // undoes it with them.
-    if (!identical(old.lines, widget.lines)) {
+    // By what the lines say, not by which list holds them: the same
+    // words read again arrive as a list of their own, and taking that
+    // for a new track would drag a reader who had scrolled away back to
+    // the playhead and take the button that undoes it with them.
+    if (!identical(old.lines, widget.lines) &&
+        !listEquals(old.lines, widget.lines)) {
       _current = _lineAt(widget.position.value);
       _following = true;
       _anchor();

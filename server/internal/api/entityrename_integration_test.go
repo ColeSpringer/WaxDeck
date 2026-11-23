@@ -270,3 +270,45 @@ func TestEditEntityClearingAnMBIDReportsTheSurvivor(t *testing.T) {
 		t.Fatalf("survivor itemCount = %v, want both members", survivor.ItemCount)
 	}
 }
+
+// An artist renamed onto another's name merges into it, and the release
+// group of a title the survivor already has folds into the survivor's:
+// the answer names it, so a client following the artist follows it too.
+func TestRenameEntityNamesTheReleaseGroupAnArtistMergeFolded(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	if _, err := fixtures.Generate(filepath.Join(h.library, "other"), fixtures.Spec{
+		Name: "other", Codec: fixtures.CodecFLAC, Duration: 5 * time.Second,
+		Tags: map[string]string{"TITLE": "Other Song", "ARTIST": "Other Artist", "ALBUM": "Fixture Album"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	var other string
+	for _, it := range h.items(t, "?limit=100").Items {
+		if it.Title == "Other Song" && it.ArtistPid != nil {
+			other = *it.ArtistPid
+		}
+	}
+	if other == "" {
+		t.Fatal("the other artist's track did not scan")
+	}
+
+	resp := h.postJSON(t, "/api/v1/entities/artist/"+other+"/rename", map[string]any{
+		"fields": map[string]string{"name": "Fixture Artist"},
+	})
+	if resp.StatusCode != 200 {
+		t.Fatalf("merging rename status = %d", resp.StatusCode)
+	}
+	out := decode[EntityRenameResult](t, resp)
+	if out.Outcome != EntityRenameResultOutcomeMerged {
+		t.Fatalf("outcome = %q, want merged", out.Outcome)
+	}
+	if out.Folded == nil || len(*out.Folded) != 1 {
+		t.Fatalf("folded = %+v, want the one release group", out.Folded)
+	}
+	f := (*out.Folded)[0]
+	if !strings.HasPrefix(f.Pid, "rg-") || !strings.HasPrefix(f.Into, "rg-") || f.Pid == f.Into {
+		t.Fatalf("folded = %+v, want one release group into another", f)
+	}
+}

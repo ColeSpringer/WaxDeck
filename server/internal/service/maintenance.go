@@ -188,10 +188,16 @@ func (l *Library) catalogReplaced(ctx context.Context, seq, ts int64) bool {
 	defer l.resetMu.Unlock()
 	l.feed.mu.Lock()
 	key := feedKey{seq: seq, ts: ts}
-	if ts != 0 && l.feed.resetKey == key {
-		l.feed.mu.Unlock()
+	repeated := ts != 0 && l.feed.resetKey == key
+	l.feed.mu.Unlock()
+	if repeated {
 		return false
 	}
+	// What was recorded names the catalog that is gone. Marked before the
+	// generation moves, so a drain that reads the new one holds the mark,
+	// or one before it did.
+	l.feed.changes.markUnknown()
+	l.feed.mu.Lock()
 	gen := ulid.Make().String()
 	l.feed.gen, l.feed.tail, l.feed.tailTS, l.feed.floor = gen, seq, ts, seq
 	l.feed.resetKey, l.feed.bootTS = key, 0
@@ -221,6 +227,11 @@ func (l *Library) catalogReplaced(ctx context.Context, seq, ts int64) bool {
 	}
 	l.Jobs.jobs.forget()
 	l.fireCatalogResync()
+	// Woken once every connection holds the resync, so the mark drains
+	// beside it rather than unnaming the next change, and no catalog
+	// invalidation reaches a client ahead of it: a mirror would re-mirror
+	// for each.
+	l.wakeCatalog()
 	l.settleAfterReopen()
 	l.Similarity.wakeup()
 	return true

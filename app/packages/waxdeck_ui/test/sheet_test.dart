@@ -109,4 +109,109 @@ void main() {
     expect(find.text(_help), findsNothing);
     expect(defaultTargetPlatform, TargetPlatform.android);
   });
+
+  group("a sheet takes a side inset only where it reaches that side", () {
+    final surface = find
+        .descendant(
+          of: find.byType(BottomSheet),
+          matching: find.byType(Material),
+        )
+        .first;
+    final content = find.byKey(const Key('content'));
+
+    Future<void> openAt(
+      WidgetTester tester,
+      Size size,
+      FakeViewPadding insets,
+    ) async {
+      tester.view
+        ..physicalSize = size
+        ..devicePixelRatio = 1
+        ..padding = insets
+        ..viewPadding = insets;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildWaxTheme(),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: WaxButton(
+                  label: 'Open',
+                  onPressed: () => showWaxSheet<void>(
+                    context: context,
+                    builder: (_) => const SafeArea(
+                      top: false,
+                      child: SizedBox(
+                        key: Key('content'),
+                        width: double.infinity,
+                        height: 40,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('narrower than the window, a cutout it does not reach does '
+        'not indent it', (tester) async {
+      await openAt(
+        tester,
+        const Size(1000, 700),
+        const FakeViewPadding(left: 44, right: 30),
+      );
+      final sheet = tester.getRect(surface);
+      expect((sheet.left, sheet.right), (180.0, 820.0));
+      final inner = tester.getRect(content);
+      expect((inner.left, inner.right), (sheet.left, sheet.right));
+    });
+
+    testWidgets('as wide as the window, it takes the cutouts at both sides', (
+      tester,
+    ) async {
+      await openAt(
+        tester,
+        const Size(600, 700),
+        const FakeViewPadding(left: 44, right: 30),
+      );
+      final sheet = tester.getRect(surface);
+      expect((sheet.left, sheet.right), (0.0, 600.0));
+      final inner = tester.getRect(content);
+      expect((inner.left, inner.right), (44.0, 570.0));
+    });
+
+    testWidgets('a cutout reaching past the gap beside it is taken for what '
+        'of it reaches', (tester) async {
+      await openAt(
+        tester,
+        const Size(700, 700),
+        const FakeViewPadding(left: 44),
+      );
+      final sheet = tester.getRect(surface);
+      expect((sheet.left, sheet.right), (30.0, 670.0));
+      final inner = tester.getRect(content);
+      expect((inner.left, inner.right), (44.0, 670.0));
+    });
+
+    testWidgets('a window narrowed under it lays it out again the same '
+        'frame', (tester) async {
+      await openAt(
+        tester,
+        const Size(1000, 700),
+        const FakeViewPadding(left: 44),
+      );
+      tester.view.physicalSize = const Size(600, 700);
+      await tester.pump();
+      expect(tester.getRect(content).left, 44);
+      tester.view.physicalSize = const Size(1000, 700);
+      await tester.pump();
+      expect(tester.getRect(content).left, tester.getRect(surface).left);
+    });
+  });
 }

@@ -1,18 +1,24 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../providers.dart';
+import '../settings/client_prefs.dart';
 import '../shell/navigation_history.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'podcasts_controller.dart';
 import 'speed_slider.dart';
 
-/// Per-subscription settings. Save PUTs the complete object, so every
-/// field the sheet does not edit rides through untouched: the endpoint
-/// replaces the document, and a sender that dropped one would erase a
-/// setting made somewhere else.
+/// Per-subscription settings. Save reads the stored settings and PUTs the
+/// complete object back with only what was changed here laid over them:
+/// the endpoint replaces the document, so a field dropped, or sent as the
+/// sheet read it when it opened, would erase a setting made since, by the
+/// player or another device.
 class SubscriptionSettingsSheet extends ConsumerStatefulWidget {
   const SubscriptionSettingsSheet({
     super.key,
@@ -39,27 +45,106 @@ class _SubscriptionSettingsSheetState
   late final TextEditingController _exclude;
   late final TextEditingController _skipIntro;
   late final TextEditingController _skipOutro;
+
+  /// What the fields stand on while nobody has changed them: what the
+  /// screen had, then what is stored once it is read.
+  late SubscriptionSettings _base = widget.initial;
   var _busy = false;
+
+  // A field with nothing stored is drawn as playback has it: at this
+  // device's default.
+  late final double _defaultSpeed = ref.read(podcastSpeedProvider);
+  late final bool _defaultTrim = ref.read(trimSilenceDefaultProvider);
+  late final bool _defaultBoost = ref.read(voiceBoostDefaultProvider);
 
   @override
   void initState() {
     super.initState();
-    _speed = widget.initial.speed ?? 1.0;
-    _trimSilence = widget.initial.trimSilence ?? false;
-    _voiceBoost = widget.initial.voiceBoost ?? false;
-    _autoDownload = widget.initial.autoDownload;
-    _retention = TextEditingController(
-      text: widget.initial.retentionKeep?.toString() ?? '',
-    );
-    final filter = widget.initial.autoDownloadFilter;
+    _speed = _base.speed ?? _defaultSpeed;
+    _trimSilence = _base.trimSilence ?? _defaultTrim;
+    _voiceBoost = _base.voiceBoost ?? _defaultBoost;
+    _autoDownload = _base.autoDownload;
+    _retention = TextEditingController(text: _number(_base.retentionKeep));
+    final filter = _base.autoDownloadFilter;
     _include = TextEditingController(text: _joinTerms(filter?.include));
     _exclude = TextEditingController(text: _joinTerms(filter?.exclude));
-    _skipIntro = TextEditingController(
-      text: widget.initial.skipIntroSeconds?.toString() ?? '',
+    _skipIntro = TextEditingController(text: _number(_base.skipIntroSeconds));
+    _skipOutro = TextEditingController(text: _number(_base.skipOutroSeconds));
+    unawaited(_readStored(ref.read(repositoryProvider)));
+  }
+
+  static String _number(int? value) => value?.toString() ?? '';
+
+  /// [value] for a copy to take, or null while it is still [atOpen].
+  static T Function()? _changed<T>(T value, T atOpen) =>
+      value == atOpen ? null : () => value;
+
+  /// The stored settings, read as the sheet opens: the screen's copy may be
+  /// older than a rate the player stored since, or another device's change.
+  /// A field still as it opened takes them; one already changed here keeps
+  /// its change. Unread, the sheet stays on what the screen had.
+  Future<void> _readStored(WaxDeckRepository repository) async {
+    final SubscriptionSettings stored;
+    try {
+      stored =
+          (await repository.getPodcast(widget.pid)).settings ??
+          const SubscriptionSettings();
+    } on WaxDeckApiException {
+      return;
+    }
+    if (!mounted) return;
+    final base = _base;
+    final baseFilter = base.autoDownloadFilter;
+    final storedFilter = stored.autoDownloadFilter;
+    final speed = _speed == (base.speed ?? _defaultSpeed);
+    final trim = _trimSilence == (base.trimSilence ?? _defaultTrim);
+    final boost = _voiceBoost == (base.voiceBoost ?? _defaultBoost);
+    final autoDownload = _autoDownload == base.autoDownload;
+    final retention =
+        _bounded(_retention.text, max: _maxRetention) == base.retentionKeep;
+    final intro =
+        _bounded(_skipIntro.text, max: _maxSkipSeconds) ==
+        base.skipIntroSeconds;
+    final outro =
+        _bounded(_skipOutro.text, max: _maxSkipSeconds) ==
+        base.skipOutroSeconds;
+    final include = listEquals(
+      _splitTerms(_include.text),
+      baseFilter?.include ?? const <String>[],
     );
-    _skipOutro = TextEditingController(
-      text: widget.initial.skipOutroSeconds?.toString() ?? '',
+    final exclude = listEquals(
+      _splitTerms(_exclude.text),
+      baseFilter?.exclude ?? const <String>[],
     );
+    final includeTerms = include
+        ? storedFilter?.include ?? const <String>[]
+        : baseFilter?.include ?? const <String>[];
+    final excludeTerms = exclude
+        ? storedFilter?.exclude ?? const <String>[]
+        : baseFilter?.exclude ?? const <String>[];
+    setState(() {
+      _base = stored.copyWith(
+        retentionKeep: retention ? null : () => base.retentionKeep,
+        autoDownload: autoDownload ? null : base.autoDownload,
+        autoDownloadFilter: () => includeTerms.isEmpty && excludeTerms.isEmpty
+            ? null
+            : EpisodeFilter(include: includeTerms, exclude: excludeTerms),
+        speed: speed ? null : () => base.speed,
+        trimSilence: trim ? null : () => base.trimSilence,
+        voiceBoost: boost ? null : () => base.voiceBoost,
+        skipIntroSeconds: intro ? null : () => base.skipIntroSeconds,
+        skipOutroSeconds: outro ? null : () => base.skipOutroSeconds,
+      );
+      if (speed) _speed = stored.speed ?? _defaultSpeed;
+      if (trim) _trimSilence = stored.trimSilence ?? _defaultTrim;
+      if (boost) _voiceBoost = stored.voiceBoost ?? _defaultBoost;
+      if (autoDownload) _autoDownload = stored.autoDownload;
+    });
+    if (retention) _retention.text = _number(stored.retentionKeep);
+    if (intro) _skipIntro.text = _number(stored.skipIntroSeconds);
+    if (outro) _skipOutro.text = _number(stored.skipOutroSeconds);
+    if (include) _include.text = _joinTerms(storedFilter?.include);
+    if (exclude) _exclude.text = _joinTerms(storedFilter?.exclude);
   }
 
   @override
@@ -110,32 +195,66 @@ class _SubscriptionSettingsSheetState
     final messenger = ref.read(shellMessengerProvider);
     final route = ModalRoute.of(context);
     final l10n = context.l10n;
+    // Read off the fields before the first await: a sheet swiped away
+    // takes its controllers and its `ref` with it.
+    final opened = _base;
+    // No ceiling: keeping N episodes is bounded by the feed, and the
+    // contract sets only a floor.
+    final retention = _bounded(_retention.text, max: _maxRetention);
     final include = _splitTerms(_include.text);
     final exclude = _splitTerms(_exclude.text);
-    final settings = SubscriptionSettings(
-      // No ceiling: keeping N episodes is bounded by the feed, and the
-      // contract sets only a floor.
-      retentionKeep: _bounded(_retention.text, max: _maxRetention),
-      autoDownload: _autoDownload,
-      // An empty filter is sent as absent rather than as two empty
-      // lists: absent is what the contract calls "take everything", and
-      // storing an empty document to mean the same thing invites the
-      // next reader to think a filter is set.
-      autoDownloadFilter: include.isEmpty && exclude.isEmpty
-          ? null
-          : EpisodeFilter(include: include, exclude: exclude),
-      folder: widget.initial.folder,
-      private: widget.initial.private,
-      speed: _speed,
-      trimSilence: _trimSilence,
-      voiceBoost: _voiceBoost,
-      skipIntroSeconds: _bounded(_skipIntro.text, max: _maxSkipSeconds),
-      skipOutroSeconds: _bounded(_skipOutro.text, max: _maxSkipSeconds),
+    final skipIntro = _bounded(_skipIntro.text, max: _maxSkipSeconds);
+    final skipOutro = _bounded(_skipOutro.text, max: _maxSkipSeconds);
+    final includeChanged = !listEquals(
+      include,
+      opened.autoDownloadFilter?.include ?? const <String>[],
     );
+    final excludeChanged = !listEquals(
+      exclude,
+      opened.autoDownloadFilter?.exclude ?? const <String>[],
+    );
+    final speed = _changed(_speed, opened.speed ?? _defaultSpeed);
+    final trim = _changed(_trimSilence, opened.trimSilence ?? _defaultTrim);
+    final boost = _changed(_voiceBoost, opened.voiceBoost ?? _defaultBoost);
+    final autoDownload = _autoDownload == opened.autoDownload
+        ? null
+        : _autoDownload;
+    final repository = ref.read(repositoryProvider);
+    final controller = ref.read(podcastDetailProvider(widget.pid).notifier);
     try {
-      await ref
-          .read(podcastDetailProvider(widget.pid).notifier)
-          .saveSettings(settings);
+      // A read that fails writes nothing, and is said as a failed save is.
+      final stored =
+          (await repository.getPodcast(widget.pid)).settings ??
+          const SubscriptionSettings();
+      final storedFilter = stored.autoDownloadFilter;
+      final filterInclude = includeChanged
+          ? include
+          : storedFilter?.include ?? const <String>[];
+      final filterExclude = excludeChanged
+          ? exclude
+          : storedFilter?.exclude ?? const <String>[];
+      final settings = stored.copyWith(
+        retentionKeep: _changed(retention, opened.retentionKeep),
+        autoDownload: autoDownload,
+        // An empty filter is sent as absent rather than as two empty
+        // lists: absent is what the contract calls "take everything", and
+        // storing an empty document to mean the same thing invites the
+        // next reader to think a filter is set.
+        autoDownloadFilter: !includeChanged && !excludeChanged
+            ? null
+            : () => filterInclude.isEmpty && filterExclude.isEmpty
+                  ? null
+                  : EpisodeFilter(
+                      include: filterInclude,
+                      exclude: filterExclude,
+                    ),
+        speed: speed,
+        trimSilence: trim,
+        voiceBoost: boost,
+        skipIntroSeconds: _changed(skipIntro, opened.skipIntroSeconds),
+        skipOutroSeconds: _changed(skipOutro, opened.skipOutroSeconds),
+      );
+      await controller.saveSettings(settings);
       // Only while this sheet is still there: a save outlives a sheet
       // somebody swiped away, and popping then takes the show screen
       // underneath with it.

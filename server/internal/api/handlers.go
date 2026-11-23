@@ -330,7 +330,10 @@ func (s *Server) Login(ctx context.Context, req LoginRequestObject) (LoginRespon
 	}
 	setCookie := s.newSessionCookie(created.Token)
 	return Login200JSONResponse{
-		Body:    LoginResponse{User: userJSON(user), Token: created.Token, CsrfToken: created.CSRFToken},
+		Body: LoginResponse{
+			User: userJSON(user), Token: created.Token, CsrfToken: created.CSRFToken,
+			SessionId: created.Session.ID,
+		},
 		Headers: Login200ResponseHeaders{SetCookie: &setCookie},
 	}, nil
 }
@@ -350,7 +353,8 @@ func (s *Server) GetSession(ctx context.Context, _ GetSessionRequestObject) (Get
 		u := principalJSON(p.User)
 		return GetSession200JSONResponse{
 			Authenticated: true, User: &u, CsrfToken: &p.Session.CSRFToken,
-			Server: &SessionServer{ReadOnly: s.svc.Settings.ServerReadOnly()},
+			SessionId: &p.Session.ID,
+			Server:    &SessionServer{ReadOnly: s.svc.Settings.ServerReadOnly()},
 		}, nil
 	}
 	return GetSession200JSONResponse{Authenticated: false}, nil
@@ -1027,15 +1031,9 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 		return s.directPlayInfo(ctx, uc, p, req.Pid, part)
 	}
 
-	// Voice boost precedence is resolved here, at mint time: an explicit
-	// parameter wins, an absent one falls back to the caller's stored
-	// setting for the show or book.
-	boost := false
-	if req.Params.VoiceBoost != nil {
-		boost = *req.Params.VoiceBoost
-	} else {
-		boost = s.svc.Playback.EffectiveVoiceBoost(ctx, uc, req.Pid)
-	}
+	// Resolved at mint time: an explicit parameter, else the caller's
+	// stored setting for the show or book, else the caller's default.
+	boost := s.svc.Playback.EffectiveVoiceBoost(ctx, uc, req.Pid, req.Params.VoiceBoost, derefBool(req.Params.VoiceBoostDefault))
 
 	// The position also cuts a stream that cannot be range-seeked, from
 	// inside the resolved part; the bridge clamps it to the part's end. A

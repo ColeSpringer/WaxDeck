@@ -270,6 +270,7 @@ final libraryHasAnythingProvider = FutureProvider.autoDispose<bool>((
 final List<ProviderBase<Object?>> homeShelfProviders = <ProviderBase<Object?>>[
   libraryHasAnythingProvider,
   ...homeCatalogShelfProviders,
+  mixCardsProvider,
 ];
 
 /// The home reads a catalog change moves, for the catalog fan-out. Every
@@ -277,7 +278,8 @@ final List<ProviderBase<Object?>> homeShelfProviders = <ProviderBase<Object?>>[
 /// all of them; not the probe, which is not worth a read on every pass
 /// of a scan: the binder asks it again on a pass while it reads empty,
 /// once a run of catalog changes goes quiet, and when the libraries
-/// change.
+/// change. Nor the mixes, two top lists, which are asked once a run
+/// goes quiet.
 final List<ProviderBase<Object?>> homeCatalogShelfProviders =
     <ProviderBase<Object?>>[
       pinnedCardsProvider,
@@ -286,7 +288,6 @@ final List<ProviderBase<Object?>> homeCatalogShelfProviders =
       neverPlayedShelfProvider,
       rediscoverShelfProvider,
       mostPlayedShelfProvider,
-      mixCardsProvider,
     ];
 
 /// The home reads that are about the caller rather than about the

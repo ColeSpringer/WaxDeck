@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_store.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
+import 'package:waxdeck/src/sync/refresh_pacing.dart';
 import 'package:waxdeck/src/sync/session_doubt.dart';
 import 'package:waxdeck/src/sync/sync_binder.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -217,6 +218,7 @@ Future<_Session> _signedIn({
     artwork: artwork,
     sync: engine,
     mirror: db,
+    observers: [FirstBuildObserver()],
   );
   await container.read(authControllerProvider.future);
   final alive = container.listen(syncBinderProvider, (_, _) {});

@@ -836,6 +836,59 @@ void main() {
     );
   });
 
+  testWidgets('a change that ends after its dialog was taken down still has '
+      'the open reads read again', (tester) async {
+    final repo = _repo()
+      ..jobs = const [Job(pid: _job, kind: 'set-kind', state: 'running')];
+    final harness = await _pump(tester, repo, pids: [_a], to: 'audiobook');
+    final container = harness.container;
+    const count = (
+      dimension: MusicDimension.artists,
+      domain: BrowseDomain.music,
+    );
+    final held = container.listen(musicIndexCountProvider(count), (_, _) {});
+    addTearDown(held.close);
+    await tester.runAsync(
+      () => container.read(musicIndexCountProvider(count).future),
+    );
+    await tester.tap(find.text('Start'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.kindConfirm));
+    await tester.pump();
+    await tester.pump(kindChangePoll);
+
+    // Its route goes from under it, as the navigator being rebuilt for
+    // an ended session takes it.
+    Navigator.of(
+      tester.element(find.byType(AlertDialog)),
+      rootNavigator: true,
+    ).pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    final before = repo.facetReads.length;
+
+    repo.jobs = [
+      Job(
+        pid: _job,
+        kind: 'set-kind',
+        state: 'done',
+        result: {
+          'converted': ['bk-${_a.substring(3)}'],
+          'absorbed': const <String, String>{},
+          'created': const <String>[],
+          'writeBackFailures': const <Object>[],
+        },
+      ),
+    ];
+    await tester.pump(kindChangePoll);
+    await tester.pumpAndSettle();
+
+    expect(repo.facetReads.sublist(before), [
+      (dimension: 'artist', sort: null, facet: 'kind', facetKey: 'track'),
+    ]);
+    expect(find.byType(BookScreen), findsNothing, reason: 'nobody asked');
+  });
+
   testWidgets('a running change keeps its dialog and its buttons', (
     tester,
   ) async {

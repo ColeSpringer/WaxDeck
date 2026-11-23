@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,6 +55,25 @@ const _account = WaxAccount(
   ],
 );
 
+/// The window's insets as the engine reports them: [view] the view
+/// padding, a keyboard [keyboard] high, and the padding what the keyboard
+/// leaves of the view padding, side by side.
+void _engineInsets(
+  WidgetTester tester,
+  FakeViewPadding view, {
+  double keyboard = 0,
+}) {
+  tester.view
+    ..viewPadding = view
+    ..viewInsets = FakeViewPadding(bottom: keyboard)
+    ..padding = FakeViewPadding(
+      left: view.left,
+      top: view.top,
+      right: view.right,
+      bottom: math.max(0, view.bottom - keyboard),
+    );
+}
+
 /// Pumps the frame at [size], which is what picks the chrome: every
 /// adaptive decision keys off the window's own width.
 Future<List<String>> _pumpFrame(
@@ -64,6 +86,7 @@ Future<List<String>> _pumpFrame(
   WaxAccount? account,
   ValueChanged<String>? onAccountAction,
   Widget content = const Center(child: Text('content pane')),
+  TextDirection direction = TextDirection.ltr,
 }) async {
   final selections = <String>[];
   tester.view.physicalSize = size;
@@ -75,7 +98,7 @@ Future<List<String>> _pumpFrame(
       builder: (context, child) => MediaQuery.withClampedTextScaling(
         minScaleFactor: textScale,
         maxScaleFactor: textScale,
-        child: child!,
+        child: Directionality(textDirection: direction, child: child!),
       ),
       home: WaxShellFrame(
         destinations: _primary,
@@ -995,6 +1018,30 @@ void main() {
       expect(reachedChrome, isTrue, reason: 'tab never left the page');
     });
 
+    for (final direction in TextDirection.values) {
+      testWidgets('${direction.name}: sits inside the insets of the corner '
+          'it is in', (tester) async {
+        const size = Size(1000, 900);
+        final semantics = tester.ensureSemantics();
+        final link = find.bySemanticsLabel('Skip to content');
+        await _pumpFrame(tester, size: size, direction: direction);
+        final bare = tester.getRect(link);
+
+        tester.view
+          ..padding = const FakeViewPadding(top: 24, left: 40, right: 30)
+          ..viewPadding = const FakeViewPadding(top: 24, left: 40, right: 30);
+        await _pumpFrame(tester, size: size, direction: direction);
+        final inset = tester.getRect(link);
+        expect(inset.top, bare.top + 24, reason: 'the top');
+        if (direction == TextDirection.ltr) {
+          expect(inset.left, bare.left + 40, reason: 'the start side');
+        } else {
+          expect(inset.right, bare.right - 30, reason: 'the start side');
+        }
+        semantics.dispose();
+      });
+    }
+
     testWidgets('is not drawn where the content already comes first', (
       tester,
     ) async {
@@ -1002,6 +1049,867 @@ void main() {
       // link that skips forward to what is already first is noise.
       await _pumpFrame(tester, size: const Size(400, 800));
       expect(find.text('Skip to content'), findsNothing);
+    });
+  });
+
+  group("banners and the window's insets", () {
+    const first = 'Reconnecting to the server.';
+    const second = 'The library is read-only.';
+    final page = find.byKey(const Key('page body'));
+
+    /// The frame at [size] under [padding], around a page with a compact
+    /// bar, showing [banners].
+    Future<void> pump(
+      WidgetTester tester,
+      Size size, {
+      required FakeViewPadding padding,
+      List<Widget> banners = const <Widget>[],
+    }) async {
+      tester.view
+        ..physicalSize = size
+        ..devicePixelRatio = 1
+        ..padding = padding
+        ..viewPadding = padding;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildWaxTheme(),
+          home: WaxShellFrame(
+            destinations: _primary,
+            secondary: _secondary,
+            selected: 'home',
+            onSelect: (_) {},
+            banners: banners,
+            content: const WaxScaffold(
+              title: 'Page',
+              largeTitle: false,
+              body: SizedBox(key: Key('page body'), height: 100),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    for (final entry in <String, Size>{
+      'tabs': const Size(400, 800),
+      'the rail': const Size(700, 900),
+      'the sidebar': const Size(1000, 900),
+    }.entries) {
+      testWidgets('with ${entry.key}, banners take the top inset and the '
+          'page bar sits under them', (tester) async {
+        const top = 24.0;
+        await pump(
+          tester,
+          entry.value,
+          padding: const FakeViewPadding(top: top),
+          banners: const <Widget>[
+            WaxBanner(message: first),
+            WaxBanner(message: second),
+          ],
+        );
+
+        final text = tester.getRect(find.text(first, findRichText: true));
+        expect(text.top, greaterThanOrEqualTo(top), reason: 'first banner');
+        final upper = tester.getRect(find.byType(WaxBanner).first);
+        final lower = tester.getRect(find.byType(WaxBanner).last);
+        expect(lower.top, upper.bottom, reason: 'second banner');
+        expect(
+          tester.getTopLeft(page).dy,
+          lower.bottom + kToolbarHeight,
+          reason: 'the inset is taken once',
+        );
+      });
+
+      testWidgets('with ${entry.key} and no banners, the page bar takes the '
+          'top inset itself', (tester) async {
+        await pump(
+          tester,
+          entry.value,
+          padding: const FakeViewPadding(top: 24),
+        );
+        expect(tester.getTopLeft(page).dy, 24 + kToolbarHeight);
+      });
+    }
+
+    testWidgets('a banner keeps inside the side insets', (tester) async {
+      await pump(
+        tester,
+        const Size(400, 800),
+        padding: const FakeViewPadding(top: 24, left: 60, right: 60),
+        banners: const <Widget>[WaxBanner(message: first)],
+      );
+
+      final glyph = tester.getRect(
+        find.descendant(
+          of: find.byType(WaxBanner),
+          matching: find.byType(WaxIcon),
+        ),
+      );
+      final text = tester.getRect(find.text(first, findRichText: true));
+      expect(glyph.left, greaterThanOrEqualTo(60));
+      expect(text.right, lessThanOrEqualTo(400 - 60));
+    });
+  });
+
+  group("the window's side insets are taken once", () {
+    const inset = 40.0;
+    const message = 'Reconnecting to the server.';
+    final title = find.text('Page');
+    final action = find.byKey(const Key('page action'));
+    final panelBody = find.byKey(const Key('panel body'));
+    final bannerGlyph = find.descendant(
+      of: find.byType(WaxBanner),
+      matching: find.byType(WaxIcon),
+    );
+
+    /// The frame at [size] in [direction] under [padding], around a page
+    /// with a compact bar and one action, with a banner and a side panel
+    /// when asked for.
+    Future<void> pump(
+      WidgetTester tester,
+      Size size, {
+      required TextDirection direction,
+      FakeViewPadding padding = FakeViewPadding.zero,
+      bool banner = false,
+      bool panel = false,
+    }) async {
+      tester.view
+        ..physicalSize = size
+        ..devicePixelRatio = 1
+        ..padding = padding
+        ..viewPadding = padding;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildWaxTheme(),
+          builder: (context, child) =>
+              Directionality(textDirection: direction, child: child!),
+          home: WaxShellFrame(
+            destinations: _primary,
+            secondary: _secondary,
+            selected: 'home',
+            onSelect: (_) {},
+            banners: <Widget>[if (banner) const WaxBanner(message: message)],
+            panel: panel
+                ? const WaxSidePanel(
+                    title: 'Queue',
+                    child: SizedBox.expand(key: Key('panel body')),
+                  )
+                : null,
+            content: const WaxScaffold(
+              title: 'Page',
+              largeTitle: false,
+              actions: <Widget>[
+                SizedBox(key: Key('page action'), width: 10, height: 10),
+              ],
+              body: SizedBox(height: 100),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    /// How far [inner] sits inside [outer]'s start edge (its trailing edge
+    /// when [after] is true) in [direction].
+    double gap(
+      Rect inner,
+      Rect outer,
+      TextDirection direction, {
+      bool after = false,
+    }) {
+      final ltr = direction == TextDirection.ltr;
+      return ltr != after ? inner.left - outer.left : outer.right - inner.right;
+    }
+
+    /// How far [inner] sits past [edge]'s end edge in [direction].
+    double past(Rect inner, Rect edge, TextDirection direction) =>
+        direction == TextDirection.ltr
+        ? inner.left - edge.right
+        : edge.left - inner.right;
+
+    FakeViewPadding startSide(TextDirection direction) =>
+        direction == TextDirection.ltr
+        ? const FakeViewPadding(left: inset)
+        : const FakeViewPadding(right: inset);
+
+    FakeViewPadding endSide(TextDirection direction) =>
+        direction == TextDirection.ltr
+        ? const FakeViewPadding(right: inset)
+        : const FakeViewPadding(left: inset);
+
+    for (final direction in TextDirection.values) {
+      for (final entry in <String, (Size, Type)>{
+        'the rail': (const Size(700, 900), WaxNavRail),
+        'the sidebar': (const Size(1000, 900), WaxSidebar),
+      }.entries) {
+        final (size, type) = entry.value;
+        final chrome = find.byType(type);
+        final chromeGlyph = find
+            .descendant(of: chrome, matching: find.byType(WaxIcon))
+            .first;
+        final window = Offset.zero & size;
+
+        testWidgets('${direction.name}: ${entry.key} takes the start inset '
+            'and the page starts at its edge', (tester) async {
+          await pump(tester, size, direction: direction, banner: true);
+          final titleAt = past(
+            tester.getRect(title),
+            tester.getRect(chrome),
+            direction,
+          );
+          final bannerAt = past(
+            tester.getRect(bannerGlyph),
+            tester.getRect(chrome),
+            direction,
+          );
+          final glyphAt = gap(tester.getRect(chromeGlyph), window, direction);
+
+          await pump(
+            tester,
+            size,
+            direction: direction,
+            padding: startSide(direction),
+            banner: true,
+          );
+          final edge = tester.getRect(chrome);
+          expect(
+            gap(tester.getRect(chromeGlyph), window, direction),
+            glyphAt + inset,
+            reason: 'the chrome clears the inset',
+          );
+          expect(
+            past(tester.getRect(title), edge, direction),
+            titleAt,
+            reason: 'the page bar',
+          );
+          expect(
+            past(tester.getRect(bannerGlyph), edge, direction),
+            bannerAt,
+            reason: 'the banner',
+          );
+        });
+      }
+
+      testWidgets('${direction.name}: a docked panel takes the end inset and '
+          'the page is not indented by it', (tester) async {
+        const size = Size(1300, 900);
+        final window = Offset.zero & size;
+        final panel = find.byType(WaxSidePanel);
+        await pump(tester, size, direction: direction, panel: true);
+        final actionAt = past(
+          tester.getRect(panel),
+          tester.getRect(action),
+          direction,
+        );
+        final body = tester.getRect(panelBody);
+
+        await pump(
+          tester,
+          size,
+          direction: direction,
+          padding: endSide(direction),
+          panel: true,
+        );
+        expect(
+          gap(tester.getRect(panelBody), window, direction, after: true),
+          gap(body, window, direction, after: true) + inset,
+          reason: 'the panel clears the inset',
+        );
+        expect(
+          tester.getRect(panelBody).width,
+          body.width,
+          reason: 'the panel keeps its width',
+        );
+        expect(
+          past(tester.getRect(panel), tester.getRect(action), direction),
+          actionAt,
+          reason: 'the page bar',
+        );
+      });
+
+      testWidgets('${direction.name}: a panel over the page clears the end '
+          'inset', (tester) async {
+        const size = Size(1000, 900);
+        final window = Offset.zero & size;
+        await pump(tester, size, direction: direction, panel: true);
+        final body = tester.getRect(panelBody);
+
+        await pump(
+          tester,
+          size,
+          direction: direction,
+          padding: endSide(direction),
+          panel: true,
+        );
+        expect(
+          gap(tester.getRect(panelBody), window, direction, after: true),
+          gap(body, window, direction, after: true) + inset,
+        );
+        expect(tester.getRect(panelBody).width, body.width);
+      });
+    }
+
+    testWidgets('on a phone the page keeps both side insets', (tester) async {
+      const size = Size(400, 800);
+      await pump(tester, size, direction: TextDirection.ltr);
+      final titleLeft = tester.getRect(title).left;
+      final actionRight = tester.getRect(action).right;
+
+      await pump(
+        tester,
+        size,
+        direction: TextDirection.ltr,
+        padding: const FakeViewPadding(left: inset, right: inset),
+      );
+      expect(tester.getRect(title).left, titleLeft + inset);
+      expect(tester.getRect(action).right, actionRight - inset);
+    });
+  });
+
+  group("the window's bottom inset is taken once", () {
+    const inset = 30.0;
+    final deck = find.byType(DeckBarOffer);
+    final deckArt = find.descendant(
+      of: deck,
+      matching: find.byType(ArtworkImage),
+    );
+    final panelBody = find.byKey(const Key('panel body'));
+    late double paneBottom;
+
+    /// The frame at [size] under a bottom [padding], with the deck bar's
+    /// offer in the bottom slot when [deckBar] and a side panel when
+    /// [panel].
+    Future<void> pump(
+      WidgetTester tester,
+      Size size, {
+      required bool deckBar,
+      double padding = 0,
+      bool panel = false,
+    }) async {
+      tester.view
+        ..physicalSize = size
+        ..devicePixelRatio = 1
+        ..padding = FakeViewPadding(bottom: padding)
+        ..viewPadding = FakeViewPadding(bottom: padding);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildWaxTheme(),
+          home: WaxShellFrame(
+            destinations: _primary,
+            secondary: _secondary,
+            selected: 'home',
+            onSelect: (_) {},
+            onToggleCollapsed: () {},
+            bottom: deckBar
+                ? DeckBarOffer(
+                    title: 'Kelp Line',
+                    onResume: () {},
+                    onDismiss: () {},
+                  )
+                : null,
+            panel: panel
+                ? const WaxSidePanel(
+                    title: 'Queue',
+                    child: SizedBox.expand(key: Key('panel body')),
+                  )
+                : null,
+            // Read where the page is handed it: its scaffold takes it from
+            // there, and its body is handed none.
+            content: Builder(
+              builder: (context) {
+                paneBottom = MediaQuery.paddingOf(context).bottom;
+                return const WaxScaffold(
+                  title: 'Page',
+                  body: SizedBox(height: 100),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    for (final entry in <String, (Size, Type)>{
+      'the rail': (const Size(700, 900), WaxNavRail),
+      'the sidebar': (const Size(1000, 900), WaxSidebar),
+    }.entries) {
+      final (size, type) = entry.value;
+      final foot = find
+          .descendant(of: find.byType(type), matching: find.byType(WaxIcon))
+          .last;
+
+      testWidgets('with ${entry.key}, a deck bar takes it and the chrome and '
+          'the page are not lifted', (tester) async {
+        await pump(tester, size, deckBar: true);
+        final artAbove = size.height - tester.getRect(deckArt).bottom;
+        final footAbove =
+            tester.getRect(deck).top - tester.getRect(foot).bottom;
+
+        await pump(tester, size, deckBar: true, padding: inset);
+        expect(
+          tester.getRect(deck).bottom,
+          size.height,
+          reason: "the bar's surface reaches the window's foot",
+        );
+        expect(
+          size.height - tester.getRect(deckArt).bottom,
+          artAbove + inset,
+          reason: 'the bar clears the inset',
+        );
+        expect(
+          tester.getRect(deck).top - tester.getRect(foot).bottom,
+          footAbove,
+          reason: 'the chrome',
+        );
+        expect(paneBottom, 0, reason: 'the page');
+      });
+
+      testWidgets('with ${entry.key} and nothing in the bottom slot, the '
+          'chrome and the page take it', (tester) async {
+        await pump(tester, size, deckBar: false);
+        final footAbove = size.height - tester.getRect(foot).bottom;
+
+        await pump(tester, size, deckBar: false, padding: inset);
+        expect(size.height - tester.getRect(foot).bottom, footAbove + inset);
+        expect(paneBottom, inset);
+      });
+    }
+
+    for (final entry in <String, Size>{
+      'docked': const Size(1300, 900),
+      'over the page': const Size(1000, 900),
+    }.entries) {
+      testWidgets('a panel ${entry.key} stands on the deck bar, and takes the '
+          'inset with nothing there', (tester) async {
+        await pump(
+          tester,
+          entry.value,
+          deckBar: true,
+          padding: inset,
+          panel: true,
+        );
+        expect(tester.getRect(panelBody).bottom, tester.getRect(deck).top);
+
+        await pump(
+          tester,
+          entry.value,
+          deckBar: false,
+          padding: inset,
+          panel: true,
+        );
+        expect(tester.getRect(panelBody).bottom, entry.value.height - inset);
+      });
+    }
+
+    testWidgets('on a phone the tabs take it and the deck bar does not', (
+      tester,
+    ) async {
+      const size = Size(400, 800);
+      await pump(tester, size, deckBar: true);
+      final height = tester.getRect(deck).height;
+
+      await pump(tester, size, deckBar: true, padding: inset);
+      final tabs = tester.getRect(find.byType(WaxNavBar));
+      expect(tabs.bottom, size.height);
+      expect(tester.getRect(deck).bottom, tabs.top);
+      expect(tester.getRect(deck).height, height);
+      expect(paneBottom, 0, reason: 'the page: the tabs have taken it');
+    });
+  });
+
+  group('the keyboard is taken once', () {
+    const inset = 34.0;
+    final body = find.byType(CustomScrollView);
+    final deck = find.byType(DeckBarOffer);
+    final tabs = find.byType(WaxNavBar);
+    final floating = find.byKey(const Key('floating'));
+    late double paneViewPadding;
+
+    /// The frame at [size] over a gesture bar [inset] high with a keyboard
+    /// [keyboard] high, around a page whose body its Scaffold lifts clear
+    /// of the keyboard and which floats a button, with the deck bar's
+    /// offer in the bottom slot when [deckBar].
+    Future<void> pump(
+      WidgetTester tester,
+      Size size, {
+      required double keyboard,
+      bool deckBar = false,
+    }) async {
+      tester.view
+        ..physicalSize = size
+        ..devicePixelRatio = 1;
+      _engineInsets(
+        tester,
+        const FakeViewPadding(bottom: inset),
+        keyboard: keyboard,
+      );
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildWaxTheme(),
+          home: WaxShellFrame(
+            destinations: _primary,
+            secondary: _secondary,
+            selected: 'home',
+            onSelect: (_) {},
+            bottom: deckBar
+                ? DeckBarOffer(
+                    title: 'Kelp Line',
+                    onResume: () {},
+                    onDismiss: () {},
+                  )
+                : null,
+            content: Builder(
+              builder: (context) {
+                paneViewPadding = MediaQuery.viewPaddingOf(context).bottom;
+                return const WaxScaffold(
+                  title: 'Page',
+                  body: SizedBox(height: 100),
+                  floating: SizedBox(
+                    key: Key('floating'),
+                    width: 40,
+                    height: 40,
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    for (final entry in <String, (Size, bool)>{
+      'on a phone with the tabs': (const Size(400, 800), false),
+      'on a phone with the tabs and the deck bar': (const Size(400, 800), true),
+      'beside the sidebar with the deck bar': (const Size(1000, 900), true),
+    }.entries) {
+      final (size, deckBar) = entry.value;
+
+      testWidgets('${entry.key}, the page rests on the top of a keyboard '
+          'taller than what is below it', (tester) async {
+        await pump(tester, size, keyboard: 300, deckBar: deckBar);
+        expect(tester.getRect(body).bottom, size.height - 300);
+      });
+    }
+
+    testWidgets('a keyboard shorter than what is below the page leaves it '
+        'where it was', (tester) async {
+      const size = Size(400, 800);
+      await pump(tester, size, keyboard: 0, deckBar: true);
+      final foot = tester.getRect(body).bottom;
+      expect(foot, tester.getRect(deck).top);
+
+      await pump(tester, size, keyboard: 40, deckBar: true);
+      expect(tester.getRect(body).bottom, foot);
+    });
+
+    testWidgets('with nothing below the page, it takes the whole keyboard', (
+      tester,
+    ) async {
+      const size = Size(700, 900);
+      await pump(tester, size, keyboard: 300);
+      expect(tester.getRect(body).bottom, size.height - 300);
+    });
+
+    for (final entry in <String, Size>{
+      'on a phone with the tabs and the deck bar': const Size(400, 800),
+      'beside the rail with the deck bar': const Size(700, 900),
+      'beside the sidebar with the deck bar': const Size(1000, 900),
+    }.entries) {
+      final size = entry.value;
+
+      testWidgets('${entry.key}, the page keeps none of the bottom inset '
+          'whatever the keyboard, and floats its button above the keyboard '
+          'or its own foot', (tester) async {
+        await pump(tester, size, keyboard: 0, deckBar: true);
+        final foot = tester.getRect(deck).top;
+        final below = size.height - foot;
+        final keyboards = <double>[
+          // Short of the gesture bar, then over it but short of the
+          // tabs, then between the tabs and the deck bar on them, and
+          // taller than everything.
+          inset / 2,
+          if (tester.any(tabs)) ...<double>[
+            tester.getRect(tabs).height - 10,
+            tester.getRect(tabs).height + 10,
+          ] else
+            below - 10,
+          below + 100,
+        ];
+        for (final keyboard in keyboards) {
+          await pump(tester, size, keyboard: keyboard, deckBar: true);
+          expect(tester.getRect(deck).top, foot, reason: 'keyboard $keyboard');
+          expect(paneViewPadding, 0, reason: 'keyboard $keyboard');
+          expect(
+            tester.getRect(floating).bottom,
+            math.min(foot, size.height - keyboard) -
+                kFloatingActionButtonMargin,
+            reason: 'keyboard $keyboard',
+          );
+        }
+      });
+    }
+
+    for (final entry in <String, Size>{
+      'beside the rail': const Size(700, 900),
+      'beside the sidebar': const Size(1000, 900),
+    }.entries) {
+      final size = entry.value;
+
+      testWidgets('${entry.key} with nothing playing, a keyboard rising '
+          "through the gesture bar leaves the page's foot on it, and a "
+          'taller one lifts it', (tester) async {
+        for (final keyboard in const <double>[0, inset / 2, inset - 1]) {
+          await pump(tester, size, keyboard: keyboard);
+          expect(
+            tester.getRect(body).bottom,
+            size.height - inset,
+            reason: 'keyboard $keyboard',
+          );
+        }
+        await pump(tester, size, keyboard: inset + 50);
+        expect(tester.getRect(body).bottom, size.height - inset - 50);
+      });
+    }
+  });
+
+  group("the deck bar takes the window's side insets", () {
+    const inset = 40.0;
+    final deck = find.byType(DeckBarOffer);
+    final art = find.descendant(of: deck, matching: find.byType(ArtworkImage));
+    final dismiss = find
+        .descendant(of: deck, matching: find.byType(WaxIconButton))
+        .last;
+
+    Future<void> pump(
+      WidgetTester tester,
+      Size size,
+      TextDirection direction, {
+      FakeViewPadding padding = FakeViewPadding.zero,
+    }) async {
+      tester.view
+        ..physicalSize = size
+        ..devicePixelRatio = 1
+        ..padding = padding
+        ..viewPadding = padding;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildWaxTheme(),
+          builder: (context, child) =>
+              Directionality(textDirection: direction, child: child!),
+          home: WaxShellFrame(
+            destinations: _primary,
+            secondary: _secondary,
+            selected: 'home',
+            onSelect: (_) {},
+            bottom: DeckBarOffer(
+              title: 'Kelp Line',
+              onResume: () {},
+              onDismiss: () {},
+            ),
+            content: const SizedBox.expand(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    /// [inner]'s distance in from the window's start edge, or its end edge
+    /// when [end], in [direction].
+    double inFrom(
+      Rect inner,
+      Size size,
+      TextDirection direction, {
+      bool end = false,
+    }) => (direction == TextDirection.ltr) != end
+        ? inner.left
+        : size.width - inner.right;
+
+    for (final direction in TextDirection.values) {
+      for (final entry in <String, Size>{
+        'the rail': const Size(700, 900),
+        'the sidebar': const Size(1000, 900),
+      }.entries) {
+        final size = entry.value;
+        testWidgets('${direction.name}: under ${entry.key}, its controls '
+            'clear both side insets', (tester) async {
+          await pump(tester, size, direction);
+          final start = inFrom(tester.getRect(art), size, direction);
+          final end = inFrom(
+            tester.getRect(dismiss),
+            size,
+            direction,
+            end: true,
+          );
+
+          await pump(
+            tester,
+            size,
+            direction,
+            padding: const FakeViewPadding(left: inset, right: inset),
+          );
+          expect(
+            inFrom(tester.getRect(art), size, direction),
+            start + inset,
+            reason: 'the start side',
+          );
+          expect(
+            inFrom(tester.getRect(dismiss), size, direction, end: true),
+            end + inset,
+            reason: 'the end side',
+          );
+          expect(
+            tester.getRect(deck),
+            Rect.fromLTRB(0, tester.getRect(deck).top, size.width, size.height),
+            reason: 'its surface still spans the window',
+          );
+        });
+      }
+
+      testWidgets('${direction.name}: on a phone, over the tabs, its '
+          'controls clear both side insets', (tester) async {
+        const size = Size(400, 800);
+        await pump(tester, size, direction);
+        final start = inFrom(tester.getRect(art), size, direction);
+        final end = inFrom(tester.getRect(dismiss), size, direction, end: true);
+
+        await pump(
+          tester,
+          size,
+          direction,
+          padding: const FakeViewPadding(left: inset, right: inset),
+        );
+        expect(
+          inFrom(tester.getRect(art), size, direction),
+          start + inset,
+          reason: 'the start side',
+        );
+        expect(
+          inFrom(tester.getRect(dismiss), size, direction, end: true),
+          end + inset,
+          reason: 'the end side',
+        );
+        final surface = tester.getRect(deck);
+        expect(
+          (surface.left, surface.right, surface.bottom),
+          (0.0, size.width, tester.getRect(find.byType(WaxNavBar)).top),
+          reason: 'its surface still spans the window, on the tabs',
+        );
+      });
+    }
+  });
+
+  group('the page keeps its state while the frame changes around it', () {
+    testWidgets('a keyed page keeps its scroll and its typed text across '
+        'every size class, banners, the deck bar and a keyboard', (
+      tester,
+    ) async {
+      final page = GlobalKey<_StatefulPageState>();
+      Widget frame({bool banner = false, bool deckBar = false}) => MaterialApp(
+        theme: buildWaxTheme(),
+        home: WaxShellFrame(
+          destinations: _primary,
+          secondary: _secondary,
+          selected: 'home',
+          onSelect: (_) {},
+          banners: <Widget>[
+            if (banner) const WaxBanner(message: 'Reconnecting.'),
+          ],
+          bottom: deckBar
+              ? DeckBarOffer(title: 'Kelp', onResume: () {}, onDismiss: () {})
+              : null,
+          content: _StatefulPage(key: page),
+        ),
+      );
+
+      tester.view
+        ..physicalSize = const Size(400, 800)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(frame());
+      await tester.enterText(find.byType(TextField), 'typed');
+      page.currentState!.scroll.jumpTo(120);
+      await tester.pump();
+      final state = page.currentState;
+
+      void kept(String when) {
+        expect(page.currentState, same(state), reason: when);
+        expect(page.currentState!.inits, 1, reason: when);
+        expect(page.currentState!.scroll.offset, 120, reason: when);
+        expect(find.text('typed'), findsOneWidget, reason: when);
+      }
+
+      for (final size in const <Size>[
+        Size(700, 900),
+        Size(1000, 900),
+        Size(1300, 900),
+        Size(400, 800),
+      ]) {
+        tester.view.physicalSize = size;
+        await tester.pump();
+        kept('at $size');
+      }
+      await tester.pumpWidget(frame(banner: true, deckBar: true));
+      kept('with a banner and the deck bar');
+      for (var keyboard = 0.0; keyboard <= 300; keyboard += 60) {
+        _engineInsets(
+          tester,
+          const FakeViewPadding(bottom: 34),
+          keyboard: keyboard,
+        );
+        await tester.pump();
+        kept('with a keyboard $keyboard high');
+      }
+      tester.view.physicalSize = const Size(1000, 900);
+      await tester.pumpWidget(frame());
+      kept('beside the sidebar again, with neither');
+    });
+
+    testWidgets('an open side panel keeps its state while a banner comes '
+        'and goes', (tester) async {
+      // Not keyed from outside, as the app's own panel is not: what keeps
+      // it is the frame's shape above it.
+      Widget frame({required bool banner}) => MaterialApp(
+        theme: buildWaxTheme(),
+        home: WaxShellFrame(
+          destinations: _primary,
+          secondary: _secondary,
+          selected: 'home',
+          onSelect: (_) {},
+          banners: <Widget>[
+            if (banner) const WaxBanner(message: 'Reconnecting.'),
+          ],
+          panel: const WaxSidePanel(title: 'Queue', child: _StatefulPage()),
+          content: const SizedBox.expand(),
+        ),
+      );
+      final inPanel = find.descendant(
+        of: find.byType(WaxSidePanel),
+        matching: find.byType(_StatefulPage),
+      );
+
+      tester.view
+        ..physicalSize = const Size(1300, 900)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(frame(banner: false));
+      final state = tester.state<_StatefulPageState>(inPanel);
+      state.scroll.jumpTo(120);
+      await tester.pump();
+
+      for (final banner in <bool>[true, false, true]) {
+        await tester.pumpWidget(frame(banner: banner));
+        final now = tester.state<_StatefulPageState>(inPanel);
+        expect(now, same(state), reason: 'banner $banner');
+        expect(now.inits, 1, reason: 'banner $banner');
+        expect(now.scroll.offset, 120, reason: 'banner $banner');
+      }
     });
   });
 
@@ -1032,4 +1940,230 @@ void main() {
       expect(selections, <String>['users']);
     });
   });
+
+  group("a page's foot bar stands on the window's foot", () {
+    const inset = 30.0;
+    const cutout = 24.0;
+    final bar = find.byType(WaxFootBar);
+    final controls = find.byKey(const Key('controls'));
+    final endPane = find.byKey(const Key('end pane'));
+    final deck = find.byType(DeckBarOffer);
+    final tabs = find.byType(WaxNavBar);
+
+    const footed = WaxFootedPane(
+      body: SizedBox.expand(),
+      foot: WaxFootBar(child: SizedBox(key: Key('controls'), height: 40)),
+    );
+
+    /// The frame at [size] over a gesture bar [inset] high with a
+    /// keyboard [keyboard] high and cutouts [left] and [right] wide,
+    /// around a page that fills with a footed pane, the end one of two
+    /// when [split], with the deck bar's offer below when [deckBar].
+    Future<void> pump(
+      WidgetTester tester,
+      Size size, {
+      bool deckBar = false,
+      bool split = false,
+      double bottom = inset,
+      double keyboard = 0,
+      double left = 0,
+      double right = cutout,
+    }) async {
+      tester.view
+        ..physicalSize = size
+        ..devicePixelRatio = 1;
+      _engineInsets(
+        tester,
+        FakeViewPadding(left: left, right: right, bottom: bottom),
+        keyboard: keyboard,
+      );
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildWaxTheme(),
+          home: WaxShellFrame(
+            destinations: _primary,
+            secondary: _secondary,
+            selected: 'home',
+            onSelect: (_) {},
+            onToggleCollapsed: () {},
+            bottom: deckBar
+                ? DeckBarOffer(
+                    title: 'Kelp Line',
+                    onResume: () {},
+                    onDismiss: () {},
+                  )
+                : null,
+            content: WaxScaffold(
+              title: 'Page',
+              largeTitle: false,
+              fill: split
+                  ? const Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: WaxInsetsTaken(
+                            end: true,
+                            child: SafeArea(
+                              top: false,
+                              child: SizedBox.expand(),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: WaxInsetsTaken(
+                            key: Key('end pane'),
+                            start: true,
+                            child: footed,
+                          ),
+                        ),
+                      ],
+                    )
+                  : footed,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    for (final entry in <String, Size>{
+      'on a phone': const Size(400, 800),
+      'beside the rail': const Size(700, 900),
+      'beside the sidebar': const Size(1000, 900),
+    }.entries) {
+      final size = entry.value;
+      for (final deckBar in <bool>[false, true]) {
+        for (final split in <bool>[false, true]) {
+          final where =
+              '${entry.key}${deckBar ? ' with the deck bar' : ''}, '
+              '${split ? 'under the end pane of two' : 'across the page'}';
+
+          testWidgets("$where, its surface reaches the window's foot or "
+              'what stands on it and the end edge, and its controls keep '
+              'clear of the insets', (tester) async {
+            await pump(tester, size, deckBar: deckBar, split: split);
+            final below = deckBar
+                ? tester.getRect(deck).top
+                : tester.any(tabs)
+                ? tester.getRect(tabs).top
+                : size.height;
+            final page = tester.getRect(find.byType(WaxScaffold));
+            final start = split ? tester.getRect(endPane).left : page.left;
+            final box = tester.getRect(bar);
+            final inner = tester.getRect(controls);
+            expect(box.bottom, below, reason: 'its surface, at the foot');
+            expect(box.right, size.width, reason: 'its surface, at the end');
+            expect(box.left, start, reason: 'its surface, at the start');
+            expect(
+              inner.bottom,
+              below == size.height ? size.height - inset : below,
+              reason: 'its controls, at the foot',
+            );
+            expect(inner.right, size.width - cutout, reason: 'at the end');
+            expect(inner.left, start, reason: 'at the start');
+          });
+        }
+      }
+    }
+
+    /// The colour the window's layer holds at [at], as composited: no
+    /// repaint asked for first, so a picture left stale shows.
+    Future<List<int>> pixel(WidgetTester tester, Offset at) async {
+      final out = await tester.runAsync(() async {
+        final image = await captureImage(
+          tester.element(find.byType(WaxShellFrame)),
+        );
+        final data = (await image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        ))!;
+        final i = ((at.dy.floor() * image.width) + at.dx.floor()) * 4;
+        return <int>[for (var k = 0; k < 4; k++) data.getUint8(i + k)];
+      });
+      return out!;
+    }
+
+    testWidgets('beside the rail with nothing playing, the frame after a '
+        'keyboard closes through the gesture bar has the bar on the foot', (
+      tester,
+    ) async {
+      const size = Size(700, 900);
+      await pump(tester, size);
+      for (final keyboard in const <double>[300, 120, 40, 18, 7, 2, 0]) {
+        _engineInsets(
+          tester,
+          const FakeViewPadding(right: cutout, bottom: inset),
+          keyboard: keyboard,
+        );
+        await tester.pump();
+      }
+      expect(tester.getRect(bar).bottom, size.height);
+      expect(tester.getRect(controls).bottom, size.height - inset);
+      final surface = await pixel(tester, const Offset(400, 850));
+      expect(surface, isNot(await pixel(tester, const Offset(400, 400))));
+      expect(
+        await pixel(tester, const Offset(400, 895)),
+        surface,
+        reason: 'under the gesture bar',
+      );
+    });
+
+    testWidgets('beside the rail, the frame after a cutout moves to the '
+        'other side has the bar under the new one', (tester) async {
+      const size = Size(700, 900);
+      await pump(tester, size, bottom: 0, left: 40, right: 0);
+      _engineInsets(tester, const FakeViewPadding(right: 40));
+      await tester.pump();
+      expect(tester.getRect(bar).right, size.width);
+      expect(tester.getRect(controls).right, size.width - 40);
+      expect(
+        await pixel(tester, const Offset(690, 880)),
+        await pixel(tester, const Offset(400, 880)),
+        reason: 'under the end cutout',
+      );
+    });
+  });
+}
+
+/// A page with state of its own to lose: a scroll position and a field.
+class _StatefulPage extends StatefulWidget {
+  const _StatefulPage({super.key});
+
+  @override
+  State<_StatefulPage> createState() => _StatefulPageState();
+}
+
+class _StatefulPageState extends State<_StatefulPage> {
+  final scroll = ScrollController();
+  var inits = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    inits++;
+  }
+
+  @override
+  void dispose() {
+    scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Material(
+    type: MaterialType.transparency,
+    child: Column(
+      children: <Widget>[
+        const TextField(),
+        Expanded(
+          child: ListView(
+            controller: scroll,
+            children: <Widget>[
+              for (var row = 0; row < 40; row++)
+                SizedBox(height: 40, child: Text('row $row')),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }

@@ -3,12 +3,15 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
+import 'package:waxdeck_player/waxdeck_player.dart' show EngineProcessingState;
 
+import '../downloads/wifi_only_gate.dart';
 import '../providers.dart';
 import '../sync/sync_providers.dart';
 import 'artwork_store.dart';
 import 'artwork_store_io.dart'
     if (dart.library.js_interop) 'artwork_store_stub.dart';
+import 'pin_refresh.dart';
 
 /// The artwork slots an item holds at its own level, and where the
 /// cover it resolves came from.
@@ -40,10 +43,47 @@ final artworkStoreProvider = Provider<ArtworkStore>((ref) {
     // store holding the one it was built with would start answering 401
     // in the middle of a session.
     token: () => ref.read(repositoryProvider).authToken,
+    pinGate: pinRefreshGate(ref),
+    reachable: serverReachable(ref),
   );
   ref.onDispose(store.dispose);
   return store;
 });
+
+/// Whether the server is known to be reachable now: the sync engine is
+/// running and connected. Anything else is not known, a cold start whose
+/// first connect has not answered included, and neither is a read off
+/// providers that are gone.
+bool Function() serverReachable(Ref ref) => () {
+  try {
+    final engine = ref.read(syncEngineProvider);
+    return engine != null && engine.started && engine.current.online;
+  } catch (_) {
+    return false;
+  }
+};
+
+/// The gate the pinned covers' refresh waits at, read off the app as it
+/// stands when asked: nothing here is watched, so nothing here rebuilds
+/// the store.
+PinRefreshGate pinRefreshGate(Ref ref) => PinRefreshGate(
+  reachable: serverReachable(ref),
+  playbackWaiting: () =>
+      ref.read(audioEngineProvider).processingState ==
+      EngineProcessingState.loading,
+  // The wifi-only setting downloads themselves wait at.
+  transfers: () => ref.read(transferGateProvider),
+  downloading: () async {
+    final held = await ref.read(downloadManagerProvider)?.stored();
+    return held != null && held.any((item) => item.active && !item.complete);
+  },
+  moved: () => <Stream<void>>[
+    ?ref.read(syncEngineProvider)?.status,
+    ref.read(audioEngineProvider).processingStateStream,
+    if (ref.read(downloadManagerProvider)?.progress case final progress?)
+      downloadTurns(progress),
+  ],
+);
 
 /// Bounds Flutter's decoded-image cache to what this app actually draws.
 ///

@@ -3,11 +3,10 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
-import '../music/album_detail.dart';
-import '../music/music_controllers.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import '../sync/catalog_writes.dart';
 
 /// Confirms and performs a per-member detach: the track leaves the
 /// release a MusicBrainz id pins it to and lands on the album its own
@@ -30,6 +29,7 @@ Future<void> confirmDetachItem(
   final l10n = context.l10n;
   final container = ProviderScope.containerOf(context, listen: false);
   final messenger = container.read(shellMessengerProvider);
+  final writes = container.read(catalogWritesProvider);
   var writeBack = true;
   final confirmed = await showDialog<bool>(
     context: context,
@@ -74,12 +74,10 @@ Future<void> confirmDetachItem(
     final result = await container
         .read(repositoryProvider)
         .detachItem(pid, writeBack: writeBack);
-    // Both albums: the one the track left and the one it landed on.
-    // The catalog invalidation is on its way over the socket too; this
-    // is what makes the move show now rather than shortly.
-    container
-      ..invalidate(musicItemsProvider)
-      ..invalidate(albumDetailProvider);
+    // Both albums, the one the track left and the one it landed on, and
+    // the index that now lists one more. The server's hint is on its way
+    // too; this is what makes the move show now.
+    writes.landed();
     messenger.show(
       <String>[
         l10n.libraryMenuDetached,

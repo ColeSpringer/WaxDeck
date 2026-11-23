@@ -1,4 +1,3 @@
-import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
@@ -13,6 +12,7 @@ import 'src/diagnostics/defect_log.dart';
 import 'src/desktop/desktop_ports_io.dart'
     if (dart.library.js_interop) 'src/desktop/desktop_ports_stub.dart';
 import 'src/providers.dart';
+import 'src/shell/automation_semantics.dart';
 import 'src/shell/url_strategy/url_strategy.dart';
 import 'src/sync/refresh_pacing.dart';
 
@@ -26,9 +26,9 @@ Future<void> main() async {
   // and the framework's defaults are sized for apps that draw a few.
   applyArtworkImageCacheBounds();
   // Browser automation drives the web build through the semantics tree, so
-  // semantics must be live from the first frame, not gated on a screen
-  // reader announcing itself.
-  SemanticsBinding.instance.ensureSemantics();
+  // there semantics must be live from the first frame, not gated on a
+  // screen reader announcing itself.
+  holdSemanticsForAutomation();
   // Points just_audio at mpv on desktop and bounds its player release on the
   // web; no-op on mobile.
   ensureAudioEngineInitialized();

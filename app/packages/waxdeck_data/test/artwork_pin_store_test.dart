@@ -45,6 +45,104 @@ void main() {
     expect(pins.single.etag, 'W/"new"');
   });
 
+  group('recording where a pinned picture is now', () {
+    const now = 'https://deck.moved.example/api/v1/items/bk-A/art';
+
+    test('moves the URL of that pin and nothing else of it', () async {
+      await store.put(_pin('bk-A', 1024));
+      await store.put(_pin('bk-A', 256));
+      final [hero, cell] = await store.pinsFor('bk-A');
+
+      await store.recordUrl(hero, now);
+
+      final [after, other] = await store.pinsFor('bk-A');
+      expect(after.artUrl, now);
+      expect(after.etag, hero.etag);
+      expect(after.localPath, hero.localPath);
+      expect(after.pinnedAt, hero.pinnedAt);
+      expect(other.artUrl, cell.artUrl);
+    });
+
+    test('leaves a size pinned again since, and makes no row for one that '
+        'is gone', () async {
+      await store.put(_pin('bk-A', 1024));
+      final read = (await store.pinsFor('bk-A')).single;
+      await store.put(
+        ArtworkPinRecord(
+          pid: read.pid,
+          sizePx: read.sizePx,
+          artUrl: read.artUrl,
+          etag: 'W/"since"',
+          localPath: read.localPath,
+          sizeBytes: read.sizeBytes,
+          pinnedAt: DateTime.utc(2030),
+        ),
+      );
+      await store.recordUrl(read, now);
+      expect((await store.pinsFor('bk-A')).single.artUrl, read.artUrl);
+
+      await store.removeExactly('bk-A', [
+        (sizePx: 1024, pinnedAt: DateTime.utc(2030)),
+      ]);
+      await store.recordUrl(read, now);
+      expect(await store.pinsFor('bk-A'), isEmpty);
+    });
+  });
+
+  group('a walk of every pin', () {
+    List<String> names(List<ArtworkPinRecord> pins) => [
+      for (final pin in pins) '${pin.pid}/${pin.sizePx}',
+    ];
+
+    setUp(() async {
+      // Put in no order, as downloads land.
+      await store.put(_pin('tr-B', 1024));
+      await store.put(_pin('al-C', 256));
+      await store.put(_pin('tr-A', 1024));
+      await store.put(_pin('tr-B', 256));
+      await store.put(_pin('tr-A', 256));
+    });
+
+    test('reads them a page at a time, each once', () async {
+      final seen = <String>[];
+      PinCursor? after;
+      while (true) {
+        final page = await store.pinsAfter(after, limit: 2);
+        if (page.isEmpty) break;
+        expect(page.length, lessThanOrEqualTo(2));
+        seen.addAll(names(page));
+        after = (pid: page.last.pid, sizePx: page.last.sizePx);
+      }
+      expect(seen, [
+        'al-C/256',
+        'tr-A/256',
+        'tr-A/1024',
+        'tr-B/256',
+        'tr-B/1024',
+      ]);
+    });
+
+    test('picks up past its last pin when that pin has gone, and reads one '
+        'pinned ahead of it since', () async {
+      final first = await store.pinsAfter(null, limit: 2);
+      expect(names(first), ['al-C/256', 'tr-A/256']);
+      await store.removeExactly('tr-A', [
+        (sizePx: 256, pinnedAt: first.last.pinnedAt),
+      ]);
+      await store.put(_pin('tr-AA', 256));
+
+      final rest = await store.pinsAfter((pid: 'tr-A', sizePx: 256), limit: 10);
+      expect(names(rest), ['tr-A/1024', 'tr-AA/256', 'tr-B/256', 'tr-B/1024']);
+    });
+
+    test('carries what a conditional request needs', () async {
+      final pin = (await store.pinsAfter(null, limit: 1)).single;
+      expect(pin.etag, 'W/"a"');
+      expect(pin.artUrl, 'https://deck.example/api/v1/items/al-C/art');
+      expect(pin.localPath, '/art/al-C-256.img');
+    });
+  });
+
   group('removing exactly', () {
     ArtworkPinRecord at(String pid, int sizePx, DateTime when) =>
         ArtworkPinRecord(

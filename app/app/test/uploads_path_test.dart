@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/uploads/upload_phase.dart';
 import 'package:waxdeck/src/uploads/uploads_controller.dart';
@@ -269,6 +270,46 @@ UploadSession _session(String id) => UploadSession(
   state: 'staged',
   createdAt: DateTime.utc(2026, 7, 1),
 );
+
+UploadSession _staged(String id) => UploadSession(
+  id: id,
+  fileName: '$id.flac',
+  sizeBytes: 8,
+  receivedBytes: 8,
+  idle: Duration.zero,
+  mediaType: MediaType.music,
+  state: 'staged',
+  createdAt: DateTime.utc(2026, 10, 1),
+);
+
+WaxDeckUser _user(String name) => WaxDeckUser(
+  id: 'us-$name',
+  username: name,
+  roles: const ['user'],
+  uploadEnabled: true,
+);
+
+/// Answers each account its own session and allowance, Ann's read held
+/// behind [annGate] while it is set.
+class _PerAccount extends FakeRepository {
+  _PerAccount()
+    : super(
+        sessionState: SessionState(authenticated: true, user: _user('ann')),
+      );
+
+  Completer<void>? annGate;
+
+  @override
+  Future<UploadPage> listUploads({String? cursor, int? limit}) async {
+    final who = sessionState.user!.username;
+    final page = UploadPage(
+      uploads: [_staged('up-$who')],
+      quota: UploadQuota(bytesInUse: who == 'ann' ? 1 : 2),
+    );
+    if (who == 'ann') await annGate?.future;
+    return page;
+  }
+}
 
 void main() {
   late Directory dir;
@@ -615,11 +656,13 @@ void main() {
       repo.putUploadDataGate!.complete();
       await upload;
       // The held list now carries this client's own staged copy; the
-      // second page says nothing about the session.
-      await container.read(uploadsProvider.notifier).loadMore();
+      // second page, asked now and read once the refresh ahead of it
+      // lands, says nothing about the session.
+      final more = container.read(uploadsProvider.notifier).loadMore();
       gate.complete();
       repo.listGate = null;
       await stale;
+      await more;
 
       expect(
         uploadPhaseOf(
@@ -1401,5 +1444,34 @@ void main() {
       expect(repo.putUploadDataCalls, hasLength(puts));
       expect(repo.getUploadCalls, 1);
     });
+  });
+
+  test('a read the last account left out lands nothing on the next', () async {
+    final repo = _PerAccount()..uploadsById['up-ben'] = _staged('up-ben');
+    final container = appContainer(repo: repo);
+    addTearDown(container.dispose);
+    await container.read(authControllerProvider.future);
+    final held = container.listen(uploadsProvider, (_, _) {});
+    addTearDown(held.close);
+    expect((await container.read(uploadsProvider.future)).quota?.bytesInUse, 1);
+
+    // Ann's refresh is out when Ben signs in on the same server.
+    final annRead = repo.annGate = Completer<void>();
+    container.invalidate(uploadsProvider);
+    await container.pump();
+    repo.sessionState = SessionState(authenticated: true, user: _user('ben'));
+    await container.read(authControllerProvider.notifier).refreshSession();
+    final ben = await container.read(uploadsProvider.future);
+    expect([for (final u in ben.uploads) u.id], ['up-ben']);
+    expect(ben.quota?.bytesInUse, 2);
+
+    // Ann's answer lands after Ben's, and the list is drawn again.
+    annRead.complete();
+    await pumpEventQueue();
+    await container.read(uploadsProvider.notifier).readAgain(['up-ben']);
+
+    final now = container.read(uploadsProvider).requireValue;
+    expect([for (final u in now.uploads) u.id], ['up-ben']);
+    expect(now.quota?.bytesInUse, 2, reason: 'Ben\'s allowance, not Ann\'s');
   });
 }

@@ -305,7 +305,7 @@ func (d *DB) ListenLog(ctx context.Context, userID, client string, beforeNS, bef
 		beforeID = 0
 	}
 	q := `
-		SELECT id, user_id, item_pid, media_type, started_at_ns,
+		SELECT id, user_id, session_id, item_pid, media_type, started_at_ns,
 		       ms_played, skipped_ms, finished, client, source
 		FROM listen_sessions
 		WHERE user_id = ? AND (started_at_ns < ? OR (started_at_ns = ? AND id < ?))`
@@ -326,7 +326,7 @@ func (d *DB) ListenLog(ctx context.Context, userID, client string, beforeNS, bef
 		var r ListenRow
 		var startedNS int64
 		var finished int
-		if err := rows.Scan(&r.RowID, &r.UserID, &r.ItemPID, &r.MediaType,
+		if err := rows.Scan(&r.RowID, &r.UserID, &r.SessionID, &r.ItemPID, &r.MediaType,
 			&startedNS, &r.MsPlayed, &r.SkippedMs, &finished, &r.Client, &r.Source); err != nil {
 			return nil, fmt.Errorf("db: reading listen log: %w", err)
 		}

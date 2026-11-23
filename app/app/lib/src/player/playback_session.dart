@@ -125,7 +125,8 @@ class PlaybackSession {
   /// queue through it instead of being dropped.
   final SyncEngine? sync;
 
-  /// Downloaded originals, for playback when the server is unreachable.
+  /// Downloaded originals: an item with one plays it, online or not (see
+  /// [start]).
   final DownloadManagerPort? downloads;
 
   /// Where a listen that could not be reported waits, when this platform
@@ -185,6 +186,13 @@ class PlaybackSession {
 
   /// Position deltas above this are treated as seeks, not listening.
   static const maxCountedStep = Duration(seconds: 2);
+
+  /// How long a start of a downloaded item waits on the server while
+  /// nothing says whether it is in reach (the sync engine's first connect
+  /// still out) before it plays the device copy. Half the wait a launch
+  /// gives the server before opening on a remembered session: a press of
+  /// play is heard as silence, and the item is already here.
+  static const unansweredStartWait = Duration(milliseconds: 1500);
 
   /// How early before a silence span the trim jump may fire, absorbing
   /// position-stream granularity.
@@ -247,11 +255,26 @@ class PlaybackSession {
   /// on the offline path.
   int _loadedDurationMs = 0;
 
-  /// The downloaded parts this book is playing from, set only where the
-  /// offline branch took over an item whose parts can be placed on its
-  /// timeline. Non-null means part resolution runs against the download
-  /// store rather than against play-info.
+  /// The downloaded parts this book is playing from, set where the device
+  /// copy plays an item whose parts can be placed on its timeline.
+  /// Non-null means part resolution runs against the download store
+  /// rather than against play-info.
   LocalPlayback? _localParts;
+
+  /// The downloaded copy of this item that stands in for the server's
+  /// stream: one file, or parts that can be placed on its timeline. Null
+  /// where there is none, for a timeline member, for a book's copy whose
+  /// parts no longer match the server's, and once it failed to load or to
+  /// play.
+  LocalPlayback? _copy;
+
+  /// A boost the server has just stored, which proves it answers: the next
+  /// load passing the copy over mints, whatever the socket says.
+  bool _boostServed = false;
+
+  /// The boosted stream the server refused this session: the copy plays
+  /// without it, and the boost waits for the next start.
+  bool _boostRefused = false;
 
   /// Whether media ever reached the engine under this session. A start
   /// that failed before loading has no position of its own: the engine's
@@ -259,7 +282,7 @@ class PlaybackSession {
   bool _loaded = false;
 
   /// The play-info the loaded media was minted from. Null for a timeline
-  /// member and a downloaded file, which nothing here can mint again.
+  /// member, which nothing here can mint again, and for a device copy.
   PlayInfo? _info;
 
   /// When the loaded stream reads stale on this device's clock, fixed as
@@ -498,6 +521,28 @@ class PlaybackSession {
   /// it could be fetched.
   BookDetail? get book => _book;
 
+  /// Reads the book's detail again, for chapter marks an edit renamed or
+  /// moved, and holds it while it is still the book this plays: the same
+  /// parts on the same timeline. Answers whether the marks changed.
+  Future<bool> rereadBook() async {
+    final held = _book;
+    if (!_isBook || held == null || _disposed) return false;
+    final BookDetail fresh;
+    try {
+      fresh = await repository.getBook(item.pid);
+    } on WaxDeckApiException {
+      return false;
+    }
+    if (_disposed || !identical(_book, held)) return false;
+    if (fresh.durationMs != held.durationMs ||
+        !_sameParts(fresh.parts, held.parts) ||
+        _sameMarks(fresh.chapters, held.chapters)) {
+      return false;
+    }
+    _book = fresh;
+    return true;
+  }
+
   bool get _isBook => item.mediaType == MediaType.audiobook;
 
   /// Whether play-info's length can be a feed's word rather than the
@@ -585,10 +630,27 @@ class PlaybackSession {
     milliseconds: _partStartMs + _cutMs + enginePosition.inMilliseconds,
   );
 
-  /// Fetches item config, play-info, and saved state, loads the stream at
-  /// the resume position, and starts playing. When the server is
-  /// unreachable and the item's original is downloaded, playback runs
-  /// from the local file with the mirrored resume position instead.
+  /// Fetches item config and saved state, loads the media at the resume
+  /// position, and starts playing.
+  ///
+  /// What plays: the downloaded copy where the item has one, online or
+  /// not, unless the boost is on (the listener's choice, else the stored
+  /// setting, else this device's default) and the server answered, since
+  /// only its minted stream carries the boost; a boosted stream the server
+  /// will not mint leaves the copy playing without it. A book's copy whose
+  /// parts no longer match the server's streams. A copy that will not
+  /// load, or fails as it plays, turns to the server's stream; an item
+  /// with no copy streams. The source is chosen at each load (a start, a
+  /// part roll, a reload), and only the listener's own toggle switches it
+  /// mid-play: a boost learned late, from an answer, or chosen with the
+  /// server out of reach applies from the next load.
+  ///
+  /// Where the position and settings come from: the server's reads, or
+  /// the mirror's position where the server is unreachable, known out of
+  /// reach (the sync engine past a failure: only the config is asked,
+  /// behind it), or not known either way and silent for
+  /// [unansweredStartWait]. Those two apply to a start that will sound; a
+  /// paused load waits for the server until play is pressed on it.
   ///
   /// [autoplay] false loads and stops there, for a queue put back at
   /// launch: the item stands at its checkpoint until someone presses
@@ -611,21 +673,33 @@ class PlaybackSession {
   /// stopped, and this session picks up accounting where it stands.
   ///
   /// Only ever called for an item the preload admission policy let
-  /// through, which is why the book and offline branches of [start] have
-  /// no counterpart: neither is ever preloaded.
-  Future<void> adopt(PlayInfo info) async {
+  /// through, which is why the book branch of [start] has no counterpart:
+  /// a book is never preloaded.
+  Future<void> adopt(PlayInfo info) => _adopt(
+    // A timeline member's info is the rendering's, which the feeder keeps
+    // and nothing here can mint again.
+    () => _moveTimeline(
+      info: timeline == null ? info : null,
+      cutMs: info.startOffsetMs,
+      durationMs: info.durationMs,
+    ),
+  );
+
+  /// [adopt] for a downloaded track the preload armed from [copy], its
+  /// file on this device: held as a start's copy is, so a reload takes it
+  /// again and nothing is minted.
+  Future<void> adoptCopy(LocalPlayback copy) => _adopt(() {
+    _copy = copy;
+    _moveTimeline(durationMs: _fileLengthMs(copy));
+  });
+
+  Future<void> _adopt(void Function() moveTimeline) async {
     _engineOwners[engine] = this;
     await (_configLoad = _loadConfig());
     if (_disposed) return;
     await engine.setSpeed(_configuredSpeed());
     if (_disposed) return;
-    // A timeline member's info is the rendering's, which the feeder keeps
-    // and nothing here can mint again.
-    _moveTimeline(
-      info: timeline == null ? info : null,
-      cutMs: info.startOffsetMs,
-      durationMs: info.durationMs,
-    );
+    moveTimeline();
     _lastPosition = engine.position;
     _loaded = true;
     _watchEngine();
@@ -639,6 +713,46 @@ class PlaybackSession {
   /// The in-flight (or finished) config load, so a write that arrives
   /// before it does can wait for it rather than run without it.
   Future<void>? _configLoad;
+
+  /// Whether a rate was set on this session ([setSpeed]): one the server's
+  /// config does not overrule when it lands late.
+  bool _speedChosen = false;
+
+  /// The same for trimming ([setTrimEnabled]) and voice boost
+  /// ([setVoiceBoost]).
+  bool _trimChosen = false;
+  bool _boostChosen = false;
+
+  /// Whether the server answered this session's config read: until it
+  /// has, a downloaded part asks it for no skip map.
+  bool _configAnswered = false;
+
+  /// Whether the config was never answered and its last read failed for
+  /// want of the server, which asks it again on the re-ask pace and at the
+  /// sync engine's return ([_keepWaiting]).
+  bool _configFailed = false;
+  StreamSubscription<SyncStatus>? _serverBack;
+
+  /// The rate and boost the listener chose and not yet stored
+  /// ([_storeChoices]). Kept while the server is out of reach for this
+  /// session only: one let go drops them.
+  double? _speedToStore;
+  bool? _boostToStore;
+
+  /// The next ask for those, or for a config never answered, on the app's
+  /// re-ask pace: the sync engine's return is not the only one, and there
+  /// is none on the web or while a 503 leaves its socket up.
+  Timer? _askAgain;
+  final _askPace = Backoff();
+
+  /// Settles with what became of the choices made since the server was last
+  /// found out of reach or a write took them: true stored or kept, false
+  /// refused. Null while there are none.
+  Completer<bool>? _choicesMade;
+
+  /// The settings reads and writes under way, one at a time, so an answer
+  /// reported and the chip it leaves always agree.
+  Future<void> _settingsTurn = Future<void>.value();
 
   /// Re-opens the same item on a freshly minted timeline, at the
   /// position it stands at.
@@ -917,45 +1031,22 @@ class PlaybackSession {
         inMedia > engine.bufferedPosition.inMilliseconds + _bufferSlackMs;
   }
 
-  /// Sets the playback speed now and, for episodes and books, persists it
-  /// as the item's remembered speed. Music never persists.
+  /// Sets the playback speed now and, for episodes and books, stores it as
+  /// the item's remembered speed. Music never stores one. Answers once the
+  /// rate changed, the store going on behind it: a routed command is
+  /// answered on this.
   Future<void> setSpeed(double speed, {bool persist = true}) async {
-    await engine.setSpeed(speed);
-    if (!persist) return;
-    try {
-      final it = item;
-      if (item.mediaType == MediaType.podcast && it is EpisodeSummary) {
-        final current = await _storedShowSettings(it.showPid);
-        final updated = SubscriptionSettings(
-          retentionKeep: current.retentionKeep,
-          autoDownload: current.autoDownload,
-          folder: current.folder,
-          private: current.private,
-          speed: speed,
-          trimSilence: current.trimSilence,
-          voiceBoost: current.voiceBoost,
-          skipIntroSeconds: current.skipIntroSeconds,
-          skipOutroSeconds: current.skipOutroSeconds,
-        );
-        _showSettings = updated;
-        await repository.putSubscriptionSettings(it.showPid, updated);
-      } else if (_isBook) {
-        final current = _bookSettings ?? const BookSettings();
-        final updated = BookSettings(
-          speed: speed,
-          voiceBoost: current.voiceBoost,
-          trimSilence: current.trimSilence,
-        );
-        _bookSettings = updated;
-        await repository.putBookSettings(item.pid, updated);
-      }
-    } on WaxDeckApiException {
-      // The runtime speed stands; remembering it is best effort.
+    _speedChosen = true;
+    if (persist && _keepsSettings) {
+      unawaited(_choose(speed: speed));
+      unawaited(_store());
     }
+    await engine.setSpeed(speed);
   }
 
   /// Turns silence trimming on or off for this session.
   void setTrimEnabled(bool on) {
+    _trimChosen = true;
     trimEnabled.value = on;
     if (on && _skipSpans.isEmpty) {
       unawaited(_loadSkipMap());
@@ -969,76 +1060,52 @@ class PlaybackSession {
   /// The reopen is the part that makes the control honest: the boost is
   /// applied when the server mints the stream, so persisting alone would
   /// be a toggle that does nothing until the item is loaded again. A
-  /// downloaded original carries no boost at all and cannot be given
-  /// one, which is why the offline branch is left alone: the setting is
-  /// stored for the next online play and the local file keeps playing.
-  /// Answers whether the change took: false when there was nothing to
-  /// store it on, which is a show whose settings this session could not
-  /// fetch. The chip puts itself back for that, rather than reporting a
-  /// state nothing holds and a reload that changed nothing.
+  /// downloaded original carries no boost at all, so the toggle switches
+  /// the source where it stands, a load under way included: on with the
+  /// socket up, a device play turns over to the server's stream; off, a
+  /// stream of a downloaded item turns back to the copy. Chosen with the
+  /// server out of reach, it applies from the next load: the reopen once
+  /// the choice is stored, or a start.
+  /// Answers whether the change took: false when the server refused it in
+  /// its own words (a show nobody here follows among them); the chip is
+  /// back on the stored setting then, rather than reporting a state nothing
+  /// holds and a reload that changed nothing. With the server out of reach
+  /// the choice is kept, the chip standing, and stored once it is back, for
+  /// as long as this session lasts.
   Future<bool> setVoiceBoost(bool on) async {
+    _boostChosen = true;
     voiceBoost.value = on;
-    if (!await _persistVoiceBoost(on)) {
-      voiceBoost.value = !on;
-      return false;
+    if (!_keepsSettings) {
+      if (!_disposed) await _reopenForEffects();
+      return true;
     }
-    // A mint that fails leaves the old media playing, and the stored
-    // setting is applied by the next load; a load that began and failed
-    // has stopped the old media, so that is said, as a seek's is.
-    if (!_disposed) await _reopenForEffects();
-    return true;
+    final took = _choose(boost: on);
+    await _store();
+    return took;
   }
 
-  Future<bool> _persistVoiceBoost(bool on) async {
-    try {
-      final it = item;
-      if (item.mediaType == MediaType.podcast && it is EpisodeSummary) {
-        final current = await _storedShowSettings(it.showPid);
-        final updated = SubscriptionSettings(
-          retentionKeep: current.retentionKeep,
-          autoDownload: current.autoDownload,
-          folder: current.folder,
-          private: current.private,
-          speed: current.speed,
-          trimSilence: current.trimSilence,
-          voiceBoost: on,
-          skipIntroSeconds: current.skipIntroSeconds,
-          skipOutroSeconds: current.skipOutroSeconds,
-        );
-        _showSettings = updated;
-        await repository.putSubscriptionSettings(it.showPid, updated);
-      } else if (_isBook) {
-        final current = _bookSettings ?? const BookSettings();
-        final updated = BookSettings(
-          speed: current.speed,
-          voiceBoost: on,
-          trimSilence: current.trimSilence,
-        );
-        _bookSettings = updated;
-        await repository.putBookSettings(item.pid, updated);
-      }
-      return true;
-    } on WaxDeckApiException {
-      // Best effort, like the speed memory beside it. Reported rather
-      // than swallowed, because unlike a rate this one changes nothing
-      // audible on its own: the server applies it when it mints the
-      // stream, so a write that did not land is a control with no
-      // effect at all.
-      return false;
-    }
-  }
+  /// Whether this item keeps settings of its own: an episode its show's,
+  /// a book its own.
+  bool get _keepsSettings =>
+      _isBook ||
+      (item.mediaType == MediaType.podcast && item is EpisodeSummary);
 
   /// Reopens the loaded media where it stands, for a change only a
-  /// freshly minted stream can carry. A downloaded file or a timeline
-  /// member has nothing to mint, so the stored setting waits for the next
-  /// online play. A load under way mints once more instead, so its target
-  /// and its intent to play stand.
+  /// freshly minted stream can carry: the server's stream, or the device
+  /// copy once the boost is off. A timeline member has nothing to mint,
+  /// and a device copy reopens only for a boost the server has not
+  /// refused this session, with the socket up, no sync engine to say
+  /// otherwise, or the boost just stored. A load under way loads once more
+  /// instead, so its target and its intent to play stand.
   Future<void> _reopenForEffects() async {
     if (_busy) {
       _remint = true;
       return;
     }
-    if (_info == null) return;
+    if (_info == null &&
+        (_copy == null || _copyPlays || !(_socketUp || _boostServed))) {
+      return;
+    }
     await _reloadKeeping(
       atMs: _startAt(displayPosition.inMilliseconds),
       resume: engine.playing,
@@ -1117,7 +1184,7 @@ class PlaybackSession {
   /// Finalizes this item because the engine walked out of it and into
   /// the item preloaded behind it. The checkpoint lands at this item's
   /// own end rather than at the engine's position, which already belongs
-  /// to the next item, and the listen report says finished. The stream
+  /// to the next item, and the listen report says finished. The media
   /// is left running: the next item's session adopts it.
   Future<void> finishAtBoundary() => _shutdown(
     atMs:
@@ -1189,3 +1256,22 @@ class PlaybackSession {
   Completer<void>? _queuedCheckpoint;
   bool _writingCheckpoint = false;
 }
+
+bool _sameParts(List<BookPart> a, List<BookPart> b) =>
+    a.length == b.length &&
+    [
+      for (var i = 0; i < a.length; i++)
+        a[i].index == b[i].index &&
+            a[i].startMs == b[i].startMs &&
+            a[i].durationMs == b[i].durationMs,
+    ].every((same) => same);
+
+bool _sameMarks(List<ChapterMark> a, List<ChapterMark> b) =>
+    a.length == b.length &&
+    [
+      for (var i = 0; i < a.length; i++)
+        a[i].index == b[i].index &&
+            a[i].title == b[i].title &&
+            a[i].startMs == b[i].startMs &&
+            a[i].endMs == b[i].endMs,
+    ].every((same) => same);

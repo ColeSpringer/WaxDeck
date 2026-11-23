@@ -35,7 +35,8 @@ class BookBucketScreen extends ConsumerStatefulWidget {
   /// or [musicUnknownSegment].
   final String segment;
 
-  /// The bucket's name, when the caller had one. A cold link has none.
+  /// The bucket's name, when the caller had one. A cold link has none,
+  /// and an author's card, once read, names the page over it.
   final String? label;
 
   @override
@@ -71,15 +72,18 @@ class _BookBucketScreenState extends ConsumerState<BookBucketScreen>
         BookDimension.genres => l10n.bookGenreUnknown,
       };
     }
-    final given = widget.label;
-    if (given != null && given.isNotEmpty) return given;
     final pid = _authorPid;
     // Never from a book: its artist line is a credit, not the author.
-    // A genre key is a catalog id, which names nothing to a reader.
+    // A genre key is a catalog id, which names nothing to a reader. The
+    // author's card, which a rename reaches; the caller's label until it
+    // answers.
     final card = pid == null
         ? null
         : ref.watch(entityCardProvider(pid)).value?.title;
-    return card ?? l10n.bookBucketFallbackTitle(widget.dimension.name);
+    if (card != null) return card;
+    final given = widget.label;
+    if (given != null && given.isNotEmpty) return given;
+    return l10n.bookBucketFallbackTitle(widget.dimension.name);
   }
 
   @override

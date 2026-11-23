@@ -78,8 +78,17 @@ class _Server extends FakeRepository {
     required String password,
     String? deviceName,
   }) async {
-    sessionState = SessionState(authenticated: true, user: next);
-    return LoginResult(user: next, token: 'token-${next.username}');
+    final session = 'se-${next.username}';
+    sessionState = SessionState(
+      authenticated: true,
+      user: next,
+      sessionId: session,
+    );
+    return LoginResult(
+      user: next,
+      token: 'token-${next.username}',
+      sessionId: session,
+    );
   }
 
   /// A session decoded afresh, as the real client's every read is.
@@ -732,10 +741,11 @@ void main() {
       user: _cid,
     );
     container.invalidate(authControllerProvider);
-    await container.read(authControllerProvider.future);
-    expect(container.read(signedInAccountProvider), _cid.id);
+    final built = container.read(authControllerProvider.future);
 
     screens.close();
+    await built;
+    expect(container.read(signedInAccountProvider), _cid.id);
     await swap;
 
     expect(

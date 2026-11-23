@@ -1,20 +1,26 @@
 import 'dart:async';
 
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/oidc_flow.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/metadata/artwork_manager.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
+import 'package:waxdeck/src/player/playback_session.dart';
 import 'package:waxdeck/src/podcasts/podcasts_controller.dart';
 import 'package:waxdeck/src/podcasts/show_actions.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'app_host.dart';
@@ -837,11 +843,207 @@ void main() {
     expect(saved.pid, showPid);
     expect(saved.settings.trimSilence, isTrue);
     expect(saved.settings.retentionKeep, 5);
-    expect(saved.settings.speed, closeTo(1.0, 0.001));
+    expect(saved.settings.speed, isNull, reason: 'not moved: none stored');
     // The sheet closed on success.
     expect(
       find.bySemanticsIdentifier(SemanticsIds.podcastSettingsSave),
       findsNothing,
+    );
+  });
+
+  for (final field in _sheetFields.where((f) => f != 'speed')) {
+    testWidgets('a speed the player stored while the settings sheet stood '
+        'open survives the sheet saving its $field', (tester) async {
+      final repo = _repo()
+        ..addSubscription(
+          testShow(showPid),
+          settings: const SubscriptionSettings(autoDownload: true),
+        );
+      await _pump(tester, repo);
+      await _openSettings(tester);
+
+      await _playerStores(tester, repo, 1.5);
+      expect(repo.subscriptions[showPid]?.settings.speed, 1.5);
+      await _editSheet(tester, field);
+      await _saveSettings(tester);
+
+      final saved = repo.putSubscriptionSettingsCalls.last.settings;
+      expect(saved.speed, 1.5);
+      _expectEdited(saved, field);
+    });
+  }
+
+  for (final field in _sheetFields) {
+    testWidgets('a change another device made while the settings sheet '
+        'stood open survives the sheet saving its $field', (tester) async {
+      final repo = _repo()
+        ..addSubscription(
+          testShow(showPid),
+          settings: const SubscriptionSettings(autoDownload: true),
+        );
+      await _pump(tester, repo);
+      await _openSettings(tester);
+
+      await repo.putSubscriptionSettings(showPid, _elsewhere(but: field));
+      await _editSheet(tester, field);
+      await _saveSettings(tester);
+
+      expect(repo.putSubscriptionSettingsCalls, hasLength(2));
+      final saved = repo.putSubscriptionSettingsCalls.last.settings;
+      _expectEdited(saved, field);
+      final kept = _elsewhere(but: field);
+      expect(saved.folder, kept.folder);
+      expect(saved.private, kept.private);
+      for (final other in _sheetFields.where((f) => f != field)) {
+        _expectElsewhere(saved, other);
+      }
+    });
+  }
+
+  testWidgets('the settings sheet shows the stored settings once they are '
+      'read, what the screen had drawn until then', (tester) async {
+    final repo = _repo();
+    await _pump(tester, repo);
+    final semantics = tester.ensureSemantics();
+    await _playerStores(tester, repo, 1.5);
+    final read = repo.podcastGate = Completer<void>();
+    await _openSettings(tester);
+    expect(
+      _shownSpeed(tester),
+      AppLocalizationsEn().formatSpeed(1.0),
+      reason: 'nothing waits on the read',
+    );
+
+    read.complete();
+    await tester.pumpAndSettle();
+    expect(_shownSpeed(tester), AppLocalizationsEn().formatSpeed(1.5));
+    semantics.dispose();
+  });
+
+  for (final moved in [false, true]) {
+    testWidgets('with nothing stored the settings sheet draws the device '
+        'defaults playback uses, and stores '
+        '${moved ? 'what was moved' : 'nothing for them left alone'}', (
+      tester,
+    ) async {
+      final repo = _repo();
+      final container = await _pump(tester, repo);
+      container.read(podcastSpeedProvider.notifier).set(1.5);
+      container.read(trimSilenceDefaultProvider.notifier).set(true);
+      container.read(voiceBoostDefaultProvider.notifier).set(true);
+      final semantics = tester.ensureSemantics();
+      await _openSettings(tester);
+      Finder toggle(String key) => find.descendant(
+        of: find.byKey(Key(key)),
+        matching: find.byType(WaxSwitch),
+      );
+      expect(_shownSpeed(tester), AppLocalizationsEn().formatSpeed(1.5));
+      expect(
+        tester.widget<WaxSwitch>(toggle('podcast-settings-trim')).value,
+        isTrue,
+      );
+      expect(
+        tester.widget<WaxSwitch>(toggle('podcast-settings-boost')).value,
+        isTrue,
+      );
+
+      if (moved) {
+        final slider = find.bySemanticsIdentifier(
+          SemanticsIds.podcastSettingsSpeed,
+        );
+        for (var i = 0; i < 10; i++) {
+          tester.binding.performSemanticsAction(
+            SemanticsActionEvent(
+              type: SemanticsAction.decrease,
+              nodeId: tester.getSemantics(slider).id,
+              viewId: tester.view.viewId,
+            ),
+          );
+          await tester.pump();
+        }
+        expect(_shownSpeed(tester), AppLocalizationsEn().formatSpeed(1.0));
+        await tester.tap(toggle('podcast-settings-trim'));
+        await tester.pump();
+      }
+      await _saveSettings(tester);
+
+      final saved = repo.putSubscriptionSettingsCalls.single.settings;
+      if (moved) {
+        expect(saved.speed, closeTo(1.0, 0.001));
+        expect(saved.trimSilence, isFalse);
+      } else {
+        expect(saved.speed, isNull);
+        expect(saved.trimSilence, isNull);
+      }
+      expect(saved.voiceBoost, isNull);
+      semantics.dispose();
+    });
+  }
+
+  testWidgets('a settings field changed before the stored settings are read '
+      'keeps what was chosen there; the others take what is stored', (
+    tester,
+  ) async {
+    final repo = _repo();
+    await _pump(tester, repo);
+    final semantics = tester.ensureSemantics();
+    await _playerStores(tester, repo, 1.5);
+    await repo.putSubscriptionSettings(
+      showPid,
+      const SubscriptionSettings(
+        speed: 1.5,
+        retentionKeep: 3,
+        skipIntroSeconds: 30,
+      ),
+    );
+    final read = repo.podcastGate = Completer<void>();
+    await _openSettings(tester);
+    await _editSheet(tester, 'speed');
+    await _editSheet(tester, 'retention');
+
+    read.complete();
+    await tester.pumpAndSettle();
+    expect(_shownSpeed(tester), AppLocalizationsEn().formatSpeed(1.05));
+    expect(
+      _fieldText(
+        tester,
+        find.bySemanticsIdentifier(SemanticsIds.podcastSettingsRetention),
+      ),
+      '7',
+    );
+    expect(
+      _fieldText(tester, find.byKey(const Key('podcast-settings-skip-intro'))),
+      '30',
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('a settings save that cannot read the stored settings writes '
+      'nothing, keeps the sheet up and says why', (tester) async {
+    const unreachable = WaxDeckApiException(
+      code: 'transport',
+      message: 'connection refused',
+    );
+    final repo = _ShowReadFails()
+      ..addSubscription(testShow(showPid))
+      ..episodesByShow[showPid] = <EpisodeSummary>[
+        testEpisode(downloadedPid, title: 'Fetched Episode'),
+      ];
+    final container = await _pump(tester, repo);
+    await _openSettings(tester);
+
+    repo.podcastReadError = unreachable;
+    await _editSheet(tester, 'trim');
+    await _saveSettings(tester);
+
+    expect(repo.putSubscriptionSettingsCalls, isEmpty);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSettingsSave),
+      findsOneWidget,
+    );
+    expect(
+      shellMessageText(container.read(shellMessagesProvider)),
+      explainRefusal(AppLocalizationsEn(), unreachable),
     );
   });
 
@@ -1324,6 +1526,196 @@ FakeRepository _curatorRepo({required bool managePodcasts}) =>
       ..episodesByShow[showPid] = <EpisodeSummary>[
         testEpisode(downloadedPid, title: 'Fetched Episode'),
       ];
+
+/// The rate the sheet's slider reads out.
+String? _shownSpeed(WidgetTester tester) => tester
+    .getSemantics(find.bySemanticsIdentifier(SemanticsIds.podcastSettingsSpeed))
+    .value;
+
+/// The text in the field under [field].
+String _fieldText(WidgetTester tester, Finder field) => tester
+    .widget<TextField>(
+      find.descendant(of: field, matching: find.byType(TextField)),
+    )
+    .controller!
+    .text;
+
+/// The settings sheet's own fields, each one control.
+const _sheetFields = [
+  'speed',
+  'trim',
+  'boost',
+  'intro',
+  'outro',
+  'autoDownload',
+  'include',
+  'exclude',
+  'retention',
+];
+
+Future<void> _openSettings(WidgetTester tester) async {
+  await tester.tap(
+    find.bySemanticsIdentifier(SemanticsIds.podcastSettingsOpen),
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _saveSettings(WidgetTester tester) async {
+  await tester.tap(
+    find.bySemanticsIdentifier(SemanticsIds.podcastSettingsSave),
+  );
+  await tester.pumpAndSettle();
+}
+
+/// Changes [field] in the open sheet, from a show stored with auto-download
+/// on and nothing else.
+Future<void> _editSheet(WidgetTester tester, String field) async {
+  Finder toggle(String key) => find.descendant(
+    of: find.byKey(Key(key)),
+    matching: find.byType(WaxSwitch),
+  );
+  final target = switch (field) {
+    'speed' => find.bySemanticsIdentifier(SemanticsIds.podcastSettingsSpeed),
+    'trim' => toggle('podcast-settings-trim'),
+    'boost' => toggle('podcast-settings-boost'),
+    'intro' => find.byKey(const Key('podcast-settings-skip-intro')),
+    'outro' => find.byKey(const Key('podcast-settings-skip-outro')),
+    'autoDownload' => toggle('podcast-settings-autodownload'),
+    'include' => find.bySemanticsIdentifier(
+      SemanticsIds.podcastSettingsInclude,
+    ),
+    'exclude' => find.bySemanticsIdentifier(
+      SemanticsIds.podcastSettingsExclude,
+    ),
+    _ => find.bySemanticsIdentifier(SemanticsIds.podcastSettingsRetention),
+  };
+  await tester.ensureVisible(target);
+  await tester.pumpAndSettle();
+  switch (field) {
+    case 'speed':
+      final semantics = tester.ensureSemantics();
+      await tester.pump();
+      tester.binding.performSemanticsAction(
+        SemanticsActionEvent(
+          type: SemanticsAction.increase,
+          nodeId: tester.getSemantics(target).id,
+          viewId: tester.view.viewId,
+        ),
+      );
+      semantics.dispose();
+    case 'trim' || 'boost' || 'autoDownload':
+      await tester.tap(target);
+    case 'intro':
+      await tester.enterText(target, '12');
+    case 'outro':
+      await tester.enterText(target, '13');
+    case 'include':
+      await tester.enterText(target, 'news');
+    case 'exclude':
+      await tester.enterText(target, 'rerun');
+    default:
+      await tester.enterText(target, '7');
+  }
+  await tester.pump();
+}
+
+/// [field] as [_editSheet] left it.
+void _expectEdited(SubscriptionSettings saved, String field) {
+  switch (field) {
+    case 'speed':
+      expect(saved.speed, closeTo(1.05, 0.001));
+    case 'trim':
+      expect(saved.trimSilence, isTrue);
+    case 'boost':
+      expect(saved.voiceBoost, isTrue);
+    case 'intro':
+      expect(saved.skipIntroSeconds, 12);
+    case 'outro':
+      expect(saved.skipOutroSeconds, 13);
+    case 'autoDownload':
+      expect(saved.autoDownload, isFalse);
+    case 'include':
+      expect(saved.autoDownloadFilter?.include, ['news']);
+    case 'exclude':
+      expect(saved.autoDownloadFilter?.exclude, ['rerun']);
+    default:
+      expect(saved.retentionKeep, 7);
+  }
+}
+
+/// What another device stored while the sheet stood open: every field
+/// changed but [but], which it leaves as the sheet opened on it.
+SubscriptionSettings _elsewhere({required String but}) => SubscriptionSettings(
+  retentionKeep: but == 'retention' ? null : 3,
+  autoDownload: but == 'autoDownload',
+  autoDownloadFilter: EpisodeFilter(
+    include: but == 'include' ? const [] : const ['interview'],
+    exclude: but == 'exclude' ? const [] : const ['trailer'],
+  ),
+  folder: 'News',
+  private: true,
+  speed: but == 'speed' ? null : 1.5,
+  trimSilence: but == 'trim' ? null : true,
+  voiceBoost: but == 'boost' ? null : true,
+  skipIntroSeconds: but == 'intro' ? null : 30,
+  skipOutroSeconds: but == 'outro' ? null : 45,
+);
+
+/// [field] as [_elsewhere] stored it.
+void _expectElsewhere(SubscriptionSettings saved, String field) {
+  switch (field) {
+    case 'speed':
+      expect(saved.speed, 1.5);
+    case 'trim':
+      expect(saved.trimSilence, isTrue);
+    case 'boost':
+      expect(saved.voiceBoost, isTrue);
+    case 'intro':
+      expect(saved.skipIntroSeconds, 30);
+    case 'outro':
+      expect(saved.skipOutroSeconds, 45);
+    case 'autoDownload':
+      expect(saved.autoDownload, isFalse);
+    case 'include':
+      expect(saved.autoDownloadFilter?.include, ['interview']);
+    case 'exclude':
+      expect(saved.autoDownloadFilter?.exclude, ['trailer']);
+    default:
+      expect(saved.retentionKeep, 3);
+  }
+}
+
+/// The player's own writer storing [speed] for the show, as a tap on its
+/// speed sheet does.
+Future<void> _playerStores(
+  WidgetTester tester,
+  FakeRepository repo,
+  double speed,
+) async {
+  final session = PlaybackSession(
+    repository: repo,
+    engine: FakeEngine(),
+    item: testEpisode(downloadedPid, showPid: showPid),
+    clientId: 'test',
+  );
+  await session.start(autoplay: false);
+  await session.setSpeed(speed);
+  for (var i = 0; i < 10; i++) {
+    await tester.pump();
+  }
+  await session.dispose();
+}
+
+/// A server whose show read fails while [podcastReadError] is set.
+class _ShowReadFails extends FakeRepository {
+  WaxDeckApiException? podcastReadError;
+
+  @override
+  Future<PodcastDetail> getPodcast(String pid) async {
+    if (podcastReadError case final error?) throw error;
+    return super.getPodcast(pid);
+  }
+}
 
 /// Records what the app asked the platform to open.
 class _Opener implements UrlOpenerPort {

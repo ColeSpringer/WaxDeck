@@ -10,6 +10,7 @@ import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import '../sync/catalog_writes.dart';
 import 'health_controller.dart';
 
 /// The names merges folded into an entry, grouped by type: each the
@@ -181,6 +182,7 @@ class _FoldGroups extends ConsumerWidget {
     // The section can go while the dialog is up; the container outlives it.
     final container = ProviderScope.containerOf(context, listen: false);
     final messenger = container.read(shellMessengerProvider);
+    final writes = container.read(catalogWritesProvider);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -226,6 +228,8 @@ class _FoldGroups extends ConsumerWidget {
       await container
           .read(repositoryProvider)
           .unfoldEntities(entityType: fold.entityType, keys: [fold.key]);
+      // The spelling is an entity of its own again, in every index.
+      writes.landed();
       messenger.show(l10n.adminFoldsUnfolded(which));
     } on WaxDeckApiException catch (e) {
       if (e.code != 'not-found') {

@@ -1,15 +1,19 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/l10n/explain_error.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_es.dart';
+import 'package:waxdeck/src/metadata/album_pane.dart';
 import 'package:waxdeck/src/metadata/release_workbench.dart';
 import 'package:waxdeck/src/music/album_detail.dart';
 import 'package:waxdeck/src/music/album_screen.dart';
+import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/navigation_history.dart';
@@ -321,6 +325,241 @@ Future<void> _dismissSheet(WidgetTester tester, String inside) async {
 }
 
 void main() {
+  testWidgets("the members list pads none of the window's insets: the page "
+      'and its bar have taken them', (tester) async {
+    const insets = FakeViewPadding(top: 24, bottom: 34);
+    tester.view
+      ..padding = insets
+      ..viewPadding = insets;
+    await _pump(tester, _repo());
+
+    final list = find.descendant(
+      of: _byId(SemanticsIds.workbenchList),
+      matching: find.byType(ListView),
+    );
+    expect(
+      tester
+          .widget<SliverPadding>(
+            find.descendant(of: list, matching: find.byType(SliverPadding)),
+          )
+          .padding,
+      EdgeInsets.zero,
+    );
+    expect(tester.getRect(list).bottom, 2000 - 34, reason: 'its foot');
+  });
+
+  group("the foot bars stand on the window's foot", () {
+    const insets = FakeViewPadding(left: 40, right: 30, bottom: 20);
+
+    Future<void> pumpInset(WidgetTester tester, {Size? size}) async {
+      tester.view
+        ..padding = insets
+        ..viewPadding = insets;
+      await _pump(tester, _repo(), size: size ?? const Size(1200, 2000));
+    }
+
+    /// The save bar in the pane: its surface from the pane's start to the
+    /// window's end and foot, its contents inside the insets.
+    void expectPaneBar(WidgetTester tester) {
+      final pane = tester.getRect(_byId(SemanticsIds.workbenchPane));
+      final bar = tester.getRect(find.byType(WaxFootBar));
+      expect((bar.left, bar.right, bar.bottom), (pane.left, 1200.0, 2000.0));
+      final inner = tester.getRect(_byId(SemanticsIds.metadataSaveBar));
+      expect(
+        (inner.left, inner.right, inner.bottom),
+        (pane.left, 1200 - 30.0, 2000 - 20.0),
+      );
+      final list = tester.getRect(_byId(SemanticsIds.workbenchList));
+      expect((list.left, list.bottom), (40.0, 2000 - 20.0), reason: 'the list');
+    }
+
+    testWidgets("two panes: a track's save bar", (tester) async {
+      await pumpInset(tester);
+      await tester.tap(_trackRow('tr-A'));
+      await tester.pumpAndSettle();
+      expectPaneBar(tester);
+    });
+
+    testWidgets("two panes: the bulk form's save bar", (tester) async {
+      await pumpInset(tester);
+      await tester.longPress(_trackRow('tr-A'));
+      await tester.pumpAndSettle();
+      await tester.tap(_trackRow('tr-B'));
+      await tester.pumpAndSettle();
+      expect(_byId(SemanticsIds.workbenchBulkPane), findsOneWidget);
+      expectPaneBar(tester);
+    });
+
+    testWidgets('one pane: the bulk sheet takes a side cutout only for what '
+        'of it reaches past the gap beside the sheet', (tester) async {
+      tester.view
+        ..padding = const FakeViewPadding(left: 44, bottom: 20)
+        ..viewPadding = const FakeViewPadding(left: 44, bottom: 20);
+      await _pump(tester, _repo(), size: const Size(650, 900));
+      await tester.longPress(_trackRow('tr-A'));
+      await tester.pumpAndSettle();
+      await tester.tap(_byId(SemanticsIds.workbenchBulkEdit));
+      await tester.pumpAndSettle();
+
+      final pane = _byId(SemanticsIds.workbenchBulkPane);
+      final sheet = tester.getRect(pane);
+      expect((sheet.left, sheet.right), (5.0, 645.0), reason: 'the sheet');
+      final form = tester.getRect(
+        find.descendant(of: pane, matching: find.byType(SingleChildScrollView)),
+      );
+      expect(form.left, 44.0, reason: 'the form, at the cutout line');
+      final bar = tester.getRect(find.byType(WaxFootBar));
+      expect((bar.left, bar.right, bar.bottom), (5.0, 645.0, 900.0));
+      expect(tester.getRect(_byId(SemanticsIds.metadataSaveBar)).left, 44.0);
+    });
+
+    testWidgets("one pane: the bulk bar's surface reaches the window's edges "
+        'at the foot, its controls and the list above it clear of the '
+        'insets', (tester) async {
+      await pumpInset(tester, size: const Size(500, 900));
+      await tester.longPress(_trackRow('tr-A'));
+      await tester.pumpAndSettle();
+
+      final bar = tester.getRect(_byId(SemanticsIds.workbenchBulkBar));
+      expect((bar.left, bar.right, bar.bottom), (0.0, 500.0, 900.0));
+      final edit = tester.getRect(_byId(SemanticsIds.workbenchBulkEdit));
+      expect(edit.right, 500 - 30 - 16.0, reason: 'its controls, the end');
+      expect(edit.bottom, lessThanOrEqualTo(900 - 20.0));
+      final list = tester.getRect(_byId(SemanticsIds.workbenchList));
+      expect((list.left, list.right, list.bottom), (40.0, 470.0, bar.top));
+    });
+  });
+
+  group('the two panes hold their floors inside the side insets', () {
+    const insets = FakeViewPadding(left: 44, right: 30);
+
+    /// The narrowest window that holds both once the list and the pane
+    /// have taken the cutouts beside them.
+    const fits = ReleaseWorkbench.twoPaneMinWidth + 44 + 30;
+
+    Future<void> pumpAt(WidgetTester tester, double width) async {
+      tester.view
+        ..padding = insets
+        ..viewPadding = insets;
+      await _pump(tester, _repo(), size: Size(width, 900));
+    }
+
+    double list(WidgetTester tester) =>
+        tester.getSize(_byId(SemanticsIds.workbenchList)).width;
+    double pane(WidgetTester tester) =>
+        tester.getSize(find.byType(AlbumPane)).width;
+
+    testWidgets('one pane until the room inside the cutouts holds both', (
+      tester,
+    ) async {
+      await pumpAt(tester, fits - 1);
+      expect(find.byType(WaxSplitter), findsNothing);
+
+      await pumpAt(tester, fits);
+      expect(find.byType(WaxSplitter), findsOneWidget);
+      expect(list(tester), ReleaseWorkbench.listMin, reason: 'the list');
+      expect(pane(tester), ReleaseWorkbench.paneMin, reason: 'the pane');
+    });
+
+    testWidgets('the seam dragged to either end leaves each part its floor '
+        'inside the cutout beside it', (tester) async {
+      await pumpAt(tester, 1200);
+      Future<void> drag(double dx) async {
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byType(WaxSplitter)),
+        );
+        await gesture.moveBy(Offset(dx.sign * 40, 0));
+        await gesture.moveBy(Offset(dx, 0));
+        await gesture.up();
+        await tester.pumpAndSettle();
+      }
+
+      await drag(2000);
+      expect(pane(tester), ReleaseWorkbench.paneMin, reason: 'the pane');
+      await drag(-2000);
+      expect(list(tester), ReleaseWorkbench.listMin, reason: 'the list');
+    });
+  });
+
+  group("the workbench's sheets", () {
+    /// The window's insets as the engine reports them under a keyboard
+    /// [keyboard] tall: a gesture bar of 34 and a cutout each side.
+    void engine(WidgetTester tester, {double keyboard = 0}) {
+      tester.view
+        ..viewPadding = const FakeViewPadding(left: 44, right: 30, bottom: 34)
+        ..viewInsets = FakeViewPadding(bottom: keyboard)
+        ..padding = FakeViewPadding(
+          left: 44,
+          right: 30,
+          bottom: math.max(0, 34 - keyboard),
+        );
+    }
+
+    /// One pane, the sheet as wide as the window, so it reaches both
+    /// cutouts.
+    Future<void> pump(WidgetTester tester) async {
+      engine(tester);
+      await _pump(tester, _repo(), size: const Size(600, 900));
+    }
+
+    Future<void> openAlbum(WidgetTester tester) async {
+      await tester.tap(_byId(SemanticsIds.workbenchAlbumRow));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> openBulk(WidgetTester tester) async {
+      await tester.longPress(_trackRow('tr-A'));
+      await tester.pumpAndSettle();
+      await tester.tap(_byId(SemanticsIds.workbenchBulkEdit));
+      await tester.pumpAndSettle();
+      expect(_byId(SemanticsIds.workbenchBulkPane), findsOneWidget);
+    }
+
+    testWidgets("the album sheet's form keeps inside the cutouts and above "
+        'the gesture bar', (tester) async {
+      await pump(tester);
+      await openAlbum(tester);
+      final form = tester.getRect(find.byType(AlbumPane));
+      expect((form.left, form.right, form.bottom), (44.0, 570.0, 900 - 34.0));
+    });
+
+    for (final keyboard in <double>[17, 300]) {
+      testWidgets('the album sheet rises over a keyboard $keyboard tall', (
+        tester,
+      ) async {
+        await pump(tester);
+        await openAlbum(tester);
+        engine(tester, keyboard: keyboard);
+        await tester.pumpAndSettle();
+        // The keyboard's top, or the gesture bar's where it is taller.
+        final foot = 900 - math.max(keyboard, 34);
+        expect(tester.getRect(find.byType(AlbumPane)).bottom, foot);
+      });
+
+      testWidgets('the bulk sheet and its save bar rise over a keyboard '
+          '$keyboard tall', (tester) async {
+        await pump(tester);
+        await openBulk(tester);
+        engine(tester, keyboard: keyboard);
+        await tester.pumpAndSettle();
+        final bar = tester.getRect(find.byType(WaxFootBar));
+        expect(bar.bottom, 900 - keyboard, reason: "the bar's surface");
+        expect(
+          tester.getRect(_byId(SemanticsIds.metadataSaveBar)).bottom,
+          900 - math.max(keyboard, 34),
+          reason: 'its controls',
+        );
+        final form = tester.getRect(
+          find.descendant(
+            of: _byId(SemanticsIds.workbenchBulkPane),
+            matching: find.byType(SingleChildScrollView),
+          ),
+        );
+        expect(form.bottom, bar.top, reason: 'the form');
+      });
+    }
+  });
+
   for (final height in <double>[390, 300]) {
     for (final width in <double>[1200, 420]) {
       testWidgets('lays out without overflow at ${width}x$height', (
@@ -659,7 +898,8 @@ void main() {
 
   testWidgets('a rewrite that merges once a page was opened over the '
       'workbench leaves that page up, offers the survivor in one message, '
-      'and back does not return to the release merged away', (tester) async {
+      "and back returns to the survivor's workbench, not the release merged "
+      'away', (tester) async {
     final repo = _merging();
     final router = await _openInApp(tester, repo);
     final gate = repo.renameEntityGate = Completer<void>();
@@ -686,15 +926,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(AppLocalizationsEn().metadataMergedReady), findsOneWidget);
 
+    // The workbench under that page is the survivor's now.
     tester.element(find.byType(WaxScaffold).last).back();
     await tester.pumpAndSettle();
-    expect(_top(router), WaxRoute.music);
-    expect(find.byType(ReleaseWorkbench, skipOffstage: false), findsNothing);
+    expect(_top(router), WaxRoute.metadata(_regrouped));
+    expect(_anyPageOf(_album), isFalse);
+    expect(find.text('Renamed Harbour'), findsWidgets);
 
+    // Offered where the visitor was; here it is up already.
     offer.onAction!();
     await tester.pumpAndSettle();
     expect(_top(router), WaxRoute.metadata(_regrouped));
-    expect(find.text('Renamed Harbour'), findsWidgets);
+    expect(
+      find.byType(ReleaseWorkbench, skipOffstage: false),
+      findsOneWidget,
+      reason: 'no second copy over itself',
+    );
+
+    tester.element(find.byType(ReleaseWorkbench)).back();
+    await tester.pumpAndSettle();
+    expect(_top(router), WaxRoute.music);
+    expect(find.byType(ReleaseWorkbench, skipOffstage: false), findsNothing);
   });
 
   testWidgets('a rewrite that merges as its sheet is dismissed still takes '
@@ -1221,6 +1473,40 @@ void main() {
     expect(find.text('Art from the file'), findsNothing);
   });
 
+  testWidgets('a cover set in the workbench is evicted, and read again by '
+      'the albums index under it', (tester) async {
+    final repo = coverFrom('tag')..entityArtworkGate = null;
+    final albums = WaxRoute.musicIndex(MusicDimension.albums);
+    final router = await _openInApp(
+      tester,
+      repo,
+      from: albums,
+      picker: _OneImage(),
+    );
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ReleaseWorkbench)),
+      listen: false,
+    );
+    final store = container.read(artworkStoreProvider) as FakeArtworkStore;
+    int indexReads() =>
+        repo.facetReads.where((read) => read.dimension == 'album').length;
+    final before = indexReads();
+    final set = _byId(SemanticsIds.artSlotSet('front'));
+    await tester.ensureVisible(set);
+    await tester.pumpAndSettle();
+    await tester.tap(set);
+    await tester.pumpAndSettle();
+
+    expect(repo.entityArtworkCalls.single.entityPid, _album);
+    expect(store.evicted, [repo.artUrlFor(_album)]);
+    expect(indexReads(), before, reason: 'a covered index reads nothing');
+
+    tester.element(find.byType(ReleaseWorkbench)).back();
+    await tester.pumpAndSettle();
+    expect(_top(router), albums);
+    expect(indexReads(), before + 1);
+  });
+
   testWidgets('a cover cleared once the workbench was left has the album page '
       'say where its cover now comes from', (tester) async {
     final repo = coverFrom('user');
@@ -1515,9 +1801,14 @@ void main() {
   group('a release merged away', () {
     final merged = WaxRoute.metadata(_album);
     final survivor = WaxRoute.metadata(_regrouped);
+    final survivorPage = WaxRoute.musicBucket(
+      MusicDimension.albums,
+      _regrouped,
+    );
 
     testWidgets('once a page was opened over the workbench, is reached by '
-        'neither back nor forward in a browser tab', (tester) async {
+        "neither back nor forward in a browser tab: each shows the survivor's "
+        'workbench on its entry', (tester) async {
       final repo = _merging();
       final browser = FakeBrowser();
       final router = await _openInApp(tester, repo, browser: browser);
@@ -1528,15 +1819,28 @@ void main() {
       gate.complete();
       await tester.pumpAndSettle();
       final arrived = _arrivedWith(router);
+      final (at, entries) = (browser.index, browser.entries.length);
 
       tester.element(find.byType(WaxScaffold).last).back();
       await tester.pumpAndSettle();
+      expect(_top(router), survivor);
+      expect(browser.index, at - 1);
+      expect(browser.pushes, [survivor], reason: 'written over its entry');
+      tester.element(find.byType(WaxScaffold).last).back();
+      await tester.pumpAndSettle();
       expect(_top(router), WaxRoute.music);
+      expect(browser.index, at - 2);
+      browser.goForward();
+      await tester.pumpAndSettle();
+      expect(_top(router), survivor);
+      expect(browser.index, at - 1);
       browser.goForward();
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(_top(router), WaxRoute.settings, reason: 'passed on the way');
+      expect(_top(router), WaxRoute.settings);
+      expect(browser.index, at);
+      expect(browser.entries, hasLength(entries), reason: 'none minted');
       expect(arrived, isNot(contains(merged)));
       expect(_anyPageOf(_album), isFalse);
       expect(browser.pushes, isNot(contains(merged)));
@@ -1682,8 +1986,8 @@ void main() {
         expect(raised.single.onAction, isNull);
       });
 
-      testWidgets('takes its album page out from under the survivor it was '
-          'swapped for $how', (tester) async {
+      testWidgets("puts the survivor's album page under the survivor it was "
+          'swapped for, which back reaches $how', (tester) async {
         final repo = _merging();
         final router = await _openInApp(
           tester,
@@ -1701,11 +2005,16 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(arrived, isNot(contains(_albumPage)));
         expect(_anyPageOf(_album), isFalse);
-        expect(_top(router), isNot(_albumPage));
+        expect(_top(router), survivorPage);
+        expect(
+          tester.widget<AlbumScreen>(find.byType(AlbumScreen)).pid,
+          _regrouped,
+        );
       });
 
-      testWidgets('once a page was opened over the workbench, takes its album '
-          'page out from under that page too $how', (tester) async {
+      testWidgets('once a page was opened over the workbench, puts the '
+          "survivor's workbench and album page under that page, which back "
+          'reaches in turn $how', (tester) async {
         final repo = _merging();
         final router = await _openInApp(
           tester,
@@ -1725,11 +2034,172 @@ void main() {
 
         tester.element(find.byType(WaxScaffold).last).back();
         await tester.pumpAndSettle();
+        expect(_top(router), survivor);
+        expect(
+          tester.widget<ReleaseWorkbench>(find.byType(ReleaseWorkbench)).pid,
+          _regrouped,
+        );
+        tester.element(find.byType(ReleaseWorkbench)).back();
+        await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
+        expect(_top(router), survivorPage);
+        expect(
+          tester.widget<AlbumScreen>(find.byType(AlbumScreen)).pid,
+          _regrouped,
+        );
         expect(arrived, isNot(contains(merged)));
         expect(arrived, isNot(contains(_albumPage)));
         expect(_anyPageOf(_album), isFalse);
+      });
+    }
+  });
+
+  // A write that keeps the release can still dissolve its group: a retitle
+  // onto a title the artist already has moves the album into that group,
+  // and the group it left is gone. The answer names the pair with no
+  // survivor of the release's own, and the group's page goes the way a
+  // merged record's does.
+  group('a release group the write folded', () {
+    const goneGroup = 'rg-01JZX5N8QW3F4V9T2B7KDGONEG';
+    const keptGroup = 'rg-01JZX5N8QW3F4V9T2B7KDKEPTG';
+    final gonePage = WaxRoute.musicBucket(
+      MusicDimension.releaseGroups,
+      goneGroup,
+    );
+    final keptPage = WaxRoute.musicBucket(
+      MusicDimension.releaseGroups,
+      keptGroup,
+    );
+    const folded = [FoldedEntity(pid: goneGroup, into: keptGroup)];
+
+    /// Both groups listed, the release under each.
+    FakeRepository grouped(FakeRepository repo) {
+      for (final group in [goneGroup, keptGroup]) {
+        repo.facetItems['release-group ${group.substring(3)}'] = [
+          testItem('tr-A', title: 'Salt Harbour'),
+        ];
+      }
+      return repo;
+    }
+
+    bool anyPageOfGone() => find
+        .byWidgetPredicate(
+          (widget) =>
+              widget is MusicListingScreen && widget.segment == goneGroup,
+          skipOffstage: false,
+        )
+        .evaluate()
+        .isNotEmpty;
+
+    /// Back from the workbench, opened over the group's page, reaches the
+    /// group it became; in a tab, on the entry the group's page had, and
+    /// forward and back again walk the two entries with it.
+    Future<void> backReachesTheKeptGroup(
+      WidgetTester tester,
+      GoRouter router,
+      FakeBrowser? browser,
+      List<String> arrived, {
+      required String release,
+    }) async {
+      expect(tester.takeException(), isNull);
+      expect(_top(router), WaxRoute.metadata(release));
+      tester.element(find.byType(ReleaseWorkbench)).back();
+      await tester.pumpAndSettle();
+      expect(_top(router), keptPage);
+      expect(anyPageOfGone(), isFalse);
+      if (browser != null) {
+        expect(browser.location, keptPage, reason: 'written over its entry');
+        browser.goForward();
+        await tester.pumpAndSettle();
+        expect(_top(router), WaxRoute.metadata(release));
+        browser.goBack();
+        await tester.pumpAndSettle();
+        expect(_top(router), keptPage);
+      }
+      expect(arrived, isNot(contains(gonePage)));
+      expect(anyPageOfGone(), isFalse);
+    }
+
+    for (final (native, merged) in <(bool, bool)>[
+      (false, false),
+      (true, false),
+      (false, true),
+    ]) {
+      final how =
+          '${merged ? 'merging the release' : 'keeping the release'}, '
+          '${native ? 'natively' : 'in a browser tab'}';
+      final release = merged ? _regrouped : _album;
+
+      testWidgets('by a rewrite: back reaches the group it became, $how', (
+        tester,
+      ) async {
+        final repo = grouped(merged ? _merging() : _repo())
+          ..renameEntityResult = EntityRenameResult(
+            entityPid: _album,
+            outcome: merged
+                ? EntityRenameOutcome.merged
+                : EntityRenameOutcome.renamed,
+            members: 2,
+            credits: 0,
+            mergedInto: merged ? _regrouped : null,
+            movedAlbums: merged ? const [] : const [_album],
+            folded: folded,
+          );
+        final browser = native ? null : FakeBrowser();
+        final router = await _openInApp(
+          tester,
+          repo,
+          from: gonePage,
+          browser: browser,
+        );
+        await rewriteAlbum(tester, 'Renamed Harbour');
+        // From the answer on: what the walk lands on.
+        final arrived = _arrivedWith(router);
+
+        await backReachesTheKeptGroup(
+          tester,
+          router,
+          browser,
+          arrived,
+          release: release,
+        );
+      });
+
+      testWidgets('by an mbid cleared: back reaches the group it became, '
+          '$how', (tester) async {
+        final repo = grouped(merged ? _merging() : _repo())
+          ..entityEditResult = MetadataEditResult(
+            applied: true,
+            mergedInto: merged ? _regrouped : null,
+            movedAlbums: merged ? const [] : const [_album],
+            folded: folded,
+          );
+        repo.albums[_album] = const AlbumDetail(
+          pid: _album,
+          title: 'Long Exposure',
+          mbid: 'b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d',
+          itemCount: 2,
+        );
+        final browser = native ? null : FakeBrowser();
+        final router = await _openInApp(
+          tester,
+          repo,
+          from: gonePage,
+          browser: browser,
+        );
+        await clearMbid(tester);
+        await tester.pumpAndSettle();
+        final arrived = _arrivedWith(router);
+
+        expect(repo.entityEdits.single.edits, {'mbid': ''});
+        await backReachesTheKeptGroup(
+          tester,
+          router,
+          browser,
+          arrived,
+          release: release,
+        );
       });
     }
   });

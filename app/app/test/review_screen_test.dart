@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/review/review_controller.dart';
 import 'package:waxdeck/src/review/review_entry_screen.dart';
 import 'package:waxdeck/src/review/review_screen.dart';
@@ -346,6 +347,60 @@ void main() {
 
     expect(find.text('Pending (1)'), findsOneWidget);
     expect(find.text('Decided (3)'), findsOneWidget);
+  });
+
+  testWidgets("the queue pads none of the window's insets: the page and "
+      'its bar have taken them', (tester) async {
+    const insets = FakeViewPadding(top: 24, bottom: 34);
+    tester.view
+      ..padding = insets
+      ..viewPadding = insets;
+    final repo = FakeRepository()..reviewEntries = [testReviewEntry('rv-1')];
+    await _pump(tester, appContainer(repo: repo));
+    await tester.pump();
+
+    final list = find
+        .ancestor(of: _row('rv-1'), matching: find.byType(ListView))
+        .first;
+    expect(
+      tester
+          .widget<SliverPadding>(
+            find.descendant(of: list, matching: find.byType(SliverPadding)),
+          )
+          .padding,
+      EdgeInsets.zero,
+    );
+    expect(tester.getRect(list).bottom, 1400 - 34, reason: 'its foot');
+  });
+
+  testWidgets("selecting, the bulk bar's surface reaches the window's edges "
+      'at the foot, its controls and the queue above it clear of the '
+      'insets', (tester) async {
+    const insets = FakeViewPadding(left: 40, right: 30, bottom: 20);
+    tester.view
+      ..padding = insets
+      ..viewPadding = insets;
+    final repo = FakeRepository()..reviewEntries = [testReviewEntry('rv-1')];
+    await _pump(tester, appContainer(repo: repo));
+    await tester.pumpAndSettle();
+    await tester.longPress(_row('rv-1'));
+    await tester.pumpAndSettle();
+
+    final bulk = tester.getRect(
+      find.byWidgetPredicate(
+        (widget) => widget.runtimeType.toString() == '_BulkBar',
+      ),
+    );
+    expect((bulk.left, bulk.right, bulk.bottom), (0.0, 700.0, 1400.0));
+    final skip = tester.getRect(
+      find.bySemanticsIdentifier(SemanticsIds.reviewBulkSkip),
+    );
+    expect(skip.right, 700 - 30 - 16.0, reason: 'its controls, the end');
+    expect(skip.bottom, lessThanOrEqualTo(1400 - 20.0));
+    final queue = tester.getRect(
+      find.ancestor(of: _row('rv-1'), matching: find.byType(ListView)).first,
+    );
+    expect((queue.left, queue.right, queue.bottom), (40.0, 670.0, bulk.top));
   });
 
   testWidgets('renders entries with best-candidate and identifying rows', (
@@ -1332,6 +1387,159 @@ void main() {
       );
     });
 
+    group("the foot bars stand on the window's foot", () {
+      const insets = FakeViewPadding(left: 40, right: 30, bottom: 20);
+      final bulkBar = find.byWidgetPredicate(
+        (widget) => widget.runtimeType.toString() == '_BulkBar',
+      );
+
+      Future<void> pumpInset(WidgetTester tester) async {
+        tester.view
+          ..padding = insets
+          ..viewPadding = insets;
+        final repo = FakeRepository()
+          ..reviewEntries = [testReviewEntry('rv-1'), testReviewEntry('rv-2')]
+          ..reviewEntryDetails['rv-1'] = _matchable('rv-1');
+        await pumpSurface(tester, appContainer(repo: repo));
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets("the pane's decision bar reaches the window's end and "
+          'foot from the pane, its controls clear of the insets, and the '
+          'queue beside it takes the foot itself', (tester) async {
+        await pumpInset(tester);
+        final pane = tester.getRect(
+          find.bySemanticsIdentifier(SemanticsIds.reviewPane),
+        );
+        final bar = tester.getRect(find.byType(WaxFootBar));
+        expect((bar.left, bar.right, bar.bottom), (pane.left, 900.0, 1000.0));
+        final approve = tester.getRect(
+          find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
+        );
+        expect(approve.left, pane.left + 12);
+        // The last of the wrapped buttons, on its last line.
+        final skip = tester.getRect(
+          find.bySemanticsIdentifier(SemanticsIds.reviewSkip),
+        );
+        expect(skip.bottom, 1000 - 20 - 12.0);
+        final queue = tester.getRect(
+          find
+              .ancestor(of: _row('rv-1'), matching: find.byType(ListView))
+              .first,
+        );
+        expect((queue.left, queue.bottom), (40.0, 1000 - 20.0));
+      });
+
+      testWidgets("selecting, the bulk bar takes the page's foot and the "
+          "pane's bar stands on it", (tester) async {
+        await pumpInset(tester);
+        await tester.longPress(_row('rv-2'));
+        await tester.pumpAndSettle();
+
+        final bulk = tester.getRect(bulkBar);
+        expect((bulk.left, bulk.right, bulk.bottom), (0.0, 900.0, 1000.0));
+        final skip = tester.getRect(
+          find.bySemanticsIdentifier(SemanticsIds.reviewBulkSkip),
+        );
+        expect(skip.right, 900 - 30 - 16.0, reason: 'its controls, the end');
+        expect(skip.bottom, lessThanOrEqualTo(1000 - 20.0));
+        final bar = tester.getRect(find.byType(WaxFootBar));
+        expect(bar.bottom, bulk.top);
+        expect(
+          tester
+              .getRect(find.bySemanticsIdentifier(SemanticsIds.reviewSkip))
+              .bottom,
+          bulk.top - 12,
+        );
+      });
+    });
+
+    group('hold their floors inside the side insets', () {
+      const insets = FakeViewPadding(left: 44, right: 30);
+
+      /// The narrowest window that holds both once the queue and the
+      /// entry have taken the cutouts beside them.
+      const fits =
+          ReviewSurface.listMin +
+          WaxSplitter.hitWidth +
+          ReviewSurface.paneMin +
+          44 +
+          30;
+
+      Future<void> pumpAt(WidgetTester tester, double width) async {
+        tester.view
+          ..physicalSize = Size(width, 1000)
+          ..devicePixelRatio = 1
+          ..padding = insets
+          ..viewPadding = insets;
+        addTearDown(tester.view.reset);
+        final repo = FakeRepository()
+          ..reviewEntries = [testReviewEntry('rv-1'), testReviewEntry('rv-2')]
+          ..reviewEntryDetails['rv-1'] = _matchable('rv-1');
+        await _pumpSurface(tester, appContainer(repo: repo));
+        await tester.pumpAndSettle();
+      }
+
+      double queue(WidgetTester tester) => tester
+          .getSize(
+            find
+                .ancestor(of: _row('rv-1'), matching: find.byType(ListView))
+                .first,
+          )
+          .width;
+
+      /// How far the diff table's own scroller can move: nowhere while
+      /// the entry has the width it declares.
+      double tableOverflow(WidgetTester tester) => tester
+          .state<ScrollableState>(
+            find.descendant(
+              of: find.descendant(
+                of: find.bySemanticsIdentifier(SemanticsIds.reviewPane),
+                matching: find.byWidgetPredicate(
+                  (widget) =>
+                      widget is SingleChildScrollView &&
+                      widget.scrollDirection == Axis.horizontal,
+                ),
+              ),
+              matching: find.byType(Scrollable),
+            ),
+          )
+          .position
+          .maxScrollExtent;
+
+      testWidgets('one pane until the room inside the cutouts holds both', (
+        tester,
+      ) async {
+        await pumpAt(tester, fits - 1);
+        expect(find.byType(WaxSplitter), findsNothing);
+        expect(find.byType(ReviewEntryScreen), findsOneWidget);
+
+        await pumpAt(tester, fits);
+        expect(find.byType(WaxSplitter), findsOneWidget);
+        expect(queue(tester), ReviewSurface.listMin, reason: 'the queue');
+        expect(tableOverflow(tester), 0, reason: 'the diff table');
+      });
+
+      testWidgets('the seam dragged to either end leaves each part its '
+          'floor inside the cutout beside it', (tester) async {
+        await pumpAt(tester, 1100);
+        Future<void> drag(double dx) async {
+          final gesture = await tester.startGesture(
+            tester.getCenter(find.byType(WaxSplitter)),
+          );
+          await gesture.moveBy(Offset(dx.sign * 40, 0));
+          await gesture.moveBy(Offset(dx, 0));
+          await gesture.up();
+          await tester.pumpAndSettle();
+        }
+
+        await drag(2000);
+        expect(tableOverflow(tester), 0, reason: 'the diff table');
+        await drag(-2000);
+        expect(queue(tester), ReviewSurface.listMin, reason: 'the queue');
+      });
+    });
+
     testWidgets('remember where the seam was dragged to, and reset', (
       tester,
     ) async {
@@ -1561,6 +1769,39 @@ void main() {
       final colors = WaxColors.of(tester.element(_row('rv-2')));
       expect(surfaceOf(tester, 'rv-2'), colors.accentContainer);
       expect(surfaceOf(tester, 'rv-1'), colors.canvas);
+    });
+
+    testWidgets('a decision on an entry open past the first page keeps the '
+        'loaded rows, and the pane lands on its neighbour', (tester) async {
+      const rows = ReviewQueueController.pageSize + 10;
+      const at = ReviewQueueController.pageSize + 4;
+      final repo = FakeRepository()
+        ..reviewEntries = [
+          for (var i = 0; i < rows; i++)
+            testReviewEntry('rv-$i', title: 'Album $i'),
+        ];
+      final container = appContainer(repo: repo);
+      final router = await openOnTable(tester, container, 'rv-$at');
+      await container.read(reviewQueueProvider.notifier).loadMore();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewSkip));
+      await tester.pumpAndSettle();
+
+      expect(repo.decideReviewCalls.single.entryId, 'rv-$at');
+      expect(location(router), WaxRoute.reviewEntry('rv-${at + 1}'));
+      expect(paneEntry(tester), 'rv-${at + 1}');
+      expect(
+        container
+            .read(reviewQueueProvider)
+            .requireValue
+            .entries
+            .map((entry) => entry.id),
+        [
+          for (var i = 0; i < rows; i++)
+            if (i != at) 'rv-$i',
+        ],
+      );
     });
 
     testWidgets('close onto the empty queue once the only entry is decided', (
@@ -1818,17 +2059,12 @@ void main() {
     double restsAbove(WidgetTester tester, String text) =>
         tester.view.physicalSize.height - messageBar(tester, text).bottom;
 
-    /// The pane's decision bar: the bordered strip its buttons wrap in.
+    /// The pane's decision bar: the foot bar its buttons stand in.
     Rect decisionBar(WidgetTester tester) => tester.getRect(
       find
           .ancestor(
-            of: find
-                .ancestor(
-                  of: find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
-                  matching: find.byType(Wrap),
-                )
-                .first,
-            matching: find.byType(Container),
+            of: find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
+            matching: find.byType(WaxFootBar),
           )
           .first,
     );
@@ -2772,5 +3008,46 @@ void main() {
       expect(location(router), WaxRoute.reviewEntry('rv-1'));
       expect(paneEntry(tester), 'rv-1');
     });
+  });
+
+  group('a decision is a catalog write', () {
+    const MusicListing tracks = (
+      dimension: null,
+      segment: '',
+      domain: BrowseDomain.music,
+    );
+    final decisions =
+        <String, Future<void> Function(ProviderContainer container)>{
+          'one decided from the queue': (container) => container
+              .read(reviewQueueProvider.notifier)
+              .decide('rv-1', 'approve'),
+          'several decided together': (container) => container
+              .read(reviewQueueProvider.notifier)
+              .decideBulk(['rv-1'], 'approve'),
+          'one decided from its pane': (container) => container
+              .read(reviewEntryProvider('rv-1').notifier)
+              .decide('approve'),
+          'one reverted': (container) =>
+              container.read(reviewEntryProvider('rv-1').notifier).revert(),
+        };
+    for (final MapEntry(key: name, value: decide) in decisions.entries) {
+      test('$name has an open listing read again', () async {
+        final repo = FakeRepository(items: [testItem('tr-1')])
+          ..reviewEntries = [testReviewEntry('rv-1')];
+        final container = appContainer(repo: repo);
+        addTearDown(container.dispose);
+        container.listen(musicItemsProvider(tracks), (_, _) {});
+        await container.read(musicItemsProvider(tracks).future);
+        container.listen(reviewEntryProvider('rv-1'), (_, _) {});
+        await container.read(reviewEntryProvider('rv-1').future);
+        final before = repo.listItemsCalls.length;
+
+        await decide(container);
+        await container.pump();
+        await pumpEventQueue();
+
+        expect(repo.listItemsCalls, hasLength(before + 1));
+      });
+    }
   });
 }

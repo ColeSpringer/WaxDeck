@@ -630,12 +630,15 @@ void main() {
 
     // Signing out and back in as somebody else: what the previous
     // session observed is not this one's.
-    repo.sessionState = const SessionState(
-      authenticated: true,
-      user: WaxDeckUser(id: 'u-2', username: 'rosie', roles: <String>[]),
+    repo.signsIn = const WaxDeckUser(
+      id: 'u-2',
+      username: 'rosie',
+      roles: <String>[],
     );
-    container.invalidate(authControllerProvider);
-    await container.read(authControllerProvider.future);
+    final auth = container.read(authControllerProvider.notifier);
+    await auth.logout();
+    await auth.login(username: 'rosie', password: 'pw');
+    expect(container.read(signedInAccountProvider), 'u-2');
     expect(container.read(localNotificationsProvider), isEmpty);
   });
 

@@ -129,7 +129,7 @@ func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entrie
 		}
 		// Resolved once for the book rather than once per part: it is
 		// the listener's setting for the book, not for a file in it.
-		voiceBoost := r.Svc.Playback.EffectiveVoiceBoost(ctx, uc, e.PID)
+		voiceBoost := r.Svc.Playback.EffectiveVoiceBoost(ctx, uc, e.PID, nil, false)
 		for _, piece := range pieces {
 			item, err := r.partItem(ctx, userID, e, piece, d, voiceBoost)
 			if err != nil {
@@ -160,7 +160,7 @@ func (r *ConnectResolver) wholeItem(ctx context.Context, uc *service.UserCtx, us
 			TTL:           d.ttl,
 			ForceFormat:   d.force,
 			DeviceFormats: d.formats,
-			VoiceBoost:    r.Svc.Playback.EffectiveVoiceBoost(ctx, uc, e.PID),
+			VoiceBoost:    r.Svc.Playback.EffectiveVoiceBoost(ctx, uc, e.PID, nil, false),
 		})
 		switch {
 		case err == nil:

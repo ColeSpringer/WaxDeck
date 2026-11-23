@@ -229,9 +229,14 @@ class QueueRestoreController extends AsyncNotifier<RestorableQueue?> {
   ) async {
     final queue = QueueState.fromStored(stored);
     final pid = queue.currentPid;
+    // A pinned cover is drawn under the address the server has now.
     final item = db == null || pid == null
         ? null
-        : await mirrorItemByPid(db, pid);
+        : await mirrorItemByPid(
+            db,
+            pid,
+            artUrlFor: ref.read(repositoryProvider).artUrlFor,
+          );
     return RestorableQueue(
       queue: queue,
       savedAt: stored.updatedAt,
@@ -336,6 +341,33 @@ class QueueRestoreController extends AsyncNotifier<RestorableQueue?> {
     if (offer.currentItem case final item?) playback.noteSummary(item);
     playback.restore(offer.queue, autoplay: true);
     state = const AsyncData(null);
+  }
+
+  /// A cover was pinned for [pid] after the offer read its item with
+  /// none: the item is read again, so the bar draws it.
+  Future<void> coverPinned(String pid) async {
+    final offer = state.value;
+    final item = offer?.currentItem;
+    if (offer == null || item == null) return;
+    if (item.pid != pid || item.artUrl != null) return;
+    final db = ref.read(mirrorDatabaseProvider);
+    if (db == null) return;
+    final now = await mirrorItemByPid(
+      db,
+      pid,
+      artUrlFor: ref.read(repositoryProvider).artUrlFor,
+    );
+    // Accepted, declined or read again meanwhile: not this offer's.
+    if (!ref.mounted || !identical(state.value, offer)) return;
+    if (now?.artUrl == null) return;
+    state = AsyncData(
+      RestorableQueue(
+        queue: offer.queue,
+        savedAt: offer.savedAt,
+        currentItem: now,
+        sessionId: offer.sessionId,
+      ),
+    );
   }
 
   /// Turns the offer down, and forgets the queue so it is not offered

@@ -397,8 +397,10 @@ func (l *Editor) SetEntityArtwork(ctx context.Context, uc *UserCtx, entityType, 
 	}))
 	if err == nil {
 		// An album or artist cover is what a member track resolves when it
-		// carries none of its own, so this moves playlist covers too.
+		// carries none of its own, so this moves playlist covers too, and a
+		// show's is what its episodes resolve.
 		l.Playlists.noteArtworkChanged(ctx)
+		l.noteShowCover(ent, pid, art)
 	}
 	return out, entityMiss(err, entityType, apiEntityPID)
 }
@@ -442,7 +444,16 @@ func (l *Editor) ClearEntityArtwork(ctx context.Context, uc *UserCtx, entityType
 		return entityMiss(classify(err), entityType, apiEntityPID)
 	}
 	l.Playlists.noteArtworkChanged(ctx)
+	l.noteShowCover(ent, pid, art)
 	return nil
+}
+
+// noteShowCover tells the catalog invalidation that a show's front cover
+// moved, which its episodes draw when they have none of their own.
+func (l *Editor) noteShowCover(ent model.ArtEntity, pid model.PID, role model.ArtRole) {
+	if ent == model.ArtPodcast && role == model.ArtRoleFront {
+		l.library.showCoverMoved(pid)
+	}
 }
 
 // setPlaylistArtwork stores an owner's cover and records it as custom,

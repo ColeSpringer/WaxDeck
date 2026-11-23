@@ -296,6 +296,9 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
     final buckets = state.value?.buckets ?? const <FacetBucket>[];
     final railed = sort == FacetSort.label && buckets.isNotEmpty;
     final railWidth = railed ? WaxSpace.s24 : 0.0;
+    // The scaffold holds the rows inside the window's insets; the rail,
+    // laid over it, stands inside them as well.
+    final insets = MediaQuery.paddingOf(context);
 
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
@@ -305,7 +308,7 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
       child: Stack(
         children: <Widget>[
           ShellMessageMargin(
-            right: railWidth,
+            right: railWidth + insets.right,
             child: WaxScaffold(
               title: copy.title,
               onBack: () => context.back(
@@ -357,8 +360,8 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
               top:
                   WaxScaffold.barHeight(context, largeTitle: false) +
                   WaxSpace.s8,
-              bottom: WaxSpace.s8,
-              right: 0,
+              bottom: WaxSpace.s8 + insets.bottom,
+              right: insets.right,
               child: FastScrollRail(
                 letters: fastScrollLetters,
                 selected: _letter,

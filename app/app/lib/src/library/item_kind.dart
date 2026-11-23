@@ -5,14 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../books/books_controller.dart';
-import '../books/series_controller.dart';
-import '../books/series_merge.dart';
 import '../connect/queue_gateway.dart';
-import '../home/home_shelves.dart';
 import '../l10n/l10n.dart';
 import '../metadata/metadata_controller.dart';
-import '../music/album_detail.dart';
 import '../music/music_controllers.dart';
 import '../player/now_playing_controller.dart';
 import '../player/now_playing_slot.dart';
@@ -24,6 +19,7 @@ import '../shell/navigation_history.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import '../sync/catalog_writes.dart';
 
 /// How often the dialog asks after a running kind change, and how many
 /// times before it lets the change carry on unwatched: a part is a file
@@ -53,6 +49,7 @@ Future<void> confirmSetKind(
   final l10n = context.l10n;
   final container = ProviderScope.containerOf(context, listen: false);
   final messenger = container.read(shellMessengerProvider);
+  final writes = container.read(catalogWritesProvider);
   final router = GoRouter.of(context);
   // Gone from only while the page it was asked on is still on top.
   final from = pageOnTop(router);
@@ -68,25 +65,12 @@ Future<void> confirmSetKind(
     return;
   }
   final job = outcome.job!;
-  void invalidate() {
-    container
-      ..invalidate(musicItemsProvider)
-      // The indexes count by kind, so a changed item moves from one
-      // index's buckets to another's.
-      ..invalidate(musicIndexProvider)
-      ..invalidate(musicIndexCountProvider)
-      ..invalidate(albumDetailProvider)
-      ..invalidate(bookDetailProvider)
-      ..invalidate(booksProvider)
-      // A book that joins or leaves a series moves the series reads.
-      ..invalidate(bookSeriesProvider)
-      ..invalidate(bookSeriesShelfProvider)
-      ..invalidate(bookSeriesCountProvider)
-      ..invalidate(bookSeriesDetailProvider)
-      ..invalidate(mayCurateItemProvider);
-    for (final provider in homeShelfProviders) {
-      container.invalidate(provider);
-    }
+  // Whatever the job did by the time it was last read moved items
+  // between the listings, the indexes that count by kind, the books and
+  // their series. Who may curate one is asked under its new pid.
+  void reread() {
+    writes.landed();
+    container.invalidate(mayCurateItemProvider);
   }
 
   switch (job.state) {
@@ -99,7 +83,7 @@ Future<void> confirmSetKind(
       await _letGoOfFolded(container, job.result);
       _forgetConverted(container, job.result);
       _forgetOldPages(router, _oldPages(job.result, to));
-      invalidate();
+      reread();
       final why = job.error?.trim() ?? '';
       messenger.show(
         why.isEmpty ? l10n.libraryKindFailed : l10n.libraryKindFailedWhy(why),
@@ -108,7 +92,7 @@ Future<void> confirmSetKind(
     default:
       // Running, or a state this build does not know, which the
       // contract says is not finished yet.
-      invalidate();
+      reread();
       if (container.read(isAdminProvider)) {
         messenger.show(
           l10n.libraryKindStillRunning,
@@ -126,7 +110,7 @@ Future<void> confirmSetKind(
   if (_unchanged(result)) {
     // Every item named already had the kind (a view drawn before another
     // device changed it), which the server skips rather than refuses.
-    invalidate();
+    reread();
     messenger.show(
       to == 'audiobook'
           ? l10n.libraryKindAlreadyBook(pids.length)
@@ -148,7 +132,7 @@ Future<void> confirmSetKind(
   // still showing the old kind does not refetch it and draw its error
   // while the destination loads.
   final destination = await _destination(container, _landedPid(result), to);
-  invalidate();
+  reread();
   final old = [..._oldPages(result, to), ...pages];
   // From the page it was asked on, or one of the items' old pages, which
   // the move leaves behind.
@@ -361,18 +345,21 @@ class _SetKindDialogState extends ConsumerState<_SetKindDialog> {
   Future<void> _run() async {
     setState(() => _running = true);
     final repository = ref.read(repositoryProvider);
+    final writes = ref.read(catalogWritesProvider);
     final navigator = Navigator.of(context);
     final route = ModalRoute.of(context)!;
     // This dialog's own route, never what is on top: something can open
     // over it while the change runs (a shared link, a notice), and a pop
-    // would close that instead and leave this one spinning.
-    void close(_KindOutcome outcome) {
-      if (!mounted || !route.isActive) return;
+    // would close that instead and leave this one spinning. False when
+    // the dialog has gone and nobody is left to hear the outcome.
+    bool close(_KindOutcome outcome) {
+      if (!mounted || !route.isActive) return false;
       if (route.isCurrent) {
         navigator.pop(outcome);
       } else {
         navigator.removeRoute(route, outcome);
       }
+      return true;
     }
 
     Job job;
@@ -387,17 +374,19 @@ class _SetKindDialogState extends ConsumerState<_SetKindDialog> {
       return;
     }
     // Started: a poll that goes unanswered leaves the job as it last
-    // read, still running, rather than reading as a refusal.
+    // read, still running, rather than reading as a refusal. Watched to
+    // its end even with the dialog gone, as the change runs on.
     for (var i = 0; !job.ended && i < kindChangePolls; i++) {
       await Future<void>.delayed(kindChangePoll);
-      if (!mounted) return;
       try {
         job = await repository.getJob(job.pid);
       } on WaxDeckApiException {
         break;
       }
     }
-    close(_KindOutcome(job: job));
+    // Whoever asked takes it from the outcome. With the dialog gone the
+    // open reads still follow what the job did.
+    if (!close(_KindOutcome(job: job))) writes.landed();
   }
 
   @override

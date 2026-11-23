@@ -80,7 +80,8 @@ class ReleaseWorkbench extends ConsumerStatefulWidget {
 
   /// The narrowest content pane that holds both. Measured against the
   /// room this screen actually gets, not the window's size class: the
-  /// shell sidebar takes its share before this screen starts.
+  /// shell sidebar takes its share before this screen starts, and the
+  /// list and the pane take the window's side insets inside theirs.
   static const twoPaneMinWidth = listMin + WaxSplitter.hitWidth + paneMin;
 
   @override
@@ -146,6 +147,8 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
     super.dispose();
   }
 
+  /// [available] here and in [_listWidth] is the room inside the side
+  /// insets, and the widths are the list's own inside them.
   double _listMax(double available) =>
       (available - WaxSplitter.hitWidth - ReleaseWorkbench.paneMin).clamp(
         ReleaseWorkbench.listMin,
@@ -315,18 +318,6 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
         )
       : null;
 
-  /// A member saved in the pane: the pane's controller refetches only
-  /// itself, and the list beside it holds the same item, as may the page
-  /// Back lands on once the workbench has gone. Read while it is up.
-  VoidCallback _memberSaved() {
-    final container = ProviderScope.containerOf(context, listen: false);
-    final listing = _listing;
-    final pid = widget.pid;
-    return () => container
-      ..invalidate(musicItemsProvider(listing))
-      ..invalidate(albumDetailProvider(pid));
-  }
-
   /// Opens [pane] as the workbench's sheet, kept as [_sheet] while it is up.
   Future<void> _openSheet(Widget Function(BuildContext sheet) pane) async {
     await showWaxSheet<void>(
@@ -334,17 +325,29 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
       isScrollControlled: true,
       builder: (sheetContext) {
         _sheet = ModalRoute.of(sheetContext);
-        return FractionallySizedBox(
-          heightFactor: 0.95,
-          child: pane(sheetContext),
+        return Padding(
+          // Over the keyboard its fields raise: a scroll-controlled sheet
+          // is not lifted for it.
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
+          child: FractionallySizedBox(
+            heightFactor: 0.95,
+            child: pane(sheetContext),
+          ),
         );
       },
     );
     if (mounted) _sheet = null;
   }
 
+  // The album pane takes no insets of its own; the bulk pane takes them
+  // under its save bar.
   Future<void> _albumSheet() => _openSheet(
-    (sheet) => AlbumPane(pid: widget.pid, follow: () => _follow(sheet)),
+    (sheet) => SafeArea(
+      top: false,
+      child: AlbumPane(pid: widget.pid, follow: () => _follow(sheet)),
+    ),
   );
 
   Future<void> _bulkSheet() async {
@@ -427,51 +430,72 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
         semanticsId: SemanticsIds.metadataWorkbench,
         onBack: () => context.back(fallback: WaxRoute.music),
         backSemanticsId: SemanticsIds.navBack,
-        // A filling sliver, not a body: the list needs a bounded height
-        // and a scroll position of its own for j/k to move by
-        // arithmetic, and the pane keeps its save bar under its own
-        // scroll.
-        slivers: <Widget>[
-          SliverFillRemaining(
-            hasScrollBody: true,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                _twoPane =
-                    constraints.maxWidth >= ReleaseWorkbench.twoPaneMinWidth;
-                // No pane, nothing at stake: a resize below the
-                // threshold disposes the pane, and a dirtiness it
-                // reported before that must not outlive it into a
-                // spurious question later.
-                if (!_twoPane) _paneDirty = false;
-                final width = _twoPane
-                    ? _listWidth(constraints.maxWidth, seamAt)
-                    : constraints.maxWidth;
-                // One position in the tree whether or not there is a
-                // pane: moving the list between shapes rebuilds its
-                // Scrollable, and a fresh scroll position starts at
-                // the top - the rule the review surface states.
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    Expanded(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: <Widget>[
-                          SizedBox(
-                            width: width,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: <Widget>[
-                                _selectHeader(),
-                                Expanded(child: _list(members, album.value)),
-                              ],
+        // A fill, not a body: the list needs a bounded height and a
+        // scroll position of its own for j/k to move by arithmetic, and
+        // the pane keeps its save bar under its own scroll, on the
+        // page's foot.
+        fill: LayoutBuilder(
+          builder: (context, constraints) {
+            // The floors hold for what the list and the pane get once
+            // each has taken the side inset it stands against.
+            final insets = MediaQuery.paddingOf(context);
+            final room = constraints.maxWidth - insets.horizontal;
+            _twoPane = room >= ReleaseWorkbench.twoPaneMinWidth;
+            // No pane, nothing at stake: a resize below the
+            // threshold disposes the pane, and a dirtiness it
+            // reported before that must not outlive it into a
+            // spurious question later.
+            if (!_twoPane) _paneDirty = false;
+            final seam = _listWidth(room, seamAt);
+            final width = _twoPane
+                ? seam +
+                      (Directionality.of(context) == TextDirection.rtl
+                          ? insets.right
+                          : insets.left)
+                : constraints.maxWidth;
+            final bulkBar = !_twoPane && _selecting;
+            // One position in the tree whether or not there is a
+            // pane: moving the list between shapes rebuilds its
+            // Scrollable, and a fresh scroll position starts at
+            // the top - the rule the review surface states. Each part
+            // takes the window's insets on the edges it stands
+            // against: the bulk bar the foot, under its surface; the
+            // list its start, the foot when no bar is there and, alone,
+            // its end; the pane its end and foot.
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Expanded(
+                  child: WaxInsetsTaken(
+                    bottom: bulkBar,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        SizedBox(
+                          width: width,
+                          child: WaxInsetsTaken(
+                            end: _twoPane,
+                            child: SafeArea(
+                              top: false,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: <Widget>[
+                                  _selectHeader(),
+                                  Expanded(child: _list(members, album.value)),
+                                ],
+                              ),
                             ),
                           ),
-                          if (_twoPane) ...<Widget>[
-                            WaxSplitter(
-                              position: width,
+                        ),
+                        if (_twoPane) ...<Widget>[
+                          SafeArea(
+                            top: false,
+                            left: false,
+                            right: false,
+                            child: WaxSplitter(
+                              position: seam,
                               min: ReleaseWorkbench.listMin,
-                              max: _listMax(constraints.maxWidth),
+                              max: _listMax(room),
                               semanticsId: SemanticsIds.workbenchSplitter,
                               onChanged: (w) => setState(() => _dragging = w),
                               onSettled: (w) {
@@ -487,33 +511,40 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
                                     .set(0);
                               },
                             ),
-                            Expanded(child: _pane()),
-                          ],
+                          ),
+                          Expanded(
+                            child: WaxInsetsTaken(start: true, child: _pane()),
+                          ),
                         ],
-                      ),
+                      ],
                     ),
-                    if (!_twoPane && _selecting) _bulkBar(),
-                  ],
-                );
-              },
-            ),
-          ),
-        ],
+                  ),
+                ),
+                if (bulkBar) _bulkBar(),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 
   Widget _pane() {
     final l10n = context.l10n;
+    // The item and bulk editors take their own insets, under their save
+    // bars; the others in a box.
     final Widget pane;
     if (_selecting) {
       final ordered = _orderedChecked();
       pane = ordered.isEmpty
-          ? Center(
-              child: EmptyState(
-                glyph: WaxIcons.check,
-                title: l10n.metadataWorkbenchSelectEmptyTitle,
-                message: l10n.metadataWorkbenchSelectEmptyMessage,
+          ? SafeArea(
+              top: false,
+              child: Center(
+                child: EmptyState(
+                  glyph: WaxIcons.check,
+                  title: l10n.metadataWorkbenchSelectEmptyTitle,
+                  message: l10n.metadataWorkbenchSelectEmptyMessage,
+                ),
               ),
             )
           // Keyed by the selection: a different set of tracks is a
@@ -533,15 +564,17 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
         key: ValueKey(pid),
         pid: pid,
         embedded: true,
-        onSaved: _memberSaved(),
         onDirtyChanged: _paneDirtyChanged,
         mayLeave: _mayLeave,
       );
     } else {
-      pane = AlbumPane(
-        pid: widget.pid,
-        follow: _follow,
-        onDirtyChanged: _paneDirtyChanged,
+      pane = SafeArea(
+        top: false,
+        child: AlbumPane(
+          pid: widget.pid,
+          follow: _follow,
+          onDirtyChanged: _paneDirtyChanged,
+        ),
       );
     }
     return Semantics(
@@ -701,26 +734,35 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
       container: true,
       explicitChildNodes: true,
       identifier: SemanticsIds.workbenchBulkBar,
-      child: Container(
+      // On the page's foot: its surface runs under the insets there, its
+      // contents keep clear of them.
+      child: ColoredBox(
         color: colors.surface2,
-        padding: const EdgeInsets.symmetric(
-          horizontal: WaxSpace.s16,
-          vertical: WaxSpace.s8,
-        ),
-        child: Row(
-          children: <Widget>[
-            Text(
-              l10n.metadataWorkbenchSelectedCount(ordered.length),
-              style: WaxType.label.copyWith(color: colors.textSecondary),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: WaxSpace.s16,
+              vertical: WaxSpace.s8,
             ),
-            const Spacer(),
-            WaxButton(
-              label: l10n.metadataWorkbenchEditSelection,
-              kind: WaxButtonKind.text,
-              semanticsId: SemanticsIds.workbenchBulkEdit,
-              onPressed: ordered.isEmpty ? null : () => unawaited(_bulkSheet()),
+            child: Row(
+              children: <Widget>[
+                Text(
+                  l10n.metadataWorkbenchSelectedCount(ordered.length),
+                  style: WaxType.label.copyWith(color: colors.textSecondary),
+                ),
+                const Spacer(),
+                WaxButton(
+                  label: l10n.metadataWorkbenchEditSelection,
+                  kind: WaxButtonKind.text,
+                  semanticsId: SemanticsIds.workbenchBulkEdit,
+                  onPressed: ordered.isEmpty
+                      ? null
+                      : () => unawaited(_bulkSheet()),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

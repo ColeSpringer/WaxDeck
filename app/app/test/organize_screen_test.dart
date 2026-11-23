@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/music/entity_facts.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -29,6 +31,15 @@ class _HistoryDown extends FakeRepository {
   }
 }
 
+final class _Invalidations extends ProviderObserver {
+  final seen = <ProviderBase<Object?>>{};
+
+  @override
+  void didDisposeProvider(ProviderObserverContext context) {
+    seen.add(context.provider);
+  }
+}
+
 /// Wide enough for the plan to be a table rather than a card list. The
 /// container comes back so a test can leave the screen and return to it
 /// with the providers it left behind.
@@ -37,6 +48,7 @@ Future<ProviderContainer> _pump(
   FakeRepository repo, {
   Widget screen = const OrganizeScreen(),
   Locale locale = const Locale('en'),
+  List<ProviderObserver>? observers,
 }) {
   tester.view.physicalSize = const Size(1200, 1600);
   tester.view.devicePixelRatio = 1;
@@ -44,7 +56,7 @@ Future<ProviderContainer> _pump(
   return pumpApp(
     tester,
     screen,
-    container: appContainer(repo: repo),
+    container: appContainer(repo: repo, observers: observers),
     routed: false,
     locale: locale,
   );
@@ -1853,5 +1865,86 @@ void main() {
     expect(row('jb-1'), findsOneWidget);
     expect(more, findsNothing);
     expect(repo.organizeHistoryCursors, [null, '2', '2']);
+  });
+
+  // A run has moved files when it answers, and so has its undo: the
+  // paths an open item lists are read again.
+  testWidgets('a run that moved files has an open read of them read again', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..organizePlanResult = const OrganizePlan(
+        profile: 'default',
+        totalActions: 1,
+        actions: [
+          OrganizeAction(itemPid: 'tr-1', from: '/old/a.flac', to: '/a.flac'),
+        ],
+      )
+      ..organizeReportResult = const OrganizeReport(
+        moved: 1,
+        skipped: 0,
+        failed: 0,
+      );
+    final swept = _Invalidations();
+    final container = await _pump(tester, repo, observers: [swept]);
+    final files = itemFilesProvider('tr-1');
+    container.listen(files, (_, _) {});
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeApply));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
+      'ORGANIZE',
+    );
+    await tester.pumpAndSettle();
+    swept.seen.clear();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeConfirm));
+    await tester.pumpAndSettle();
+
+    expect(repo.applyOrganizeCalls, hasLength(1));
+    expect(swept.seen, contains(files));
+  });
+
+  testWidgets('an undone run has an open read of its files read again', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..organizeHistory = [
+        OrganizeBatch(
+          jobPid: 'jb-2',
+          kind: 'organize',
+          state: 'done',
+          startedAt: DateTime.utc(2026, 7, 1, 9),
+          committed: 1,
+          undoable: true,
+        ),
+      ]
+      ..undoOrganizeResult = const OrganizeReport(
+        moved: 1,
+        skipped: 0,
+        failed: 0,
+      );
+    final swept = _Invalidations();
+    final container = await _pump(tester, repo, observers: [swept]);
+    final files = itemFilesProvider('tr-1');
+    container.listen(files, (_, _) {});
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeUndo('jb-2')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
+      'UNDO',
+    );
+    await tester.pumpAndSettle();
+    swept.seen.clear();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeUndoConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.undoOrganizeCalls, ['jb-2']);
+    expect(swept.seen, contains(files));
   });
 }

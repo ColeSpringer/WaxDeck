@@ -3191,6 +3191,7 @@ mixin _PlaybackCalls on _WaxDeckTransport implements PlaybackApi {
     String pid, {
     int? positionMs,
     bool? voiceBoost,
+    bool? voiceBoostDefault,
     int? maxBitrateKbps,
     bool? hls,
   }) => _send(
@@ -3199,6 +3200,7 @@ mixin _PlaybackCalls on _WaxDeckTransport implements PlaybackApi {
     query: {
       'positionMs': ?positionMs,
       'voiceBoost': ?voiceBoost,
+      'voiceBoostDefault': ?voiceBoostDefault,
       'maxBitrateKbps': ?maxBitrateKbps,
       'hls': ?hls,
     },
@@ -3209,6 +3211,7 @@ mixin _PlaybackCalls on _WaxDeckTransport implements PlaybackApi {
     String pid, {
     int? positionMs,
     bool? voiceBoost,
+    bool? voiceBoostDefault,
     int? maxBitrateKbps,
     bool? hls,
   }) => _guard(() async {
@@ -3216,6 +3219,7 @@ mixin _PlaybackCalls on _WaxDeckTransport implements PlaybackApi {
       pid,
       positionMs: positionMs,
       voiceBoost: voiceBoost,
+      voiceBoostDefault: voiceBoostDefault,
       maxBitrateKbps: maxBitrateKbps,
       hls: hls,
     );

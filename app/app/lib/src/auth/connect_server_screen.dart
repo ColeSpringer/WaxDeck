@@ -9,6 +9,7 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'forget_server.dart';
+import 'reach_again.dart';
 import 'server_address.dart';
 
 /// The pre-login server-address screen, native only: the web build is
@@ -138,6 +139,7 @@ class _ConnectServerScreenState extends ConsumerState<ConnectServerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(reachAgainProvider);
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final stored = ref.watch(serverAddressProvider);

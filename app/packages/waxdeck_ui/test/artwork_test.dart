@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:ui' as ui;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -6,6 +10,73 @@ Widget _host(Widget child) => MaterialApp(
   theme: buildWaxTheme(),
   home: Scaffold(body: child),
 );
+
+/// A cover whose picture lands when the test says. Each instance is
+/// another provider, as a cover asked under another name is.
+class _TestCover extends ImageProvider<_TestCover> {
+  /// The cover it is a picture of, null for one that names none.
+  _TestCover(this.cover);
+
+  final String? cover;
+
+  final Completer<ImageInfo> _landing = Completer<ImageInfo>();
+
+  void land(ui.Image image) => _landing.complete(ImageInfo(image: image));
+
+  void fail() => _landing.completeError(StateError('404'));
+
+  @override
+  Future<_TestCover> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture<_TestCover>(this);
+
+  @override
+  ImageStreamCompleter loadImage(_TestCover key, ImageDecoderCallback decode) =>
+      OneFrameImageStreamCompleter(key._landing.future);
+}
+
+/// The app saying a cover was replaced.
+class _Told extends ChangeNotifier {
+  void tell() => notifyListeners();
+
+  bool get heard => hasListeners;
+}
+
+Future<ui.Image> _picture(WidgetTester tester, int width) async => (await tester
+    .runAsync(() => createTestImage(width: width, height: width)))!;
+
+Future<void> _draw(WidgetTester tester, _TestCover image) => tester.pumpWidget(
+  _host(
+    ArtworkImage(
+      size: 96,
+      monogram: 'Salt Harbour',
+      artwork: WaxArtwork((_) => image, cover: image.cover),
+    ),
+  ),
+);
+
+/// Lets a picture that has landed reach the screen and fade in. The
+/// first frame after it lands may be the one that hears of it.
+Future<void> _settle(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump();
+  await tester.pump(const Duration(seconds: 1));
+}
+
+/// The width of the picture on screen, null while none is drawn: none
+/// held, or one held and faded out.
+int? _drawn(WidgetTester tester) {
+  final held = tester.widgetList<RawImage>(find.byType(RawImage));
+  final image = held.isEmpty ? null : held.first.image;
+  if (image == null) return null;
+  final fades = tester.widgetList<FadeTransition>(
+    find.descendant(
+      of: find.byType(ArtworkImage),
+      matching: find.byType(FadeTransition),
+    ),
+  );
+  if (fades.isNotEmpty && fades.first.opacity.value < 1) return null;
+  return image.width;
+}
 
 void main() {
   group('monogramInitials', () {
@@ -169,10 +240,10 @@ void main() {
         _host(
           ArtworkImage(
             size: 96,
-            artwork: (int px) {
+            artwork: WaxArtwork((int px) {
               asked.add(px);
               return null;
-            },
+            }),
           ),
         ),
       );
@@ -189,10 +260,10 @@ void main() {
         _host(
           ArtworkImage(
             size: 168.34,
-            artwork: (int px) {
+            artwork: WaxArtwork((int px) {
               asked.add(px);
               return null;
-            },
+            }),
           ),
         ),
       );
@@ -207,7 +278,7 @@ void main() {
           ArtworkImage(
             size: 96,
             monogram: 'Salt Harbour',
-            artwork: (int px) => null,
+            artwork: WaxArtwork((int px) => null),
           ),
         ),
       );
@@ -248,6 +319,218 @@ void main() {
         findsNothing,
       );
       handle.dispose();
+    });
+  });
+
+  group('a cover handed over again', () {
+    testWidgets('under another name keeps its picture until the new one '
+        'is ready', (tester) async {
+      final old = await _picture(tester, 4);
+      final fresh = await _picture(tester, 8);
+      final first = _TestCover('/items/al-1/art');
+      await _draw(tester, first);
+      first.land(old);
+      await _settle(tester);
+      expect(_drawn(tester), 4);
+
+      final second = _TestCover('/items/al-1/art');
+      await _draw(tester, second);
+      for (var frame = 0; frame < 6; frame++) {
+        expect(_drawn(tester), 4, reason: 'frame $frame');
+        expect(find.text('SH'), findsNothing);
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      second.land(fresh);
+      await tester.pump();
+      await tester.pump();
+      expect(_drawn(tester), 8);
+    });
+
+    testWidgets('keeps a picture that was drawn at once from memory', (
+      tester,
+    ) async {
+      final old = await _picture(tester, 4);
+      final first = _TestCover('/items/al-1/art');
+      await _draw(tester, first);
+      first.land(old);
+      await _settle(tester);
+      // Mounted again, the decoded copy answers in the same frame.
+      await tester.pumpWidget(_host(const SizedBox()));
+      await _draw(tester, first);
+      expect(_drawn(tester), 4);
+
+      await _draw(tester, _TestCover('/items/al-1/art'));
+      for (var frame = 0; frame < 6; frame++) {
+        expect(_drawn(tester), 4, reason: 'frame $frame');
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+    });
+
+    testWidgets('for another cover in the same slot never shows the '
+        'picture before it', (tester) async {
+      // A list that reuses its rows by position hands a row another
+      // item's cover, and the picture there is somebody else's.
+      final old = await _picture(tester, 4);
+      final fresh = await _picture(tester, 8);
+      final first = _TestCover('/items/al-1/art');
+      await _draw(tester, first);
+      first.land(old);
+      await _settle(tester);
+      expect(_drawn(tester), 4);
+
+      final other = _TestCover('/items/al-2/art');
+      await _draw(tester, other);
+      for (var frame = 0; frame < 6; frame++) {
+        expect(_drawn(tester), isNull, reason: 'frame $frame');
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      other.land(fresh);
+      await _settle(tester);
+      expect(_drawn(tester), 8);
+    });
+
+    testWidgets('that names no cover never shows the picture before it', (
+      tester,
+    ) async {
+      final old = await _picture(tester, 4);
+      final first = _TestCover(null);
+      await _draw(tester, first);
+      first.land(old);
+      await _settle(tester);
+      expect(_drawn(tester), 4);
+
+      final second = _TestCover(null);
+      await _draw(tester, second);
+      expect(_drawn(tester), isNull);
+      second.land(await _picture(tester, 8));
+      await _settle(tester);
+      expect(_drawn(tester), 8);
+
+      // Nor does a cover that names itself take up a nameless one's.
+      await _draw(tester, _TestCover('/items/al-1/art'));
+      expect(_drawn(tester), isNull);
+    });
+
+    testWidgets('and answered that there is none draws the monogram', (
+      tester,
+    ) async {
+      final old = await _picture(tester, 4);
+      final first = _TestCover('/items/al-1/art');
+      await _draw(tester, first);
+      first.land(old);
+      await _settle(tester);
+      expect(find.text('SH'), findsNothing);
+
+      final second = _TestCover('/items/al-1/art');
+      await _draw(tester, second);
+      expect(_drawn(tester), 4);
+      second.fail();
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('SH'), findsOneWidget);
+      expect(_drawn(tester), isNull);
+    });
+  });
+
+  group('a cover on screen', () {
+    testWidgets('asks again by itself when it is told its cover was '
+        'replaced, and keeps its picture until the new one is ready', (
+      tester,
+    ) async {
+      final old = await _picture(tester, 4);
+      final fresh = await _picture(tester, 8);
+      final told = _Told();
+      ImageProvider? current = _TestCover('/items/al-1/art')..land(old);
+      var asks = 0;
+      var builds = 0;
+      final artwork = WaxArtwork(
+        (_) {
+          asks++;
+          return current;
+        },
+        cover: '/items/al-1/art',
+        replaced: told,
+      );
+      await tester.pumpWidget(
+        _host(
+          Builder(
+            builder: (context) {
+              builds++;
+              return ArtworkImage(
+                size: 96,
+                monogram: 'Salt Harbour',
+                artwork: artwork,
+              );
+            },
+          ),
+        ),
+      );
+      await _settle(tester);
+      expect(_drawn(tester), 4);
+      expect((asks, builds), (1, 1));
+
+      // Told nothing, it asks nothing.
+      await tester.pump(const Duration(seconds: 1));
+      expect(asks, 1);
+
+      final next = _TestCover('/items/al-1/art');
+      current = next;
+      told.tell();
+      await tester.pump();
+      expect((asks, builds), (2, 1));
+      expect(_drawn(tester), 4);
+      next.land(fresh);
+      await _settle(tester);
+      expect(_drawn(tester), 8);
+      expect((asks, builds), (2, 1));
+    });
+
+    testWidgets('with no picture asks again too', (tester) async {
+      final told = _Told();
+      _TestCover? current;
+      await tester.pumpWidget(
+        _host(
+          ArtworkImage(
+            size: 96,
+            monogram: 'Salt Harbour',
+            artwork: WaxArtwork(
+              (_) => current,
+              cover: '/items/al-1/art',
+              replaced: told,
+            ),
+          ),
+        ),
+      );
+      expect(find.text('SH'), findsOneWidget);
+
+      current = _TestCover('/items/al-1/art')..land(await _picture(tester, 4));
+      told.tell();
+      await _settle(tester);
+      expect(find.text('SH'), findsNothing);
+      expect(_drawn(tester), 4);
+    });
+
+    testWidgets('stops listening when it leaves the screen, and listens to '
+        'the artwork it is handed next', (tester) async {
+      final first = _Told();
+      final second = _Told();
+      Widget cover(_Told told) => _host(
+        ArtworkImage(
+          size: 96,
+          monogram: 'Salt Harbour',
+          artwork: WaxArtwork((_) => null, replaced: told),
+        ),
+      );
+      await tester.pumpWidget(cover(first));
+      expect((first.heard, second.heard), (true, false));
+
+      await tester.pumpWidget(cover(second));
+      expect((first.heard, second.heard), (false, true));
+
+      await tester.pumpWidget(_host(const SizedBox()));
+      expect((first.heard, second.heard), (false, false));
     });
   });
 }

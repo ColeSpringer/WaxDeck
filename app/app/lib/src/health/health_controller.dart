@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../admin/admin_providers.dart';
 import '../auth/auth_controller.dart';
 import '../providers.dart';
+import '../sync/catalog_writes.dart';
 import '../tools/tool_tasks_provider.dart';
 
 /// The library health scoreboard. The `health` marker refetches it when a
@@ -232,6 +233,7 @@ class DuplicatesController extends AsyncNotifier<List<DuplicateGroup>> {
   /// stale, which only a fresh read shows. A merge folds the losers'
   /// names into the survivor, so the folded names are read again too.
   Future<MergeOutcome> merge(DuplicateGroup group) async {
+    final writes = ref.read(catalogWritesProvider);
     try {
       final outcome = await ref
           .read(repositoryProvider)
@@ -240,6 +242,8 @@ class DuplicatesController extends AsyncNotifier<List<DuplicateGroup>> {
             survivorPid: group.survivor.pid,
             loserPids: [for (final loser in group.losers) loser.pid],
           );
+      // The losers are gone from every listing and index that held them.
+      writes.landed();
       if (ref.mounted) ref.invalidate(foldsProvider);
       return outcome;
     } finally {
@@ -368,6 +372,7 @@ class UpgradesController extends AsyncNotifier<List<UpgradeGroup>> {
     final keep =
         group.members.where((m) => m.best).firstOrNull ?? group.members.first;
     final repo = ref.read(repositoryProvider);
+    final writes = ref.read(catalogWritesProvider);
     final oneItem = group.members.every((m) => m.itemPid == keep.itemPid);
     try {
       return oneItem
@@ -387,7 +392,10 @@ class UpgradesController extends AsyncNotifier<List<UpgradeGroup>> {
               ],
             );
     } finally {
-      if (ref.mounted) ref.invalidateSelf();
+      // Whatever the answer, as the list is read again (it is a read the
+      // landing sweeps): the members that went before a refusal are out
+      // of every listing.
+      writes.landed();
     }
   }
 }

@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// Override lives here rather than in the root library.
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
+import 'package:waxdeck/src/connectivity/connectivity_port.dart';
 import 'package:waxdeck/src/l10n/explain_error.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
@@ -13,6 +16,7 @@ import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_item.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
+import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/shell/lifecycle_banners.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -67,6 +71,8 @@ _harness({
   List<ItemSummary>? items,
   DateTime Function()? clock,
   FakeEngine? engine,
+  DownloadManagerPort? downloads,
+  List<Override> extra = const <Override>[],
 }) {
   final repo = FakeRepository(
     items: items ?? [testItem(_a), testItem(_b), testItem(_c)],
@@ -75,7 +81,11 @@ _harness({
   final container = appContainer(
     repo: repo,
     engine: engine,
-    extra: [if (clock != null) wallClockProvider.overrideWithValue(clock)],
+    downloads: downloads,
+    extra: [
+      if (clock != null) wallClockProvider.overrideWithValue(clock),
+      ...extra,
+    ],
   );
   return (container: container, repo: repo, engine: engine);
 }
@@ -115,6 +125,57 @@ _strayAtTheEnd() async {
   expect(h.container.read(nowPlayingProvider).entry?.pid, _a);
   expect(h.container.read(nowPlayingProvider).session, isNull);
   return h;
+}
+
+/// Downloads that count the lookups made of each pid.
+class _CountedDownloads extends FakeDownloads {
+  _CountedDownloads();
+
+  final lookups = <String>[];
+
+  @override
+  Future<LocalPlayback?> localFor(String pid) {
+    lookups.add(pid);
+    return super.localFor(pid);
+  }
+}
+
+/// An engine that counts what it was handed to play next.
+class _CountedPreloads extends FakeEngine {
+  _CountedPreloads()
+    : super(mediaDuration: const Duration(milliseconds: _trackMs));
+
+  final preloads = <String>[];
+
+  @override
+  Future<void> preloadNext(
+    String url, {
+    String? mimeType,
+    Duration? clipStart,
+    Duration? clipEnd,
+  }) {
+    preloads.add(url);
+    return super.preloadNext(
+      url,
+      mimeType: mimeType,
+      clipStart: clipStart,
+      clipEnd: clipEnd,
+    );
+  }
+}
+
+/// A link that says it is metered.
+class _Metered implements ConnectivityPort {
+  const _Metered();
+
+  @override
+  Future<ConnectionCost> cost() async => ConnectionCost.metered;
+
+  @override
+  Stream<ConnectionCost> get costs => const Stream.empty();
+
+  @override
+  Stream<void> get returns => const Stream<void>.empty();
 }
 
 class _Clock {
@@ -547,6 +608,240 @@ void main() {
       expect(h.container.queueState.currentPid, _a);
       // The pass that did play is reported, and finished.
       expect(h.repo.reportedSessions.single.finished, isTrue);
+    });
+  });
+
+  group('preloading a downloaded next track', () {
+    final copyOfB = Uri.file('/downloads/B.flac').toString();
+
+    FakeDownloads bDownloaded() =>
+        FakeDownloads(local: {_b: testLocal('/downloads/B.flac')});
+
+    int mintsFor(FakeRepository repo, String pid) =>
+        repo.playInfoCalls.where((c) => c.pid == pid).length;
+
+    test('arms it from its file, asking the server for nothing', () async {
+      final h = _harness(downloads: bDownloaded());
+      h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+      await pumpEventQueue();
+      await _skipTo(h.engine, 190000);
+
+      expect(h.engine.preloadedUrl, copyOfB);
+      expect(mintsFor(h.repo, _b), 0);
+    });
+
+    test('arms it on a metered link with preloading kept to wifi', () async {
+      final h = _harness(
+        downloads: bDownloaded(),
+        extra: [connectivityProvider.overrideWithValue(const _Metered())],
+      );
+      h.container.read(preloadOnWifiOnlyProvider.notifier).set(true);
+      h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+      await pumpEventQueue();
+      await _skipTo(h.engine, 190000);
+
+      expect(h.engine.preloadedUrl, copyOfB);
+      expect(mintsFor(h.repo, _b), 0);
+    });
+
+    test('arms it and crosses into it with no server at all, the session '
+        'taking over the file without a load or a mint', () async {
+      final h = _harness(downloads: bDownloaded());
+      h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+      await pumpEventQueue();
+      h.repo
+        ..playInfoError = const WaxDeckApiException(
+          code: 'transport',
+          message: 'connection refused',
+        )
+        // A read nothing answers.
+        ..getItemGate = Completer<void>();
+      await _skipTo(h.engine, 190000);
+      expect(h.engine.preloadedUrl, copyOfB);
+
+      await _runOut(h.engine);
+
+      expect(h.container.queueState.currentPid, _b);
+      expect(h.engine.loadedUrl, copyOfB);
+      expect(h.engine.loadedUrls, isNot(contains(copyOfB)));
+      expect(h.engine.playing, isTrue);
+      final now = h.container.read(nowPlayingProvider);
+      expect(now.item?.pid, _b);
+      expect(now.session?.isLoaded, isTrue);
+      expect(mintsFor(h.repo, _b), 0);
+    });
+
+    test('the crossing into it reports its listen and its play state as any '
+        'play does, minting nothing', () async {
+      final h = _harness(downloads: bDownloaded());
+      h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+      await pumpEventQueue();
+      await _skipTo(h.engine, 190000);
+      await _runOut(h.engine);
+
+      await _play(h.engine, 6000);
+      h.container.queue.clear();
+      await pumpEventQueue();
+
+      final listens = h.repo.reportedSessions.where((s) => s.pid == _b);
+      expect(listens, hasLength(1));
+      expect(listens.single.msPlayed, greaterThan(0));
+      expect(h.repo.putPlayStateCalls.where((c) => c.pid == _b), isNotEmpty);
+      expect(mintsFor(h.repo, _b), 0);
+    });
+
+    test('a next track whose download is removed before the crossing is '
+        'armed again from the server\'s stream, and crossed into', () async {
+      final downloads = bDownloaded();
+      final h = _harness(downloads: downloads);
+      h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+      await pumpEventQueue();
+      await _skipTo(h.engine, 190000);
+      expect(h.engine.preloadedUrl, copyOfB);
+
+      await downloads.remove(_b);
+      await pumpEventQueue();
+
+      expect(h.engine.preloadedUrl, contains('pid=$_b'));
+      expect(mintsFor(h.repo, _b), 1);
+      await _runOut(h.engine);
+      expect(h.container.queueState.currentPid, _b);
+      expect(h.engine.loadedUrl, contains('pid=$_b'));
+      expect(h.engine.playing, isTrue);
+      final now = h.container.read(nowPlayingProvider);
+      expect(now.error, isNull);
+      expect(now.session?.isLoaded, isTrue);
+    });
+
+    test('a next track whose download a refresh replaced before the crossing '
+        'is armed again from the new file', () async {
+      final downloads = bDownloaded();
+      final h = _harness(downloads: downloads);
+      h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+      await pumpEventQueue();
+      await _skipTo(h.engine, 190000);
+      expect(h.engine.preloadedUrl, copyOfB);
+
+      downloads
+        ..byPid[_b] = testLocal('/downloads/B2.flac')
+        ..emit(const DownloadProgress(pid: _b, fraction: 1, complete: true));
+      await pumpEventQueue();
+
+      final newCopy = Uri.file('/downloads/B2.flac').toString();
+      expect(h.engine.preloadedUrl, newCopy);
+      await _runOut(h.engine);
+      expect(h.container.queueState.currentPid, _b);
+      expect(h.engine.loadedUrl, newCopy);
+      expect(h.engine.playing, isTrue);
+      expect(mintsFor(h.repo, _b), 0);
+    });
+
+    test('a crossing into a file gone without a word plays the next track '
+        'from the server\'s stream where the file failed', () async {
+      final downloads = bDownloaded();
+      final h = _harness(downloads: downloads);
+      h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+      await pumpEventQueue();
+      await _skipTo(h.engine, 190000);
+      expect(h.engine.preloadedUrl, copyOfB);
+      downloads.byPid.remove(_b);
+
+      await _runOut(h.engine);
+      expect(h.engine.loadedUrl, copyOfB);
+      h.engine.failPlayback(fault: MediaFault.source);
+      await pumpEventQueue();
+
+      expect(h.container.queueState.currentPid, _b);
+      expect(h.engine.loadedUrl, contains('pid=$_b'));
+      expect(h.engine.playing, isTrue);
+      final now = h.container.read(nowPlayingProvider);
+      expect(now.error, isNull);
+      expect(now.item?.pid, _b);
+    });
+
+    test('a next track not downloaded is looked up once while it stays next, '
+        'not on every tick', () async {
+      final downloads = _CountedDownloads();
+      final h = _harness(
+        downloads: downloads,
+        extra: [connectivityProvider.overrideWithValue(const _Metered())],
+      );
+      h.container.read(preloadOnWifiOnlyProvider.notifier).set(true);
+      h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+      await pumpEventQueue();
+      await _skipTo(h.engine, 190000);
+
+      await _play(h.engine, 10000);
+
+      expect(h.engine.preloadedUrl, isNull);
+      expect(downloads.lookups.where((p) => p == _b), hasLength(1));
+    });
+
+    test(
+      'a next track whose download a refresh is fetching stays armed '
+      'from its file, and is armed again once, as the refresh lands',
+      () async {
+        final downloads = bDownloaded();
+        final engine = _CountedPreloads();
+        final h = _harness(downloads: downloads, engine: engine);
+        h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+        await pumpEventQueue();
+        await _skipTo(h.engine, 190000);
+        expect(engine.preloads, [copyOfB]);
+
+        for (final fraction in [0.25, 0.5, 0.75]) {
+          downloads.emit(
+            DownloadProgress(pid: _b, fraction: fraction, complete: false),
+          );
+          await pumpEventQueue();
+        }
+        expect(engine.preloads, [copyOfB], reason: 'the old file still holds');
+
+        downloads
+          ..byPid[_b] = testLocal('/downloads/B2.flac')
+          ..emit(const DownloadProgress(pid: _b, fraction: 1, complete: true));
+        await pumpEventQueue();
+
+        final newCopy = Uri.file('/downloads/B2.flac').toString();
+        expect(engine.preloads, [copyOfB, newCopy]);
+        expect(engine.preloadedUrl, newCopy);
+      },
+    );
+
+    test('a next track whose download completes while it is next is armed '
+        'from its file', () async {
+      final downloads = _CountedDownloads();
+      final h = _harness(
+        downloads: downloads,
+        extra: [connectivityProvider.overrideWithValue(const _Metered())],
+      );
+      h.container.read(preloadOnWifiOnlyProvider.notifier).set(true);
+      h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+      await pumpEventQueue();
+      await _skipTo(h.engine, 190000);
+      await _play(h.engine, 4000);
+      expect(h.engine.preloadedUrl, isNull);
+
+      downloads
+        ..byPid[_b] = testLocal('/downloads/B.flac')
+        ..emit(const DownloadProgress(pid: _b, fraction: 1, complete: true));
+      await pumpEventQueue();
+
+      expect(h.engine.preloadedUrl, copyOfB);
+      expect(mintsFor(h.repo, _b), 0);
+    });
+
+    test('a next track not downloaded is prepared from a minted stream, as '
+        'ever', () async {
+      final h = _harness(
+        downloads: FakeDownloads(local: {_c: testLocal('/downloads/C.flac')}),
+      );
+      h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+      await pumpEventQueue();
+      await _skipTo(h.engine, 190000);
+
+      expect(h.engine.preloadedUrl, contains('pid=$_b'));
+      expect(mintsFor(h.repo, _b), 1);
     });
   });
 
@@ -2210,6 +2505,316 @@ void main() {
       link.report(connected: true);
       await pumpEventQueue();
       expect(h.repo.reportedSessions.single.pid, _a);
+    });
+
+    test('a start that failed for want of the server before the link first '
+        'answered plays when it does', () async {
+      final h = _harness();
+      final link = h.container.read(liveLinkProvider.notifier);
+      h.repo.playInfoError = offline;
+      h.container.playback;
+      h.container.queue.playNow([_a, _b], source: _album);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(h.container.read(nowPlayingProvider).error, isNotNull);
+      expect(
+        h.container.read(shellMessagesProvider)?.resolve(_l10n),
+        _l10n.playerCouldNotStart(testItem(_a).title),
+        reason: 'nothing has said the link is down',
+      );
+
+      h.repo.playInfoError = null;
+      link.report(connected: true);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(h.container.read(nowPlayingProvider).error, isNull);
+      expect(h.engine.playing, isTrue);
+
+      h.container.queue.clear();
+      await pumpEventQueue();
+    });
+
+    test('a listen that could not be reported before the link first '
+        'answered is sent when it does', () async {
+      final h = _harness();
+      final link = h.container.read(liveLinkProvider.notifier);
+      h.container.playback;
+      h.container.queue.playNow([_a, _b], source: _album);
+      await pumpEventQueue();
+      await _play(h.engine, 6000);
+
+      h.repo.reportError = offline;
+      h.container.queue.clear();
+      await pumpEventQueue();
+      expect(h.repo.reportedSessions, isEmpty);
+
+      h.repo.reportError = null;
+      link.report(connected: true);
+      await pumpEventQueue();
+      expect(h.repo.reportedSessions.single.pid, _a);
+    });
+
+    test('the link\'s first answer, with nothing failed and nothing held, '
+        'starts nothing and reports nothing', () async {
+      final h = _harness();
+      final link = h.container.read(liveLinkProvider.notifier);
+      h.container.playback;
+      await pumpEventQueue();
+
+      link.report(connected: true);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(h.repo.playInfoCalls, isEmpty);
+      expect(h.repo.reportedSessions, isEmpty);
+      expect(h.engine.loadedUrl, isNull);
+      expect(h.engine.playing, isFalse);
+    });
+
+    /// Every message the shell is asked for, from now on, as worded.
+    List<String> raisedOn(ProviderContainer container) {
+      final raised = <String>[];
+      final messages = container.listen(shellMessagesProvider, (_, next) {
+        if (next != null) raised.add(next.resolve(_l10n));
+      });
+      addTearDown(messages.close);
+      return raised;
+    }
+
+    test('a start that failed before the link first answered, which reads '
+        'down only long after, still plays when it is back', () async {
+      final clock = _Clock();
+      final h = _harness(clock: clock.call);
+      final link = h.container.read(liveLinkProvider.notifier);
+      h.repo.playInfoError = offline;
+      h.container.playback;
+      h.container.queue.playNow([_a, _b], source: _album);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(h.container.read(nowPlayingProvider).error, isNotNull);
+
+      clock.advance(const Duration(minutes: 5));
+      link.report(connected: false);
+      await pumpEventQueue();
+      clock.advance(const Duration(minutes: 5));
+      h.repo.playInfoError = null;
+      link.report(connected: true);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(h.container.read(nowPlayingProvider).error, isNull);
+      expect(h.engine.playing, isTrue);
+
+      h.container.queue.clear();
+      await pumpEventQueue();
+    });
+
+    test('a start that failed before the link first answered says offline '
+        'once the link reads down, in place of the offer standing', () async {
+      final h = _harness();
+      final link = h.container.read(liveLinkProvider.notifier);
+      final raised = raisedOn(h.container);
+      h.repo.playInfoError = offline;
+      h.container.playback;
+      h.container.queue.playNow([_a, _b], source: _album);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(raised, [_l10n.playerCouldNotStart(testItem(_a).title)]);
+
+      link.report(connected: false);
+      await pumpEventQueue();
+      expect(raised, [
+        _l10n.playerCouldNotStart(testItem(_a).title),
+        _l10n.playerOfflineStart,
+      ]);
+      final message = h.container.read(shellMessagesProvider);
+      expect(message?.channel, ShellChannel.startRetry);
+      expect(message?.actionLabelIn(_l10n), _l10n.commonRetry);
+
+      h.repo.playInfoError = null;
+      h.container.queue.clear();
+      await pumpEventQueue();
+    });
+
+    test('a start said offline as it failed is not said again when the link '
+        'is lost and found down again', () async {
+      final h = _harness();
+      final link = h.container.read(liveLinkProvider.notifier)
+        ..report(connected: false);
+      final raised = raisedOn(h.container);
+      h.repo.playInfoError = offline;
+      h.container.playback;
+      h.container.queue.playNow([_a, _b], source: _album);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(raised, [_l10n.playerOfflineStart]);
+
+      link.forget();
+      await pumpEventQueue();
+      link.report(connected: false);
+      await pumpEventQueue();
+      expect(raised, [_l10n.playerOfflineStart]);
+
+      h.repo.playInfoError = null;
+      h.container.queue.clear();
+      await pumpEventQueue();
+    });
+
+    /// A stream that breaks with the link up, which reads down [wait]
+    /// later: what the shell was asked for.
+    Future<List<String>> brokeThenDown(Duration wait) async {
+      final clock = _Clock();
+      final h = _harness(clock: clock.call);
+      final link = h.container.read(liveLinkProvider.notifier)
+        ..report(connected: true);
+      h.container.playback;
+      h.container.queue.playNow([_a, _b], source: _album);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(h.engine.playing, isTrue, reason: 'precondition: it plays');
+      final raised = raisedOn(h.container);
+      h.repo.playInfoError = offline;
+      h.engine.failPlayback();
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      clock.advance(wait);
+      link.report(connected: false);
+      await pumpEventQueue();
+
+      h.repo.playInfoError = null;
+      h.container.queue.clear();
+      await pumpEventQueue();
+      return raised;
+    }
+
+    test('a failure the link goes down for soon after is then said to '
+        'continue by itself', () async {
+      expect(await brokeThenDown(const Duration(seconds: 5)), [
+        _l10n.playerCouldNotContinue(testItem(_a).title),
+        _l10n.playerOfflineStart,
+      ]);
+    });
+
+    test('a failure the link goes down for long after is not said to '
+        'continue', () async {
+      expect(await brokeThenDown(const Duration(minutes: 5)), [
+        _l10n.playerCouldNotContinue(testItem(_a).title),
+      ]);
+    });
+
+    test('a failure the link then stops answering for, and is not known '
+        'down, is not said to be offline', () async {
+      final h = _harness();
+      final link = h.container.read(liveLinkProvider.notifier)
+        ..report(connected: true);
+      h.container.playback;
+      h.container.queue.playNow([_a, _b], source: _album);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(h.engine.playing, isTrue, reason: 'precondition: it plays');
+      final raised = raisedOn(h.container);
+      h.repo.playInfoError = offline;
+      h.engine.failPlayback();
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(raised, hasLength(1));
+
+      link.forget();
+      await pumpEventQueue();
+      expect(raised, hasLength(1));
+
+      h.repo.playInfoError = null;
+      h.container.queue.clear();
+      await pumpEventQueue();
+    });
+
+    test('a start that failed before the link first answered, then a pause '
+        'from outside: the link reading down says nothing more, and its '
+        'return starts nothing', () async {
+      final h = _harness();
+      final link = h.container.read(liveLinkProvider.notifier);
+      final raised = raisedOn(h.container);
+      h.repo.playInfoError = offline;
+      h.container.playback;
+      h.container.queue.playNow([_a, _b], source: _album);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(raised, hasLength(1));
+      await h.container.playback.transportPause();
+      final asked = h.repo.playInfoCalls.length;
+
+      h.repo.playInfoError = null;
+      link.report(connected: false);
+      await pumpEventQueue();
+      expect(raised, hasLength(1));
+      link.report(connected: true);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(h.repo.playInfoCalls, hasLength(asked));
+      expect(h.engine.playing, isFalse);
+
+      h.container.queue.clear();
+      await pumpEventQueue();
+    });
+
+    test('a start that failed before the link first answered, then a '
+        'station: the link\'s first answer leaves the engine to the '
+        'station', () async {
+      final h = _harness();
+      final link = h.container.read(liveLinkProvider.notifier);
+      h.repo.playInfoError = offline;
+      h.container.playback;
+      h.container.queue.playNow([_a, _b], source: _album);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(h.container.read(nowPlayingProvider).error, isNotNull);
+      final radio = h.container.read(radioPlaybackProvider.notifier);
+      await radio.play(_station());
+      await pumpEventQueue();
+      expect(h.engine.loadedUrl, contains('/media/radio/'));
+      final asked = h.repo.playInfoCalls.length;
+
+      h.repo.playInfoError = null;
+      link.report(connected: true);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(h.repo.playInfoCalls, hasLength(asked));
+      expect(h.engine.loadedUrl, contains('/media/radio/'));
+
+      await radio.stop();
+      h.container.queue.clear();
+      await pumpEventQueue();
+    });
+
+    test('a start the server refused before the link first answered is not '
+        'said to continue when the link reads down, and its return starts '
+        'nothing', () async {
+      final h = _harness();
+      final link = h.container.read(liveLinkProvider.notifier);
+      final raised = raisedOn(h.container);
+      h.repo.playInfoError = const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such item',
+        statusCode: 404,
+      );
+      h.container.playback;
+      h.container.queue.playNow([_a], source: _album);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(raised, [_l10n.playerCouldNotStart(testItem(_a).title)]);
+      final asked = h.repo.playInfoCalls.length;
+
+      h.repo.playInfoError = null;
+      link.report(connected: false);
+      await pumpEventQueue();
+      expect(raised, hasLength(1));
+      link.report(connected: true);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(h.repo.playInfoCalls, hasLength(asked));
+      expect(h.engine.playing, isFalse);
+
+      h.container.queue.clear();
+      await pumpEventQueue();
     });
 
     test('a paused start that failed offline waits for a press', () async {

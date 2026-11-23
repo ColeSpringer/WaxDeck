@@ -26,6 +26,13 @@ class ScriptedRepository implements WaxDeckRepository {
   /// server's answer.
   Object? catalogFault;
 
+  /// With [catalogFault] set, the only catalog read (counting from 1 over
+  /// [catalogAsks]) that fails; every read when null.
+  int? catalogFaultOnCall;
+
+  /// Every catalog read asked, failed ones included.
+  int catalogAsks = 0;
+
   final replayed = <String>[];
   final reportedSessions = <String>{};
 
@@ -48,13 +55,21 @@ class ScriptedRepository implements WaxDeckRepository {
     sortKey: sortKey,
   );
 
+  /// When set, a catalog read answers only once this completes.
+  Completer<void>? catalogGate;
+
   @override
   Future<CatalogSyncPage> syncCatalog({
     String? since,
     String? cursor,
     int? limit,
   }) async {
-    if (catalogFault case final fault?) throw fault;
+    catalogAsks++;
+    if (catalogFault case final fault?
+        when catalogFaultOnCall == null || catalogFaultOnCall == catalogAsks) {
+      throw fault;
+    }
+    await catalogGate?.future;
     if (since != null && resetCatalogOnce) {
       resetCatalogOnce = false;
       throw const WaxDeckApiException(
@@ -412,11 +427,25 @@ class _LinkedChannel extends EventsChannel {
       if (subscribed['catalogSince'] != null) 'catalog',
       if (subscribed['serverSince'] != null) 'user',
     ];
+    // Decided as the subscribe is read.
+    var catalogAnswer = link.catalogAnswer;
+    link.subscribed.add(subscribed['catalogSince'] as String?);
+    if (subscribed['catalogSince'] case final String since) {
+      link.presented.add(since);
+      catalogAnswer = link.answerFor?.call(since) ?? catalogAnswer;
+    }
     // Over the wire, so after the connect has resolved.
-    if (topics.isEmpty) return;
+    if (topics.isEmpty || !link.answers) return;
     Timer.run(() {
       for (final topic in topics) {
-        if (_up) onFrame(jsonEncode({'type': 'invalidate', 'topic': topic}));
+        if (!_up) continue;
+        onFrame(
+          jsonEncode({
+            'type': 'invalidate',
+            'topic': topic,
+            if (topic == 'catalog') ...catalogAnswer,
+          }),
+        );
       }
     });
   }
@@ -452,6 +481,24 @@ class _Link {
 
   /// Holds each close until completed, when set.
   Completer<void>? closeGate;
+
+  /// What the server says of the catalog in answer to a cursor, beside the
+  /// frame's type and topic: nothing by default, the bare answer.
+  Map<String, Object?> catalogAnswer = const {};
+
+  /// When set, what the server says of the catalog in answer to the
+  /// cursor presented, in place of [catalogAnswer].
+  Map<String, Object?> Function(String presented)? answerFor;
+
+  /// Every catalog cursor a subscribe presented, in order.
+  final presented = <String>[];
+
+  /// What each subscribe presented of the catalog, null for none.
+  final subscribed = <String?>[];
+
+  /// False drops each socket's answers on the way: the socket goes before
+  /// they arrive.
+  bool answers = true;
 
   final attempts = <_LinkedChannel>[];
 
@@ -3442,6 +3489,577 @@ void main() {
     });
   });
 
+  group('a delta that held nothing', () {
+    // An artist's portrait or an album's cover is in no delta entry, so
+    // the server's word that the catalog moved is all a client gets.
+    test('is still a change when the server said the catalog moved', () async {
+      late void Function(String) deliver;
+      final framed = SyncEngine(
+        db: db,
+        repository: repo,
+        channelFactory: capturingFrames((sink) => deliver = sink),
+      );
+      addTearDown(framed.dispose);
+      await framed.pullCatalog();
+      framed.start();
+      await pumpEventQueue();
+      var changes = 0;
+      final sub = framed.catalogChanged.listen((_) => changes++);
+      addTearDown(sub.cancel);
+      final pulls = repo.catalogCalls;
+
+      deliver(jsonEncode({'type': 'invalidate', 'topic': 'catalog'}));
+      await pumpEventQueue();
+      expect(repo.catalogCalls, pulls + 1, reason: 'the frame pulled');
+      expect(changes, 1);
+
+      deliver(jsonEncode({'type': 'invalidate', 'topic': 'user'}));
+      await pumpEventQueue();
+      expect(changes, 1, reason: 'another topic says nothing of the catalog');
+    });
+
+    // The server answers a subscribe that presents a cursor with a
+    // catalog invalidation saying what changed after it. What changed while
+    // the socket was down may be in no entry, so every answer is a change
+    // but the one saying nothing in the catalog changed.
+
+    /// A connect the server answers with [answer]: the catalog changes it
+    /// reported and the catalog requests it made.
+    Future<({int changes, int pulls})> connectAnswered(
+      Map<String, Object?> answer,
+    ) async {
+      final link = _Link()..catalogAnswer = answer;
+      final live = SyncEngine(
+        db: db,
+        repository: repo,
+        channelFactory: link.factory,
+      )..account = _owner;
+      addTearDown(live.dispose);
+      await live.pullCatalog();
+      var changes = 0;
+      final sub = live.catalogChanged.listen((_) => changes++);
+      addTearDown(sub.cancel);
+      final pulls = repo.catalogCalls;
+
+      await live.start();
+      await pumpEventQueue();
+      expect(live.current.online, isTrue);
+      expect(
+        repo.catalogCalls,
+        greaterThan(pulls),
+        reason: 'every delta read was empty',
+      );
+      return (changes: changes, pulls: repo.catalogCalls - pulls);
+    }
+
+    Future<int> changesOnConnect(Map<String, Object?> answer) async =>
+        (await connectAnswered(answer)).changes;
+
+    // The connect's own walk pulls from the cursor it presented, so an
+    // answer saying nothing changed after it asks for nothing more.
+    test('pulls nothing more on a connect the server answers with nothing '
+        'changed than the connect\'s own walk', () async {
+      expect((await connectAnswered({'unchanged': true})).pulls, 1);
+    });
+
+    test('pulls again on a connect the server answers with nothing named, '
+        'as for a genre', () async {
+      expect((await connectAnswered(const {})).pulls, 2);
+    });
+
+    group('the cursor a subscribe presents', () {
+      /// An engine over [link] with a mirror, counting from its start the
+      /// passes it reports and the answers it says left all current. The
+      /// catalog's reads hand out [cursors] in turn, the first to the
+      /// snapshot that takes the mirror.
+      Future<({SyncEngine live, List<int> changes, List<int> currents})>
+      started(_Link link, List<String> cursors) async {
+        repo.catalogPages.addAll([
+          for (final since in cursors) CatalogSyncPage(nextSince: since),
+        ]);
+        final live = SyncEngine(
+          db: db,
+          repository: repo,
+          channelFactory: link.factory,
+        )..account = _owner;
+        addTearDown(live.dispose);
+        await live.pullCatalog();
+        final changes = [0];
+        final currents = [0];
+        final subs = [
+          live.catalogChanged.listen((_) => changes[0]++),
+          live.catalogCurrent.listen((_) => currents[0]++),
+        ];
+        addTearDown(() => subs.forEach((sub) => sub.cancel()));
+        await live.start();
+        await pumpEventQueue();
+        return (live: live, changes: changes, currents: currents);
+      }
+
+      /// The socket goes, and the next one is up and walked.
+      Future<void> again(_Link link, SyncEngine live) async {
+        if (link.attempts.last.closeCode == null && live.current.online) {
+          link.attempts.last.drop(null);
+        }
+        await pumpEventQueue();
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
+        await live.beforeSync(() async {});
+        await pumpEventQueue();
+        expect(live.current.online, isTrue);
+      }
+
+      /// A server whose catalog stands at [head]: a cursor there is told
+      /// nothing changed, an older one that an artist did.
+      _Link serving(String Function() head) =>
+          _Link()
+            ..answerFor = (since) => since == head()
+                ? {'unchanged': true, 'since': head()}
+                : {
+                    'pids': ['ar-G'],
+                    'since': head(),
+                  };
+
+      test('is the one whose answer was lost when the socket before it went '
+          'before its answer came', () async {
+        final link = serving(() => 'cur-1')..answers = false;
+        final e = await started(link, ['cur-0', 'cur-1', 'cur-1', 'cur-1']);
+        expect(e.changes.single, 0);
+        link.answers = true;
+        await again(link, e.live);
+        expect(link.attempts, hasLength(2));
+        expect(e.changes.single, 1);
+        expect(link.presented, ['cur-0', 'cur-0']);
+        expect(e.currents.single, 0);
+      });
+
+      test('is the one whose answer was not acted on when the pull that '
+          'answer prompted failed', () async {
+        final link = serving(() => 'cur-1');
+        repo
+          ..catalogFault = const WaxDeckApiException(
+            code: 'internal',
+            message: 'down',
+            statusCode: 503,
+          )
+          // The snapshot, the connect's walk, then the answer's pull.
+          ..catalogFaultOnCall = repo.catalogAsks + 3;
+        final e = await started(link, ['cur-0', 'cur-1', 'cur-1', 'cur-1']);
+        expect(e.changes.single, 0, reason: 'the answer\'s pull failed');
+        await again(link, e.live);
+        expect(link.attempts, hasLength(2));
+        expect(e.changes.single, 1);
+        expect(link.presented, ['cur-0', 'cur-0']);
+      });
+
+      test('is where the answer before it covered once that answer was acted '
+          'on', () async {
+        final link = serving(() => 'cur-1');
+        final e = await started(link, ['cur-0', 'cur-1', 'cur-1', 'cur-1']);
+        expect(e.changes.single, 1, reason: 'the answer\'s pull');
+        await again(link, e.live);
+        expect(link.attempts, hasLength(2));
+        expect(e.changes.single, 1);
+        expect(e.currents.single, 1);
+        expect(link.presented, ['cur-0', 'cur-1']);
+      });
+
+      test('is where an answer saying nothing changed covered, past rows '
+          'of users\' own state', () async {
+        final link = _Link()
+          ..answerFor = (_) => {'unchanged': true, 'since': 'cur-9'};
+        final e = await started(link, ['cur-0', 'cur-1', 'cur-1']);
+        await again(link, e.live);
+        expect(e.changes.single, 0);
+        expect(link.presented, ['cur-0', 'cur-9']);
+      });
+
+      /// The session ends and [next] signs in on the same engine, as the
+      /// app does it: stopped, the account cleared, then named and started.
+      Future<void> signIn(SyncEngine live, String next) async {
+        await live.stop();
+        live.account = null;
+        live.account = next;
+        await live.start();
+        await pumpEventQueue();
+        expect(live.current.online, isTrue);
+      }
+
+      test('is none for an account that signs in after another, and its own '
+          'once its first walk has run', () async {
+        var head = 'cur-1';
+        final link = serving(() => head);
+        final e = await started(link, [
+          'cur-0',
+          'cur-1',
+          'cur-1',
+          'cur-2',
+          'cur-2',
+        ]);
+        expect(link.subscribed, ['cur-0']);
+        head = 'cur-2';
+        await signIn(e.live, 'us-2');
+        expect(link.subscribed, ['cur-0', null]);
+        await again(link, e.live);
+        expect(link.subscribed, ['cur-0', null, 'cur-2']);
+        expect(e.currents.single, 1, reason: 'answered nothing changed');
+      });
+
+      test('is where the snapshot stands for an account whose first walk '
+          're-mirrors', () async {
+        final link = serving(() => 'cur-5');
+        final e = await started(link, [
+          'cur-0',
+          'cur-1',
+          'cur-1',
+          'cur-5',
+          'cur-5',
+        ]);
+        repo.resetCatalogOnce = true;
+        await signIn(e.live, 'us-2');
+        await again(link, e.live);
+        expect(link.subscribed, ['cur-0', null, 'cur-5']);
+        expect(e.currents.single, 1);
+      });
+
+      /// A second engine over the same mirror for [owner], as a process
+      /// that starts again.
+      SyncEngine relaunched(_Link link, String owner) {
+        final live = SyncEngine(
+          db: db,
+          repository: repo,
+          channelFactory: link.factory,
+        )..account = owner;
+        addTearDown(live.dispose);
+        return live;
+      }
+
+      test('is none for a process that starts on a mirror another account '
+          'walked last, and its own once its first walk has run', () async {
+        var head = 'cur-1';
+        final link = serving(() => head);
+        final e = await started(link, [
+          'cur-0',
+          'cur-1',
+          'cur-1',
+          'cur-2',
+          'cur-2',
+        ]);
+        await e.live.stop();
+        head = 'cur-2';
+        final next = relaunched(link, 'us-2');
+        await next.start();
+        await pumpEventQueue();
+        expect(link.subscribed, ['cur-0', null]);
+        await again(link, next);
+        expect(link.subscribed, ['cur-0', null, 'cur-2']);
+      });
+
+      test('is the mirror\'s for a process that starts on a mirror the same '
+          'account walked last', () async {
+        final link = serving(() => 'cur-1');
+        final e = await started(link, ['cur-0', 'cur-1', 'cur-1', 'cur-1']);
+        await e.live.stop();
+        final next = relaunched(link, _owner);
+        await next.start();
+        await pumpEventQueue();
+        expect(link.subscribed, ['cur-0', 'cur-1']);
+      });
+
+      test('is not seeded by a walk the last account left queued when the '
+          'next signs in', () async {
+        final link = serving(() => 'cur-b')..answers = false;
+        repo.catalogPages.addAll([
+          for (final since in ['cur-0', 'cur-a', 'cur-b', 'cur-b'])
+            CatalogSyncPage(nextSince: since),
+        ]);
+        final live = relaunched(link, _owner);
+        await live.pullCatalog();
+        repo.catalogGate = Completer<void>();
+        await live.start();
+        await pumpEventQueue();
+        // The last account's walk waits on its catalog read.
+        await signIn(live, 'us-2');
+        repo.catalogGate!.complete();
+        await pumpEventQueue();
+        await live.beforeSync(() async {});
+        link.answers = true;
+        await again(link, live);
+        expect(link.subscribed, ['cur-0', null, 'cur-b']);
+      });
+
+      test('is not seeded by a re-mirror the last account left queued when '
+          'the next signs in', () async {
+        final link = serving(() => 'cur-b')..answers = false;
+        repo.catalogPages.addAll([
+          for (final since in ['cur-0', 'cur-a', 'cur-b', 'cur-b'])
+            CatalogSyncPage(nextSince: since),
+        ]);
+        final live = relaunched(link, _owner);
+        await live.pullCatalog();
+        repo
+          ..catalogGate = Completer<void>()
+          ..resetCatalogOnce = true;
+        await live.start();
+        await pumpEventQueue();
+        await signIn(live, 'us-2');
+        repo.catalogGate!.complete();
+        await pumpEventQueue();
+        await live.beforeSync(() async {});
+        link.answers = true;
+        await again(link, live);
+        expect(link.subscribed, ['cur-0', null, 'cur-b']);
+      });
+
+      test('is kept through a stop and start under one account, as a '
+          'session in doubt restarts the engine', () async {
+        final link = serving(() => 'cur-1');
+        final e = await started(link, ['cur-0', 'cur-1', 'cur-1', 'cur-1']);
+        await e.live.stop();
+        // The preference controller names the account on every build.
+        e.live.account = _owner;
+        await e.live.start();
+        await pumpEventQueue();
+        expect(link.subscribed, ['cur-0', 'cur-1']);
+        expect(e.currents.single, 1);
+      });
+
+      // Its own position: the server binds a cursor to its account's grants,
+      // so this one is still servable, and what it answers is at worst a
+      // pass over lists the sign-in read afresh.
+      test(
+        'is the account\'s own when the same account signs in again',
+        () async {
+          final link = serving(() => 'cur-1');
+          final e = await started(link, ['cur-0', 'cur-1', 'cur-1', 'cur-1']);
+          await signIn(e.live, _owner);
+          expect(link.subscribed, ['cur-0', 'cur-1']);
+          expect(e.currents.single, 1);
+        },
+      );
+
+      test('is not where a walk pulled to past a change whose frame the '
+          'socket went before', () async {
+        var head = 'cur-0';
+        final link = serving(() => head);
+        // The connect's walk pulls past an artist's row, which no entry
+        // carries.
+        final e = await started(link, ['cur-0', 'cur-1', 'cur-1', 'cur-1']);
+        expect(e.currents.single, 1, reason: 'answered nothing changed');
+        expect(e.changes.single, 0, reason: 'the walk saw no entry');
+        head = 'cur-1';
+        await again(link, e.live);
+        expect(link.attempts, hasLength(2));
+        expect(e.changes.single, 1);
+        expect(link.presented, ['cur-0', 'cur-0']);
+      });
+    });
+
+    test('is a change on a connect the server answers with names', () async {
+      expect(
+        await changesOnConnect({
+          'pids': ['al-A'],
+        }),
+        1,
+      );
+    });
+
+    test('is a change on a connect the server answers with entities changed '
+        'unnamed', () async {
+      expect(await changesOnConnect({'unnamed': true}), 1);
+    });
+
+    test('is no change on a connect the server answers with nothing changed '
+        'after the cursor', () async {
+      expect(await changesOnConnect({'unchanged': true}), 0);
+    });
+
+    test('is a change on a connect the server answers with nothing named '
+        'and nothing unnamed, as for a genre', () async {
+      expect(await changesOnConnect(const {}), 1);
+    });
+
+    test('is a change on a connect the server answers with unchanged that '
+        'does not read as true', () async {
+      expect(await changesOnConnect({'unchanged': 'true'}), 1);
+    });
+
+    test('is a change on a connect the server answers with names that do '
+        'not read as names', () async {
+      expect(await changesOnConnect({'pids': 'al-A'}), 1);
+    });
+
+    test(
+      'is a change for a frame after an answer with nothing changed',
+      () async {
+        final link = _Link()..catalogAnswer = {'unchanged': true};
+        final live = SyncEngine(
+          db: db,
+          repository: repo,
+          channelFactory: link.factory,
+        )..account = _owner;
+        addTearDown(live.dispose);
+        await live.pullCatalog();
+        var changes = 0;
+        final sub = live.catalogChanged.listen((_) => changes++);
+        addTearDown(sub.cancel);
+        await live.start();
+        await pumpEventQueue();
+        expect(changes, 0);
+
+        link.attempts.last.onFrame(
+          jsonEncode({'type': 'invalidate', 'topic': 'catalog'}),
+        );
+        await pumpEventQueue();
+        expect(changes, 1);
+      },
+    );
+
+    test('is no change after a pull no frame prompted', () async {
+      await engine.pullCatalog();
+      var changes = 0;
+      final sub = engine.catalogChanged.listen((_) => changes++);
+      addTearDown(sub.cancel);
+
+      await engine.pullCatalog();
+      await engine.reconcile();
+      await pumpEventQueue();
+      expect(changes, 0);
+    });
+  });
+
+  group('a catalog frame', () {
+    late void Function(String) deliver;
+    late SyncEngine framed;
+
+    /// What the engine said, in order.
+    late List<Object> heard;
+
+    setUp(() async {
+      framed = SyncEngine(
+        db: db,
+        repository: repo,
+        channelFactory: capturingFrames((sink) => deliver = sink),
+      );
+      addTearDown(framed.dispose);
+      await framed.pullCatalog();
+      framed.start();
+      await pumpEventQueue();
+      heard = [];
+      final named = framed.catalogNamed.listen(
+        (names) => heard.add(names.unnamed ? 'unnamed' : names.pids),
+      );
+      final changed = framed.catalogChanged.listen((_) => heard.add('changed'));
+      addTearDown(named.cancel);
+      addTearDown(changed.cancel);
+    });
+
+    void say(Object? pids, {Object? unnamed}) => deliver(
+      jsonEncode({
+        'type': 'invalidate',
+        'topic': 'catalog',
+        'pids': ?pids,
+        'unnamed': ?unnamed,
+      }),
+    );
+
+    test('that left entities unnamed says so before the change', () async {
+      say(null, unnamed: true);
+      await pumpEventQueue();
+      expect(heard, ['unnamed', 'changed']);
+    });
+
+    test('whose marker does not read as one is a plain one', () async {
+      say(null, unnamed: false);
+      say(null, unnamed: 'true');
+      say(null, unnamed: 1);
+      await pumpEventQueue();
+      expect(heard, ['changed', 'changed', 'changed']);
+    });
+
+    test('that carries the marker beside names is unnamed: they are not all '
+        'of them', () async {
+      say(['al-AAA'], unnamed: true);
+      await pumpEventQueue();
+      expect(heard, ['unnamed', 'changed']);
+    });
+
+    test('says nothing of names for another topic', () async {
+      deliver(
+        jsonEncode({'type': 'invalidate', 'topic': 'user', 'unnamed': true}),
+      );
+      await pumpEventQueue();
+      expect(heard, isEmpty);
+    });
+
+    // A replaced or repaired catalog can change any cover.
+    for (final topic in ['catalog', null]) {
+      test('beside it, a resync of ${topic ?? 'every stream'} says entities '
+          'went unnamed before the change its re-mirror ends in', () async {
+        deliver(jsonEncode({'type': 'resync', 'topic': ?topic}));
+        await pumpEventQueue();
+        expect(heard.first, 'unnamed');
+        expect(heard.skip(1), isNotEmpty);
+        expect(heard.skip(1), everyElement('changed'));
+      });
+    }
+
+    test('beside it, a resync of the user stream says nothing of '
+        'names', () async {
+      deliver(jsonEncode({'type': 'resync', 'topic': 'user'}));
+      await pumpEventQueue();
+      expect(heard, isNot(contains('unnamed')));
+    });
+
+    test('that names what moved says the names before the change', () async {
+      say(['al-AAA', 'tr-BBB']);
+      await pumpEventQueue();
+      expect(heard, [
+        ['al-AAA', 'tr-BBB'],
+        'changed',
+      ]);
+    });
+
+    test('that names nothing says only the change', () async {
+      say(null);
+      await pumpEventQueue();
+      expect(heard, ['changed']);
+    });
+
+    test('whose names do not read as names is a plain one', () async {
+      say('al-AAA');
+      say(['al-AAA', 7]);
+      say(<String>[]);
+      say({'al-AAA': true});
+      await pumpEventQueue();
+      expect(heard, ['changed', 'changed', 'changed', 'changed']);
+    });
+
+    test('says its names as it arrives, a pull under way or not', () async {
+      final gate = repo.catalogGate = Completer<void>();
+      say(['al-AAA']);
+      await pumpEventQueue();
+      expect(heard, [
+        ['al-AAA'],
+      ], reason: 'the names do not wait on the pull');
+
+      say(['ar-BBB']);
+      say(null, unnamed: true);
+      say(['al-AAA', 'tr-CCC']);
+      await pumpEventQueue();
+      expect(heard, [
+        ['al-AAA'],
+        ['ar-BBB'],
+        'unnamed',
+        ['al-AAA', 'tr-CCC'],
+      ], reason: 'each frame its own word, none held behind the pull');
+
+      repo.catalogGate = null;
+      gate.complete();
+      await pumpEventQueue();
+      expect(heard.sublist(4), ['changed', 'changed', 'changed', 'changed']);
+    });
+  });
+
   test('the outbox replays in order with recorded times', () async {
     await engine.queueCheckpoint('tr-A', 5000);
     await engine.queueStar('tr-A', true);
@@ -4092,6 +4710,76 @@ void main() {
       });
     }
 
+    test('the network back while it waits to reconnect connects now, and '
+        'its waits start over', () async {
+      link.reachable = false;
+      await live.start();
+      await pumpEventQueue();
+      // A second, then two: the next wait would be four.
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(link.attempts, hasLength(2));
+
+      live.networkBack();
+      await pumpEventQueue();
+      expect(link.attempts, hasLength(3), reason: 'at once');
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(link.attempts, hasLength(4), reason: 'a second on, not four');
+
+      link.reachable = true;
+      live.networkBack();
+      await pumpEventQueue();
+      expect(link.attempts, hasLength(5));
+      expect(live.current.online, isTrue);
+    });
+
+    test(
+      'the network back leaves a socket that is up, or on its way, be',
+      () async {
+        await connected();
+        live.networkBack();
+        await pumpEventQueue();
+        expect(link.attempts, hasLength(1));
+
+        final gate = link.gate = Completer<void>();
+        link.attempts.last.drop(null);
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
+        expect(link.attempts, hasLength(2), reason: 'its reconnect, held');
+        live.networkBack();
+        await pumpEventQueue();
+        expect(link.attempts, hasLength(2));
+        link.gate = null;
+        gate.complete();
+        await pumpEventQueue();
+        expect(live.current.online, isTrue);
+      },
+    );
+
+    test(
+      'the network back says whether the socket stood up through it',
+      () async {
+        await connected();
+        expect(live.networkBack(), isTrue, reason: 'nothing comes to catch up');
+
+        link.reachable = false;
+        link.attempts.last.drop(null);
+        await pumpEventQueue();
+        expect(live.networkBack(), isFalse, reason: 'it tries now');
+        await pumpEventQueue();
+        expect(link.attempts, hasLength(2));
+
+        final gate = link.gate = Completer<void>();
+        link.reachable = true;
+        expect(live.networkBack(), isFalse, reason: 'it tries now');
+        await pumpEventQueue();
+        expect(live.networkBack(), isFalse, reason: 'it is on its way up');
+        link.gate = null;
+        gate.complete();
+        await pumpEventQueue();
+        expect(live.current.online, isTrue);
+        expect(live.networkBack(), isTrue);
+      },
+    );
+
     test('a walk that goes through starts the waits over: the next drop is '
         'tried again a second later', () async {
       await connected();
@@ -4321,6 +5009,298 @@ void main() {
       expect(link.attempts, hasLength(2));
       expect(live.current.online, isTrue);
       expect(live.sendControl(const {'type': 'ping'}), isTrue);
+    });
+  });
+
+  group('whether the engine is past a failure', () {
+    late _Link link;
+    late SyncEngine live;
+    late List<(SyncConnection, bool)> said;
+    late StreamSubscription<SyncStatus> heard;
+
+    (SyncConnection, bool) now() =>
+        (live.current.connection, live.current.retrying);
+
+    setUp(() {
+      link = _Link();
+      said = [];
+      live = SyncEngine(db: db, repository: repo, channelFactory: link.factory)
+        ..account = _owner;
+      heard = live.status.listen(
+        (status) => said.add((status.connection, status.retrying)),
+      );
+    });
+
+    tearDown(() async {
+      await heard.cancel();
+      live.dispose();
+    });
+
+    /// The reconnect a second after a failure, held at its connect.
+    Future<Completer<void>> retryHeld() async {
+      final gate = link.gate = Completer<void>();
+      final before = link.attempts.length;
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(link.attempts, hasLength(before + 1));
+      return gate;
+    }
+
+    test('a first connect still out has failed nothing', () async {
+      final gate = link.gate = Completer<void>();
+      expect(now(), (SyncConnection.offline, false), reason: 'never started');
+
+      await live.start();
+      await pumpEventQueue();
+      expect(now(), (SyncConnection.connecting, false));
+
+      gate.complete();
+      await pumpEventQueue();
+      expect(now(), (SyncConnection.connected, false));
+      expect(said.where((status) => status.$2), isEmpty);
+    });
+
+    test('a connect that fails is one through the wait and the retry, until '
+        'a connect answers', () async {
+      link.reachable = false;
+      await live.start();
+      await pumpEventQueue();
+      expect(now(), (SyncConnection.offline, true));
+
+      final gate = await retryHeld();
+      expect(now(), (SyncConnection.connecting, true));
+
+      link.reachable = true;
+      gate.complete();
+      await pumpEventQueue();
+      expect(now(), (SyncConnection.connected, false));
+      // Nothing between the failure and the connect said otherwise.
+      final failed = said.indexOf((SyncConnection.offline, true));
+      final up = said.indexOf((SyncConnection.connected, false));
+      expect(failed, greaterThan(-1));
+      expect(
+        said.sublist(failed, up),
+        everyElement(
+          isA<(SyncConnection, bool)>().having((s) => s.$2, 'retrying', true),
+        ),
+      );
+    });
+
+    test('a link that drops goes straight to offline, and is one until the '
+        'socket is up again', () async {
+      await live.start();
+      await pumpEventQueue();
+      expect(now(), (SyncConnection.connected, false));
+
+      link.attempts.last.drop(null);
+      expect(now(), (SyncConnection.offline, true));
+
+      final gate = await retryHeld();
+      expect(now(), (SyncConnection.connecting, true));
+
+      gate.complete();
+      await pumpEventQueue();
+      expect(now(), (SyncConnection.connected, false));
+    });
+
+    test('a socket the server closes as ended is none: the server answered, '
+        'and the session is put in doubt all the same', () async {
+      var doubts = 0;
+      live.onSessionInDoubt = () => doubts++;
+      await live.start();
+      await pumpEventQueue();
+      expect(now(), (SyncConnection.connected, false));
+
+      link.attempts.last.drop(sessionEndedCloseCode);
+      expect(now(), (SyncConnection.offline, false));
+      expect(doubts, 1);
+
+      final gate = await retryHeld();
+      expect(now(), (SyncConnection.connecting, false));
+      expect(said.where((status) => status.$2), isEmpty);
+
+      gate.complete();
+      await pumpEventQueue();
+      expect(now(), (SyncConnection.connected, false));
+    });
+
+    test('a reconnect refused for want of a session is none, and ends the '
+        'one the drop before it began', () async {
+      var doubts = 0;
+      live.onSessionInDoubt = () => doubts++;
+      await live.start();
+      await pumpEventQueue();
+
+      link.attempts.last.drop(null);
+      expect(now(), (SyncConnection.offline, true));
+      expect(doubts, 0);
+
+      link.refusal = const UpgradeRefused(401);
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(link.attempts, hasLength(2));
+      expect(now(), (SyncConnection.offline, false));
+      expect(doubts, 1);
+      expect(live.started, isTrue);
+    });
+
+    test('a start told the server was out of reach, whose connect the server '
+        'refuses for want of a session, is none from that answer', () async {
+      var doubts = 0;
+      live.onSessionInDoubt = () => doubts++;
+      link.refusal = const UpgradeRefused(401);
+      await live.start(unreached: true);
+      await pumpEventQueue();
+      expect(said, [
+        (SyncConnection.connecting, true),
+        (SyncConnection.offline, false),
+      ]);
+      expect(doubts, 1);
+    });
+
+    for (final (failure, what) in <(Object, String)>[
+      (const SocketException('connection refused'), 'refused'),
+      (
+        TimeoutException('the sync channel did not finish connecting'),
+        'timed out',
+      ),
+      (const UpgradeRefused(502), 'answered by a proxy whose server is down'),
+    ]) {
+      test('a link that drops and a reconnect $what are one, through the '
+          'wait, until a connect answers', () async {
+        var doubts = 0;
+        live.onSessionInDoubt = () => doubts++;
+        await live.start();
+        await pumpEventQueue();
+
+        link.attempts.last.drop(null);
+        expect(now(), (SyncConnection.offline, true));
+
+        link.refusal = failure;
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
+        expect(link.attempts, hasLength(2));
+        expect(now(), (SyncConnection.offline, true));
+
+        // The next wait is two seconds.
+        link.refusal = null;
+        final gate = link.gate = Completer<void>();
+        await Future<void>.delayed(const Duration(milliseconds: 2200));
+        expect(link.attempts, hasLength(3));
+        expect(now(), (SyncConnection.connecting, true));
+        gate.complete();
+        await pumpEventQueue();
+        expect(now(), (SyncConnection.connected, false));
+        expect(doubts, 0);
+      });
+
+      test('a first connect $what is one', () async {
+        link.refusal = failure;
+        await live.start();
+        await pumpEventQueue();
+        expect(now(), (SyncConnection.offline, true));
+      });
+    }
+
+    test('a stop is none, and the start after it has failed nothing', () async {
+      link.reachable = false;
+      await live.start();
+      await pumpEventQueue();
+      expect(now(), (SyncConnection.offline, true));
+
+      await live.stop();
+      expect(now(), (SyncConnection.offline, false));
+
+      link.gate = Completer<void>();
+      await live.start();
+      expect(now(), (SyncConnection.connecting, false));
+    });
+
+    test('a start in the turn of a stop has failed nothing either', () async {
+      link.reachable = false;
+      await live.start();
+      await pumpEventQueue();
+      expect(now(), (SyncConnection.offline, true));
+
+      link.gate = Completer<void>();
+      final stopped = live.stop();
+      await live.start();
+      expect(now(), (SyncConnection.connecting, false));
+      await stopped;
+      await pumpEventQueue();
+      expect(now(), (SyncConnection.connecting, false));
+    });
+
+    test('a start told the server was already found out of reach is one '
+        'from that start, until a connect answers', () async {
+      final gate = link.gate = Completer<void>();
+      await live.start(unreached: true);
+      expect(now(), (SyncConnection.connecting, true));
+      await pumpEventQueue();
+      expect(now(), (SyncConnection.connecting, true));
+      expect(said, [(SyncConnection.connecting, true)]);
+
+      gate.complete();
+      await pumpEventQueue();
+      expect(now(), (SyncConnection.connected, false));
+    });
+
+    test('a start told so whose connect fails stays one, and a stop ends '
+        'it: the start after it is told afresh', () async {
+      link.reachable = false;
+      await live.start(unreached: true);
+      await pumpEventQueue();
+      expect(said, [
+        (SyncConnection.connecting, true),
+        (SyncConnection.offline, true),
+      ]);
+
+      await live.stop();
+      expect(now(), (SyncConnection.offline, false));
+
+      link.gate = Completer<void>();
+      await live.start();
+      expect(now(), (SyncConnection.connecting, false));
+    });
+
+    test(
+      'an engine already running is told nothing by a second start',
+      () async {
+        await live.start();
+        await pumpEventQueue();
+        expect(now(), (SyncConnection.connected, false));
+
+        await live.start(unreached: true);
+        // A walk, which says the status again.
+        said.clear();
+        await live.reconcile();
+        await pumpEventQueue();
+        expect(said, [(SyncConnection.connected, false)]);
+      },
+    );
+
+    test('ends at the upgrade, not at a walk that went through: a socket '
+        'that comes up over a server failing every pull reads up, then '
+        'failed, at each attempt', () async {
+      repo.catalogFault = const WaxDeckApiException(
+        code: 'internal',
+        message: 'the database is locked',
+        statusCode: 500,
+      );
+      await live.start();
+      await pumpEventQueue();
+      expect(said, [
+        (SyncConnection.connecting, false),
+        (SyncConnection.connected, false),
+        (SyncConnection.offline, true),
+      ]);
+
+      said.clear();
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      await pumpEventQueue();
+      expect(link.attempts, hasLength(2));
+      expect(said, [
+        (SyncConnection.connecting, true),
+        (SyncConnection.connected, false),
+        (SyncConnection.offline, true),
+      ]);
     });
   });
 

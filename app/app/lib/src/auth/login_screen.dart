@@ -13,6 +13,7 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'auth_controller.dart';
+import 'reach_again.dart';
 
 /// Configured single-sign-on providers, for rendering login buttons. An
 /// unreachable server hides the buttons rather than erroring the form.
@@ -53,13 +54,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _error = null;
     });
     try {
-      await ref
+      final shown = await ref
           .read(authControllerProvider.notifier)
           .login(username: _username.text, password: _password.text);
       // On success the root gate unmounts this screen; nothing else to do.
+      if (!shown) _overtaken();
     } on WaxDeckApiException catch (e) {
       _refused(from, _signInError(l10n, e, l10n.authSignInRejected));
     }
+  }
+
+  /// A sign-in overtaken before it showed leaves the form as it was before
+  /// the press: whatever came instead may have left nobody signed in.
+  void _overtaken() {
+    if (mounted) setState(() => _submitting = false);
   }
 
   /// Says [error] under the form while this page is still there, else
@@ -94,9 +102,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _error = null;
     });
     try {
-      await ref.read(authControllerProvider.notifier).loginWithOidc(provider);
+      final shown = await ref
+          .read(authControllerProvider.notifier)
+          .loginWithOidc(provider);
       // Web: the browser is navigating away, keep the spinner. Native: on
       // success the root gate unmounts this screen.
+      if (!shown) _overtaken();
     } on WaxDeckApiException catch (e) {
       _refused(from, _signInError(l10n, e, l10n.authSsoFailed));
     } on TimeoutException {
@@ -113,11 +124,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(reachAgainProvider);
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final oidcProviders =
         ref.watch(oidcProvidersProvider).value ?? const <OidcProvider>[];
     final signupEnabled = ref.watch(signupEnabledProvider).value ?? false;
+    // The form's own refusal, else that the last session read did not
+    // reach the server, until one does. Not over a sign-in in flight,
+    // whose answer is the newer word.
+    final said =
+        _error ??
+        switch (ref.watch(authControllerProvider).error) {
+          final WaxDeckApiException lost
+              when lost.unreachable && !_submitting =>
+            explainError(l10n, lost),
+          _ => null,
+        };
     return ShellMessageArea(
       child: Scaffold(
         body: WaxPlainTextStyle(
@@ -160,11 +183,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         onSubmitted: (_) => _submit(),
                       ),
                       const SizedBox(height: WaxSpace.s24),
-                      if (_error != null) ...[
+                      if (said != null) ...[
                         Semantics(
                           identifier: SemanticsIds.loginError,
                           child: Text(
-                            _error!,
+                            said,
                             key: const Key(SemanticsIds.loginError),
                             style: WaxType.body.copyWith(color: colors.error),
                             textAlign: TextAlign.center,

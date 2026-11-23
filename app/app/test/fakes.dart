@@ -427,6 +427,18 @@ class FakeArtworkStore extends ArtworkStore {
   @override
   Future<void> evict(String artUrl) async => evicted.add(artUrl);
 
+  /// How many times this store was told every cover may have changed.
+  var evictedAll = 0;
+
+  @override
+  Future<void> evictAll() async => evictedAll++;
+
+  /// How many times this store was told every cover is owed a fresh ask.
+  var owedEvictAll = 0;
+
+  @override
+  void oweEvictAll() => owedEvictAll++;
+
   var forgotten = 0;
 
   @override
@@ -465,11 +477,18 @@ EventsChannelFactory deadChannelFactory() {
 class FakeLink {
   bool reachable = true;
 
+  /// Holds each attempt until completed, when set.
+  Completer<void>? gate;
+
   /// What each attempt fails with while set, as a server that answers the
   /// upgrade without taking it.
   Object? refusal;
 
   final attempts = <LinkedChannel>[];
+
+  /// What the server says of the catalog in answer to a cursor, beside
+  /// the frame's type and topic: nothing by default, the bare answer.
+  Map<String, Object?> catalogAnswer = const {};
 
   EventsChannelFactory get factory =>
       ({required onFrame, required onDone, required subscribe}) {
@@ -501,15 +520,20 @@ class LinkedChannel extends EventsChannel {
   /// Every frame sent on it, in order.
   final sent = <String>[];
 
+  /// What its subscribe said, once sent.
+  Map<String, Object?>? subscribed;
+
   @override
   int? get closeCode => _code;
 
   @override
   Future<void> connect() async {
+    await _link.gate?.future;
     if (_link.refusal case final refusal?) throw refusal;
     if (!_link.reachable) throw Exception('unreachable');
     _up = true;
-    final subscribed = jsonDecode(await subscribe()) as Map<String, Object?>;
+    final subscribed = this.subscribed =
+        jsonDecode(await subscribe()) as Map<String, Object?>;
     final topics = [
       if (subscribed['catalogSince'] != null) 'catalog',
       if (subscribed['serverSince'] != null) 'user',
@@ -518,7 +542,14 @@ class LinkedChannel extends EventsChannel {
     if (topics.isEmpty) return;
     Timer.run(() {
       for (final topic in topics) {
-        if (_up) onFrame(jsonEncode({'type': 'invalidate', 'topic': topic}));
+        if (!_up) continue;
+        onFrame(
+          jsonEncode({
+            'type': 'invalidate',
+            'topic': topic,
+            if (topic == 'catalog') ..._link.catalogAnswer,
+          }),
+        );
       }
     });
   }

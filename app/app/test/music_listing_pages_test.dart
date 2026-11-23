@@ -2,11 +2,62 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/metadata/metadata_controller.dart';
+import 'package:waxdeck/src/metadata/metadata_form.dart';
+import 'package:waxdeck/src/metadata/metadata_screen.dart';
+import 'package:waxdeck/src/music/index_screen.dart';
+import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'app_host.dart';
 import 'fakes.dart';
+
+const _noGenre = FacetBucket(key: '', label: '', count: 2, unknown: true);
+
+/// A library that files a track under the genre it is given, as the
+/// server does: out of the unknown bucket's listing, into the genre's
+/// bucket.
+class _Genres extends FakeRepository {
+  _Genres({super.sessionState, super.items});
+
+  @override
+  Future<MetadataEditResult> editItemMetadata(
+    String pid, {
+    required Map<String, String> fields,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  }) async {
+    final result = await super.editItemMetadata(
+      pid,
+      fields: fields,
+      writeBack: writeBack,
+      lock: lock,
+      force: force,
+    );
+    final genre = fields['genre'];
+    if (genre == null || genre.isEmpty) return result;
+    final unfiled = facetItems['genre ']!;
+    facetItems['genre '] = [
+      for (final item in unfiled)
+        if (item.pid != pid) item,
+    ];
+    facets['genre'] = [
+      FacetBucket(key: '01JZX$genre', label: genre, count: 1),
+      FacetBucket(
+        key: '',
+        label: '',
+        count: facetItems['genre ']!.length,
+        unknown: true,
+      ),
+    ];
+    return result;
+  }
+}
 
 /// A listing page can come back empty and still carry a cursor: the
 /// server drops rows the caller may not see after it cuts the page. A
@@ -114,6 +165,78 @@ void main() {
     await pumpEventQueue();
 
     expect(repo.listItemsCalls, hasLength(1), reason: 'nobody is reading');
+  });
+
+  testWidgets('a track given a genre leaves the no-genre listing under its '
+      'editor, and the genre index under that follows', (tester) async {
+    tester.view.physicalSize = const Size(900, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    const edited = 'tr-01JZX5N8QW3F4V9T2B7KDGENRE1';
+    final unfiled = [
+      testItem(edited, title: 'Unfiled One'),
+      testItem('tr-01JZX5N8QW3F4V9T2B7KDGENRE2', title: 'Unfiled Two'),
+    ];
+    final repo =
+        _Genres(
+            sessionState: const SessionState(
+              authenticated: true,
+              user: WaxDeckUser(
+                id: 'us-1',
+                username: 'admin',
+                roles: ['admin'],
+              ),
+            ),
+            items: unfiled,
+          )
+          ..facets['genre'] = [_noGenre]
+          ..facetItems['genre '] = unfiled;
+    final container = await pumpApp(
+      tester,
+      const Scaffold(),
+      container: appContainer(repo: repo),
+    );
+    final router = GoRouter.of(tester.element(find.byType(Scaffold)))
+      ..go(WaxRoute.musicBucket(MusicDimension.genres, musicUnknownSegment));
+    await tester.pumpAndSettle();
+    expect(find.byType(MusicListingScreen), findsOneWidget);
+    expect(find.byType(MusicIndexScreen, skipOffstage: false), findsOneWidget);
+    expect(find.text('Unfiled One'), findsOneWidget);
+
+    unawaited(router.push<void>(WaxRoute.metadata(edited)));
+    await tester.pumpAndSettle();
+    expect(find.byType(MetadataScreen), findsOneWidget);
+    Iterable<ListItemsCall> listingReads() => repo.listItemsCalls.where(
+      (call) => call.facet == 'genre' && call.facetKey == '' && call.limit != 1,
+    );
+    int indexReads() =>
+        repo.facetReads.where((read) => read.dimension == 'genre').length;
+    final listedBefore = listingReads().length;
+    final indexedBefore = indexReads();
+
+    final outcome = await container
+        .read(metadataControllerProvider(edited).notifier)
+        .saveAll(
+          const MetadataChanges(fields: {'genre': 'Drone'}),
+          writeBack: false,
+          lock: true,
+          force: false,
+        );
+    expect(outcome.refusal, isNull);
+    await tester.pumpAndSettle();
+
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(MusicListingScreen), findsOneWidget);
+    expect(find.text('Unfiled One'), findsNothing);
+    expect(find.text('Unfiled Two'), findsOneWidget);
+    expect(listingReads(), hasLength(listedBefore + 1));
+
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(MusicIndexScreen), findsOneWidget);
+    expect(indexReads(), indexedBefore + 1);
+    expect(find.text('Drone'), findsOneWidget);
   });
 
   test('reading a listing through does not stop at an empty page', () async {

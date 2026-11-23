@@ -59,6 +59,7 @@ type Renderer struct {
 	// pay for a byte nothing asserts on.
 	fetch     bool
 	sink      []string
+	posHold   *posHold
 	actions   []Action
 	uris      []string
 	metaByURI map[string]string
@@ -140,6 +141,27 @@ func (r *Renderer) FaultNextSetURI(code int, desc string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.uriFaultCode, r.uriFaultDesc = code, desc
+}
+
+// posHold is one GetPositionInfo answer held back: reached closes once
+// the position is read, and the answer goes out when release closes.
+type posHold struct {
+	reached chan struct{}
+	release chan struct{}
+}
+
+// HoldNextPositionRead makes the next GetPositionInfo read the position
+// and then wait for release before it answers: a poll that read the
+// renderer before a command and reports after it. Release is safe to
+// call more than once; a test registers it as cleanup, since Kill waits
+// for the held answer.
+func (r *Renderer) HoldNextPositionRead() (reached <-chan struct{}, release func()) {
+	h := &posHold{reached: make(chan struct{}), release: make(chan struct{})}
+	r.mu.Lock()
+	r.posHold = h
+	r.mu.Unlock()
+	var once sync.Once
+	return h.reached, func() { once.Do(func() { close(h.release) }) }
 }
 
 // SetSink replaces the protocolInfo entries GetProtocolInfo reports.
@@ -281,6 +303,16 @@ func (r *Renderer) serveControl(w http.ResponseWriter, req *http.Request, servic
 	r.mu.Unlock()
 
 	out, code, desc := r.dispatch(service, action, args)
+	if action == "GetPositionInfo" {
+		r.mu.Lock()
+		h := r.posHold
+		r.posHold = nil
+		r.mu.Unlock()
+		if h != nil {
+			close(h.reached)
+			<-h.release
+		}
+	}
 	if code != 0 {
 		writeFault(w, code, desc)
 		return

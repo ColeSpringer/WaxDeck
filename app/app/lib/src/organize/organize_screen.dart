@@ -11,6 +11,7 @@ import '../providers.dart';
 import '../shell/async_box_face.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import '../sync/catalog_writes.dart';
 import 'organize_labels.dart';
 import 'profile_editor_sheet.dart';
 
@@ -213,10 +214,13 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     if (!confirmed || !mounted) return;
     setState(() => _busy = _applying = true);
     final messenger = ref.read(shellMessengerProvider);
+    final writes = ref.read(catalogWritesProvider);
     try {
       final report = await ref
           .read(repositoryProvider)
           .applyOrganize(profile: profile.isEmpty ? null : profile);
+      // The run has ended when it answers: the files have moved.
+      writes.landed();
       if (mounted) {
         setState(() {
           _report = report;
@@ -253,10 +257,12 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     if (!confirmed || !mounted) return;
     setState(() => _busy = true);
     final messenger = ref.read(shellMessengerProvider);
+    final writes = ref.read(catalogWritesProvider);
     try {
       final report = await ref
           .read(repositoryProvider)
           .undoOrganize(run.jobPid);
+      writes.landed();
       messenger.show(l10n.organizeUndone(report.moved));
       if (mounted) {
         setState(() {

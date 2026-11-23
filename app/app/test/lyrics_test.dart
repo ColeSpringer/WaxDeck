@@ -12,6 +12,7 @@ import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/side_panel.dart';
+import 'package:waxdeck/src/sync/catalog_reads.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -266,6 +267,57 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(engine.position, const Duration(seconds: 12));
+  });
+
+  testWidgets('a reader who scrolled away stays there when a catalog '
+      'change reads the same words again, and other words reset them', (
+    tester,
+  ) async {
+    _phone(tester);
+    Lyrics words(String of) => Lyrics(
+      pid: _pid,
+      source: 'lrc',
+      synced: <SyncedLine>[
+        for (var i = 0; i < 60; i++)
+          SyncedLine(timeMs: i * 1000, text: '$of $i'),
+      ],
+    );
+    final repo = FakeRepository()..lyrics[_pid] = words('Line');
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+      item: testItem(_pid),
+      host: (player) => routedHost(player),
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerLyrics));
+    await tester.pumpAndSettle();
+    final list = find.descendant(
+      of: find.byType(LyricsView),
+      matching: find.byType(Scrollable),
+    );
+    double offset() => tester.state<ScrollableState>(list).position.pixels;
+    await tester.drag(list, const Offset(0, -400));
+    await tester.pumpAndSettle();
+    final away = offset();
+    final follow = find.bySemanticsIdentifier(SemanticsIds.lyricsFollow);
+    expect(away, greaterThan(0));
+    expect(follow, findsOneWidget);
+    final asked = repo.lyricsCalls.length;
+
+    // The registry's sweep, as a hint's pass and a write here both make it.
+    harness.container.read(catalogFanOutProvider).sweep(CatalogRefresh.head);
+    await tester.pumpAndSettle();
+    expect(repo.lyricsCalls, hasLength(asked + 1), reason: 'read again');
+    expect(offset(), away);
+    expect(follow, findsOneWidget);
+
+    repo.lyrics[_pid] = words('Verse');
+    harness.container.read(catalogFanOutProvider).sweep(CatalogRefresh.head);
+    await tester.pumpAndSettle();
+    expect(find.text('Verse 0'), findsOneWidget);
+    expect(offset(), isNot(away));
+    expect(follow, findsNothing);
   });
 
   testWidgets('and the queue beside it does the same', (tester) async {

@@ -1,10 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/artwork/artwork_store.dart';
+import 'package:waxdeck/src/artwork/artwork_store_io.dart';
 import 'package:waxdeck/src/connectivity/connectivity_port.dart';
+import 'package:waxdeck/src/downloads/download_state.dart';
 import 'package:waxdeck/src/downloads/downloads_controller.dart';
 import 'package:waxdeck/src/downloads/downloads_screen.dart';
+import 'package:waxdeck/src/downloads/held_covers.dart';
 import 'package:waxdeck/src/downloads/wifi_only_gate.dart';
 import 'package:waxdeck/src/music/album_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
@@ -21,12 +27,16 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'app_host.dart';
+import 'artwork_fixtures.dart';
 import 'fakes.dart';
 
 const _track = 'tr-01JZX5N8QW3F4V9T2B7KDTRACK1';
 const _episode = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
 const _book = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
 const _album = 'al-01JZX5N8QW3F4V9T2B7KDALBUM1';
+const _base = 'http://deck.local:4420';
+const _trackArt = '$_base/api/v1/items/$_track/art';
+const _bookArt = '$_base/api/v1/items/$_book/art';
 
 DownloadedItem _stored(String pid, {int bytes = 4194304, int files = 1}) =>
     DownloadedItem(pid: pid, sizeBytes: bytes, files: files, complete: true);
@@ -85,9 +95,11 @@ void main() {
     Map<String, int> positions = const <String, int>{},
     Set<String> finished = const <String>{},
     WifiOnlyGate? gate,
+    MirrorDatabase? mirror,
+    ArtworkStore? store,
   }) async {
     downloads.setStored(stored);
-    final db = await _mirror();
+    final db = mirror ?? await _mirror();
     for (final entry in positions.entries) {
       await db
           .into(db.mirrorPlayStates)
@@ -99,7 +111,7 @@ void main() {
             ),
           );
     }
-    final repo = FakeRepository();
+    final repo = ArtUnderBase(_base);
     await pumpApp(
       tester,
       const DownloadsScreen(),
@@ -107,7 +119,7 @@ void main() {
         repo: repo,
         mirror: db,
         downloads: downloads,
-        artwork: artwork,
+        artwork: store ?? artwork,
         sync: SyncEngine(
           db: db,
           repository: repo,
@@ -854,6 +866,271 @@ void main() {
     });
   });
 
+  group('covers pinned for offline', () {
+    MediaTileData row(WidgetTester tester) =>
+        tester.widget<MediaListRow>(find.byType(MediaListRow)).data;
+
+    testWidgets('a row with nothing pinned draws its monogram and asks for '
+        'nothing', (tester) async {
+      await pump(tester, stored: <DownloadedItem>[_stored(_track)]);
+
+      expect(row(tester).artwork, isNull);
+      expect(artwork.requested, isEmpty);
+    });
+
+    group('with the real store', () {
+      // Built outside the test's fake clock, as the walk awaits the mirror
+      // from real time and a database opened under the fake one never
+      // answers it there.
+      var reach = false;
+      late Directory temp;
+      late MirrorDatabase db;
+      late FakeArtServer server;
+      late FakeArtCache cache;
+      late CachedArtworkStore store;
+
+      setUp(() async {
+        temp = Directory.systemTemp.createTempSync('waxdeck-downloads');
+        db = await _mirror();
+        // The walk asks about a pin only for an item the device holds.
+        await db
+            .into(db.downloadRecords)
+            .insert(
+              DownloadRecordsCompanion.insert(
+                pid: _track,
+                fileIndex: 0,
+                essenceHash: 'essence',
+                etag: '1-1',
+                fileName: 'track.flac',
+                localPath: '/downloads/track.flac',
+                sizeBytes: 4194304,
+                state: 'complete',
+              ),
+            );
+        final pins = DriftArtworkPinStore(db);
+        final old = await artPng(40);
+        for (final rung in kOfflineArtworkRungs) {
+          final file = File('${temp.path}/$rung.img')..writeAsBytesSync(old);
+          await pins.put(
+            ArtworkPinRecord(
+              pid: _track,
+              sizePx: rung,
+              artUrl: _trackArt,
+              etag: '"old-$rung"',
+              localPath: file.path,
+              sizeBytes: old.length,
+              pinnedAt: DateTime.utc(2026, 11, 18),
+            ),
+          );
+        }
+        reach = false;
+        server = FakeArtServer();
+        cache = FakeArtCache();
+        store = CachedArtworkStore(
+          baseUrl: _base,
+          pins: pins,
+          client: Dio()..httpClientAdapter = server,
+          pinDirectory: temp,
+          cache: cache,
+          reachable: () => reach,
+        );
+      });
+
+      tearDown(() async {
+        store.dispose();
+        temp.deleteSync(recursive: true);
+      });
+
+      testWidgets('a stored row draws its pinned cover with no server, and '
+          'the new one once a cover change rewrites the pin', (tester) async {
+        await pump(
+          tester,
+          stored: <DownloadedItem>[_stored(_track)],
+          mirror: db,
+          store: store,
+        );
+        expect(row(tester).artwork?.cover, _trackArt);
+        await coverDraws(tester, 40);
+        expect(cache.asked, isEmpty, reason: 'the disk cache fetches nothing');
+        expect(
+          server.requested,
+          isEmpty,
+          reason: 'the pin is read, and the store asks nothing of its own',
+        );
+
+        // What a frame naming the item does, with the server back long
+        // enough for the walk to bring the pin up to date.
+        final fresh = (await tester.runAsync(() => artPng(24)))!;
+        for (final rung in kOfflineArtworkRungs) {
+          server.serveBytes('$_trackArt?size=$rung', fresh);
+        }
+        await tester.runAsync(() async {
+          await store.evict(_trackArt);
+          await store.settled;
+        });
+        for (final rung in kOfflineArtworkRungs) {
+          server.cut('$_trackArt?size=$rung');
+        }
+        await coverDraws(tester, 24);
+        expect(cache.asked, isEmpty);
+      });
+
+      testWidgets('a row whose cover a sign-out took draws it once the server '
+          'is in reach, and off its pin with the server gone again', (
+        tester,
+      ) async {
+        // The audio kept, every pin dropped.
+        await tester.runAsync(store.forgetEverything);
+        final picture = (await tester.runAsync(() => artPng(24)))!;
+        for (final rung in kOfflineArtworkRungs) {
+          server.serveBytes('$_trackArt?size=$rung', picture);
+        }
+        await pump(
+          tester,
+          stored: <DownloadedItem>[_stored(_track)],
+          mirror: db,
+          store: store,
+        );
+        expect(row(tester).artwork, isNull);
+
+        reach = true;
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(DownloadsScreen)),
+        );
+        await tester.runAsync(() async {
+          await pinHeldCovers(container);
+          await store.settled;
+        });
+        await tester.pumpAndSettle();
+        expect(row(tester).artwork?.cover, _trackArt);
+        await coverDraws(tester, 24);
+
+        // A later visit, nothing decoded and nobody to ask.
+        reach = false;
+        for (final rung in kOfflineArtworkRungs) {
+          server.cut('$_trackArt?size=$rung');
+        }
+        server.requested.clear();
+        cache.asked.clear();
+        await tester.pumpWidget(const SizedBox());
+        PaintingBinding.instance.imageCache.clear();
+        await pump(
+          tester,
+          stored: <DownloadedItem>[_stored(_track)],
+          mirror: db,
+          store: store,
+        );
+        expect(row(tester).artwork?.cover, _trackArt);
+        await coverDraws(tester, 24);
+        expect(cache.asked, isEmpty);
+        expect(server.requested, isEmpty);
+      });
+    });
+
+    testWidgets('a cover pinned while the server was at another address is '
+        "the row's under this one", (tester) async {
+      final db = await _mirror();
+      await DriftArtworkPinStore(db).put(
+        ArtworkPinRecord(
+          pid: _track,
+          sizePx: 1024,
+          artUrl: 'http://old.local:4420/api/v1/items/$_track/art',
+          etag: '"1024"',
+          localPath: '/art/$_track-1024.img',
+          sizeBytes: 1024,
+          pinnedAt: DateTime.utc(2026, 11, 18),
+        ),
+      );
+
+      await pump(tester, stored: <DownloadedItem>[_stored(_track)], mirror: db);
+
+      expect(row(tester).artwork?.cover, _trackArt);
+    });
+
+    testWidgets('a cover pinned after the list was built reaches its row', (
+      tester,
+    ) async {
+      final db = await _mirror();
+      final pinning = _PinningArtworkStore(db);
+      await pump(
+        tester,
+        stored: <DownloadedItem>[
+          const DownloadedItem(
+            pid: _book,
+            sizeBytes: 4194304,
+            files: 1,
+            complete: false,
+          ),
+        ],
+        mirror: db,
+        store: pinning,
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DownloadsScreen)),
+      );
+      final starting = container
+          .read(downloadStateProvider(_book).notifier)
+          .start(artUrl: _bookArt);
+      await tester.pump();
+
+      // The audio lands and the list is built again, before the cover has.
+      downloads.byPid[_book] = testLocal('/books/one.m4b');
+      downloads.setStored(<DownloadedItem>[_stored(_book)]);
+      downloads.emit(
+        const DownloadProgress(pid: _book, fraction: 1, complete: true),
+      );
+      await tester.pumpAndSettle();
+      expect(pinning.pinned, [_book]);
+      expect(row(tester).artwork, isNull);
+
+      pinning.landing.complete();
+      await tester.pumpAndSettle();
+      await starting;
+
+      expect(row(tester).artwork?.cover, _bookArt);
+      expect(pinning.requested, contains(_bookArt));
+    });
+
+    testWidgets('a cover that lands after the app has let go of its '
+        'providers is not an error', (tester) async {
+      final db = await _mirror();
+      final pinning = _PinningArtworkStore(db);
+      await pump(
+        tester,
+        stored: <DownloadedItem>[
+          const DownloadedItem(
+            pid: _book,
+            sizeBytes: 4194304,
+            files: 1,
+            complete: false,
+          ),
+        ],
+        mirror: db,
+        store: pinning,
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DownloadsScreen)),
+      );
+      final starting = container
+          .read(downloadStateProvider(_book).notifier)
+          .start(artUrl: _bookArt);
+      await tester.pump();
+      downloads.byPid[_book] = testLocal('/books/one.m4b');
+      downloads.setStored(<DownloadedItem>[_stored(_book)]);
+      downloads.emit(
+        const DownloadProgress(pid: _book, fraction: 1, complete: true),
+      );
+      await tester.pumpAndSettle();
+      expect(pinning.pinned, [_book]);
+
+      // The tree goes, and its container with it.
+      await tester.pumpWidget(const SizedBox());
+      pinning.landing.complete();
+      await tester.pumpAndSettle();
+      await starting;
+    });
+  });
+
   testWidgets('a download notification opens the screen, and its arrow walks '
       'back through Notifications to the album', (tester) async {
     tester.view.physicalSize = const Size(1000, 900);
@@ -898,6 +1175,32 @@ void main() {
   });
 }
 
+/// Pins a cover in the mirror once [landing] is let go: a cover still on
+/// its way when the audio has landed.
+class _PinningArtworkStore extends FakeArtworkStore {
+  _PinningArtworkStore(this.db);
+
+  final MirrorDatabase db;
+  final landing = Completer<void>();
+
+  @override
+  Future<void> pinForOffline(String pid, String? artUrl) async {
+    await super.pinForOffline(pid, artUrl);
+    await landing.future;
+    await DriftArtworkPinStore(db).put(
+      ArtworkPinRecord(
+        pid: pid,
+        sizePx: 1024,
+        artUrl: artUrl!,
+        etag: '"1024"',
+        localPath: '/art/$pid-1024.img',
+        sizeBytes: 1024,
+        pinnedAt: DateTime.utc(2026, 11, 18),
+      ),
+    );
+  }
+}
+
 /// A connection that starts on mobile data and moves when told.
 class _Net implements ConnectivityPort {
   ConnectionCost now = ConnectionCost.metered;
@@ -914,6 +1217,9 @@ class _Net implements ConnectivityPort {
 
   @override
   Stream<ConnectionCost> get costs => _costs.stream;
+
+  @override
+  Stream<void> get returns => const Stream<void>.empty();
 
   void move(ConnectionCost cost) {
     now = cost;

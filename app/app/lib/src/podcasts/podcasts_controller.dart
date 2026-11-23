@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../sync/catalog_writes.dart';
+import '../sync/refresh_in_place.dart';
 
 /// Whether the signed-in account may curate podcasts.
 ///
@@ -39,10 +44,12 @@ class SubscriptionsController extends AsyncNotifier<List<Subscription>> {
     required String url,
     String? sourceType,
   }) async {
+    final writes = ref.read(catalogWritesProvider);
     final subscription = await ref
         .read(repositoryProvider)
         .subscribePodcast(url: url, sourceType: sourceType);
-    ref.invalidateSelf();
+    // A show and its episodes joined what this account's reads answer.
+    writes.landed();
     return subscription;
   }
 
@@ -50,8 +57,9 @@ class SubscriptionsController extends AsyncNotifier<List<Subscription>> {
   /// per-feed outcomes once the import lands, for the reason [subscribe]
   /// gives: a failed reload never replaces the import's report.
   Future<List<OpmlImportOutcome>> importOpml(String opml) async {
+    final writes = ref.read(catalogWritesProvider);
     final outcomes = await ref.read(repositoryProvider).importOpml(opml);
-    ref.invalidateSelf();
+    writes.landed();
     return outcomes;
   }
 }
@@ -164,40 +172,68 @@ class PodcastDetailController extends AsyncNotifier<PodcastDetail> {
 
   final String pid;
 
+  /// What a write made here was just answered with, for the one build
+  /// its landing prompts: see [_landed].
+  PodcastDetail? _answered;
+
   @override
-  Future<PodcastDetail> build() {
+  Future<PodcastDetail> build() async {
     ref.watch(signedInAccountProvider);
-    return ref.watch(repositoryProvider).getPodcast(pid);
+    final repository = ref.watch(repositoryProvider);
+    final answered = _answered;
+    _answered = null;
+    return answered ?? await repository.getPodcast(pid);
   }
 
   Future<void> subscribe() async {
     final detail = state.value;
     final feedUrl = detail?.show.feedUrl;
     if (feedUrl == null) return;
+    final writes = ref.read(catalogWritesProvider);
     final subscription = await ref
         .read(repositoryProvider)
         .subscribePodcast(url: feedUrl, sourceType: detail!.show.sourceType);
-    state = AsyncData(
+    _landed(
+      writes,
       PodcastDetail(
         show: subscription.show,
         subscribed: true,
         settings: subscription.settings,
       ),
     );
-    ref.invalidate(subscriptionsProvider);
   }
 
   Future<void> unsubscribe({bool removeDownloads = false}) async {
+    final writes = ref.read(catalogWritesProvider);
     await ref
         .read(repositoryProvider)
         .unsubscribePodcast(pid, removeDownloads: removeDownloads);
-    final detail = state.value;
-    if (detail != null) {
-      state = AsyncData(PodcastDetail(show: detail.show, subscribed: false));
-    }
-    ref.invalidate(subscriptionsProvider);
-    if (removeDownloads) {
-      ref.invalidate(episodesProvider(pid));
+    // The show left this account's reads, its fetched audio with it when
+    // that was asked.
+    final detail = ref.mounted ? state.value : null;
+    _landed(
+      writes,
+      detail == null
+          ? null
+          : PodcastDetail(show: detail.show, subscribed: false),
+    );
+  }
+
+  /// Says a write made here landed. The sweep that follows reads every
+  /// open read of the catalog again, this show among them; [answered] is
+  /// what the write was just told the show is, so the build the sweep
+  /// prompts answers that and asks the server nothing. Built in this
+  /// turn, so the answer can wait for no later build to hand it over
+  /// stale.
+  void _landed(CatalogWrites writes, PodcastDetail? answered) {
+    final here = ref.mounted;
+    if (here) _answered = answered;
+    try {
+      writes.landed();
+      if (here && ref.mounted) unawaited(future);
+    } finally {
+      // Only the build just run may take it, thrown past or not.
+      _answered = null;
     }
   }
 
@@ -236,114 +272,92 @@ class EpisodeListState {
   final bool loadingMore;
 
   bool get hasMore => nextCursor != null;
-
-  EpisodeListState copyWith({List<EpisodeSummary>? items, bool? loadingMore}) =>
-      EpisodeListState(
-        items: items ?? this.items,
-        nextCursor: nextCursor,
-        loadingMore: loadingMore ?? this.loadingMore,
-      );
 }
 
-/// Pages one show's episodes with keyset cursors, mirroring the library
-/// controller's load-more-on-scroll pattern.
-class EpisodesController extends AsyncNotifier<EpisodeListState> {
+/// Pages one show's episodes with keyset cursors, and refreshes them in
+/// place: a sweep reads again what is loaded, where the listing stands.
+class EpisodesController extends AsyncNotifier<EpisodeListState>
+    with RefreshedInPlace<EpisodeSummary, EpisodeListState> {
   EpisodesController(this.showPid);
 
   final String showPid;
   static const pageSize = 50;
 
-  /// Bumped by every [build] so an in-flight [loadMore] can tell its
-  /// listing was replaced and drop its result.
-  var _generation = 0;
+  @override
+  ProviderBase<Object?> get self => episodesProvider(showPid);
 
   @override
-  Future<EpisodeListState> build() async {
-    _generation++;
-    ref.watch(signedInAccountProvider);
-    final page = await ref
-        .watch(repositoryProvider)
-        .listEpisodes(showPid, limit: pageSize);
-    return EpisodeListState(items: page.items, nextCursor: page.nextCursor);
-  }
+  int get pageRows => pageSize;
 
-  Future<void> loadMore() async {
-    final current = state.value;
-    if (current == null || !current.hasMore || current.loadingMore) return;
-    final generation = _generation;
-    state = AsyncData(current.copyWith(loadingMore: true));
-    try {
-      final page = await ref
-          .read(repositoryProvider)
-          .listEpisodes(showPid, cursor: current.nextCursor, limit: pageSize);
-      if (generation != _generation) return;
-      state = AsyncData(
-        EpisodeListState(
-          items: [...current.items, ...page.items],
-          nextCursor: page.nextCursor,
-        ),
-      );
-    } on WaxDeckApiException {
-      // An expected transport or server error. Keep what we have;
-      // scrolling near the end again retries.
-      if (generation != _generation) return;
-      state = AsyncData(current.copyWith(loadingMore: false));
-    } catch (_) {
-      // Anything else is a defect, not a hiccup: a decode failure,
-      // a bad cast. Release the paging guard first - loadingMore is
-      // what keeps two fetches from racing, so leaving it set would
-      // wedge paging permanently and silently - then let the error
-      // reach the app's error handler instead of vanishing here.
-      if (generation == _generation) {
-        state = AsyncData(current.copyWith(loadingMore: false));
-      }
-      rethrow;
-    }
-  }
+  @override
+  int? get walkLimit => 1;
 
-  /// Queues a server-side fetch and optimistically marks the episode
-  /// queued; the real state arrives with the next listing refresh.
-  Future<void> fetchEpisode(String pid) async {
-    await ref.read(repositoryProvider).fetchEpisode(pid);
-    final current = state.value;
-    if (current == null) return;
-    state = AsyncData(
-      current.copyWith(
-        items: [
-          for (final e in current.items)
-            if (e.pid == pid && !e.downloaded) _asQueued(e) else e,
-        ],
-      ),
+  @override
+  Object rowKey(EpisodeSummary row) => row.pid;
+
+  @override
+  EpisodeListState shape(
+    PagedRows<EpisodeSummary> held, {
+    required bool loadingMore,
+  }) => EpisodeListState(
+    items: held.rows,
+    nextCursor: held.nextCursor,
+    loadingMore: loadingMore,
+  );
+
+  @override
+  Future<PagedRows<EpisodeSummary>> readRows({
+    required int want,
+    String? from,
+    int? maxPages,
+    bool Function()? stop,
+  }) {
+    final repository = ref.read(repositoryProvider);
+    return walkRows(
+      (cursor) async {
+        final page = await repository.listEpisodes(
+          showPid,
+          cursor: cursor,
+          limit: pageSize,
+        );
+        return (rows: page.items, nextCursor: page.nextCursor);
+      },
+      want: want,
+      from: from,
+      maxPages: maxPages,
+      stop: stop,
     );
   }
 
-  /// Removes the episode's server download, then refetches the list so
-  /// the row reflects the settled server state.
-  Future<void> removeEpisodeDownload(String pid) async {
-    await ref.read(repositoryProvider).removeEpisodeDownload(pid);
-    ref.invalidateSelf();
+  @override
+  Future<EpisodeListState> build() {
+    // Keyed on the account: the repository moves only with the server.
+    final account = ref.watch(signedInAccountProvider);
+    final repository = ref.watch(repositoryProvider);
+    return buildInPlace(source: (account, repository));
   }
 
-  static EpisodeSummary _asQueued(EpisodeSummary e) => EpisodeSummary(
-    pid: e.pid,
-    mediaType: e.mediaType,
-    title: e.title,
-    artist: e.artist,
-    album: e.album,
-    durationMs: e.durationMs,
-    artUrl: e.artUrl,
-    showPid: e.showPid,
-    season: e.season,
-    episodeNumber: e.episodeNumber,
-    episodeType: e.episodeType,
-    publishedAt: e.publishedAt,
-    downloaded: e.downloaded,
-    fetchState: 'queued',
-    fetchError: null,
-    explicit: e.explicit,
-    hasTranscript: e.hasTranscript,
-    hasEnclosure: e.hasEnclosure,
-  );
+  /// Fetches the next page and appends it. No-op while a fetch is
+  /// running or once the last page was reached.
+  Future<void> loadMore() => loadMoreInPlace();
+
+  /// Queues a server-side fetch and marks the episode queued where it
+  /// sits; the real state arrives with the next listing refresh.
+  Future<void> fetchEpisode(String pid) async {
+    await ref.read(repositoryProvider).fetchEpisode(pid);
+    amendInPlace((e) => e.pid == pid && !e.downloaded ? _asQueued(e) : e);
+  }
+
+  /// Removes the episode's server download and says it landed, so this
+  /// list and every other read that draws the episode is read again.
+  Future<void> removeEpisodeDownload(String pid) async {
+    final writes = ref.read(catalogWritesProvider);
+    await ref.read(repositoryProvider).removeEpisodeDownload(pid);
+    writes.landed();
+  }
+
+  static EpisodeSummary _asQueued(EpisodeSummary e) =>
+      e.copyWith(fetchState: () => 'queued', fetchError: () => null);
 }
 
 final episodesProvider =

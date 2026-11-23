@@ -320,7 +320,7 @@ var ErrSyncReset = &Error{Kind: KindGone, Msg: "sync cursor is no longer service
 
 // syncFeed is the catalog stream's identity and position, guarded by
 // its own mutex (request goroutines read it, the feed consumer writes
-// it).
+// it), and what the stream saw move since a drain.
 type syncFeed struct {
 	mu    sync.Mutex
 	gen   string
@@ -339,6 +339,12 @@ type syncFeed struct {
 	// bootTS stamps the head at a boot that could not continue its
 	// cursor: catalog rows no later predate the generation it minted.
 	bootTS int64
+	// changes is what the catalog wakes stand for, as far as it can be
+	// named; showCovers remembers the shows whose cover moved, for a
+	// subscribe's walk of the log, whose rows cannot say so. Neither is
+	// under mu: each keeps its own lock, a leaf never taken with mu held.
+	changes    catalogChanges
+	showCovers showCoverLog
 }
 
 // feedKey names a change row across catalogs: a replaced catalog reuses
@@ -390,6 +396,7 @@ const (
 // catalog, pruned-past-cursor history) mints a new generation, which
 // retires every outstanding client cursor at its next use.
 func (l *Library) initSync(ctx context.Context) error {
+	l.feed.showCovers.start(time.Now().UnixNano())
 	sg, err := l.db.SyncStateGet(ctx, syncKeyServerGen)
 	if err != nil {
 		return err
@@ -482,11 +489,15 @@ func (l *Library) initSync(ctx context.Context) error {
 // mintCatalogGeneration retires every catalog cursor handed out so far,
 // for a change to what mirrors hold that the change log has no row for:
 // each answers sync-reset at its next delta, so its client snapshots the
-// catalog again, and connected clients are nudged to pull at once. The
-// feed's position stands.
+// catalog again, and connected clients are nudged to pull at once, by an
+// invalidation that names nothing: no row says what moved. The feed's
+// position stands.
 func (l *Library) mintCatalogGeneration(ctx context.Context) {
 	l.resetMu.Lock()
 	defer l.resetMu.Unlock()
+	// Marked before the generation moves, so a drain that reads the new
+	// one holds the mark, or one before it did.
+	l.feed.changes.markUnknown()
 	l.feed.mu.Lock()
 	gen := ulid.Make().String()
 	l.feed.gen = gen
@@ -496,16 +507,13 @@ func (l *Library) mintCatalogGeneration(ctx context.Context) {
 	if err := l.persistGeneration(ctx, gen, mints); err != nil {
 		l.log.Warn("persisting the catalog generation", "err", err)
 	}
-	select {
-	case l.catalogWake <- struct{}{}:
-	default:
-	}
+	l.wakeCatalog()
 }
 
 // runCatalogFeed is the change-feed consumer: it subscribes before
 // priming (the documented order, so nothing lands in the gap), drains
-// to the tail, then follows live changes, waking the event hub on
-// item-granular ones and persisting its position coarsely. The
+// to the tail, then follows live changes, waking the event hub on the
+// rows a client mirrors or draws and persisting its position coarsely. The
 // subscription drops rows when it falls behind, so a row past the next
 // one, and a quiet tick, send it back to the log for what it missed.
 func (l *Library) runCatalogFeed(ctx context.Context) error {
@@ -606,8 +614,8 @@ func (l *Library) feedPastTheLog(ctx context.Context) error {
 	return nil
 }
 
-// advanceFeed tracks one change row and wakes the hub when a summary
-// mirror could care.
+// advanceFeed tracks one change row and wakes the hub when a client's
+// mirror or listings could care, having recorded which entity moved.
 func (l *Library) advanceFeed(ctx context.Context, ch model.Change) {
 	l.feed.mu.Lock()
 	history := ch.TS <= l.feed.bootTS
@@ -616,6 +624,13 @@ func (l *Library) advanceFeed(ctx context.Context, ch model.Change) {
 		l.catalogReplaced(ctx, ch.Seq, ch.TS)
 		l.wakeLibraryJournal()
 		return
+	}
+	// Recorded before the position moves past it, so a drain that reads
+	// the position first holds every row up to it, and before the wake,
+	// so the drain a wake prompts holds everything the wake stood for.
+	wakes := wakesCatalog(ch.EntityType)
+	if wakes {
+		l.feed.changes.record(ch)
 	}
 	l.feed.mu.Lock()
 	if ch.Seq > l.feed.tail {
@@ -647,13 +662,8 @@ func (l *Library) advanceFeed(ctx context.Context, ch model.Change) {
 		l.Roots.refreshLibraryState(ctx)
 		l.Grants.podcastLibraryMayHaveLanded()
 	}
-	// Items feed summary mirrors; podcast rows feed show lists. Both
-	// travel the catalog stream (a show is not per-user state).
-	if ch.EntityType == "item" || ch.EntityType == "podcast" {
-		select {
-		case l.catalogWake <- struct{}{}:
-		default:
-		}
+	if wakes {
+		l.wakeCatalog()
 	}
 }
 
@@ -683,9 +693,9 @@ func parseFeedCursor(s string) (seq, ts int64) {
 	return seq, ts
 }
 
-// CatalogWakeups signals when item-granular catalog changes landed. It
+// CatalogWakeups signals when item, show or entity changes landed. It
 // is a coalesced hint, not a delivery guarantee; the sync endpoints are
-// the authoritative path.
+// the authoritative path. DrainCatalogChanges names what a hint stood for.
 func (l *Library) CatalogWakeups() <-chan struct{} { return l.catalogWake }
 
 // UserEventWakeups carries the WaxDeck user id whose server state just
@@ -700,16 +710,27 @@ func (l *Library) UserEventWakeups() <-chan string { return l.userWake }
 // from another row a log put back to an earlier copy numbers the same. A
 // zero ts stands on no row.
 func encodeCatalogCursor(gen string, epoch, seq, ts int64) string {
+	return encodeCatalogPosition(gen, epoch, seq, ts, 0)
+}
+
+// encodeCatalogPosition is encodeCatalogCursor for a position a catalog
+// invalidation hands out, which also carries the newest show cover move
+// it covers (see showCoverLog), zero for none.
+func encodeCatalogPosition(gen string, epoch, seq, ts, cover int64) string {
 	raw := fmt.Sprintf("c2|%s|%d|%d|%d", gen, epoch, seq, ts)
+	if cover != 0 {
+		raw += "|" + strconv.FormatInt(cover, 10)
+	}
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
 // catalogCursor is a decoded catalog cursor. One from before cursors
-// carried their row's time is not stamped, and serves nothing.
+// carried their row's time is not stamped, and serves nothing. cover is
+// the newest show cover move a frame's position covers, zero for none.
 type catalogCursor struct {
-	gen            string
-	epoch, seq, ts int64
-	stamped        bool
+	gen                   string
+	epoch, seq, ts, cover int64
+	stamped               bool
 }
 
 func decodeCatalogCursor(s string) (catalogCursor, bool) {
@@ -718,7 +739,7 @@ func decodeCatalogCursor(s string) (catalogCursor, bool) {
 		return catalogCursor{}, false
 	}
 	parts := strings.Split(string(raw), "|")
-	c := catalogCursor{stamped: len(parts) == 5 && parts[0] == "c2"}
+	c := catalogCursor{stamped: (len(parts) == 5 || len(parts) == 6) && parts[0] == "c2"}
 	if !c.stamped && (len(parts) != 4 || parts[0] != "c1") {
 		return catalogCursor{}, false
 	}
@@ -729,6 +750,9 @@ func decodeCatalogCursor(s string) (catalogCursor, bool) {
 	c.gen, c.epoch, c.seq = parts[1], nums[0], nums[1]
 	if c.stamped {
 		c.ts = nums[2]
+	}
+	if len(nums) == 4 {
+		c.cover = nums[3]
 	}
 	return c, true
 }

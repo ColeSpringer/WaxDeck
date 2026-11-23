@@ -14,9 +14,9 @@ import '../player/play_progress.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import '../sync/catalog_writes.dart';
 import 'episode_actions.dart';
 import 'mark_older_played_dialog.dart';
-import 'podcast_shelves.dart';
 import 'podcasts_controller.dart';
 
 /// What a show's menus offer. The header's overflow and a show card's
@@ -184,16 +184,12 @@ Future<void> _refresh(BuildContext context, String pid) async {
   // The container rather than a widget's ref, which a card can outlive.
   final container = ProviderScope.containerOf(context, listen: false);
   final messenger = container.read(shellMessengerProvider);
+  final writes = container.read(catalogWritesProvider);
   try {
     final result = await container.read(repositoryProvider).refreshPodcast(pid);
-    // New episodes change what the hub's tile and shelves say, and the
-    // count a tile draws lives on the subscription row.
-    container
-      ..invalidate(episodesProvider(pid))
-      ..invalidate(podcastDetailProvider(pid))
-      ..invalidate(subscriptionsProvider)
-      ..invalidate(upNextEpisodesProvider)
-      ..invalidate(latestEpisodesProvider);
+    // New episodes change what the show's listing, the hub's tile and
+    // its shelves say.
+    writes.landed();
     messenger.show(
       result.newEpisodes == 0
           ? l10n.podcastNoNewEpisodes
@@ -285,9 +281,6 @@ class ShowCoverSheet extends ConsumerWidget {
     final hasArtwork = roles.hasValue
         ? roles.value?.artSource != null
         : initialHasArtwork;
-    // Through the container: a cover write may land once this sheet is
-    // closed, and the show page under it draws the cover it reads.
-    final container = ProviderScope.containerOf(context, listen: false);
     return Padding(
       padding: EdgeInsets.only(
         left: WaxSpace.s16,
@@ -301,7 +294,6 @@ class ShowCoverSheet extends ConsumerWidget {
           hasArtwork: hasArtwork,
           entityType: 'podcast',
           domain: WaxDomain.podcasts,
-          onChanged: () => container.invalidate(podcastDetailProvider(pid)),
         ),
       ),
     );

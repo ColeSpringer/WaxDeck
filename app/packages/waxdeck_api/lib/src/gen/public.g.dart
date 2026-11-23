@@ -141,6 +141,7 @@ export 'models/metadata.g.dart'
         EntityRenameResult,
         EntityTypeFields,
         FieldProvenance,
+        FoldedEntity,
         ItemAcquisition,
         ItemMetadata,
         ItemPermissions,

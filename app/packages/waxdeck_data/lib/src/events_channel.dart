@@ -21,6 +21,66 @@ typedef EventsChannelFactory =
 /// reconnecting on that session will be refused.
 const sessionEndedCloseCode = 4401;
 
+/// What a frame says of the catalog's entities that changed: the ones
+/// it names, or that some changed which it does not name.
+final class CatalogNames {
+  const CatalogNames.of(this.pids) : unnamed = false;
+
+  const CatalogNames.unnamed() : pids = const [], unnamed = true;
+
+  /// The entities named as moved, as the server spelled them. Empty
+  /// when [unnamed].
+  final List<String> pids;
+
+  /// Entities changed that the frame does not name: more than fit, a
+  /// read that failed, an account that is sent no names, a catalog
+  /// replaced or repaired.
+  final bool unnamed;
+}
+
+/// What [frame] says of the catalog's entities that changed, or null
+/// when it says nothing of them.
+///
+/// A catalog invalidation names them in `pids` or carries the `unnamed`
+/// marker, which wins over names sent beside it: they are not all of
+/// them. With neither it means only that anything may have changed, and
+/// so does one whose `pids` is not a list of strings. A resync that
+/// covers the catalog, its own or every stream's, leaves them all
+/// unnamed: any cover can have changed.
+CatalogNames? catalogFrameNames(Map<String, Object?> frame) {
+  final topic = frame['topic'];
+  switch (frame['type']) {
+    case 'resync' when topic == null || topic == 'catalog':
+      return const CatalogNames.unnamed();
+    case 'invalidate' when topic == 'catalog':
+      break;
+    default:
+      return null;
+  }
+  if (frame['unnamed'] == true) return const CatalogNames.unnamed();
+  final pids = frame['pids'];
+  if (pids is! List<Object?> || pids.isEmpty) return null;
+  if (pids.any((pid) => pid is! String)) return null;
+  return CatalogNames.of(List.unmodifiable(pids.cast<String>()));
+}
+
+/// Whether [frame], a catalog invalidation, says nothing in the catalog
+/// changed after the cursor a subscribe presented: what a client holds
+/// from it is current.
+bool catalogFrameUnchanged(Map<String, Object?> frame) =>
+    frame['unchanged'] == true;
+
+/// The catalog position a catalog invalidation says it was sent at, or
+/// null when it says none. Opaque: presented again as `catalogSince` on
+/// a later subscribe.
+String? catalogFrameSince(Map<String, Object?> frame) {
+  if (frame['type'] != 'invalidate' || frame['topic'] != 'catalog') {
+    return null;
+  }
+  final since = frame['since'];
+  return since is String && since.isNotEmpty ? since : null;
+}
+
 /// One WebSocket connection to `GET /api/v1/ws`. Native builds
 /// authenticate with the bearer token header; web builds ride the
 /// session cookie the browser attaches to same-origin upgrades.

@@ -25,8 +25,17 @@ class _HeldSessions extends FakeRepository {
     required String password,
     String? deviceName,
   }) async {
-    sessionState = SessionState(authenticated: true, user: next);
-    return LoginResult(user: next, token: 'token-${next.id}');
+    final session = 'se-${next.username}';
+    sessionState = SessionState(
+      authenticated: true,
+      user: next,
+      sessionId: session,
+    );
+    return LoginResult(
+      user: next,
+      token: 'token-${next.id}',
+      sessionId: session,
+    );
   }
 
   @override

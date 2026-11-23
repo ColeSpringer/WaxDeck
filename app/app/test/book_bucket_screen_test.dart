@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/books/book_bucket_screen.dart';
@@ -34,6 +36,34 @@ Future<void> _pump(
   addTearDown(tester.view.reset);
   await pumpApp(tester, screen, container: appContainer(repo: repository));
 }
+
+/// A library whose card read fails, and counts how often it was asked.
+class _CardReadFails extends FakeRepository {
+  var asked = 0;
+
+  @override
+  Future<EntityResolution> resolveEntities(List<String> pids) async {
+    asked++;
+    throw const WaxDeckApiException(
+      code: 'internal',
+      message: 'boom',
+      statusCode: 500,
+    );
+  }
+}
+
+/// A library whose card read does not answer until [answer] completes.
+class _CardReadWaits extends FakeRepository {
+  final answer = Completer<void>();
+
+  @override
+  Future<EntityResolution> resolveEntities(List<String> pids) async {
+    await answer.future;
+    return super.resolveEntities(pids);
+  }
+}
+
+const _notHere = 'That is not here any more.';
 
 List<String> _covers(WidgetTester tester) => <String>[
   for (final card in tester.widgetList<MediaCard>(find.byType(MediaCard)))
@@ -109,6 +139,78 @@ void main() {
       expect(find.byType(BookBucketScreen), findsOneWidget);
     });
 
+    testWidgets('is named from the card over the caller\'s label', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[_book(_dune, 'Dune')]
+        ..entityCards['ar-1'] = const EntityCard(
+          pid: 'ar-1',
+          kind: EntityCardKind.artist,
+          title: 'Frank Herbert',
+        );
+      tester.view.physicalSize = const Size(900, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await mountApp(
+        tester,
+        const BookBucketScreen(
+          dimension: BookDimension.authors,
+          segment: 'ar-1',
+          label: 'Herbert, Frank',
+        ),
+        container: appContainer(repo: repository),
+      );
+      // The label holds the title until the card answers.
+      expect(find.text('Herbert, Frank'), findsWidgets);
+
+      await tester.pumpAndSettle();
+      expect(find.text('Herbert, Frank'), findsNothing);
+      expect(find.text('Frank Herbert'), findsWidgets);
+    });
+
+    testWidgets("keeps the caller's label where the card resolves nothing", (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[_book(_dune, 'Dune')];
+      await _pump(
+        tester,
+        repository,
+        const BookBucketScreen(
+          dimension: BookDimension.authors,
+          segment: 'ar-1',
+          label: 'Herbert, Frank',
+        ),
+      );
+
+      expect(repository.resolvedEntityPids, <List<String>>[
+        <String>['ar-1'],
+      ], reason: 'the card was asked for, and answered with nothing');
+      expect(find.text('Herbert, Frank'), findsWidgets);
+      expect(_covers(tester), <String>['Dune']);
+    });
+
+    testWidgets("keeps the caller's label where the card read fails, and "
+        'asks once', (tester) async {
+      final repository = _CardReadFails()
+        ..facetItems['artist 1'] = <ItemSummary>[_book(_dune, 'Dune')];
+      await _pump(
+        tester,
+        repository,
+        const BookBucketScreen(
+          dimension: BookDimension.authors,
+          segment: 'ar-1',
+          label: 'Herbert, Frank',
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(repository.asked, 1, reason: 'a decoration is not retried');
+      expect(find.text('Herbert, Frank'), findsWidgets);
+      expect(_covers(tester), <String>['Dune']);
+    });
+
     testWidgets('a cold link to an author with no card reads in the singular', (
       tester,
     ) async {
@@ -147,6 +249,76 @@ void main() {
       // The page's own sentence, not the hub's.
       expect(find.text('Could not load this author'), findsOneWidget);
       expect(find.text('Could not load your books'), findsNothing);
+    });
+
+    testWidgets('an author that is gone is not here whatever label the page '
+        'was opened with', (tester) async {
+      await _pump(
+        tester,
+        FakeRepository(),
+        const BookBucketScreen(
+          dimension: BookDimension.authors,
+          segment: 'ar-1',
+          label: 'Herbert, Frank',
+        ),
+      );
+
+      expect(find.text('No books here'), findsNothing);
+      expect(find.text('Could not load this author'), findsOneWidget);
+      expect(find.text(_notHere), findsOneWidget);
+      expect(find.text('Try again'), findsNothing);
+      expect(find.text('Herbert, Frank'), findsOneWidget);
+    });
+
+    testWidgets('an author with nothing listed waits for the card, neither '
+        'empty nor gone, and is not here once it answers nothing', (
+      tester,
+    ) async {
+      final repository = _CardReadWaits();
+      tester.view.physicalSize = const Size(900, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await mountApp(
+        tester,
+        const BookBucketScreen(
+          dimension: BookDimension.authors,
+          segment: 'ar-1',
+          label: 'Herbert, Frank',
+        ),
+        container: appContainer(repo: repository),
+      );
+      for (var i = 0; i < 3; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(find.text('No books here'), findsNothing);
+      expect(find.text(_notHere), findsNothing);
+      expect(find.byType(SkeletonShapes), findsOneWidget);
+
+      repository.answer.complete();
+      await tester.pumpAndSettle();
+      expect(find.text(_notHere), findsOneWidget);
+    });
+
+    testWidgets('an author with nothing listed whose card read fails keeps '
+        'the label, and offers the read again rather than saying it is gone', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _CardReadFails(),
+        const BookBucketScreen(
+          dimension: BookDimension.authors,
+          segment: 'ar-1',
+          label: 'Herbert, Frank',
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Herbert, Frank'), findsOneWidget);
+      expect(find.text(_notHere), findsNothing);
+      expect(find.text('Could not load this author'), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
     });
 
     testWidgets('the unknown bucket is titled in the reader\'s language', (

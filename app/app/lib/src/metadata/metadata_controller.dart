@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../auth/auth_controller.dart';
 import '../providers.dart';
 import '../settings/settings_registry.dart';
+import '../sync/catalog_writes.dart';
 import 'metadata_form.dart';
 
 /// What one unified save came back with: the write-back failures and
@@ -163,6 +164,7 @@ class MetadataController extends AsyncNotifier<MetadataEditorState> {
     required bool force,
   }) async {
     final repository = ref.read(repositoryProvider);
+    final writes = ref.read(catalogWritesProvider);
     MetadataCommitResult result;
     try {
       result = await repository.commitItemMetadata(
@@ -199,10 +201,12 @@ class MetadataController extends AsyncNotifier<MetadataEditorState> {
       }
       // Anything else refused the whole request, which committed
       // nothing, so there is nothing to report beside it.
-      await _refreshQuietly();
+      await _refetchedQuietly(own: true);
       return MetadataSaveOutcome(refusal: e);
     }
-    await _refreshQuietly();
+    // A refusal partway still committed the parts before it.
+    writes.landed();
+    await _refetchedQuietly();
     // The per-part list rides the wire for a banner richer than this
     // one; what the banner reads today is the shape the sequential path
     // produces, so the two are interchangeable.
@@ -223,6 +227,7 @@ class MetadataController extends AsyncNotifier<MetadataEditorState> {
     required bool force,
   }) async {
     final repository = ref.read(repositoryProvider);
+    final writes = ref.read(catalogWritesProvider);
     final failures = <WriteBackFailure>[];
     final seen = <String>{};
     final warnings = <String>[];
@@ -324,7 +329,9 @@ class MetadataController extends AsyncNotifier<MetadataEditorState> {
     } on WaxDeckApiException catch (e) {
       refusal = e;
     } finally {
-      await _refreshQuietly();
+      // Whatever happened: the calls before a refusal committed.
+      writes.landed();
+      await _refetchedQuietly();
     }
     return MetadataSaveOutcome(
       writeBackFailures: failures,
@@ -333,24 +340,26 @@ class MetadataController extends AsyncNotifier<MetadataEditorState> {
     );
   }
 
-  /// Refetch after a save, whatever happened, so the parts that landed
-  /// are adopted and only the rest stays dirty. A refetch failure is
-  /// swallowed: the provider holds the error, and replacing the refusal
-  /// (or the failures) with a fetch problem would hide the answer that
-  /// matters.
-  Future<void> _refreshQuietly() async {
+  /// The refetch after a save, whatever happened, so the parts that
+  /// landed are adopted and only the rest stays dirty. A refetch failure
+  /// is swallowed: the provider holds the error, and replacing the
+  /// refusal (or the failures) with a fetch problem would hide the
+  /// answer that matters.
+  Future<void> _refetchedQuietly({bool own = false}) async {
     try {
-      await _refresh();
+      await _refetched(own: own);
     } on Exception {
       // Deliberate; see above.
     }
   }
 
   Future<void> setLock(String field, {required bool locked}) async {
+    final writes = ref.read(catalogWritesProvider);
     await ref
         .read(repositoryProvider)
         .setItemLocks(pid, fields: [field], locked: locked);
-    await _refresh();
+    writes.landed();
+    await _refetched();
   }
 
   /// Reopens identification; returns the review entry id to watch.
@@ -368,16 +377,21 @@ class MetadataController extends AsyncNotifier<MetadataEditorState> {
     List<String> want, {
     EnrichProposal? proposal,
   }) async {
+    final writes = ref.read(catalogWritesProvider);
     final result = await ref
         .read(repositoryProvider)
         .enrichItem(pid, want: want, proposal: proposal);
-    await _refresh();
+    writes.landed();
+    await _refetched();
     return result;
   }
 
-  Future<void> _refresh() async {
+  /// Waits for the editor's refetch. A landed write prompts it, the
+  /// editor being one of the catalog's reads; [own] asks for it where
+  /// nothing landed.
+  Future<void> _refetched({bool own = false}) async {
     if (!ref.mounted) return;
-    ref.invalidateSelf();
+    if (own) ref.invalidateSelf();
     await future;
   }
 }

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/art_slot.dart';
 import '../artwork/art_source_label.dart';
 import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
@@ -17,7 +18,6 @@ import '../l10n/l10n.dart';
 import '../library/item_delete.dart';
 import '../library/item_kind.dart';
 import '../media_view.dart';
-import '../metadata/artwork_manager.dart' show ArtSlot;
 import '../metadata/metadata_controller.dart';
 import '../player/play_progress.dart';
 import '../playlists/add_to_playlist_sheet.dart';
@@ -507,10 +507,14 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
   WaxArtwork? _heroArtwork(String? url) {
     final source = waxArtwork(ref.read(artworkStoreProvider), url);
     if (source == null) return null;
-    return (px) {
-      _heroPx = px;
-      return source(px);
-    };
+    return WaxArtwork(
+      (px) {
+        _heroPx = px;
+        return source(px);
+      },
+      cover: source.cover,
+      replaced: source.replaced,
+    );
   }
 
   bool _isCover(PlayerArtwork artwork) =>
@@ -1396,6 +1400,8 @@ class SleepTimerButton extends ConsumerWidget {
       onPressed: () => unawaited(
         showWaxSheet<void>(
           context: context,
+          // Tall enough to stand above the keyboard its field raises.
+          isScrollControlled: true,
           builder: (_) => _SleepTimerSheet(session: session),
         ),
       ),
@@ -1484,108 +1490,116 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
     final l10n = context.l10n;
     final timer = ref.watch(sleepTimerProvider);
     final chapterEndMs = _currentChapterEndMs(watch: true);
-    return SafeArea(
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Both of the running timer's own verbs first, and together:
-            // a listener who opened this sheet with a timer on came to
-            // change that timer, not to set a new one, and the presets
-            // below are long enough to push a row at the bottom out of
-            // a half-height sheet.
-            if (timer.active) ...[
-              WaxOptionRow(
-                key: const Key(SemanticsIds.sleepTimerExtend),
-                semanticsId: SemanticsIds.sleepTimerExtend,
-                glyph: WaxIcons.add,
-                title: l10n.playerExtendTimer,
-                subtitle: switch (timer.minutesLeft) {
-                  final minutes? => l10n.playerTimerLeft(
-                    _span(context, minutes),
-                  ),
-                  null => l10n.playerTimerAtChapterEnd,
-                },
-                onTap: () {
-                  ref.read(sleepTimerProvider.notifier).extend();
-                  Navigator.of(context).pop();
-                },
-              ),
-              WaxOptionRow(
-                key: const Key(SemanticsIds.sleepTimerCancel),
-                semanticsId: SemanticsIds.sleepTimerCancel,
-                glyph: WaxIcons.close,
-                title: l10n.playerCancelTimer,
-                onTap: () {
-                  ref.read(sleepTimerProvider.notifier).cancel();
-                  Navigator.of(context).pop();
-                },
-              ),
-              const WaxHairline(extent: WaxSpace.s16),
-            ],
-            for (final minutes in const [5, 15, 30, 60])
-              WaxOptionRow(
-                key: ValueKey(SemanticsIds.sleepTimer(minutes)),
-                semanticsId: SemanticsIds.sleepTimer(minutes),
-                glyph: WaxIcons.sleepTimer,
-                title: l10n.playerTimerMinutes(minutes),
-                onTap: () => _startMinutes(minutes),
-              ),
-            if (chapterEndMs != null)
-              WaxOptionRow(
-                key: const Key(SemanticsIds.sleepTimerChapter),
-                semanticsId: SemanticsIds.sleepTimerChapter,
-                glyph: widget.session?.item.mediaType == MediaType.podcast
-                    ? WaxIcons.podcasts
-                    : WaxIcons.audiobooks,
-                title: l10n.playerTimerChapterEnd,
-                onTap: () {
-                  // Read now rather than when the sheet opened: a sheet
-                  // left open across a chapter end means the chapter
-                  // playing now. One whose end nothing knows arms
-                  // nothing, and the sheet is drawn again without the row.
-                  final endMs = _currentChapterEndMs();
-                  if (endMs == null) {
-                    setState(() {});
-                    return;
-                  }
-                  ref
-                      .read(sleepTimerProvider.notifier)
-                      .startEndOfChapter(endMs, pid: widget.session?.item.pid);
-                  Navigator.of(context).pop();
-                },
-              ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: WaxTextField(
-                      label: l10n.playerTimerCustom,
-                      semanticsId: SemanticsIds.sleepTimerCustomField,
-                      controller: _custom,
-                      keyboardType: TextInputType.number,
+    return Padding(
+      // Over the keyboard its field raises: SafeArea covers the display's
+      // padding, not view insets.
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Both of the running timer's own verbs first, and together:
+              // a listener who opened this sheet with a timer on came to
+              // change that timer, not to set a new one, and the presets
+              // below are long enough to push a row at the bottom out of
+              // a half-height sheet.
+              if (timer.active) ...[
+                WaxOptionRow(
+                  key: const Key(SemanticsIds.sleepTimerExtend),
+                  semanticsId: SemanticsIds.sleepTimerExtend,
+                  glyph: WaxIcons.add,
+                  title: l10n.playerExtendTimer,
+                  subtitle: switch (timer.minutesLeft) {
+                    final minutes? => l10n.playerTimerLeft(
+                      _span(context, minutes),
                     ),
-                  ),
-                  const SizedBox(width: WaxSpace.s8),
-                  WaxButton(
-                    label: l10n.playerStart,
-                    spokenLabel: l10n.playerTimerCustomStart,
-                    kind: WaxButtonKind.text,
-                    semanticsId: SemanticsIds.sleepTimerCustomStart,
-                    onPressed: () {
-                      final minutes = int.tryParse(_custom.text.trim());
-                      if (minutes != null && minutes > 0) {
-                        _startMinutes(minutes);
-                      }
-                    },
-                  ),
-                ],
+                    null => l10n.playerTimerAtChapterEnd,
+                  },
+                  onTap: () {
+                    ref.read(sleepTimerProvider.notifier).extend();
+                    Navigator.of(context).pop();
+                  },
+                ),
+                WaxOptionRow(
+                  key: const Key(SemanticsIds.sleepTimerCancel),
+                  semanticsId: SemanticsIds.sleepTimerCancel,
+                  glyph: WaxIcons.close,
+                  title: l10n.playerCancelTimer,
+                  onTap: () {
+                    ref.read(sleepTimerProvider.notifier).cancel();
+                    Navigator.of(context).pop();
+                  },
+                ),
+                const WaxHairline(extent: WaxSpace.s16),
+              ],
+              for (final minutes in const [5, 15, 30, 60])
+                WaxOptionRow(
+                  key: ValueKey(SemanticsIds.sleepTimer(minutes)),
+                  semanticsId: SemanticsIds.sleepTimer(minutes),
+                  glyph: WaxIcons.sleepTimer,
+                  title: l10n.playerTimerMinutes(minutes),
+                  onTap: () => _startMinutes(minutes),
+                ),
+              if (chapterEndMs != null)
+                WaxOptionRow(
+                  key: const Key(SemanticsIds.sleepTimerChapter),
+                  semanticsId: SemanticsIds.sleepTimerChapter,
+                  glyph: widget.session?.item.mediaType == MediaType.podcast
+                      ? WaxIcons.podcasts
+                      : WaxIcons.audiobooks,
+                  title: l10n.playerTimerChapterEnd,
+                  onTap: () {
+                    // Read now rather than when the sheet opened: a sheet
+                    // left open across a chapter end means the chapter
+                    // playing now. One whose end nothing knows arms
+                    // nothing, and the sheet is drawn again without the row.
+                    final endMs = _currentChapterEndMs();
+                    if (endMs == null) {
+                      setState(() {});
+                      return;
+                    }
+                    ref
+                        .read(sleepTimerProvider.notifier)
+                        .startEndOfChapter(
+                          endMs,
+                          pid: widget.session?.item.pid,
+                        );
+                    Navigator.of(context).pop();
+                  },
+                ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: WaxTextField(
+                        label: l10n.playerTimerCustom,
+                        semanticsId: SemanticsIds.sleepTimerCustomField,
+                        controller: _custom,
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    const SizedBox(width: WaxSpace.s8),
+                    WaxButton(
+                      label: l10n.playerStart,
+                      spokenLabel: l10n.playerTimerCustomStart,
+                      kind: WaxButtonKind.text,
+                      semanticsId: SemanticsIds.sleepTimerCustomStart,
+                      onPressed: () {
+                        final minutes = int.tryParse(_custom.text.trim());
+                        if (minutes != null && minutes > 0) {
+                          _startMinutes(minutes);
+                        }
+                      },
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: WaxSpace.s8),
-          ],
+              const SizedBox(height: WaxSpace.s8),
+            ],
+          ),
         ),
       ),
     );

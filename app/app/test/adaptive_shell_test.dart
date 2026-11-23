@@ -1010,6 +1010,32 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
+  testWidgets('the deck bar slot is empty while there is nothing to draw', (
+    tester,
+  ) async {
+    // The frame gives the window's bottom inset to whatever stands at the
+    // foot, so an empty slot must say so rather than draw nothing.
+    WaxShellFrame frame() =>
+        tester.widget<WaxShellFrame>(find.byType(WaxShellFrame));
+    final container = await _pumpShell(tester);
+    expect(frame().bottom, isNull);
+
+    container.read(nowPlayingProvider.notifier).play(
+      [testItem('tr-A', title: 'Salt Harbour')],
+      source: const QueueSource(
+        kind: QueueSourceKind.single,
+        label: 'Salt Harbour',
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(frame().bottom, isA<DeckBarHost>());
+
+    container.read(queueControllerProvider.notifier).clear();
+    await tester.pump(const Duration(seconds: 1));
+    expect(frame().bottom, isNull);
+  });
+
   testWidgets('a replacing play verb says nothing and keeps the queue', (
     tester,
   ) async {

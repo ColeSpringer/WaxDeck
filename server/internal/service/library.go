@@ -268,8 +268,8 @@ type Library struct {
 	// catalogResync tells every client to re-mirror the catalog. Set by
 	// SetCatalogResyncer; unset is a no-op.
 	catalogResync atomic.Pointer[func()]
-	// feed is the catalog change stream's identity and position;
-	// serverGen names the event_log stream's generation.
+	// feed is the catalog change stream's identity, position and what it
+	// saw move; serverGen names the event_log stream's generation.
 	feed      syncFeed
 	serverGen string
 	// libJournal records which library each item sat in, followed off the

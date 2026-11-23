@@ -310,6 +310,51 @@ func TestPlayStartsALoadMadeWhilePaused(t *testing.T) {
 	}
 }
 
+// TestReportsNameTheirLoad: a position the play loop reported before a
+// reload can reach the session after the reload set the position
+// itself, so each report names its load and the driver says which load
+// is the newest, for the session to drop the rest.
+func TestReportsNameTheirLoad(t *testing.T) {
+	_, header := numberedWAV(t, 0)
+	host := &heldHost{header: header, fetches: make(chan string, 8)}
+	srv := httptest.NewServer(host)
+	t.Cleanup(srv.Close)
+	d := newSilentDriver(t)
+	ctx := context.Background()
+	items := []connect.MediaItem{{PID: "tr-X", URL: srv.URL + "/media/stream?pid=tr-X", DurationMS: 60_000}}
+	lc, ok := any(d).(connect.LoadCounter)
+	if !ok {
+		t.Fatal("the driver does not number its loads")
+	}
+	next := func(what string, ok func(connect.DriverEvent) bool) connect.DriverEvent {
+		t.Helper()
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case ev := <-d.Events():
+				if ok(ev) {
+					return ev
+				}
+			case <-deadline:
+				t.Fatalf("timed out waiting for %s", what)
+			}
+		}
+	}
+
+	if err := d.Load(ctx, items, 0, 0, true); err != nil {
+		t.Fatal(err)
+	}
+	first := next("a position from the first load", func(ev connect.DriverEvent) bool { return ev.Playing })
+	if err := d.Load(ctx, items, 0, 20_000, true); err != nil {
+		t.Fatal(err)
+	}
+	second := next("a position from the reload", func(ev connect.DriverEvent) bool { return ev.PositionMS >= 20_000 })
+	if first.Load == 0 || first.Load >= lc.CurrentLoad() || second.Load != lc.CurrentLoad() {
+		t.Fatalf("reports name loads %d and %d with load %d current, want the first older and the second current",
+			first.Load, second.Load, lc.CurrentLoad())
+	}
+}
+
 // oddReads hands out what it holds in reads of the sizes it cycles
 // through, as a network body does whatever its framing.
 type oddReads struct {

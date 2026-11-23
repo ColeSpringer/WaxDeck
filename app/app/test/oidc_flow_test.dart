@@ -124,6 +124,25 @@ void main() {
       },
     );
 
+    test('no longer wanted once its code is in, never redeems it', () async {
+      final repo = FakeRepository();
+      final links = _FakeDeepLinks();
+      var wanted = true;
+      final flow = OidcLoginFlow(
+        repository: repo,
+        urlOpener: _FakeOpener(),
+        deepLinks: links,
+      );
+
+      final login = flow.loginWithDeepLink(_provider, wanted: () => wanted);
+      await pumpEventQueue();
+      wanted = false;
+      links.controller.add(Uri.parse('waxdeck://auth?code=one-time-code'));
+
+      await expectLater(login, throwsA(isA<OidcAbandoned>()));
+      expect(repo.oidcExchangeCalls, isEmpty);
+    });
+
     test('times out when no link ever arrives', () async {
       final flow = OidcLoginFlow(
         repository: FakeRepository(),
@@ -184,6 +203,31 @@ void main() {
         expect(served, _page);
       },
     );
+
+    test('no longer wanted once its code is in, never redeems it, and '
+        'closes', () async {
+      final repo = FakeRepository();
+      final receiver = _FakeReceiver();
+      var wanted = true;
+      final flow = OidcLoginFlow(
+        repository: repo,
+        urlOpener: _FakeOpener(),
+        bindLoopbackReceiver: (_) async => receiver,
+      );
+
+      final login = flow.loginWithLoopback(
+        _provider,
+        page: _page,
+        wanted: () => wanted,
+      );
+      await pumpEventQueue();
+      wanted = false;
+      receiver.codeController.complete('one-time-code');
+
+      await expectLater(login, throwsA(isA<OidcAbandoned>()));
+      expect(repo.oidcExchangeCalls, isEmpty);
+      expect(receiver.closed, isTrue);
+    });
 
     test('closes the receiver when the exchange never happens', () async {
       final receiver = _FakeReceiver();

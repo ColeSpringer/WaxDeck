@@ -606,12 +606,14 @@ void main() {
 
   test('a downloaded item whose stream dies offline plays on from the '
       'download', () async {
-    final downloads = FakeDownloads(
-      local: {
-        _trackPid: testLocal('/downloads/track.flac', durationMs: 214000),
-      },
-    );
+    // The download lands while the item streams: one it started with would
+    // have played from the device.
+    final downloads = FakeDownloads();
     await started(downloads: downloads);
+    downloads.byPid[_trackPid] = testLocal(
+      '/downloads/track.flac',
+      durationMs: 214000,
+    );
     engine.advance(const Duration(minutes: 1));
     await settle();
     repo.playInfoError = const WaxDeckApiException(

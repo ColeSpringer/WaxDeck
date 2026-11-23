@@ -41,6 +41,11 @@ func (l *Editor) EditEntity(ctx context.Context, entityType, apiEntityPID string
 			return EditOutcomeDTO{}, err
 		}
 	}
+	// Only an mbid clear re-keys, and so only it can dissolve a release.
+	var before *releasePlaces
+	if mbid, ok := edits["mbid"]; ok && mbid == "" {
+		before = l.placesBefore(ctx, et, pid)
+	}
 	rep, err := l.lib.EditEntity(ctx, et, pid, edits, waxbin.EntityEditOptions{
 		WriteBack: p.WriteBack, Lock: model.LockOf(p.Lock), Force: p.Force,
 	})
@@ -56,6 +61,9 @@ func (l *Editor) EditEntity(ctx context.Context, entityType, apiEntityPID string
 		for _, moved := range rep.MovedAlbums {
 			out.MovedAlbums = append(out.MovedAlbums, apiPID(PrefixAlbum, moved))
 		}
+		if rep.MergedInto != "" || len(rep.MovedAlbums) > 0 {
+			out.Folded = l.folded(ctx, before)
+		}
 	}
 	return out, nil
 }
@@ -66,6 +74,7 @@ type EntityRenameOutcomeDTO struct {
 	Outcome     string
 	MergedInto  string
 	MovedAlbums []string
+	Folded      []FoldedDTO
 	Members     int
 	Credits     int
 	Failures    []WriteBackFailureDTO
@@ -105,6 +114,9 @@ func (l *Editor) RenameEntity(ctx context.Context, entityType, apiEntityPID stri
 			return EntityRenameOutcomeDTO{}, err
 		}
 	}
+	// Any rename can land on a taken key, so where the members sit is read
+	// first; after, only where one did or a release moved.
+	before := l.placesBefore(ctx, et, pid)
 	rep, err := l.lib.RenameEntity(ctx, et, pid, fields, waxbin.RenameOptions{
 		WriteBack: p.WriteBack, Lock: model.LockOf(p.Lock), Force: p.Force,
 	})
@@ -128,6 +140,9 @@ func (l *Editor) RenameEntity(ctx context.Context, entityType, apiEntityPID stri
 	}
 	for _, moved := range rep.MovedAlbums {
 		res.MovedAlbums = append(res.MovedAlbums, apiPID(PrefixAlbum, moved))
+	}
+	if rep.Outcome == model.EntityRenameMerged || len(rep.MovedAlbums) > 0 {
+		res.Folded = l.folded(ctx, before)
 	}
 	return res, nil
 }

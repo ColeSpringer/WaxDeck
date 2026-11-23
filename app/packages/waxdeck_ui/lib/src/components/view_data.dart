@@ -33,13 +33,35 @@ enum ArtworkShape {
 ///
 /// Answering null is a real state, not a loading one: an item with no
 /// cover draws the monogram.
-typedef WaxArtwork = ImageProvider? Function(int px);
+@immutable
+class WaxArtwork {
+  const WaxArtwork(this._at, {this.cover, this.replaced});
+
+  final ImageProvider? Function(int px) _at;
+
+  /// Names the cover, at whatever size or under whatever name it is
+  /// fetched: its art URL, for a cover the app's store hands out.
+  ///
+  /// A cover keeps its place while its bytes change, and [ArtworkImage]
+  /// goes on showing the picture it has until the new one is ready. A
+  /// list that reuses a row for another item changes the artwork there
+  /// too, and the old picture is then somebody else's: it is kept only
+  /// across two answers of one [cover]. Null is never taken for the
+  /// cover before it.
+  final String? cover;
+
+  /// Says when the app has learned that this cover's picture changed.
+  /// An [ArtworkImage] on screen asks again then, by itself; one that is
+  /// not on screen is not listening.
+  final Listenable? replaced;
+
+  ImageProvider? call(int px) => _at(px);
+}
 
 /// Artwork that is already decided at every size: assets, generated
 /// covers, test doubles. Anything drawn from a URL comes through the
 /// app's artwork store instead, which sizes the request to the draw.
-WaxArtwork fixedArtwork(ImageProvider provider) =>
-    (_) => provider;
+WaxArtwork fixedArtwork(ImageProvider provider) => WaxArtwork((_) => provider);
 
 /// What a card or row needs to draw one item.
 ///

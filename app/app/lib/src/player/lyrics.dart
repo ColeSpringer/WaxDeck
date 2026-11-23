@@ -19,13 +19,12 @@ import 'playback_session.dart';
 
 /// One item's words, in the shape the design system draws them.
 ///
-/// The mapping happens here rather than in the widget, and that is not
-/// tidiness: [LyricsView] resets a reader's scroll when it is handed a
-/// different list, which is how a new track puts the highlight back at
-/// the top. A widget that mapped the wire model inline would build a new
-/// list on every rebuild, so every parent rebuild would look like a new
-/// track and drag a reader who had scrolled away back to the playhead.
-/// A provider's resolved value is one instance until the read changes.
+/// The mapping happens here rather than in the widget: [LyricsView]
+/// resets a reader's scroll when it is handed different lines, which is
+/// how a new track puts the highlight back at the top, and it tells by
+/// comparing them. Mapped once per read, a parent rebuild hands it the
+/// same list and that comparison is free; a read made again (a catalog
+/// sweep) hands it an equal one, which leaves the reader where they are.
 @immutable
 class TrackLyrics {
   const TrackLyrics({required this.lines, this.text});

@@ -61,12 +61,16 @@ mixin _NowPlayingFailure on _NowPlayingCore, _NowPlayingTransport {
         ? (entryId: id, play: meantToPlay)
         : null;
     _resumeOnReconnect = meantToPlay && _outOfReach(error);
-    _armedOnline =
-        _resumeOnReconnect && ref.read(liveConnectionProvider) != false
+    final link = ref.read(liveConnectionProvider);
+    _armedOnline = _resumeOnReconnect && link == true
         ? ref.read(wallClockProvider)()
         : null;
     state = NowPlaying(entry: entry, item: item, error: error);
-    _offerRetry(item, midPlay: midPlay);
+    _offerRetry(
+      item,
+      midPlay: midPlay,
+      offline: _resumeOnReconnect && link == false,
+    );
   }
 
   /// Steps past [item], a file that will not play, and says so; what it
@@ -91,14 +95,19 @@ mixin _NowPlayingFailure on _NowPlayingCore, _NowPlayingTransport {
   /// Says on the shell that [item] could not start, with the pane's retry
   /// beside it: the pane is drawn only by the full player, and a listener
   /// at the deck bar would otherwise see a stopped transport and no why.
-  /// Offline, a start that will resume by itself says so (see
-  /// [_onServerBack]).
+  /// [offline] is a start that will be made by itself ([_onServerBack])
+  /// with the link known down, which is what it says. One armed before
+  /// the link is known down says only that it could not start, until
+  /// [_outageBegan] sees it down.
   /// [midPlay] is an item that had been playing, which did not fail to
   /// start and is not said to.
-  void _offerRetry(ItemSummary? item, {bool midPlay = false}) {
+  void _offerRetry(
+    ItemSummary? item, {
+    required bool offline,
+    bool midPlay = false,
+  }) {
     final title = item?.title;
-    final offline =
-        _resumeOnReconnect && ref.read(liveConnectionProvider) == false;
+    _saidOffline = offline;
     ref
         .read(shellMessengerProvider)
         .showLocalized(
@@ -113,18 +122,31 @@ mixin _NowPlayingFailure on _NowPlayingCore, _NowPlayingTransport {
           actionLabelOf: (l10n) => l10n.commonRetry,
           onAction: resume,
           actionSemanticsId: SemanticsIds.playerStartRetry,
+          channel: ShellChannel.startRetry,
+          subject: _startOffer,
         );
   }
 
-  /// The link went down. A resume a failure armed while it still read up
-  /// stands when that failure was this outage's leading edge, and lapses
-  /// when it was older.
-  void _outageBegan() {
+  /// Whether a failed start stands on the pane that the server's return
+  /// is to make.
+  bool get _awaitsServer =>
+      _resumeOnReconnect && state.session == null && state.error != null;
+
+  /// The link turned away from up; [down] is it known down, not only
+  /// unanswered. A resume a failure armed while the link read up stands
+  /// when that failure was this outage's leading edge, and lapses when it
+  /// was older. One that stands with the link down, and has not said so,
+  /// says so in place of the offer raised as it failed.
+  void _outageBegan({required bool down}) {
     final armed = _armedOnline;
-    if (armed == null) return;
-    _armedOnline = null;
-    final since = ref.read(wallClockProvider)().difference(armed);
-    if (since > _outageGrace) _resumeOnReconnect = false;
+    if (armed != null) {
+      _armedOnline = null;
+      final since = ref.read(wallClockProvider)().difference(armed);
+      if (since > _outageGrace) _resumeOnReconnect = false;
+    }
+    if (down && _awaitsServer && !_saidOffline) {
+      _offerRetry(state.item, offline: true);
+    }
   }
 
   /// The live connection came back: a start that failed for want of the
@@ -133,8 +155,12 @@ mixin _NowPlayingFailure on _NowPlayingCore, _NowPlayingTransport {
     unawaited(
       ref.read(listenOutboxProvider).flush(ref.read(repositoryProvider)),
     );
-    if (_resumeOnReconnect && state.session == null && state.error != null) {
+    if (_awaitsServer) {
       _resumeOnReconnect = false;
+      // The retry the shell still offers is being made.
+      ref
+          .read(shellMessengerProvider)
+          .withdraw(ShellChannel.startRetry, _startOffer);
       resume();
     }
   }
@@ -232,7 +258,7 @@ mixin _NowPlayingFailure on _NowPlayingCore, _NowPlayingTransport {
 
   /// The engine crossed out of the playing item and into the one it had
   /// prepared: the queue moves to that entry and a session for it takes
-  /// over a stream that never stopped.
+  /// over media that never stopped, a stream or a downloaded file.
   void _onBoundary() {
     if (_radioOwnsEngine) return;
     final crossed = _preload;
@@ -278,7 +304,7 @@ mixin _NowPlayingFailure on _NowPlayingCore, _NowPlayingTransport {
       // Already current (the queue was edited under the crossing), so
       // no state change is coming to react to.
       _adopting = null;
-      _inFlight = _adopt(crossed.entry, crossed.info);
+      _inFlight = _adopt(crossed.entry, crossed);
     } else {
       notifier.jumpTo(index);
     }
@@ -333,3 +359,7 @@ bool _outOfReach(Object error) => switch (error) {
 /// semantics identifier: none of these has a button, and there is
 /// nothing here for a test to press.
 const _skipChannel = ShellChannel.skippedUnplayable;
+
+/// What the offer to retry a failed start is about, for taking it back:
+/// there is one at a time.
+const _startOffer = 'start';

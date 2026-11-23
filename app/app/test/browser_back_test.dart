@@ -9,6 +9,8 @@ import 'package:waxdeck/src/admin/users_screen.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/login_screen.dart';
 import 'package:waxdeck/src/auth/signup_screen.dart';
+import 'package:waxdeck/src/books/book_bucket_screen.dart';
+import 'package:waxdeck/src/books/book_dimension.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/books/books_screen.dart';
 import 'package:waxdeck/src/books/series_screen.dart';
@@ -21,7 +23,9 @@ import 'package:waxdeck/src/home/mix_shelf.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/library/item_delete.dart';
 import 'package:waxdeck/src/library/item_kind.dart';
+import 'package:waxdeck/src/metadata/entity_editor_screen.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
+import 'package:waxdeck/src/metadata/rename_section.dart';
 import 'package:waxdeck/src/music/album_screen.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/index_screen.dart';
@@ -288,6 +292,9 @@ Future<void> _takeOffer(WidgetTester tester, String text) async {
   );
   await tester.pumpAndSettle();
 }
+
+/// A move of the app's, made on the screen [tester] shows.
+typedef _Move = void Function(WidgetTester tester, GoRouter router);
 
 UserAccount _account(String id, String username) => UserAccount(
   id: id,
@@ -2027,6 +2034,383 @@ void main() {
         });
       }
     }
+
+    testWidgets("the browser's back in the frame of a go, onto the app's "
+        'oldest entry, forgotten: what stands in is written over it, the go '
+        'goes unwritten and the entry ahead stays', (tester) async {
+      final (container, browser) = await _pumpTab(
+        tester,
+        at: WaxRoute.notifications,
+      );
+      await _go(tester, container, WaxRoute.tasks);
+      final history = container.read(waxHistoryProvider)!
+        ..forget(WaxRoute.notifications);
+      final built = _arrivals(container);
+
+      _router(container).go(WaxRoute.uploads);
+      browser.goBack();
+      await tester.pump(Duration.zero);
+      await tester.pumpAndSettle();
+
+      expect(history.stepping, isFalse);
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(browser.index, 0);
+      expect(locations(browser), <String>[
+        WaxRoute.home,
+        WaxRoute.tasks,
+      ], reason: 'the go is unwritten');
+      expect(built, isNot(contains(WaxRoute.notifications)));
+      expect(history.canGoBack, isFalse, reason: 'the oldest');
+
+      await _browserForward(tester, browser);
+      expect(find.byType(TasksScreen), findsOneWidget);
+      expect(browser.index, 1);
+      expect(history.isBehind(WaxRoute.home), isTrue);
+      expect(locations(browser), <String>[WaxRoute.home, WaxRoute.tasks]);
+    });
+
+    // A go made with visits ahead takes their place in the list, as any
+    // new visit does. Where the browser's own move comes before the engine
+    // is told of it, the browser still holds their entries, so the list
+    // holds them again.
+    testWidgets("the browser's back in the frame of a go made with visits "
+        'ahead leaves them in the list: forward lands on each, and the '
+        'arrow walks them back', (tester) async {
+      final (container, browser) = await _pumpTab(tester);
+      await _go(tester, container, WaxRoute.tasks);
+      await _go(tester, container, WaxRoute.notifications);
+      await _go(tester, container, WaxRoute.podcasts);
+      await _browserBack(tester, browser);
+      await _browserBack(tester, browser);
+      final history = container.read(waxHistoryProvider)!;
+      final entries = locations(browser);
+      expect(browser.index, 1);
+
+      _router(container).go(WaxRoute.uploads);
+      browser.goBack();
+      await tester.pump(Duration.zero);
+      await tester.pumpAndSettle();
+
+      expect(history.stepping, isFalse);
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(browser.index, 0);
+      expect(locations(browser), entries, reason: 'the go is unwritten');
+      for (final (i, screen) in <Type>[
+        TasksScreen,
+        NotificationsScreen,
+        PodcastsScreen,
+      ].indexed) {
+        await _browserForward(tester, browser);
+        expect(find.byType(screen), findsOneWidget);
+        expect(browser.index, i + 1);
+        expect(locations(browser), entries);
+        expect(history.canGoBack, isTrue, reason: 'the list kept its place');
+      }
+      final backs = browser.backs;
+      for (final (i, screen) in <Type>[
+        NotificationsScreen,
+        TasksScreen,
+        HomeScreen,
+      ].indexed) {
+        await _back(tester, hub: true);
+        expect(find.byType(screen), findsOneWidget);
+        expect(browser.index, 2 - i);
+      }
+      expect(browser.backs, backs + 3, reason: 'through the browser');
+      expect(locations(browser), entries, reason: 'no entry minted');
+      expect(history.canGoBack, isFalse, reason: 'the oldest');
+    });
+
+    testWidgets("the browser's back in the frame of a go made with a visit "
+        'ahead passes a forgotten entry and leaves that visit in the list', (
+      tester,
+    ) async {
+      final (container, browser) = await _pumpTab(tester);
+      await _go(tester, container, WaxRoute.tasks);
+      await _go(tester, container, WaxRoute.notifications);
+      await _go(tester, container, WaxRoute.podcasts);
+      await _go(tester, container, WaxRoute.radio);
+      await _browserBack(tester, browser);
+      final history = container.read(waxHistoryProvider)!
+        ..forget(WaxRoute.notifications);
+      final entries = locations(browser);
+      final built = _arrivals(container);
+      expect(browser.index, 3);
+
+      _router(container).go(WaxRoute.uploads);
+      browser.goBack();
+      await tester.pump(Duration.zero);
+      await tester.pumpAndSettle();
+
+      expect(history.stepping, isFalse);
+      expect(find.byType(TasksScreen), findsOneWidget);
+      expect(browser.index, 1);
+      expect(locations(browser), entries, reason: 'the go is unwritten');
+      expect(history.canGoBack, isTrue);
+      // Forward passes the forgotten entry too, and lands on each ahead.
+      for (final (screen, index) in <(Type, int)>[
+        (PodcastsScreen, 3),
+        (RadioScreen, 4),
+      ]) {
+        await _browserForward(tester, browser);
+        expect(find.byType(screen), findsOneWidget);
+        expect(browser.index, index);
+        expect(locations(browser), entries);
+        expect(history.canGoBack, isTrue, reason: 'the list kept its place');
+      }
+      for (final (screen, index) in <(Type, int)>[
+        (PodcastsScreen, 3),
+        (TasksScreen, 1),
+        (HomeScreen, 0),
+      ]) {
+        await _back(tester, hub: true);
+        expect(find.byType(screen), findsOneWidget);
+        expect(browser.index, index);
+      }
+      expect(locations(browser), entries, reason: 'no entry minted');
+      expect(built, isNot(contains(WaxRoute.notifications)));
+    });
+
+    testWidgets("the browser's back in the frame of a go made with a visit "
+        "ahead, onto the app's oldest entry, forgotten: what stands in is "
+        'written over it, and forward lands on each entry ahead', (
+      tester,
+    ) async {
+      final (container, browser) = await _pumpTab(
+        tester,
+        at: WaxRoute.notifications,
+      );
+      await _go(tester, container, WaxRoute.tasks);
+      await _go(tester, container, WaxRoute.podcasts);
+      await _browserBack(tester, browser);
+      final history = container.read(waxHistoryProvider)!
+        ..forget(WaxRoute.notifications);
+      final built = _arrivals(container);
+      final entries = <String>[
+        WaxRoute.home,
+        WaxRoute.tasks,
+        WaxRoute.podcasts,
+      ];
+      expect(browser.index, 1);
+
+      _router(container).go(WaxRoute.uploads);
+      browser.goBack();
+      await tester.pump(Duration.zero);
+      await tester.pumpAndSettle();
+
+      expect(history.stepping, isFalse);
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(browser.index, 0);
+      expect(
+        locations(browser),
+        entries,
+        reason: 'the go is unwritten, and no entry ahead is lost',
+      );
+      expect(history.canGoBack, isFalse, reason: 'the oldest');
+      expect(built, isNot(contains(WaxRoute.notifications)));
+
+      await _browserForward(tester, browser);
+      expect(find.byType(TasksScreen), findsOneWidget);
+      expect(browser.index, 1);
+      expect(history.isBehind(WaxRoute.home), isTrue);
+      await _browserForward(tester, browser);
+      expect(find.byType(PodcastsScreen), findsOneWidget);
+      expect(browser.index, 2);
+      expect(history.isBehind(WaxRoute.tasks), isTrue);
+      expect(locations(browser), entries, reason: 'no entry minted');
+    });
+
+    // The visitor's forward has nothing to show: the browser is sent back
+    // to the entry the go was made on, and the go stands.
+    for (final passing in <bool>[false, true]) {
+      testWidgets("the browser's forward in the frame of a go, "
+          '${passing ? 'past a forgotten entry ' : ''}onto the newest entry, '
+          'forgotten${passing ? ' too' : ''}: the browser comes back, the go '
+          'is written past the entry it was made on, and its visit stays in '
+          'the list', (tester) async {
+        final (container, browser) = await _pumpTab(tester);
+        await _go(tester, container, WaxRoute.tasks);
+        await _go(tester, container, WaxRoute.notifications);
+        if (passing) await _go(tester, container, WaxRoute.podcasts);
+        await _browserBack(tester, browser);
+        if (passing) await _browserBack(tester, browser);
+        final history = container.read(waxHistoryProvider)!
+          ..forget(WaxRoute.notifications)
+          ..forget(WaxRoute.podcasts);
+        final built = _arrivals(container);
+        final entries = <String>[
+          WaxRoute.home,
+          WaxRoute.tasks,
+          WaxRoute.uploads,
+        ];
+        expect(browser.index, 1);
+
+        _router(container).go(WaxRoute.uploads);
+        browser.goForward();
+        await tester.pump(Duration.zero);
+        await tester.pumpAndSettle();
+
+        expect(history.stepping, isFalse);
+        expect(find.byType(UploadsScreen), findsOneWidget);
+        expect(browser.location, WaxRoute.uploads, reason: 'the address');
+        expect(browser.index, 2);
+        expect(locations(browser), entries, reason: 'the go stands');
+        expect(history.isBehind(WaxRoute.tasks), isTrue);
+
+        // Its entry is written, so a later browser move leaves its visit be.
+        await _browserBack(tester, browser);
+        expect(find.byType(TasksScreen), findsOneWidget);
+        expect(browser.index, 1);
+        await _browserForward(tester, browser);
+        expect(find.byType(UploadsScreen), findsOneWidget);
+        expect(browser.index, 2);
+        expect(
+          history.isBehind(WaxRoute.tasks),
+          isTrue,
+          reason: "the go's visit is still the list's",
+        );
+        final backs = browser.backs;
+        await _back(tester);
+        expect(browser.backs, backs + 1, reason: 'through the browser');
+        expect(find.byType(TasksScreen), findsOneWidget);
+        expect(locations(browser), entries, reason: 'no entry minted');
+        expect(built, isNot(contains(WaxRoute.notifications)));
+        expect(built, isNot(contains(WaxRoute.podcasts)));
+      });
+    }
+
+    // A move that adds no visit is told again the same way: a swap over
+    // the entry it was made on, an up go past it. With a frame drawn while
+    // the browser is away, the router's own report of it is held with the
+    // rest, and goes with it.
+    final artistsIndex = WaxRoute.musicIndex(MusicDimension.artists);
+    for (final (what, from, to, move) in <(String, String, String, _Move)>[
+      (
+        'a swap',
+        WaxRoute.tasks,
+        WaxRoute.uploads,
+        (tester, router) =>
+            tester.element(find.byType(TasksScreen)).swap(WaxRoute.uploads),
+      ),
+      (
+        'an up go',
+        artistsIndex,
+        WaxRoute.music,
+        (tester, router) => router.go(WaxRoute.music),
+      ),
+    ]) {
+      final swap = what == 'a swap';
+      for (final (passing, framed) in <(bool, bool)>[
+        (false, false),
+        (false, true),
+        (true, false),
+        (true, true),
+      ]) {
+        testWidgets("the browser's forward in the frame of $what, "
+            '${passing ? 'past a forgotten entry ' : ''}onto the newest '
+            'entry, forgotten${passing ? ' too' : ''}'
+            "${framed ? ', each step a frame apart' : ''}: the browser comes "
+            "back, and the move is written ${swap ? 'over' : 'past'} the "
+            'entry it was made on', (tester) async {
+          const latency = Duration(milliseconds: 100);
+          final (container, browser) = await _pumpTab(tester);
+          await _go(tester, container, from);
+          await _go(tester, container, WaxRoute.notifications);
+          if (passing) await _go(tester, container, WaxRoute.podcasts);
+          await _browserBack(tester, browser);
+          if (passing) await _browserBack(tester, browser);
+          final history = container.read(waxHistoryProvider)!
+            ..forget(WaxRoute.notifications)
+            ..forget(WaxRoute.podcasts);
+          final built = _arrivals(container);
+          expect(browser.index, 1);
+
+          if (framed) browser.latency = latency;
+          move(tester, _router(container));
+          browser.goForward();
+          await tester.pump(Duration.zero);
+          if (framed) {
+            expect(history.stepping, isTrue, reason: 'the browser is away');
+            for (var i = 0; i < 3; i++) {
+              await tester.pump(latency + const Duration(milliseconds: 10));
+            }
+          }
+          await tester.pumpAndSettle();
+          browser.latency = null;
+
+          expect(history.stepping, isFalse);
+          expect(_location(container), to);
+          expect(browser.location, to, reason: 'the address');
+          // A swap drops no entry ahead; a go drops them, as any push.
+          expect(browser.index, swap ? 1 : 2);
+          expect(locations(browser), <String>[
+            WaxRoute.home,
+            if (!swap) from,
+            to,
+            if (swap) WaxRoute.notifications,
+            if (swap && passing) WaxRoute.podcasts,
+          ]);
+
+          await _browserBack(tester, browser);
+          expect(_location(container), swap ? WaxRoute.home : from);
+          expect(browser.index, swap ? 0 : 1);
+          await _browserForward(tester, browser);
+          expect(_location(container), to);
+          expect(browser.location, to, reason: 'the address');
+          expect(built, isNot(contains(WaxRoute.notifications)));
+          expect(built, isNot(contains(WaxRoute.podcasts)));
+        });
+      }
+    }
+
+    // By design, pinned as it is: the step that sends the browser back
+    // cannot be called off, so the visitor's own back heard before it lands
+    // drops the go being told again, and the step lands from where that
+    // back went.
+    testWidgets('a back of the visitor while the browser is being sent back '
+        'to the entry a go was made on undoes the go: home shows on the way, '
+        'and the tab ends on that entry as it was', (tester) async {
+      const latency = Duration(milliseconds: 100);
+      final (container, browser) = await _pumpTab(tester);
+      await _go(tester, container, WaxRoute.tasks);
+      await _go(tester, container, WaxRoute.notifications);
+      await _go(tester, container, WaxRoute.podcasts);
+      await _browserBack(tester, browser);
+      await _browserBack(tester, browser);
+      final history = container.read(waxHistoryProvider)!
+        ..forget(WaxRoute.notifications)
+        ..forget(WaxRoute.podcasts);
+      final entries = locations(browser);
+      final built = _arrivals(container);
+
+      _router(container).go(WaxRoute.uploads);
+      browser
+        ..latency = latency
+        ..goForward();
+      await tester.pump(Duration.zero);
+      // The pass has reached the newest, and the browser is sent back.
+      await tester.pump(latency + const Duration(milliseconds: 10));
+      expect(browser.index, 3);
+      expect(history.stepping, isTrue);
+      browser.goBack();
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(latency);
+      }
+      await tester.pumpAndSettle();
+      browser.latency = null;
+
+      expect(history.stepping, isFalse);
+      expect(find.byType(TasksScreen), findsOneWidget);
+      expect(browser.index, 1);
+      expect(browser.location, WaxRoute.tasks, reason: 'the address');
+      expect(locations(browser), entries, reason: 'the go is unwritten');
+      expect(built, <String>[
+        WaxRoute.uploads,
+        WaxRoute.home,
+        WaxRoute.tasks,
+      ], reason: 'home on the way');
+      expect(history.isBehind(WaxRoute.home), isTrue);
+    });
 
     testWidgets("the browser's back in the frame of a push leaves the push "
         'out of what a tap on its tab brings back', (tester) async {
@@ -6443,6 +6827,34 @@ void main() {
       await tester.pump(WaxHistory.unansweredStep);
     });
 
+    testWidgets('browser back leaves the app in one press past an entry of a '
+        'record merged into another too', (tester) async {
+      const gone = 'ar-01JZX5N8QW3F4V9T2B7KDGONE01';
+      const kept = 'ar-01JZX5N8QW3F4V9T2B7KDKEPT01';
+      final (container, browser) = await _pumpTab(tester);
+      await visit(tester, container, <String>[
+        WaxRoute.tasks,
+        WaxRoute.musicBucket(MusicDimension.artists, gone),
+        WaxRoute.radio,
+      ]);
+      container
+          .read(waxHistoryProvider)!
+          .forget(
+            WaxRoute.musicBucket(MusicDimension.artists, gone),
+            instead: WaxRoute.musicBucket(MusicDimension.artists, kept),
+          );
+      await signOut(tester, container);
+      final entries = locations(browser);
+      final built = _arrivals(container);
+
+      await _browserBack(tester, browser);
+
+      expect(browser.left, isTrue);
+      expect(built, isEmpty, reason: 'nothing the router heard of');
+      expect(locations(browser), entries, reason: 'none minted');
+      await tester.pump(WaxHistory.unansweredStep);
+    });
+
     testWidgets('browser back leaves the app past an earlier sign-in entry '
         'too', (tester) async {
       final (container, browser) = await _pumpTab(tester, signedIn: false);
@@ -6602,5 +7014,2011 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.adminForbidden),
       findsOneWidget,
     );
+  });
+
+  group('a record merged into another', () {
+    // Every page of the record is the survivor's from then on, wherever it
+    // sits: the list and the tab's entries hold the same pages, one for
+    // one, so back and forward walk them in order and mint or drop none.
+    const gone = 'ar-01JZX5N8QW3F4V9T2B7KDGONE01';
+    const kept = 'ar-01JZX5N8QW3F4V9T2B7KDKEPT01';
+    final artists = WaxRoute.musicIndex(MusicDimension.artists);
+    final gonePage = WaxRoute.musicBucket(MusicDimension.artists, gone);
+    final page = WaxRoute.musicBucket(MusicDimension.artists, kept);
+    final editor = WaxRoute.metadata(kept);
+    final album = WaxRoute.musicBucket(MusicDimension.albums, _albumPid);
+    final authors = WaxRoute.bookIndex(BookDimension.authors);
+    final goneAuthor = WaxRoute.bookBucket(BookDimension.authors, gone);
+    final author = WaxRoute.bookBucket(BookDimension.authors, kept);
+    const home = (WaxRoute.home, <String>[]);
+
+    /// The app with both artists in its library, in a browser tab unless
+    /// [native]; [at] opens it cold on a link.
+    Future<(ProviderContainer, FakeBrowser?)> tab(
+      WidgetTester tester, {
+      required bool native,
+      String? at,
+    }) async {
+      final (container, browser) = await _pumpTab(
+        tester,
+        native: native,
+        at: at,
+      );
+      _repo(container)
+        ..facetItems['artist ${kept.substring(3)}'] = [testItem('tr-1')]
+        ..facetItems['artist ${gone.substring(3)}'] = [testItem('tr-1')];
+      return (container, native ? null : browser);
+    }
+
+    /// The artist's editor, as its page's overflow opens it.
+    Future<void> edit(WidgetTester tester, ProviderContainer container) async {
+      unawaited(_router(container).push<void>(WaxRoute.metadata(gone)));
+      await tester.pumpAndSettle();
+    }
+
+    /// What the editor on top follows its answer with, read as it asks.
+    EditFollow asked(WidgetTester tester) => EditFollow.of(
+      tester.element(find.byType(EntityEditorScreen)),
+      pid: gone,
+    );
+
+    /// The server's answer: the artist went into the other.
+    Future<void> answer(
+      WidgetTester tester,
+      ProviderContainer container,
+      EditFollow follow,
+    ) async {
+      _repo(container).facetItems.remove('artist ${gone.substring(3)}');
+      unawaited(follow.merged(kept, said: (l10n) => l10n.commonOpen));
+      await tester.pumpAndSettle();
+    }
+
+    /// The editor opened over what is on screen, and the merge it asks for.
+    Future<void> merge(WidgetTester tester, ProviderContainer container) async {
+      await edit(tester, container);
+      await answer(tester, container, asked(tester));
+    }
+
+    const goneAlbum = 'al-01JZX5N8QW3F4V9T2B7KDGONEA1';
+    const keptAlbum = 'al-01JZX5N8QW3F4V9T2B7KDKEPTA1';
+    final goneRelease = WaxRoute.musicBucket(MusicDimension.albums, goneAlbum);
+    final release = WaxRoute.musicBucket(MusicDimension.albums, keptAlbum);
+    final albums = WaxRoute.musicIndex(MusicDimension.albums);
+
+    /// Each artist's release of one title.
+    void releases(ProviderContainer container) {
+      final repo = _repo(container);
+      for (final pid in [goneAlbum, keptAlbum]) {
+        repo
+          ..albums[pid] = AlbumDetail(pid: pid, title: 'Common Ground')
+          ..facetItems['album ${pid.substring(3)}'] = [testItem('tr-1')];
+      }
+    }
+
+    /// The merge, whose answer says the artist's release folded into the
+    /// survivor's, as the server answers when both had one of a title.
+    Future<void> mergeFolding(
+      WidgetTester tester,
+      ProviderContainer container,
+    ) async {
+      await edit(tester, container);
+      final follow = asked(tester);
+      _repo(container)
+        ..facetItems.remove('artist ${gone.substring(3)}')
+        ..facetItems.remove('album ${goneAlbum.substring(3)}')
+        ..albums.remove(goneAlbum);
+      unawaited(
+        follow.merged(
+          kept,
+          said: (l10n) => l10n.commonOpen,
+          folded: const [FoldedEntity(pid: goneAlbum, into: keptAlbum)],
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    final ofGoneRelease = find.byWidgetPredicate(
+      (widget) => widget is AlbumScreen && widget.pid == goneAlbum,
+      skipOffstage: false,
+    );
+
+    final ofGone = find.byWidgetPredicate(
+      (widget) =>
+          (widget is ArtistScreen && widget.pid == gone) ||
+          (widget is EntityEditorScreen && widget.pid == gone) ||
+          (widget is MusicListingScreen && widget.segment == gone),
+      skipOffstage: false,
+    );
+
+    /// The author page of the artist merged away, on screen or off.
+    final authorOfGone = find.byWidgetPredicate(
+      (widget) => widget is BookBucketScreen && widget.segment == gone,
+      skipOffstage: false,
+    );
+
+    /// The screen is [screen], a location and what is pushed over it, with
+    /// no page of the artist merged away anywhere; in a browser the tab is
+    /// on entry [index] of [entries], and that entry shows the same. Not
+    /// [everywhere] while a branch the visitor left holds a page of it: a
+    /// branch's pages are put in place as it is next shown.
+    void shows(
+      WidgetTester tester,
+      ProviderContainer container,
+      FakeBrowser? browser,
+      (String, List<String>) screen, {
+      required int index,
+      required int entries,
+      bool everywhere = true,
+    }) {
+      final (location, pushes) = screen;
+      expect(tester.takeException(), isNull);
+      expect(_location(container), location);
+      expect(_pushes(container), pushes);
+      if (everywhere) {
+        expect(ofGone, findsNothing, reason: 'no page of the artist that went');
+      }
+      if (browser == null) return;
+      expect(browser.index, index, reason: 'the entry the tab is on');
+      expect(browser.entries, hasLength(entries), reason: 'none minted');
+      expect(browser.location, location, reason: 'the address');
+      expect(browser.pushes, pushes, reason: 'what the entry holds');
+    }
+
+    /// Walks back from the newest entry to the first, by the arrow where
+    /// [arrow] and by the browser's own back otherwise, then in a browser
+    /// forward to the newest again. [screens] is what each entry shows,
+    /// oldest first. No page of the artist merged away is built on the way.
+    Future<void> walk(
+      WidgetTester tester,
+      ProviderContainer container,
+      FakeBrowser? browser,
+      List<(String, List<String>)> screens, {
+      bool arrow = true,
+    }) async {
+      final entries = screens.length;
+      final built = _arrivals(container);
+      final pushed = _pushArrivals(container);
+      for (var i = entries - 2; i >= 0; i--) {
+        if (arrow || browser == null) {
+          await _back(tester, hub: true);
+        } else {
+          await _browserBack(tester, browser);
+        }
+        shows(
+          tester,
+          container,
+          browser,
+          screens[i],
+          index: i,
+          entries: entries,
+        );
+      }
+      if (browser != null) {
+        for (var i = 1; i < entries; i++) {
+          await _browserForward(tester, browser);
+          shows(
+            tester,
+            container,
+            browser,
+            screens[i],
+            index: i,
+            entries: entries,
+          );
+        }
+      }
+      expect(
+        [...built, ...pushed].where((location) => location.contains(gone)),
+        isEmpty,
+        reason: 'the pages merged away are never built',
+      );
+    }
+
+    /// Each way back is walked: the arrow natively, and in a browser tab
+    /// the arrow and the browser's own back.
+    const ways = <(String, {bool native, bool arrow})>[
+      ('by the arrow natively', native: true, arrow: true),
+      ('by the arrow in a browser tab', native: false, arrow: true),
+      ("by the browser's back", native: false, arrow: false),
+    ];
+
+    for (final (how, :native, :arrow) in ways) {
+      testWidgets('from its editor, opened from its page: back reaches the '
+          "survivor's page, then the index, $how", (tester) async {
+        final (container, browser) = await tab(tester, native: native);
+        await _go(tester, container, artists);
+        await _go(tester, container, gonePage);
+        await merge(tester, container);
+        final screens = [
+          home,
+          (artists, <String>[]),
+          (page, <String>[]),
+          (page, [editor]),
+        ];
+        shows(tester, container, browser, screens.last, index: 3, entries: 4);
+
+        await walk(tester, container, browser, screens, arrow: arrow);
+      });
+
+      testWidgets('with a release open over its page and its page open again '
+          "over that: every page is walked in order as the survivor's, $how", (
+        tester,
+      ) async {
+        final (container, browser) = await tab(tester, native: native);
+        await _go(tester, container, artists);
+        await _go(tester, container, gonePage);
+        unawaited(_router(container).push<void>(album));
+        await tester.pumpAndSettle();
+        // As a row's "Go to artist" does.
+        unawaited(_router(container).push<void>(gonePage));
+        await tester.pumpAndSettle();
+        await merge(tester, container);
+        final screens = [
+          home,
+          (artists, <String>[]),
+          (page, <String>[]),
+          (page, [album]),
+          (page, [album, page]),
+          (page, [album, page, editor]),
+        ];
+        shows(tester, container, browser, screens.last, index: 5, entries: 6);
+
+        await walk(tester, container, browser, screens, arrow: arrow);
+      });
+
+      testWidgets('with its release open over its page, the release folded '
+          "into the survivor's by the merge: every page is walked in order "
+          "as the survivor's, the release too, $how", (tester) async {
+        final (container, browser) = await tab(tester, native: native);
+        releases(container);
+        await _go(tester, container, artists);
+        await _go(tester, container, gonePage);
+        unawaited(_router(container).push<void>(goneRelease));
+        await tester.pumpAndSettle();
+        // As the release's "Go to artist" does.
+        unawaited(_router(container).push<void>(gonePage));
+        await tester.pumpAndSettle();
+        await mergeFolding(tester, container);
+        final built = _arrivals(container);
+        final pushed = _pushArrivals(container);
+        final screens = [
+          home,
+          (artists, <String>[]),
+          (page, <String>[]),
+          (page, [release]),
+          (page, [release, page]),
+          (page, [release, page, editor]),
+        ];
+        shows(tester, container, browser, screens.last, index: 5, entries: 6);
+        expect(ofGoneRelease, findsNothing);
+
+        await walk(tester, container, browser, screens, arrow: arrow);
+        expect(ofGoneRelease, findsNothing);
+        expect(
+          [...built, ...pushed].where((at) => at.contains(goneAlbum)),
+          isEmpty,
+          reason: 'the release folded away is never built',
+        );
+      });
+
+      testWidgets('with the release opened from the albums index and the '
+          "artist from it, the release folded into the survivor's: back "
+          "reaches the survivor's release, $how", (tester) async {
+        final (container, browser) = await tab(tester, native: native);
+        releases(container);
+        await _go(tester, container, albums);
+        await _go(tester, container, goneRelease);
+        unawaited(_router(container).push<void>(gonePage));
+        await tester.pumpAndSettle();
+        await mergeFolding(tester, container);
+        final built = _arrivals(container);
+        final pushed = _pushArrivals(container);
+        final screens = [
+          home,
+          (albums, <String>[]),
+          (release, <String>[]),
+          (release, [page]),
+          (release, [page, editor]),
+        ];
+        shows(tester, container, browser, screens.last, index: 4, entries: 5);
+
+        await walk(tester, container, browser, screens, arrow: arrow);
+        expect(ofGoneRelease, findsNothing);
+        expect(
+          [...built, ...pushed].where((at) => at.contains(goneAlbum)),
+          isEmpty,
+          reason: 'the release folded away is never built',
+        );
+      });
+
+      testWidgets('with its page opened from a search hit: back from the '
+          "survivor's editor reaches the survivor's page, $how", (
+        tester,
+      ) async {
+        final (container, browser) = await tab(tester, native: native);
+        await _go(tester, container, WaxRoute.search);
+        // As the hit does, with the name it had.
+        unawaited(_router(container).push<void>(gonePage, extra: 'Old'));
+        await tester.pumpAndSettle();
+        await merge(tester, container);
+        final screens = [
+          home,
+          (WaxRoute.search, <String>[]),
+          (WaxRoute.search, [page]),
+          (WaxRoute.search, [page, editor]),
+        ];
+        shows(tester, container, browser, screens.last, index: 3, entries: 4);
+
+        await walk(tester, container, browser, screens, arrow: arrow);
+        if (browser == null) return;
+        await _browserBack(tester, browser);
+        expect(
+          tester.widget<ArtistScreen>(find.byType(ArtistScreen)).pid,
+          kept,
+        );
+      });
+
+      testWidgets('with its page opened from a health fold, which waits for '
+          "it: back reaches the survivor's page, and the fold hears once that "
+          'is left, $how', (tester) async {
+        final (container, browser) = await tab(tester, native: native);
+        await _go(tester, container, WaxRoute.health);
+        // As the fold does.
+        var heard = 0;
+        unawaited(
+          _router(
+            container,
+          ).push<void>(gonePage, extra: 'Old').then((_) => heard++),
+        );
+        await tester.pumpAndSettle();
+        await merge(tester, container);
+        final screens = [
+          home,
+          (WaxRoute.health, <String>[]),
+          (WaxRoute.health, [page]),
+          (WaxRoute.health, [page, editor]),
+        ];
+        shows(tester, container, browser, screens.last, index: 3, entries: 4);
+        expect(heard, 0, reason: 'its page is still open, as the survivor');
+
+        Future<void> back() => arrow || browser == null
+            ? _back(tester, hub: true)
+            : _browserBack(tester, browser);
+        await back();
+        shows(tester, container, browser, screens[2], index: 2, entries: 4);
+        expect(heard, 0);
+        await back();
+        shows(tester, container, browser, screens[1], index: 1, entries: 4);
+        expect(heard, 1, reason: 'left, and the fold reads its list again');
+      });
+
+      testWidgets('with its author page in a visit behind, and its own page '
+          "opened from a search hit: back reaches the survivor's author page, "
+          '$how', (tester) async {
+        final (container, browser) = await tab(tester, native: native);
+        await _go(tester, container, WaxRoute.books);
+        await _go(tester, container, authors);
+        await _go(tester, container, goneAuthor);
+        await _go(tester, container, WaxRoute.search);
+        // As the hit does, with the name it had.
+        unawaited(_router(container).push<void>(gonePage, extra: 'Old'));
+        await tester.pumpAndSettle();
+        await merge(tester, container);
+        final screens = [
+          home,
+          (WaxRoute.books, <String>[]),
+          (authors, <String>[]),
+          (author, <String>[]),
+          (WaxRoute.search, <String>[]),
+          (WaxRoute.search, [page]),
+          (WaxRoute.search, [page, editor]),
+        ];
+        shows(tester, container, browser, screens.last, index: 6, entries: 7);
+
+        await walk(tester, container, browser, screens, arrow: arrow);
+        expect(authorOfGone, findsNothing);
+        if (browser == null) return;
+        for (var i = 0; i < 3; i++) {
+          await _browserBack(tester, browser);
+        }
+        shows(tester, container, browser, screens[3], index: 3, entries: 7);
+        expect(
+          tester
+              .widget<BookBucketScreen>(find.byType(BookBucketScreen))
+              .segment,
+          kept,
+        );
+      });
+    }
+
+    for (final native in [true, false]) {
+      testWidgets('with its author page the last visit of a tab the visitor '
+          "left: a tap on that tab shows the survivor's author "
+          "page${native ? ', natively' : ''}", (tester) async {
+        final (container, browser) = await tab(tester, native: native);
+        await _go(tester, container, WaxRoute.books);
+        await _go(tester, container, authors);
+        await _go(tester, container, goneAuthor);
+        await _go(tester, container, WaxRoute.search);
+        unawaited(_router(container).push<void>(gonePage, extra: 'Old'));
+        await tester.pumpAndSettle();
+        await merge(tester, container);
+        final built = _arrivals(container);
+
+        await _tapNav(tester, WaxNavTarget.books);
+        shows(tester, container, browser, (author, []), index: 7, entries: 8);
+        expect(
+          tester
+              .widget<BookBucketScreen>(find.byType(BookBucketScreen))
+              .segment,
+          kept,
+        );
+        expect(authorOfGone, findsNothing);
+        expect(built.where((location) => location.contains(gone)), isEmpty);
+      });
+    }
+
+    testWidgets('once the asker went back before the answer: forward reaches '
+        "the survivor's page and editor, entry for entry", (tester) async {
+      final (container, browser) = await tab(tester, native: false);
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      await edit(tester, container);
+      final follow = asked(tester);
+      await _browserBack(tester, browser!);
+      await _browserBack(tester, browser);
+      expect(_location(container), artists);
+
+      await answer(tester, container, follow);
+      final screens = [
+        home,
+        (artists, <String>[]),
+        (page, <String>[]),
+        (page, [editor]),
+      ];
+      shows(tester, container, browser, screens[1], index: 1, entries: 4);
+      final built = _arrivals(container);
+      final pushed = _pushArrivals(container);
+
+      for (final i in [2, 3]) {
+        await _browserForward(tester, browser);
+        shows(tester, container, browser, screens[i], index: i, entries: 4);
+      }
+      expect(
+        tester.widget<EntityEditorScreen>(find.byType(EntityEditorScreen)).pid,
+        kept,
+      );
+      for (final i in [2, 1, 0, 1, 2, 3]) {
+        if (browser.index > i) {
+          await _browserBack(tester, browser);
+        } else {
+          await _browserForward(tester, browser);
+        }
+        shows(tester, container, browser, screens[i], index: i, entries: 4);
+      }
+      expect(
+        [...built, ...pushed].where((location) => location.contains(gone)),
+        isEmpty,
+      );
+    });
+
+    for (final arrow in [true, false]) {
+      testWidgets("with the survivor's page already under its own: the two "
+          'are one page, shown once on the way back and once on the way '
+          "forward, by ${arrow ? 'the arrow' : "the browser's back"}", (
+        tester,
+      ) async {
+        final (container, browser) = await tab(tester, native: false);
+        await _go(tester, container, artists);
+        // As the index's row does, with its label.
+        _router(container).go(page, extra: 'Kept');
+        await tester.pumpAndSettle();
+        // As a row's "Go to artist" does.
+        unawaited(_router(container).push<void>(gonePage));
+        await tester.pumpAndSettle();
+        await merge(tester, container);
+        // Entries: home, the index, the survivor's page, that with the
+        // page merged away over it, and the survivor's editor.
+        shows(
+          tester,
+          container,
+          browser,
+          (page, [editor]),
+          index: 4,
+          entries: 5,
+        );
+        Future<void> back() =>
+            arrow ? _back(tester, hub: true) : _browserBack(tester, browser!);
+
+        await back();
+        shows(tester, container, browser, (page, []), index: 3, entries: 5);
+        await back();
+        shows(tester, container, browser, (artists, []), index: 1, entries: 5);
+        await back();
+        shows(tester, container, browser, home, index: 0, entries: 5);
+
+        await _browserForward(tester, browser!);
+        shows(tester, container, browser, (artists, []), index: 1, entries: 5);
+        await _browserForward(tester, browser);
+        shows(tester, container, browser, (page, []), index: 2, entries: 5);
+        await _browserForward(tester, browser);
+        shows(
+          tester,
+          container,
+          browser,
+          (page, [editor]),
+          index: 4,
+          entries: 5,
+        );
+      });
+    }
+
+    testWidgets('a second record merged into the same survivor: each keeps '
+        "its place in the tab as the survivor's", (tester) async {
+      const other = 'ar-01JZX5N8QW3F4V9T2B7KDGONE02';
+      final otherPage = WaxRoute.musicBucket(MusicDimension.artists, other);
+      final (container, browser) = await tab(tester, native: false);
+      _repo(container).facetItems['artist ${other.substring(3)}'] = [
+        testItem('tr-1'),
+      ];
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      await merge(tester, container);
+      await _go(tester, container, WaxRoute.tasks);
+      await _go(tester, container, otherPage);
+      unawaited(_router(container).push<void>(WaxRoute.metadata(other)));
+      await tester.pumpAndSettle();
+      final follow = EditFollow.of(
+        tester.element(find.byType(EntityEditorScreen)),
+        pid: other,
+      );
+      unawaited(follow.merged(kept, said: (l10n) => l10n.commonOpen));
+      await tester.pumpAndSettle();
+      final screens = [
+        home,
+        (artists, <String>[]),
+        (page, <String>[]),
+        (page, [editor]),
+        (WaxRoute.tasks, <String>[]),
+        (page, <String>[]),
+        (page, [editor]),
+      ];
+      shows(tester, container, browser, screens.last, index: 6, entries: 7);
+
+      await walk(tester, container, browser, screens, arrow: false);
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is ArtistScreen && widget.pid == other,
+          skipOffstage: false,
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a link to its tracks, with a scope: back reaches the '
+        "survivor's tracks under the same scope, written over that entry", (
+      tester,
+    ) async {
+      const scope = '${WaxRoute.scopeParam}=${WaxRoute.wholeLibraryScope}';
+      final (container, browser) = await tab(
+        tester,
+        native: false,
+        at: '${WaxRoute.artistTracks(gone)}?$scope',
+      );
+      // By its link, as the player's "Edit metadata" opens an editor.
+      await _go(tester, container, WaxRoute.metadata(gone));
+      await answer(tester, container, asked(tester));
+      final tracks = ('${WaxRoute.artistTracks(kept)}?$scope', <String>[]);
+      // The music branch, off screen, holds its pages until it is shown.
+      shows(
+        tester,
+        container,
+        browser,
+        (editor, []),
+        index: 1,
+        entries: 2,
+        everywhere: false,
+      );
+      final built = _arrivals(container);
+
+      await _back(tester);
+      shows(tester, container, browser, tracks, index: 0, entries: 2);
+      final listing = tester.widget<MusicListingScreen>(
+        find.byType(MusicListingScreen),
+      );
+      expect(listing.segment, kept);
+      expect(listing.domain, BrowseDomain.wholeLibrary);
+      expect(built.where((location) => location.contains(gone)), isEmpty);
+
+      await _browserForward(tester, browser!);
+      shows(tester, container, browser, (editor, []), index: 1, entries: 2);
+      await _browserBack(tester, browser);
+      shows(tester, container, browser, tracks, index: 0, entries: 2);
+    });
+
+    for (final native in [true, false]) {
+      testWidgets('with its pages in the stack of a tab the visitor left: a '
+          'tap on that tab and back to it show the same, the '
+          "survivor's${native ? ', natively' : ''}", (tester) async {
+        final (container, browser) = await tab(tester, native: native);
+        await _go(tester, container, artists);
+        await _go(tester, container, gonePage);
+        await edit(tester, container);
+        final follow = asked(tester);
+        await _tapNav(tester, WaxNavTarget.podcasts);
+        await answer(tester, container, follow);
+        expect(find.byType(PodcastsScreen), findsOneWidget);
+
+        await _tapNav(tester, WaxNavTarget.music);
+        shows(
+          tester,
+          container,
+          browser,
+          (page, [editor]),
+          index: 5,
+          entries: 6,
+        );
+        expect(
+          tester
+              .widget<EntityEditorScreen>(find.byType(EntityEditorScreen))
+              .pid,
+          kept,
+        );
+
+        Future<void> back() => browser == null
+            ? _back(tester, hub: true)
+            : _browserBack(tester, browser);
+        await back();
+        expect(find.byType(PodcastsScreen), findsOneWidget);
+        await back();
+        shows(
+          tester,
+          container,
+          browser,
+          (page, [editor]),
+          index: 3,
+          entries: 6,
+        );
+        await back();
+        shows(tester, container, browser, (page, []), index: 2, entries: 6);
+        await back();
+        shows(tester, container, browser, (artists, []), index: 1, entries: 6);
+      });
+    }
+
+    for (final native in [true, false]) {
+      testWidgets("with the survivor's page open over its own as the answer "
+          'lands: that page stays up, and nothing lies on itself under '
+          "it${native ? ', natively' : ''}", (tester) async {
+        final (container, browser) = await tab(tester, native: native);
+        await _go(tester, container, artists);
+        await _go(tester, container, gonePage);
+        await edit(tester, container);
+        final follow = asked(tester);
+        await _back(tester);
+        // As a row's "Go to artist" does, for a track that credits both.
+        unawaited(_router(container).push<void>(page));
+        await tester.pumpAndSettle();
+        final shown = tester.element(find.byType(ArtistScreen));
+
+        await answer(tester, container, follow);
+        // Its own page under the one on top gave way to the index.
+        shows(
+          tester,
+          container,
+          browser,
+          (artists, [page]),
+          index: 3,
+          entries: 4,
+        );
+        expect(
+          tester.element(find.byType(ArtistScreen)),
+          same(shown),
+          reason: 'the page on top stays as it is',
+        );
+
+        await _back(tester);
+        shows(tester, container, browser, (page, []), index: 2, entries: 4);
+        await _back(tester);
+        shows(tester, container, browser, (artists, []), index: 1, entries: 4);
+      });
+    }
+
+    testWidgets('with a copy of the survivor cut in the stack of a tab the '
+        'visitor left: the tab comes back without it, and so does back', (
+      tester,
+    ) async {
+      final (container, browser) = await tab(tester, native: false);
+      await _go(tester, container, artists);
+      _router(container).go(page, extra: 'Kept');
+      await tester.pumpAndSettle();
+      unawaited(_router(container).push<void>(gonePage));
+      await tester.pumpAndSettle();
+      await edit(tester, container);
+      final follow = asked(tester);
+      await _tapNav(tester, WaxNavTarget.podcasts);
+      await answer(tester, container, follow);
+
+      await _tapNav(tester, WaxNavTarget.music);
+      shows(tester, container, browser, (page, [editor]), index: 6, entries: 7);
+
+      await _browserBack(tester, browser!);
+      expect(find.byType(PodcastsScreen), findsOneWidget);
+      await _browserBack(tester, browser);
+      shows(tester, container, browser, (page, [editor]), index: 4, entries: 7);
+      await _browserBack(tester, browser);
+      shows(tester, container, browser, (page, []), index: 3, entries: 7);
+      await _browserBack(tester, browser);
+      shows(tester, container, browser, (artists, []), index: 1, entries: 7);
+    });
+
+    testWidgets('a browser back and a forward again before a frame has drawn '
+        'either end where they began, each entry its own page', (tester) async {
+      final (container, browser) = await tab(tester, native: false);
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      unawaited(_router(container).push<void>(album));
+      await tester.pumpAndSettle();
+      await edit(tester, container);
+      final follow = asked(tester);
+      await _browserBack(tester, browser!);
+      await _browserBack(tester, browser);
+      await _browserBack(tester, browser);
+      await answer(tester, container, follow);
+      final screens = [
+        home,
+        (artists, <String>[]),
+        (page, <String>[]),
+        (page, [album]),
+        (page, [album, editor]),
+      ];
+      shows(tester, container, browser, screens[1], index: 1, entries: 5);
+
+      browser
+        ..goForward()
+        ..goForward()
+        ..goBack();
+      await tester.pumpAndSettle();
+      shows(tester, container, browser, screens[2], index: 2, entries: 5);
+      browser
+        ..goForward()
+        ..goForward();
+      await tester.pumpAndSettle();
+      shows(tester, container, browser, screens[4], index: 4, entries: 5);
+      await _back(tester);
+      shows(tester, container, browser, screens[3], index: 3, entries: 5);
+    });
+
+    testWidgets('a jump of two entries onto an entry of it shows the '
+        "survivor's page there, and the list starts over", (tester) async {
+      final (container, browser) = await tab(tester, native: false);
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      await edit(tester, container);
+      final follow = asked(tester);
+      await _go(tester, container, WaxRoute.tasks);
+      await _go(tester, container, WaxRoute.radio);
+      await answer(tester, container, follow);
+      final built = _arrivals(container);
+
+      browser!.jump(-2);
+      await tester.pumpAndSettle();
+
+      shows(tester, container, browser, (page, [editor]), index: 3, entries: 6);
+      expect(built.where((location) => location.contains(gone)), isEmpty);
+      await _browserBack(tester, browser);
+      shows(tester, container, browser, (page, []), index: 2, entries: 6);
+    });
+
+    testWidgets('an entry the list forgot is still passed once a record '
+        'became another', (tester) async {
+      final (container, browser) = await tab(tester, native: false);
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      await merge(tester, container);
+      await _go(tester, container, WaxRoute.notifications);
+      await _go(tester, container, WaxRoute.radio);
+      container.read(waxHistoryProvider)!.forget(WaxRoute.notifications);
+      final built = _arrivals(container);
+
+      await _browserBack(tester, browser!);
+
+      shows(tester, container, browser, (page, [editor]), index: 3, entries: 6);
+      expect(built, isNot(contains(WaxRoute.notifications)));
+    });
+
+    testWidgets('a browser forward onto an entry of it lands on the visit '
+        'ahead, not on the same page behind', (tester) async {
+      final (container, browser) = await tab(tester, native: false);
+      await _go(tester, container, gonePage);
+      await _go(tester, container, WaxRoute.tasks);
+      await _go(tester, container, gonePage);
+      await _browserBack(tester, browser!);
+      expect(find.byType(TasksScreen), findsOneWidget);
+      // As the merge's follow tells the history, the asker gone.
+      container.read(waxHistoryProvider)!.forget(gonePage, instead: page);
+
+      await _browserForward(tester, browser);
+      shows(tester, container, browser, (page, []), index: 3, entries: 4);
+
+      await _back(tester);
+      shows(
+        tester,
+        container,
+        browser,
+        (WaxRoute.tasks, []),
+        index: 2,
+        entries: 4,
+      );
+      await _back(tester);
+      shows(tester, container, browser, (page, []), index: 1, entries: 4);
+    });
+
+    testWidgets('a pop its own move overtakes lands on the entry of its page, '
+        "which back then shows as the survivor's", (tester) async {
+      final (container, browser) = await tab(tester, native: false);
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      await merge(tester, container);
+      final router = _router(container);
+      browser!.latency = const Duration(milliseconds: 100);
+      unawaited(router.leave());
+      await tester.pump(const Duration(milliseconds: 1));
+      final history = container.read(waxHistoryProvider)!;
+      expect(history.stepping, isTrue, reason: 'the pop is on its way');
+
+      router.go(WaxRoute.tasks);
+      await tester.pump();
+      await tester.pumpAndSettle();
+      browser.latency = null;
+
+      expect(history.stepping, isFalse);
+      expect(find.byType(TasksScreen), findsOneWidget);
+      expect(browser.index, 3, reason: 'past the entry the pop landed on');
+      expect(browser.entries, hasLength(4));
+      await _browserBack(tester, browser);
+      shows(tester, container, browser, (page, []), index: 2, entries: 4);
+      await _browserBack(tester, browser);
+      shows(tester, container, browser, (artists, []), index: 1, entries: 4);
+    });
+
+    testWidgets('the arrow back from the editor answers whoever waits for '
+        'it, in a browser tab as natively', (tester) async {
+      final (container, browser) = await tab(tester, native: false);
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      await merge(tester, container);
+      final awaited = container.read(waxHistoryProvider)!.heldAwaiters;
+      expect(awaited, isNotEmpty);
+
+      await _back(tester);
+      shows(tester, container, browser, (page, []), index: 2, entries: 4);
+      expect(
+        awaited.every((completer) => completer.isCompleted),
+        isTrue,
+        reason: 'the editor it took off is answered',
+      );
+    });
+
+    testWidgets('a second browser back before a frame has drawn the first '
+        'leaves each entry its own page', (tester) async {
+      final (container, browser) = await tab(tester, native: false);
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      unawaited(_router(container).push<void>(album));
+      await tester.pumpAndSettle();
+      unawaited(_router(container).push<void>(gonePage));
+      await tester.pumpAndSettle();
+      await merge(tester, container);
+      final screens = [
+        home,
+        (artists, <String>[]),
+        (page, <String>[]),
+        (page, [album]),
+        (page, [album, page]),
+        (page, [album, page, editor]),
+      ];
+
+      browser!
+        ..goBack()
+        ..goBack();
+      await tester.pumpAndSettle();
+      shows(tester, container, browser, screens[3], index: 3, entries: 6);
+      expect(
+        browser.pushesAt(4),
+        hasLength(2),
+        reason: 'the entry passed through kept its own two pages',
+      );
+
+      await _browserForward(tester, browser);
+      shows(tester, container, browser, screens[4], index: 4, entries: 6);
+      browser
+        ..goBack()
+        ..goBack();
+      await tester.pumpAndSettle();
+      shows(tester, container, browser, screens[2], index: 2, entries: 6);
+      await _browserForward(tester, browser);
+      shows(tester, container, browser, screens[3], index: 3, entries: 6);
+      await _browserForward(tester, browser);
+      shows(tester, container, browser, screens[4], index: 4, entries: 6);
+      await _browserForward(tester, browser);
+      shows(tester, container, browser, screens[5], index: 5, entries: 6);
+    });
+
+    /// Each entry of the tab, oldest first: its location and what is pushed
+    /// over it.
+    List<String> entriesOf(FakeBrowser browser) => [
+      for (final (i, entry) in browser.entries.indexed)
+        [entry.location, ...browser.pushesAt(i)].join(' + '),
+    ];
+
+    /// [shows], with every entry of the tab as [tab] says, oldest first.
+    void showsTab(
+      WidgetTester tester,
+      ProviderContainer container,
+      FakeBrowser browser,
+      (String, List<String>) screen, {
+      required int index,
+      required List<String> tab,
+      bool everywhere = true,
+    }) {
+      shows(
+        tester,
+        container,
+        browser,
+        screen,
+        index: index,
+        entries: tab.length,
+        everywhere: everywhere,
+      );
+      expect(entriesOf(browser), tab, reason: 'every entry of the tab');
+    }
+
+    /// No arrival in [built] is at a page of one of [pids].
+    void neverBuilt(List<String> built, List<String> pids) => expect(
+      built.where((location) => pids.any(location.contains)),
+      isEmpty,
+      reason: 'never built',
+    );
+
+    testWidgets('the survivor deleted since: the browser passes its entries '
+        "and the record's, as it passes any forgotten one", (tester) async {
+      final (container, opened) = await tab(tester, native: false);
+      final browser = opened!;
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      await merge(tester, container);
+      await _go(tester, container, WaxRoute.tasks);
+      await _go(tester, container, WaxRoute.radio);
+      // As a delete of the survivor forgets its pages.
+      container.read(waxHistoryProvider)!
+        ..forget(page)
+        ..forget(editor);
+      _repo(container).facetItems.remove('artist ${kept.substring(3)}');
+      // None is written over: the two between are passed each way.
+      final entries = [
+        WaxRoute.home,
+        artists,
+        gonePage,
+        '$page + $editor',
+        WaxRoute.tasks,
+        WaxRoute.radio,
+      ];
+      expect(entriesOf(browser), entries);
+      final arrived = _arrivals(container);
+      final pushed = _pushArrivals(container);
+      const tasks = (WaxRoute.tasks, <String>[]);
+
+      await _browserBack(tester, browser);
+      showsTab(tester, container, browser, tasks, index: 4, tab: entries);
+      await _browserBack(tester, browser);
+      showsTab(
+        tester,
+        container,
+        browser,
+        (artists, []),
+        index: 1,
+        tab: entries,
+      );
+      expect(find.byType(ArtistScreen, skipOffstage: false), findsNothing);
+
+      await _browserForward(tester, browser);
+      showsTab(tester, container, browser, tasks, index: 4, tab: entries);
+      neverBuilt([...arrived, ...pushed], [gone, kept]);
+    });
+
+    testWidgets('a release deleted since, open over its page: the browser '
+        "passes that entry and lands on the page's own as the survivor's", (
+      tester,
+    ) async {
+      final (container, opened) = await tab(tester, native: false);
+      final browser = opened!;
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      unawaited(_router(container).push<void>(album));
+      await tester.pumpAndSettle();
+      await _go(tester, container, WaxRoute.tasks);
+      // As the merge's follow tells the history, the asker gone, and then
+      // as the release's delete forgets its pages.
+      _repo(container).facetItems.remove('artist ${gone.substring(3)}');
+      container.read(waxHistoryProvider)!
+        ..forget(gonePage, instead: page)
+        ..forget(WaxRoute.metadata(gone), instead: editor)
+        ..forget(album)
+        ..forget(WaxRoute.metadata(_albumPid));
+      final arrived = _arrivals(container);
+      final pushed = _pushArrivals(container);
+      // The one passed is as it was; the page's own is written as it is
+      // landed on.
+      final entries = [
+        WaxRoute.home,
+        artists,
+        page,
+        '$gonePage + $album',
+        WaxRoute.tasks,
+      ];
+      const tasks = (WaxRoute.tasks, <String>[]);
+
+      await _browserBack(tester, browser);
+      showsTab(tester, container, browser, (page, []), index: 2, tab: entries);
+      expect(find.byType(AlbumScreen, skipOffstage: false), findsNothing);
+      await _browserBack(tester, browser);
+      showsTab(
+        tester,
+        container,
+        browser,
+        (artists, []),
+        index: 1,
+        tab: entries,
+      );
+
+      await _browserForward(tester, browser);
+      showsTab(tester, container, browser, (page, []), index: 2, tab: entries);
+      await _browserForward(tester, browser);
+      showsTab(tester, container, browser, tasks, index: 4, tab: entries);
+      neverBuilt([...arrived, ...pushed], [gone, _albumPid]);
+    });
+
+    // Its own entry is its visit's, landed on. One whose top page was done
+    // with since is forgotten, and at the app's oldest is stood in for.
+    testWidgets("a browser back onto the app's oldest entry, its page with a "
+        'release open over it that was deleted since: what the page became '
+        'stands in, written over that entry, not the index it is declared '
+        'beneath', (tester) async {
+      final (container, opened) = await tab(tester, native: false);
+      final browser = opened!;
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      unawaited(_router(container).push<void>(album));
+      await tester.pumpAndSettle();
+      await _go(tester, container, WaxRoute.tasks);
+      // As the merge's follow tells the history, the asker gone, and then
+      // as the release's delete forgets its pages.
+      _repo(container).facetItems.remove('artist ${gone.substring(3)}');
+      container.read(waxHistoryProvider)!
+        ..forget(gonePage, instead: page)
+        ..forget(WaxRoute.metadata(gone), instead: editor)
+        ..forget(album)
+        ..forget(WaxRoute.metadata(_albumPid));
+      final arrived = _arrivals(container);
+      final pushed = _pushArrivals(container);
+      // A tab that kept nothing behind the release's entry.
+      browser.stepsBack = false;
+
+      await _browserBack(tester, browser);
+      showsTab(
+        tester,
+        container,
+        browser,
+        (page, []),
+        index: 3,
+        tab: [WaxRoute.home, artists, gonePage, page, WaxRoute.tasks],
+      );
+      expect(find.byType(AlbumScreen, skipOffstage: false), findsNothing);
+      neverBuilt([...arrived, ...pushed], [gone, _albumPid]);
+    });
+
+    testWidgets('a pop its own move overtakes passes the entry of its page '
+        'once the survivor was deleted, as a forgotten one', (tester) async {
+      final (container, opened) = await tab(tester, native: false);
+      final browser = opened!;
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      await edit(tester, container);
+      final follow = asked(tester);
+      await _back(tester);
+      unawaited(_router(container).push<void>(album));
+      await tester.pumpAndSettle();
+      await answer(tester, container, follow);
+      showsTab(
+        tester,
+        container,
+        browser,
+        (page, [album]),
+        index: 3,
+        tab: [WaxRoute.home, artists, gonePage, '$page + $album'],
+      );
+      // As a delete of the survivor that lands with the release open over
+      // its page.
+      final history = container.read(waxHistoryProvider)!
+        ..takeOutFromUnder((location, _) => Uri.parse(location).path == page)
+        ..forget(page)
+        ..forget(editor);
+      await tester.pumpAndSettle();
+      showsTab(
+        tester,
+        container,
+        browser,
+        (artists, [album]),
+        index: 3,
+        tab: [WaxRoute.home, artists, gonePage, '$artists + $album'],
+      );
+
+      final router = _router(container);
+      browser.latency = const Duration(milliseconds: 100);
+      unawaited(router.leave());
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(history.stepping, isTrue, reason: 'the pop is on its way');
+      router.go(WaxRoute.tasks);
+      await tester.pump();
+      await tester.pumpAndSettle();
+      browser.latency = null;
+
+      expect(history.stepping, isFalse);
+      // The move is written past the index: the record's entry went with
+      // the page the pop closed.
+      final entries = [WaxRoute.home, artists, WaxRoute.tasks];
+      showsTab(
+        tester,
+        container,
+        browser,
+        (WaxRoute.tasks, []),
+        index: 2,
+        tab: entries,
+      );
+      await _browserBack(tester, browser);
+      showsTab(
+        tester,
+        container,
+        browser,
+        (artists, []),
+        index: 1,
+        tab: entries,
+      );
+    });
+
+    for (final (how, :native, :arrow) in ways) {
+      testWidgets('once the survivor went into another in turn: back reaches '
+          "the last survivor's page on the record's entry, $how", (
+        tester,
+      ) async {
+        const last = 'ar-01JZX5N8QW3F4V9T2B7KDKEPT02';
+        final lastPage = WaxRoute.musicBucket(MusicDimension.artists, last);
+        final lastEditor = WaxRoute.metadata(last);
+        final (container, browser) = await tab(tester, native: native);
+        _repo(container).facetItems['artist ${last.substring(3)}'] = [
+          testItem('tr-1'),
+        ];
+        await _go(tester, container, artists);
+        await _go(tester, container, gonePage);
+        await merge(tester, container);
+        // The survivor's editor, on top, asks in turn.
+        final follow = EditFollow.of(
+          tester.element(find.byType(EntityEditorScreen)),
+          pid: kept,
+        );
+        _repo(container).facetItems.remove('artist ${kept.substring(3)}');
+        unawaited(follow.merged(last, said: (l10n) => l10n.commonOpen));
+        await tester.pumpAndSettle();
+        final screens = [
+          home,
+          (artists, <String>[]),
+          (lastPage, <String>[]),
+          (lastPage, [lastEditor]),
+        ];
+        shows(tester, container, browser, screens.last, index: 3, entries: 4);
+        if (browser != null) {
+          expect(entriesOf(browser), [
+            WaxRoute.home,
+            artists,
+            gonePage,
+            '$lastPage + $lastEditor',
+          ], reason: "the record's entry, not landed on since");
+        }
+        final arrived = _arrivals(container);
+        final pushed = _pushArrivals(container);
+
+        await walk(tester, container, browser, screens, arrow: arrow);
+        neverBuilt([...arrived, ...pushed], [kept]);
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                (widget is ArtistScreen && widget.pid == kept) ||
+                (widget is EntityEditorScreen && widget.pid == kept),
+            skipOffstage: false,
+          ),
+          findsNothing,
+        );
+        if (browser != null) {
+          expect(entriesOf(browser), [
+            WaxRoute.home,
+            artists,
+            lastPage,
+            '$lastPage + $lastEditor',
+          ], reason: "written as the last survivor's");
+        }
+      });
+    }
+
+    // The visitor's own back or forward, made from the entry the app's move
+    // was made on before a frame drew it. Onto an entry of the record it
+    // does what it does onto any other: one body, both entries.
+    for (final merged in <bool>[true, false]) {
+      final own = merged ? kept : gone;
+      final ownPage = WaxRoute.musicBucket(MusicDimension.artists, own);
+      final ownEditor = WaxRoute.metadata(own);
+      final onto = merged
+          ? 'an entry of the record'
+          : 'an entry of an artist not merged, for comparison';
+
+      for (final push in <bool>[false, true]) {
+        testWidgets("the browser's back in the frame of "
+            '${push ? 'a push' : 'a go'}, onto $onto: the move goes '
+            'unwritten, no entry is lost and the list keeps its place', (
+          tester,
+        ) async {
+          final (container, opened) = await tab(tester, native: false);
+          final browser = opened!;
+          await _go(tester, container, artists);
+          await _go(tester, container, gonePage);
+          if (merged) {
+            await merge(tester, container);
+          } else {
+            await edit(tester, container);
+          }
+          final history = container.read(waxHistoryProvider)!;
+          final router = _router(container);
+          final heard = <Object?>[];
+          final arrived = _arrivals(container);
+          // The move is never written, and no entry minted or lost.
+          final entries = [
+            WaxRoute.home,
+            artists,
+            ownPage,
+            '$ownPage + $ownEditor',
+          ];
+          void at((String, List<String>) screen, int index) => showsTab(
+            tester,
+            container,
+            browser,
+            screen,
+            index: index,
+            tab: entries,
+            everywhere: merged,
+          );
+
+          if (push) {
+            unawaited(router.push<String>(album).then(heard.add));
+          } else {
+            router.go(WaxRoute.uploads);
+          }
+          browser.goBack();
+          await tester.pump(Duration.zero);
+          await tester.pumpAndSettle();
+
+          expect(history.stepping, isFalse);
+          at((ownPage, []), 2);
+          expect(heard, push ? <Object?>[null] : isEmpty);
+          expect(history.canGoBack, isTrue, reason: 'the list kept its place');
+          final backs = browser.backs;
+          await _back(tester, hub: true);
+          expect(browser.backs, backs + 1, reason: 'through the browser');
+          at((artists, []), 1);
+
+          await _browserForward(tester, browser);
+          at((ownPage, []), 2);
+          await _browserForward(tester, browser);
+          at((ownPage, [ownEditor]), 3);
+          if (merged) neverBuilt(arrived, [gone]);
+        });
+      }
+
+      testWidgets("the browser's forward in the frame of a go, onto $onto: "
+          'the go goes unwritten, no entry is lost and the list keeps the '
+          'visits the go took the place of', (tester) async {
+        final (container, opened) = await tab(tester, native: false);
+        final browser = opened!;
+        await _go(tester, container, artists);
+        await _go(tester, container, gonePage);
+        await edit(tester, container);
+        final follow = asked(tester);
+        await _browserBack(tester, browser);
+        await _browserBack(tester, browser);
+        if (merged) await answer(tester, container, follow);
+        final history = container.read(waxHistoryProvider)!;
+        final arrived = _arrivals(container);
+        // Neither entry ahead has been landed on since.
+        final ahead = '$gonePage + ${WaxRoute.metadata(gone)}';
+        expect(entriesOf(browser), [WaxRoute.home, artists, gonePage, ahead]);
+        void at(
+          (String, List<String>) screen,
+          int index, {
+          required String newest,
+        }) => showsTab(
+          tester,
+          container,
+          browser,
+          screen,
+          index: index,
+          tab: [WaxRoute.home, artists, ownPage, newest],
+          everywhere: merged,
+        );
+
+        _router(container).go(WaxRoute.uploads);
+        browser.goForward();
+        await tester.pump(Duration.zero);
+        await tester.pumpAndSettle();
+
+        expect(history.stepping, isFalse);
+        at((ownPage, []), 2, newest: ahead);
+        expect(history.canGoBack, isTrue, reason: 'the list kept its place');
+
+        final newest = '$ownPage + $ownEditor';
+        await _browserForward(tester, browser);
+        at((ownPage, [ownEditor]), 3, newest: newest);
+        final backs = browser.backs;
+        await _back(tester, hub: true);
+        at((ownPage, []), 2, newest: newest);
+        await _back(tester, hub: true);
+        at((artists, []), 1, newest: newest);
+        expect(browser.backs, backs + 2, reason: 'through the browser');
+        if (merged) neverBuilt(arrived, [gone]);
+      });
+    }
+
+    for (final together in <bool>[true, false]) {
+      testWidgets('two browser backs '
+          '${together ? 'before a frame has drawn the first' : 'a frame apart'}'
+          ", the second onto the app's oldest entry, forgotten: the list "
+          "keeps the survivor's page behind", (tester) async {
+        final (container, opened) = await tab(
+          tester,
+          native: false,
+          at: WaxRoute.notifications,
+        );
+        final browser = opened!;
+        await _go(tester, container, gonePage);
+        await _go(tester, container, WaxRoute.tasks);
+        // As the merge's follow tells the history, the asker gone.
+        _repo(container).facetItems.remove('artist ${gone.substring(3)}');
+        final history = container.read(waxHistoryProvider)!
+          ..forget(WaxRoute.notifications)
+          ..forget(gonePage, instead: page);
+
+        if (together) {
+          browser
+            ..goBack()
+            ..goBack();
+          await tester.pumpAndSettle();
+        } else {
+          await _browserBack(tester, browser);
+          showsTab(
+            tester,
+            container,
+            browser,
+            (page, []),
+            index: 1,
+            tab: [WaxRoute.notifications, page, WaxRoute.tasks],
+          );
+          await _browserBack(tester, browser);
+        }
+        // What stands in is written over the oldest. Where the second back
+        // came before the first landing's write, that write was dropped. A
+        // branch off screen holds its pages until it is next shown.
+        showsTab(
+          tester,
+          container,
+          browser,
+          home,
+          index: 0,
+          tab: [
+            WaxRoute.home,
+            if (together) gonePage else page,
+            WaxRoute.tasks,
+          ],
+          everywhere: false,
+        );
+        expect(history.canGoBack, isFalse, reason: 'the oldest');
+
+        final entries = [WaxRoute.home, page, WaxRoute.tasks];
+        await _browserForward(tester, browser);
+        showsTab(
+          tester,
+          container,
+          browser,
+          (page, []),
+          index: 1,
+          tab: entries,
+        );
+        expect(history.canGoBack, isTrue, reason: 'what stood in is behind');
+        await _browserForward(tester, browser);
+        showsTab(
+          tester,
+          container,
+          browser,
+          (WaxRoute.tasks, []),
+          index: 2,
+          tab: entries,
+        );
+        expect(history.isBehind(page), isTrue, reason: 'the list kept it');
+      });
+    }
+
+    testWidgets('a browser forward onto an entry of it and another before a '
+        'frame, onto the newest, forgotten: the browser comes back to its '
+        "entry, written as the survivor's", (tester) async {
+      final (container, opened) = await tab(tester, native: false);
+      final browser = opened!;
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      unawaited(_router(container).push<void>(album));
+      await tester.pumpAndSettle();
+      await _browserBack(tester, browser);
+      await _browserBack(tester, browser);
+      // As the merge's follow tells the history, the asker gone, and then
+      // as the release's delete forgets its pages.
+      _repo(container).facetItems.remove('artist ${gone.substring(3)}');
+      final history = container.read(waxHistoryProvider)!
+        ..forget(gonePage, instead: page)
+        ..forget(WaxRoute.metadata(gone), instead: editor)
+        ..forget(album)
+        ..forget(WaxRoute.metadata(_albumPid));
+      final arrived = _arrivals(container);
+      final pushed = _pushArrivals(container);
+      final entries = [WaxRoute.home, artists, page, '$gonePage + $album'];
+
+      browser
+        ..goForward()
+        ..goForward();
+      await tester.pumpAndSettle();
+
+      expect(history.stepping, isFalse);
+      showsTab(tester, container, browser, (page, []), index: 2, tab: entries);
+      expect(history.isBehind(artists), isTrue, reason: 'the list kept it');
+      await _browserBack(tester, browser);
+      showsTab(
+        tester,
+        container,
+        browser,
+        (artists, []),
+        index: 1,
+        tab: entries,
+      );
+      await _browserForward(tester, browser);
+      showsTab(tester, container, browser, (page, []), index: 2, tab: entries);
+      neverBuilt([...arrived, ...pushed], [gone, _albumPid]);
+    });
+
+    // A second move that starts a pass (entries passed one after another,
+    // each a move of its own) still counts from the entry the first landed
+    // on, whose write went as the pass began.
+    for (final together in <bool>[true, false]) {
+      final how = together
+          ? 'before a frame has drawn the first'
+          : 'a frame apart';
+
+      testWidgets('two browser backs $how, the second past a forgotten '
+          "entry onto the app's oldest, forgotten too: the list keeps the "
+          "survivor's page behind", (tester) async {
+        final (container, opened) = await tab(
+          tester,
+          native: false,
+          at: WaxRoute.notifications,
+        );
+        final browser = opened!;
+        await _go(tester, container, WaxRoute.uploads);
+        await _go(tester, container, gonePage);
+        await _go(tester, container, WaxRoute.tasks);
+        // As the merge's follow tells the history, the asker gone.
+        _repo(container).facetItems.remove('artist ${gone.substring(3)}');
+        final history = container.read(waxHistoryProvider)!
+          ..forget(WaxRoute.notifications)
+          ..forget(WaxRoute.uploads)
+          ..forget(gonePage, instead: page);
+        final arrived = _arrivals(container);
+
+        if (together) {
+          browser
+            ..goBack()
+            ..goBack();
+          await tester.pumpAndSettle();
+        } else {
+          await _browserBack(tester, browser);
+          showsTab(
+            tester,
+            container,
+            browser,
+            (page, []),
+            index: 2,
+            tab: [
+              WaxRoute.notifications,
+              WaxRoute.uploads,
+              page,
+              WaxRoute.tasks,
+            ],
+          );
+          await _browserBack(tester, browser);
+        }
+        // What stands in is written over the oldest; the entry passed is
+        // as it was. Where the second back came before the first landing's
+        // write, that write was dropped. A branch off screen holds its
+        // pages until it is next shown.
+        showsTab(
+          tester,
+          container,
+          browser,
+          home,
+          index: 0,
+          tab: [
+            WaxRoute.home,
+            WaxRoute.uploads,
+            if (together) gonePage else page,
+            WaxRoute.tasks,
+          ],
+          everywhere: false,
+        );
+        expect(history.canGoBack, isFalse, reason: 'the oldest');
+
+        final entries = [WaxRoute.home, WaxRoute.uploads, page, WaxRoute.tasks];
+        await _browserForward(tester, browser);
+        showsTab(
+          tester,
+          container,
+          browser,
+          (page, []),
+          index: 2,
+          tab: entries,
+        );
+        expect(history.canGoBack, isTrue, reason: 'what stood in is behind');
+        await _browserForward(tester, browser);
+        showsTab(
+          tester,
+          container,
+          browser,
+          (WaxRoute.tasks, []),
+          index: 3,
+          tab: entries,
+        );
+        expect(history.isBehind(page), isTrue, reason: 'the list kept it');
+        neverBuilt(arrived, [gone, WaxRoute.uploads, WaxRoute.notifications]);
+      });
+
+      testWidgets('two browser forwards $how, the second onto a forgotten '
+          'entry with the newest forgotten too: the browser comes back to '
+          "the record's entry, written as the survivor's", (tester) async {
+        final (container, opened) = await tab(tester, native: false);
+        final browser = opened!;
+        await _go(tester, container, artists);
+        await _go(tester, container, gonePage);
+        await _go(tester, container, WaxRoute.uploads);
+        await _go(tester, container, WaxRoute.notifications);
+        await _browserBack(tester, browser);
+        await _browserBack(tester, browser);
+        await _browserBack(tester, browser);
+        // As the merge's follow tells the history, the asker gone.
+        _repo(container).facetItems.remove('artist ${gone.substring(3)}');
+        final history = container.read(waxHistoryProvider)!
+          ..forget(WaxRoute.notifications)
+          ..forget(WaxRoute.uploads)
+          ..forget(gonePage, instead: page);
+        final arrived = _arrivals(container);
+        final entries = [
+          WaxRoute.home,
+          artists,
+          page,
+          WaxRoute.uploads,
+          WaxRoute.notifications,
+        ];
+        void at((String, List<String>) screen, int index) => showsTab(
+          tester,
+          container,
+          browser,
+          screen,
+          index: index,
+          tab: entries,
+        );
+
+        if (together) {
+          browser
+            ..goForward()
+            ..goForward();
+          await tester.pumpAndSettle();
+        } else {
+          await _browserForward(tester, browser);
+          at((page, []), 2);
+          await _browserForward(tester, browser);
+        }
+
+        expect(history.stepping, isFalse);
+        at((page, []), 2);
+        expect(history.isBehind(artists), isTrue, reason: 'the list kept it');
+        await _browserBack(tester, browser);
+        at((artists, []), 1);
+        await _browserForward(tester, browser);
+        at((page, []), 2);
+        neverBuilt(arrived, [gone, WaxRoute.uploads, WaxRoute.notifications]);
+      });
+    }
+
+    testWidgets('a go of the app while the second of two browser forwards '
+        "passes a forgotten entry: the go is written past the record's "
+        'entry, which back then shows as the survivor', (tester) async {
+      const latency = Duration(milliseconds: 100);
+      final (container, opened) = await tab(tester, native: false);
+      final browser = opened!;
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      await _go(tester, container, WaxRoute.uploads);
+      await _go(tester, container, WaxRoute.notifications);
+      await _browserBack(tester, browser);
+      await _browserBack(tester, browser);
+      await _browserBack(tester, browser);
+      // As the merge's follow tells the history, the asker gone.
+      _repo(container).facetItems.remove('artist ${gone.substring(3)}');
+      final history = container.read(waxHistoryProvider)!
+        ..forget(WaxRoute.notifications)
+        ..forget(WaxRoute.uploads)
+        ..forget(gonePage, instead: page);
+      final arrived = _arrivals(container);
+
+      browser
+        ..latency = latency
+        ..goForward()
+        ..goForward();
+      // Once the second has begun its pass, before a frame.
+      var passing = false;
+      Timer.run(() {
+        passing = history.stepping;
+        _router(container).go(WaxRoute.radio);
+      });
+      await tester.pump(Duration.zero);
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(latency + const Duration(milliseconds: 50));
+      }
+      await tester.pumpAndSettle();
+      browser.latency = null;
+
+      expect(passing, isTrue, reason: 'passing the forgotten one');
+      expect(history.stepping, isFalse);
+      // The record's entry was never written (its landing's write went as
+      // the pass began), and is where the go was made.
+      showsTab(
+        tester,
+        container,
+        browser,
+        (WaxRoute.radio, []),
+        index: 3,
+        tab: [WaxRoute.home, artists, gonePage, WaxRoute.radio],
+      );
+      final entries = [WaxRoute.home, artists, page, WaxRoute.radio];
+      await _browserBack(tester, browser);
+      showsTab(tester, container, browser, (page, []), index: 2, tab: entries);
+      await _browserBack(tester, browser);
+      showsTab(
+        tester,
+        container,
+        browser,
+        (artists, []),
+        index: 1,
+        tab: entries,
+      );
+      neverBuilt(arrived, [gone, WaxRoute.uploads, WaxRoute.notifications]);
+    });
+
+    // By design, pinned as it is: the step that sends the browser back
+    // cannot be called off, and a move of the visitor's own heard before it
+    // lands is counted from the entry the first forward left.
+    testWidgets('a back of the visitor while the browser is being sent back '
+        "to the record's entry is counted from the entry before it: the "
+        "index shows on the way, and the tab ends on the record's entry, "
+        "written as the survivor's", (tester) async {
+      const latency = Duration(milliseconds: 100);
+      final (container, opened) = await tab(tester, native: false);
+      final browser = opened!;
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      await _go(tester, container, WaxRoute.uploads);
+      await _go(tester, container, WaxRoute.notifications);
+      await _browserBack(tester, browser);
+      await _browserBack(tester, browser);
+      await _browserBack(tester, browser);
+      // As the merge's follow tells the history, the asker gone.
+      _repo(container).facetItems.remove('artist ${gone.substring(3)}');
+      final history = container.read(waxHistoryProvider)!
+        ..forget(WaxRoute.notifications)
+        ..forget(WaxRoute.uploads)
+        ..forget(gonePage, instead: page);
+      final arrived = _arrivals(container);
+
+      browser
+        ..latency = latency
+        ..goForward()
+        ..goForward();
+      await tester.pump(Duration.zero);
+      // The pass has reached the newest, and the browser is sent back.
+      await tester.pump(latency + const Duration(milliseconds: 10));
+      expect(browser.index, 4);
+      expect(history.stepping, isTrue);
+      browser.goBack();
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(latency);
+      }
+      await tester.pumpAndSettle();
+      browser.latency = null;
+
+      expect(history.stepping, isFalse);
+      showsTab(
+        tester,
+        container,
+        browser,
+        (page, []),
+        index: 2,
+        tab: [
+          WaxRoute.home,
+          artists,
+          page,
+          WaxRoute.uploads,
+          WaxRoute.notifications,
+        ],
+      );
+      expect(arrived, [page, artists, page], reason: 'the index on the way');
+      expect(history.isBehind(artists), isTrue);
+    });
+
+    testWidgets('a dialog opened in the frame a browser back landed on an '
+        'entry of it, then a second back: the dialog closes, and the tab '
+        "is on that entry again, written as the survivor's", (tester) async {
+      final (container, opened) = await tab(tester, native: false);
+      final browser = opened!;
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      await merge(tester, container);
+      final history = container.read(waxHistoryProvider)!;
+      final host = _router(container).routerDelegate.navigatorKey;
+      // The step forward again lands once a frame has built the dialog, as
+      // a browser's does.
+      browser
+        ..framed = true
+        ..goBack();
+      var held = false;
+      Timer.run(() {
+        held = history.stepping;
+        unawaited(
+          showDialog<void>(
+            context: host.currentContext!,
+            builder: (context) => const AlertDialog(content: Text('Sure?')),
+          ),
+        );
+      });
+      browser.goBack();
+      await tester.pumpAndSettle();
+      browser.framed = false;
+
+      expect(held, isTrue, reason: 'the landing waits for its frame');
+      expect(history.stepping, isFalse);
+      expect(find.text('Sure?'), findsNothing);
+      final entries = [WaxRoute.home, artists, page, '$page + $editor'];
+      showsTab(tester, container, browser, (page, []), index: 2, tab: entries);
+      await _browserBack(tester, browser);
+      showsTab(
+        tester,
+        container,
+        browser,
+        (artists, []),
+        index: 1,
+        tab: entries,
+      );
+    });
+
+    testWidgets('a go of the app in the frame a browser back landed on an '
+        "entry of it: the survivor's page is written over that entry, and "
+        'the go past it', (tester) async {
+      final (container, opened) = await tab(tester, native: false);
+      final browser = opened!;
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      await merge(tester, container);
+      final history = container.read(waxHistoryProvider)!;
+
+      browser.goBack();
+      // Once the back has landed, before the frame after it.
+      var held = false;
+      Timer.run(() {
+        held = history.stepping;
+        _router(container).go(WaxRoute.uploads);
+      });
+      await tester.pumpAndSettle();
+
+      expect(held, isTrue, reason: 'the landing waits for its frame');
+      expect(history.stepping, isFalse);
+      final entries = [WaxRoute.home, artists, page, WaxRoute.uploads];
+      showsTab(
+        tester,
+        container,
+        browser,
+        (WaxRoute.uploads, []),
+        index: 3,
+        tab: entries,
+      );
+      await _browserBack(tester, browser);
+      showsTab(tester, container, browser, (page, []), index: 2, tab: entries);
+      await _browserBack(tester, browser);
+      showsTab(
+        tester,
+        container,
+        browser,
+        (artists, []),
+        index: 1,
+        tab: entries,
+      );
+    });
+
+    for (final held in <bool>[true, false]) {
+      testWidgets('signing out '
+          '${held ? 'in the frame' : 'a frame after'} a browser back landed '
+          "on an entry of it leaves the survivor's page on that entry, and "
+          'one back leaves the app', (tester) async {
+        final (container, opened) = await tab(tester, native: false);
+        final browser = opened!;
+        await _go(tester, container, artists);
+        await _go(tester, container, gonePage);
+        await merge(tester, container);
+        final history = container.read(waxHistoryProvider)!;
+        void signOut() =>
+            unawaited(container.read(authControllerProvider.notifier).logout());
+
+        browser.goBack();
+        if (held) {
+          Timer.run(signOut);
+        } else {
+          await tester.pumpAndSettle();
+          signOut();
+        }
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.byType(LoginScreen), findsOneWidget);
+        expect(history.stepping, isFalse);
+        expect(browser.index, 3);
+        expect(browser.location, _location(container));
+        expect(Uri.parse(browser.location).path, WaxRoute.login);
+        final entries = [WaxRoute.home, artists, page, browser.location];
+        expect(entriesOf(browser), entries);
+
+        browser.goBack();
+        await tester.pumpAndSettle();
+        expect(browser.left, isTrue, reason: 'no entry ate the press');
+        expect(entriesOf(browser), entries);
+        await tester.pump(WaxHistory.unansweredStep);
+      });
+    }
+
+    testWidgets('the arrow pressed in the frame a browser back landed on an '
+        'entry of it takes its turn after the write, and steps back from '
+        'that entry', (tester) async {
+      final (container, opened) = await tab(tester, native: false);
+      final browser = opened!;
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      await merge(tester, container);
+      final history = container.read(waxHistoryProvider)!;
+
+      browser.goBack();
+      var held = false;
+      Timer.run(() {
+        held = history.stepping;
+        history.back();
+      });
+      await tester.pumpAndSettle();
+
+      expect(held, isTrue, reason: 'the landing waits for its frame');
+      expect(history.stepping, isFalse);
+      showsTab(
+        tester,
+        container,
+        browser,
+        (artists, []),
+        index: 1,
+        tab: [WaxRoute.home, artists, page, '$page + $editor'],
+      );
+    });
+
+    testWidgets('a pop with a result that lands on an entry of it not landed '
+        'on since: its opener hears, and the entry is written as the '
+        "survivor's", (tester) async {
+      final (container, opened) = await tab(tester, native: false);
+      final browser = opened!;
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      await edit(tester, container);
+      final follow = asked(tester);
+      await _back(tester);
+      final heard = <Object?>[];
+      unawaited(_router(container).push<String>(album).then(heard.add));
+      await tester.pumpAndSettle();
+      await answer(tester, container, follow);
+      showsTab(
+        tester,
+        container,
+        browser,
+        (page, [album]),
+        index: 3,
+        tab: [WaxRoute.home, artists, gonePage, '$page + $album'],
+      );
+      final history = container.read(waxHistoryProvider)!;
+
+      unawaited(history.pop('done'));
+      await tester.pumpAndSettle();
+
+      expect(heard, <Object?>['done']);
+      expect(history.stepping, isFalse);
+      final entries = [WaxRoute.home, artists, page, '$page + $album'];
+      showsTab(tester, container, browser, (page, []), index: 2, tab: entries);
+      await _browserBack(tester, browser);
+      showsTab(
+        tester,
+        container,
+        browser,
+        (artists, []),
+        index: 1,
+        tab: entries,
+      );
+      await _browserForward(tester, browser);
+      showsTab(tester, container, browser, (page, []), index: 2, tab: entries);
+    });
+
+    testWidgets('a history disposed in the frame its landing waits for has '
+        'nothing under way, and writes nothing that is held after it', (
+      tester,
+    ) async {
+      final (container, opened) = await tab(tester, native: false);
+      final browser = opened!;
+      await _go(tester, container, artists);
+      await _go(tester, container, gonePage);
+      await merge(tester, container);
+      final history = container.read(waxHistoryProvider)!;
+      final entries = entriesOf(browser);
+      final binding = tester.binding;
+      // Ahead of the landing's own callback in the frame after it, once
+      // the app has gone: what holds the tab's writes next holds one.
+      bool? stepping;
+      binding.addPostFrameCallback((_) {
+        stepping = history.stepping;
+        browser.hold();
+        unawaited(
+          SystemNavigator.routeInformationUpdated(
+            uri: Uri.parse(WaxRoute.tasks),
+            state: const <String, Object?>{},
+          ),
+        );
+      });
+
+      browser.goBack();
+      // Once the back has landed: the app goes in the frame after it.
+      var held = false;
+      Timer.run(() {
+        held = history.stepping;
+        binding
+          ..attachRootWidget(binding.wrapWithDefaultView(const SizedBox()))
+          ..scheduleFrame();
+      });
+      await tester.pump(Duration.zero);
+      await tester.pump();
+
+      expect(held, isTrue, reason: 'the landing waits for its frame');
+      expect(stepping, isFalse, reason: 'gone with its history');
+      expect(browser.index, 2);
+      expect(entriesOf(browser), entries, reason: 'still held');
+      browser.drop();
+    });
   });
 }

@@ -11,6 +11,8 @@ import 'account_scoping_cases.dart';
 import 'analysis_host.dart';
 import 'bare_pop_audit.dart';
 import 'bare_replace_audit.dart';
+import 'catalog_refresh_audit.dart';
+import 'catalog_refresh_cases.dart';
 import 'destination_push_audit.dart';
 import 'extension_tear_off_audit.dart';
 import 'page_messages_audit.dart';
@@ -29,6 +31,8 @@ void main() {
   accountScopingCases(shared);
   barePopAudit(shared);
   bareReplaceAudit(shared);
+  catalogRefreshAudit(shared);
+  catalogRefreshCases(shared);
   destinationPushAudit(shared);
   extensionTearOffAudit(shared);
   pageMessagesAudit(shared);

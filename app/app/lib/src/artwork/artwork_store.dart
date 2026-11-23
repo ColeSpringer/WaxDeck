@@ -15,6 +15,11 @@ import 'package:dio/dio.dart';
 import 'package:waxdeck_data/waxdeck_data.dart' show OwedPin;
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'art_slot.dart';
+import 'replaced_covers.dart';
+
+export 'replaced_covers.dart';
+
 /// The sizes artwork is ever requested at.
 ///
 /// Buckets, not exact extents: the server renders and caches a thumbnail
@@ -82,7 +87,10 @@ int artworkDrawSize(int px) {
 }
 
 /// The same art URL asking for one size rung, and optionally under a
-/// name no cache has seen ([bust], the endpoint's ignored `v`).
+/// name no cache has seen ([bust], the endpoint's ignored `v`). A URL
+/// that carries a `v` of its own keeps it: a station's now-playing cover
+/// is asked for by a key in that parameter, which names the bytes
+/// already.
 ///
 /// Built through [Uri] rather than string concatenation because art URLs
 /// already carry a `role` for anything but a front cover, and a naive
@@ -91,13 +99,14 @@ int artworkDrawSize(int px) {
 /// that hold one rendition (see [isUnsizedArtUrl]).
 String sizedArtUrl(String artUrl, int? rung, {int? bust}) {
   final uri = Uri.parse(artUrl);
-  if (rung == null && bust == null) return artUrl;
+  final tag = uri.queryParameters.containsKey('v') ? null : bust;
+  if (rung == null && tag == null) return artUrl;
   return uri
       .replace(
         queryParameters: <String, String>{
           ...uri.queryParameters,
           if (rung != null) 'size': '$rung',
-          if (bust != null) 'v': '$bust',
+          if (tag != null) 'v': '$tag',
         },
       )
       .toString();
@@ -124,6 +133,28 @@ final RegExp _unsizedArt = RegExp(
 String? artworkPidOf(String artUrl) {
   final match = RegExp(r'/items/([^/?#]+)/art').firstMatch(artUrl);
   return match?.group(1);
+}
+
+/// Every URL a picture of [artUrl]'s entity is drawn from: one per role
+/// for an item's art, or [artUrl] alone.
+List<String> coverUrlsOf(String artUrl) {
+  final uri = Uri.tryParse(artUrl);
+  if (uri == null || !isItemArt(uri) || uri.queryParameters.containsKey('v')) {
+    return <String>[artUrl];
+  }
+  final key = coverKeyOf(artUrl);
+  final rest = Uri.parse(key).queryParameters;
+  return <String>[
+    for (final slot in ArtSlot.values)
+      if (slot == ArtSlot.front)
+        key
+      else if (rest.isEmpty)
+        '$key?role=${slot.role}'
+      else
+        Uri.parse(
+          key,
+        ).replace(queryParameters: {...rest, 'role': slot.role}).toString(),
+  ];
 }
 
 /// Whether [artUrl] is served by the WaxDeck server this app is signed
@@ -165,21 +196,17 @@ class ArtworkBytes {
 /// cache that is better than anything reimplementable and no offline
 /// mode at all. The port is what the screens see either way.
 abstract class ArtworkStore {
+  /// [replaced] carries the store's clock and, on web, its storage. A
+  /// store handed one over storage closes it in [dispose].
+  ArtworkStore({ReplacedCovers? replaced})
+    : _replaced = replaced ?? ReplacedCovers();
+
   /// The server origin, empty on web where art URLs are relative.
   String get baseUrl;
 
   /// Covers this store has been told were replaced, and the tag that
   /// tells the old bytes from the new ones apart.
-  ///
-  /// Artwork lives at one URL whatever it holds, and the endpoint now
-  /// answers with a day of freshness, so after a cover write every cache
-  /// between here and the disk would go on serving the old image - the
-  /// browser's most stubbornly, since nothing in this process can reach
-  /// into it. Asking under a name no cache has seen is what can be done
-  /// from this side. It grows only when somebody edits a cover, which is
-  /// a handful of times in a session, never per draw.
-  final Map<String, int> _replaced = <String, int>{};
-  int _replacements = 0;
+  final ReplacedCovers _replaced;
 
   /// Covers the server has answered 404 for.
   ///
@@ -204,28 +231,79 @@ abstract class ArtworkStore {
   /// scroll-back either way.
   static const int _maxAbsent = 4096;
 
-  /// Where to fetch [artUrl] for a draw of [px] physical pixels: ours
-  /// asks for the rung that covers it, a stranger's is asked for exactly
-  /// as it was given, and either carries the tag of a replacement this
-  /// store has seen.
+  /// Where to fetch [artUrl] for a draw of [px] physical pixels: a
+  /// stranger's is asked for exactly as it was given, ours asks for the
+  /// rung that covers it, under the tag of a replacement this store has
+  /// seen. [tagged] false is the name it had before any replacement.
   @protected
-  String requestUrl(String artUrl, int px) {
+  String requestUrl(String artUrl, int px, {bool tagged = true}) {
     if (!isWaxDeckUrl(artUrl, baseUrl)) return artUrl;
     return sizedArtUrl(
       artUrl,
       isUnsizedArtUrl(artUrl) ? null : artworkRung(px),
-      bust: _replaced[artUrl],
+      bust: tagged ? _replaced.tagFor(artUrl) : null,
     );
   }
 
   /// Records that the bytes behind [artUrl] have changed, so everything
   /// asked for afterwards is asked for under a new name - and that
   /// whatever this store knew about the old bytes no longer holds,
-  /// including their absence.
+  /// including their absence. For every role of its entity: a cover is
+  /// kept by entity ([coverKeyOf]).
   @protected
   void noteReplaced(String artUrl) {
-    _replaced[artUrl] = ++_replacements;
-    forgetAbsent(artUrl);
+    _replaced.note(artUrl);
+    final covers = coverUrlsOf(artUrl);
+    for (final url in covers) {
+      forgetAbsent(url);
+    }
+    _tell([for (final url in covers) ...?_listeners[url]]);
+  }
+
+  /// The drops under way, by cover.
+  final Map<String, Future<void>> _dropping = <String, Future<void>>{};
+
+  /// What [evict] has in common on every platform: forgets every role's
+  /// absence, takes the names the old bytes are held under ([held], read
+  /// before the replacement is noted), notes it, and runs the drop
+  /// [held] returns. A cover evicted again while a drop of it is under
+  /// way joins that drop: what it would drop is nothing a draw asks for
+  /// again.
+  @protected
+  Future<void> replaceCover(
+    String artUrl,
+    Future<void> Function() Function(List<String> covers) held,
+  ) {
+    final covers = coverUrlsOf(artUrl);
+    // The absence first: a known-absent URL answers null for every
+    // provider, which would leave real decoded bytes behind.
+    for (final url in covers) {
+      forgetAbsent(url);
+    }
+    final key = coverKeyOf(artUrl);
+    final under = _dropping[key];
+    final drop = under == null ? held(covers) : null;
+    noteReplaced(artUrl);
+    if (drop == null) return under!;
+    late final Future<void> dropping;
+    dropping = () async {
+      try {
+        await drop();
+      } finally {
+        if (identical(_dropping[key], dropping)) _dropping.remove(key);
+      }
+    }();
+    return _dropping[key] = dropping;
+  }
+
+  /// Records that covers changed and nothing says which, so every one
+  /// is asked for afterwards under a name no cache has seen, the ones
+  /// known to be missing included.
+  @protected
+  void noteAllReplaced() {
+    _replaced.raiseFloor();
+    forgetAbsences();
+    _tell(_listeners.values.expand((listening) => listening));
   }
 
   /// The rung an absence at [px] is recorded under; null where requests
@@ -261,31 +339,54 @@ abstract class ArtworkStore {
   /// Forgets which covers are missing, so they are asked for again.
   ///
   /// Public because the important caller is outside: artwork mostly
-  /// appears without anything here being told. A scan picks up embedded
-  /// art, enrichment finishes, another device writes a cover - none of
-  /// those routes through [evict], which only the cover editors call.
-  /// Without this the monogram cached during a browse of a fresh
+  /// appears without anything here being told which cover. Without this
+  /// the monogram cached during a browse of a fresh
   /// library would outlast the enrichment that filled it in, for the
   /// rest of the session. Anything that invalidates the catalog calls
   /// this; sign-out does too.
   void forgetAbsences() => _absent.clear();
 
   /// Forgets that one cover was missing. For an invalidation that names
-  /// the URL it is about.
+  /// the URL it is about. By key, never a walk of the set: a scan
+  /// invalidates covers by the dozen a frame.
   @protected
-  void forgetAbsent(String artUrl) =>
-      _absent.removeWhere((k) => k == artUrl || k.startsWith('$artUrl#'));
+  void forgetAbsent(String artUrl) {
+    _absent.remove(artUrl);
+    for (final rung in kArtworkRungs) {
+      _absent.remove(_absentKey(artUrl, rung));
+    }
+  }
 
   /// The artwork at [artUrl] ready to paint at [px] physical pixels, or
   /// null when there is no artwork. Null is a real state (fresh imports,
   /// feeds without art), and the design system draws a monogram for it.
   ImageProvider? imageFor(String? artUrl, int px);
 
+  /// What is listening for each cover, by art URL: the covers on
+  /// screen, and nothing else. An entry goes with its last listener.
+  final Map<String, List<VoidCallback>> _listeners =
+      <String, List<VoidCallback>>{};
+
+  /// How many covers something on screen is listening for.
+  @visibleForTesting
+  int get listening => _listeners.length;
+
+  void _tell(Iterable<VoidCallback> listeners) {
+    // A copy: a listener that leaves while it is told changes the list.
+    for (final listener in listeners.toList()) {
+      listener();
+    }
+  }
+
   /// [artUrl] as the design system takes it: a function from the size a
   /// component decides to draw at to a provider for exactly that size.
   WaxArtwork? source(String? artUrl) {
     if (artUrl == null || artUrl.isEmpty) return null;
-    return (int px) => imageFor(artUrl, px);
+    return WaxArtwork(
+      (int px) => imageFor(artUrl, px),
+      cover: artUrl,
+      replaced: _CoverReplaced(this, artUrl),
+    );
   }
 
   /// The bytes behind [artUrl] at the rung covering [px]. For everything
@@ -317,16 +418,99 @@ abstract class ArtworkStore {
   /// does nothing.
   Future<void> unpinExact(String pid, List<OwedPin> owed);
 
-  /// Forgets everything held for [artUrl], at every size. Called when an
-  /// entity's artwork is replaced: the URL is stable across a cover
-  /// change, so nothing else would notice.
+  /// Forgets everything held for [artUrl]'s entity, every role of it at
+  /// every size. Called when an entity's artwork is replaced: the URL is
+  /// stable across a cover change, so nothing else would notice. One
+  /// call per entity, with any of its art URLs, is enough.
+  ///
+  /// The replacement is noted before the first await, so a surface that
+  /// asks again in the same turn already gets the new bytes; what is
+  /// dropped after that is nothing a redraw waits for. A cover on screen
+  /// drawn from [source] is told then, and asks again by itself. Where
+  /// the picture [artUrl] names is pinned for offline, that pin is asked
+  /// about again in the background, as [evictAll] asks about every pin.
   Future<void> evict(String artUrl);
+
+  /// [evict] for every cover at once, for when covers were replaced and
+  /// nothing says which: each is asked for afresh, once, at the cost of
+  /// fetching every one drawn again. Noted before the first await, as
+  /// there, and every cover on screen is told. Where covers are pinned
+  /// for offline, each is asked about again in the background.
+  Future<void> evictAll();
+
+  /// Marks every cover as owed a fresh ask, so a session that ends before
+  /// [evictAll] makes it still does at its next start.
+  void oweEvictAll();
+
+  /// The server is known to be in reach again. Where covers are pinned
+  /// for offline, one drawn off a pin still owed its refresh is told
+  /// replaced and asks the server, whatever holds the refresh back.
+  /// Nothing where there are no pins.
+  void serverReached() {}
+
+  /// [told] hears the art URL of each cover drawn off a pin that this
+  /// store names anew by itself (the pin rewritten, the server back in
+  /// reach), for what was read off the old bytes elsewhere. Once however
+  /// often it is handed in. Nothing where there are no pins.
+  void onRenamed(void Function(String artUrl) told) {}
+
+  /// Pins the cover of each download in [held], its art URL by pid, at
+  /// every offline size it has no pin at: a download pins its cover only
+  /// as it lands, and a sign-out drops every pin and keeps the audio.
+  /// [held] is every download there is: what was kept of one not in it
+  /// is dropped.
+  ///
+  /// The pin walk's work, in the background behind its gate and at its
+  /// pace: a size the server will not give is asked for again in the
+  /// walk's rounds, and one it could not be asked about once the walk's
+  /// wait is up, however often this is called meanwhile. A size still
+  /// refused after the rounds, or one the server answers it has no cover
+  /// at, is not asked for again until the item is named replaced, every
+  /// cover is, or a sign-out: the first until the next launch at most,
+  /// the second in a later launch too. [landed] hears each pid a cover
+  /// was pinned for, once a call. Nothing where there are no pins.
+  void pinHeld(Map<String, String> held, {void Function(String pid)? landed}) {}
 
   /// Drops every cached and pinned byte. Sign-out: the next account has
   /// no business reading the last one's covers.
   Future<void> forgetEverything();
 
   void dispose();
+}
+
+/// Says when its store is told one cover, or every cover, was replaced.
+///
+/// Handed out with every [ArtworkStore.source] and costing nothing until
+/// something listens: the store keeps a listener, not this. Equal for
+/// one cover of one store, so a widget handed another of them on each
+/// build does not listen afresh each time.
+@immutable
+class _CoverReplaced implements Listenable {
+  const _CoverReplaced(this._store, this._artUrl);
+
+  final ArtworkStore _store;
+  final String _artUrl;
+
+  @override
+  void addListener(VoidCallback listener) =>
+      (_store._listeners[_artUrl] ??= <VoidCallback>[]).add(listener);
+
+  @override
+  void removeListener(VoidCallback listener) {
+    final listening = _store._listeners[_artUrl];
+    if (listening == null) return;
+    listening.remove(listener);
+    if (listening.isEmpty) _store._listeners.remove(_artUrl);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is _CoverReplaced &&
+      identical(other._store, _store) &&
+      other._artUrl == _artUrl;
+
+  @override
+  int get hashCode => Object.hash(identityHashCode(_store), _artUrl);
 }
 
 /// The store that leans on the platform: sized requests, and the HTTP
@@ -336,7 +520,9 @@ abstract class ArtworkStore {
 /// same-origin request, the browser's own cache is honest about ETag and
 /// `Cache-Control` (a day of freshness, a week of stale-while-revalidate
 /// as of the art endpoint's caching contract), and there is no offline
-/// mode to pin for. Native tests use it too: it reaches the network only
+/// mode to pin for. That cache outlives the page, so the web build hands
+/// in a memory over browser storage and a replaced cover is still asked
+/// for under its tag after a reload. Native tests use it too: it reaches the network only
 /// when something actually paints, which under `flutter test` is a
 /// refused request and a monogram.
 ///
@@ -344,8 +530,12 @@ abstract class ArtworkStore {
 /// is the bug the whole pipeline was built to fix. Native gets
 /// `CachedArtworkStore`.
 class NetworkArtworkStore extends ArtworkStore {
-  NetworkArtworkStore({required this.baseUrl, this.token, Dio? client})
-    : _dio = client ?? artworkTransport();
+  NetworkArtworkStore({
+    required this.baseUrl,
+    this.token,
+    Dio? client,
+    super.replaced,
+  }) : _dio = client ?? artworkTransport();
 
   @override
   final String baseUrl;
@@ -414,33 +604,49 @@ class NetworkArtworkStore extends ArtworkStore {
 
   @override
   Future<void> evict(String artUrl) async {
-    // The absence goes first, because the ladder below is built by
-    // asking for providers and a known-absent URL answers null for
-    // every one of them - which would walk away from real decoded
-    // bytes when a cover is deleted server-side and only then answers
-    // 404.
-    forgetAbsent(artUrl);
-    // The whole ladder, because that is the whole set of keys a cover
-    // can be held under. Nothing has to be remembered to be dropped.
-    // Built before the replacement is noted, since these are the keys
-    // the old bytes are under.
-    final held = <ImageProvider?>[
-      for (final draw in kArtworkDrawSizes) imageFor(artUrl, draw),
-    ];
-    noteReplaced(artUrl);
-    for (final image in held) {
-      await image?.evict();
-    }
+    // Async, so a URL that cannot be read fails the future, not the
+    // caller; the replacement is still noted before the first await.
+    await replaceCover(artUrl, (covers) {
+      // The whole ladder, because that is the whole set of keys a cover
+      // can be held under. Nothing has to be remembered to be dropped.
+      final held = <ImageProvider?>[
+        for (final url in covers)
+          for (final draw in kArtworkDrawSizes) imageFor(url, draw),
+      ];
+      return () async {
+        for (final image in held) {
+          await image?.evict();
+        }
+      };
+    });
   }
 
   @override
+  Future<void> evictAll() async {
+    // The decoded copies are under the old names and age out; the
+    // browser's are not ours to drop.
+    noteAllReplaced();
+  }
+
+  @override
+  void oweEvictAll() => _replaced.owe();
+
+  @override
   Future<void> forgetEverything() async {
+    // The replacement tags are folded, not dropped: the browser's cache
+    // is not ours to empty and can answer the next sign-in's draw of a
+    // replaced cover with the old bytes, but which covers those were is
+    // not the next account's to read.
+    _replaced.fold();
     dropDecodedArtwork();
     forgetAbsences();
   }
 
   @override
-  void dispose() => _dio.close(force: true);
+  void dispose() {
+    _replaced.close();
+    _dio.close(force: true);
+  }
 }
 
 /// The sized cover the web store hands out, which tells its store when
@@ -549,6 +755,97 @@ Dio artworkTransport() => Dio(
   ),
 );
 
+/// What one artwork GET came to.
+sealed class ArtworkAnswer {
+  const ArtworkAnswer();
+}
+
+/// The bytes, and the validator to ask with next time.
+final class ArtworkFetched extends ArtworkAnswer {
+  const ArtworkFetched(this.art);
+
+  final ArtworkBytes art;
+}
+
+/// A 304: the caller's validator still names the server's bytes.
+final class ArtworkUnchanged extends ArtworkAnswer {
+  const ArtworkUnchanged();
+}
+
+/// A 404: the server saying there is nothing here.
+final class ArtworkAbsent extends ArtworkAnswer {
+  const ArtworkAbsent();
+}
+
+/// The server answered with a [status] that gives no cover: a refusal,
+/// a failure of its own, or a 200 with nothing in it.
+final class ArtworkRefused extends ArtworkAnswer {
+  const ArtworkRefused(this.status);
+
+  final int status;
+
+  /// Whether the status is about the session or the server as a whole
+  /// and says nothing of this cover: a credential it will not hear, a
+  /// request it has no time for, a gateway with nothing behind it.
+  bool get ofTheServer =>
+      const <int>{401, 408, 429, 502, 503, 504}.contains(status);
+}
+
+/// No answer at all: unreachable, cut off, or one that cannot be read.
+final class ArtworkUnanswered extends ArtworkAnswer {
+  const ArtworkUnanswered();
+}
+
+/// One artwork GET, for a caller that tells the answers apart: a walk
+/// of pinned covers goes on past a 304, a 404 and a cover the server
+/// will not give, and stops for a server that did not answer.
+Future<ArtworkAnswer> askArtwork(
+  Dio dio,
+  String url, {
+  Map<String, String> headers = const <String, String>{},
+  String? ifNoneMatch,
+}) async {
+  try {
+    final response = await dio.get<List<int>>(
+      url,
+      options: Options(
+        responseType: ResponseType.bytes,
+        headers: <String, String>{
+          ...headers,
+          if (ifNoneMatch != null && ifNoneMatch.isNotEmpty)
+            'If-None-Match': ifNoneMatch,
+        },
+        // Every status is an answer: which one is the caller's to read.
+        validateStatus: (int? status) => true,
+      ),
+    );
+    final status = response.statusCode;
+    if (status == null) return const ArtworkUnanswered();
+    if (status == 404) return const ArtworkAbsent();
+    if (status == 304) return const ArtworkUnchanged();
+    final body = response.data;
+    if (status != 200 || body == null || body.isEmpty) {
+      return ArtworkRefused(status);
+    }
+    return ArtworkFetched(
+      ArtworkBytes(
+        bytes: Uint8List.fromList(body),
+        etag: response.headers.value('etag') ?? '',
+      ),
+    );
+  } catch (_) {
+    // Everything, not just DioException: dio casts the response body
+    // outside its own error wrapping, so a body that is not what was
+    // asked for arrives as a plain TypeError. This is called from
+    // background work nobody is awaiting - a warm-ahead, a pin beside a
+    // download - where an escaping error is an unhandled one, and the
+    // answer to every failure here is the same anyway: no bytes, and the
+    // monogram that is already the drawn state for a cover there is none
+    // of.
+    return const ArtworkUnanswered();
+  }
+}
+
 /// One artwork GET. Answers null for a 304 (the caller already has these
 /// bytes) and for any failure, which is always drawable: a missing cover
 /// is a monogram, not an error dialog.
@@ -563,39 +860,12 @@ Future<ArtworkBytes?> fetchArtwork(
   String? ifNoneMatch,
   void Function()? onAbsent,
 }) async {
-  try {
-    final response = await dio.get<List<int>>(
-      url,
-      options: Options(
-        responseType: ResponseType.bytes,
-        headers: <String, String>{
-          ...headers,
-          if (ifNoneMatch != null && ifNoneMatch.isNotEmpty)
-            'If-None-Match': ifNoneMatch,
-        },
-        validateStatus: (int? status) =>
-            status == 200 || status == 304 || status == 404,
-      ),
-    );
-    if (response.statusCode == 404) {
-      onAbsent?.call();
-      return null;
-    }
-    final body = response.data;
-    if (response.statusCode != 200 || body == null || body.isEmpty) return null;
-    return ArtworkBytes(
-      bytes: Uint8List.fromList(body),
-      etag: response.headers.value('etag') ?? '',
-    );
-  } catch (_) {
-    // Everything, not just DioException: dio casts the response body
-    // outside its own error wrapping, so a body that is not what was
-    // asked for arrives as a plain TypeError. This is called from
-    // background work nobody is awaiting - a warm-ahead, a pin beside a
-    // download - where an escaping error is an unhandled one, and the
-    // answer to every failure here is the same anyway: no bytes, and the
-    // monogram that is already the drawn state for a cover there is none
-    // of.
-    return null;
-  }
+  final answer = await askArtwork(
+    dio,
+    url,
+    headers: headers,
+    ifNoneMatch: ifNoneMatch,
+  );
+  if (answer is ArtworkAbsent) onAbsent?.call();
+  return answer is ArtworkFetched ? answer.art : null;
 }

@@ -540,7 +540,7 @@ components:
     LoginResponse:
       type: object
       description: Established session plus a bearer token for native clients.
-      required: [user, token, csrfToken]
+      required: [user, token, csrfToken, sessionId]
       properties:
         user:
           $ref: "#/components/schemas/User"
@@ -555,6 +555,13 @@ components:
           description: >
             CSRF token for cookie-authenticated mutations (sent back as the
             `X-CSRF-Token` header). Irrelevant to bearer-token callers.
+        sessionId:
+          type: string
+          description: >
+            Id of the session the answer established, or for a token
+            rotation the session rotated, as the device list names it
+            (`DeviceSession.id`).
+          example: se-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     SessionInfo:
       type: object
@@ -571,6 +578,12 @@ components:
           description: >
             CSRF token for cookie-authenticated mutations. Present only when
             authenticated.
+        sessionId:
+          type: string
+          description: >
+            Id of the session serving this request, as the device list
+            names it (`DeviceSession.id`). Present only when authenticated.
+          example: se-01JZX5N8QW3F4V9T2B7KD3M9R6
         server:
           $ref: "#/components/schemas/SessionServer"
 

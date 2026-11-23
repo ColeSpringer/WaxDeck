@@ -15,6 +15,7 @@ import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import '../sync/catalog_writes.dart';
 import 'artwork_manager.dart';
 import 'rename_section.dart';
 
@@ -224,10 +225,6 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
 
   Widget _body(AlbumDetail album) {
     final l10n = context.l10n;
-    final pid = widget.pid;
-    // Through the container: a cover write may land once this pane has
-    // gone, and the album page Back lands on draws the source it reads.
-    final container = ProviderScope.containerOf(context, listen: false);
     final curation = ref.watch(albumCurationProvider(widget.pid)).value ?? {};
     final changed = _changed(album);
     return Semantics(
@@ -275,12 +272,6 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
               hasArtwork: album.artSource != null,
               entityType: 'album',
               writeBack: _writeBack,
-              // The summary above draws this album's resolved cover
-              // and its source mark from the detail read, which the
-              // grid knows nothing about: without this, clearing a
-              // cover leaves the mark describing a picture that is
-              // gone until the pane is left and re-entered.
-              onChanged: () => container.invalidate(albumDetailProvider(pid)),
             ),
             const SizedBox(height: WaxSpace.s24),
             _FieldSection(
@@ -382,8 +373,7 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
     final follow = widget.follow();
     // The answer outlives this pane when the visitor leaves meanwhile; the
     // page Back lands on may draw the same release.
-    final container = ProviderScope.containerOf(context, listen: false);
-    final pid = widget.pid;
+    final writes = ref.read(catalogWritesProvider);
     try {
       final result = await ref
           .read(repositoryProvider)
@@ -413,17 +403,20 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
         }
         _reportDirty();
       }
+      // The release's own reads are among those this sweeps, and so are
+      // the survivor's where the edit merged it away.
+      writes.landed();
       // An mbid clear is the one entity edit that can re-key the album
-      // onto a heuristic twin, which deletes this pid: refetching it
-      // would put an error state under a "Saved" toast. The workbench
-      // follows instead, exactly as for a merging rename, and whether or
-      // not this pane is still up.
+      // onto a heuristic twin, which deletes this pid. The workbench
+      // follows, exactly as for a merging rename, and whether or not
+      // this pane is still up.
       if (result.mergedInto case final survivor?) {
         if (follow != null) {
           unawaited(
             follow.merged(
               survivor,
               said: (l10n) => l10n.musicAlbumRewriteMerged,
+              folded: result.folded,
             ),
           );
         } else {
@@ -431,9 +424,7 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
         }
         return;
       }
-      container
-        ..invalidate(albumDetailProvider(pid))
-        ..invalidate(albumCurationProvider(pid));
+      unawaited(follow?.folded(result.folded));
       messenger.show(l10n.musicAlbumEditorSaved);
     } on WaxDeckApiException catch (e) {
       // A locked field keeps the server's sentence, which names the
@@ -460,14 +451,6 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
     // scrolled that far.
     final members =
         ref.watch(albumDetailProvider(widget.pid)).value?.itemCount ?? 0;
-    final pid = widget.pid;
-    final listing = (
-      dimension: MusicDimension.albums,
-      segment: pid,
-      domain: BrowseDomain.wholeLibrary,
-    );
-    // Through the container: a rename may land once this pane has gone.
-    final container = ProviderScope.containerOf(context, listen: false);
     return EntityRenameSection(
       entityType: 'album',
       pid: widget.pid,
@@ -498,9 +481,6 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
         _reportDirty();
       },
       follow: widget.follow,
-      onRenamed: () => container
-        ..invalidate(albumDetailProvider(pid))
-        ..invalidate(musicItemsProvider(listing)),
     );
   }
 }

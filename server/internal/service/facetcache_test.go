@@ -65,6 +65,50 @@ func TestAPlayLeavesTheEnumerationCacheWarm(t *testing.T) {
 	}
 }
 
+// A client told the catalog moved reads at once, so by the time the wake
+// fires the feed has to be past the edit: the enumeration it then asks for
+// is counted afresh, not served from before the edit.
+func TestAGenreEditIsCountedOnceTheWakeFires(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	settleCatalogFeed(t, svc)
+	genres := func() map[string]int {
+		t.Helper()
+		page, err := svc.Reads.Facets(ctx, uc, FacetQuery{Dimension: "genre", Limit: 500})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]int{}
+		for _, b := range page.Buckets {
+			out[b.Label] = b.Count
+		}
+		return out
+	}
+	if got := genres(); got["Ambient"] != 3 || got["Jazz"] != 1 {
+		t.Fatalf("genres = %v, want the fixture's", got)
+	}
+	if !servesFromCache(svc, "genre") {
+		t.Fatal("the enumeration did not cache")
+	}
+	select {
+	case <-svc.catalogWake:
+	default:
+	}
+
+	delta, _ := fixtureTrackPID(t, ctx, svc, uc, "Delta Groove")
+	if _, err := svc.Editor.EditItemMetadata(ctx, uc, delta, map[string]string{"genre": "Ambient"}, MetadataEditParams{}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-svc.catalogWake:
+	case <-time.After(10 * time.Second):
+		t.Fatal("a genre edit woke no client")
+	}
+	if got := genres(); got["Ambient"] != 4 || got["Jazz"] != 0 {
+		t.Errorf("genres at the wake = %v, want the track counted under Ambient", got)
+	}
+}
+
 // A content rule compiles from the spellings the catalog holds, memoized on
 // the content position, and a value nothing carried when the memo filled
 // compiles to no condition. So a play, which changes no spelling, leaves the

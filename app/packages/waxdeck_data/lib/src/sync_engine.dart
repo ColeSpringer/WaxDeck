@@ -49,12 +49,26 @@ class LocalBookmark {
 
 /// One frame of engine status for the UI.
 class SyncStatus {
-  const SyncStatus({required this.connection, this.lastSyncAt});
+  const SyncStatus({
+    required this.connection,
+    this.lastSyncAt,
+    this.retrying = false,
+  });
 
   final SyncConnection connection;
 
   /// When a walk last caught the mirror up; an upgrade alone is no sync.
   final DateTime? lastSyncAt;
+
+  /// Whether the engine is past a failure: a connect failed, or the link
+  /// dropped, since the socket was last up, or it was started with the
+  /// server already found out of reach ([SyncEngine.start]). Holds through
+  /// the wait and each retry's [SyncConnection.connecting], until a connect
+  /// answers: the upgrade, not a walk that went through. Any other first
+  /// connect still out has failed nothing, and a stop is no failure; nor is
+  /// the server's word that the session ended (the socket closed as ended,
+  /// an upgrade refused with 401), which ends one as a connect does.
+  final bool retrying;
 
   bool get online => connection == SyncConnection.connected;
 }
@@ -98,6 +112,8 @@ class SyncEngine {
 
   final _status = StreamController<SyncStatus>.broadcast();
   final _catalogChanged = StreamController<void>.broadcast();
+  final _catalogCurrent = StreamController<void>.broadcast();
+  final _catalogNamed = StreamController<CatalogNames>.broadcast();
   final _playStateChanged = StreamController<PlayStateChange>.broadcast();
   final _serverEvents = StreamController<ServerSyncEvent>.broadcast();
   final _serverResets = StreamController<void>.broadcast();
@@ -106,6 +122,11 @@ class SyncEngine {
   EventsChannel? _channel;
   Timer? _reconnect;
   bool _running = false;
+
+  /// What [SyncStatus.retrying] says. Kept here and not folded from
+  /// [status] by a reader: one that listens late, or between two
+  /// listeners, has missed the failure.
+  bool _retrying = false;
 
   /// The waits between reconnects, started over by a walk that goes
   /// through ([reconcile]), and by [stop].
@@ -121,9 +142,52 @@ class SyncEngine {
   /// that never started reports offline without meaning it.
   bool get started => _running;
 
-  /// Fires after mirror rows changed (drift watches also work; these
-  /// are for invalidating server-backed views).
+  /// Fires after mirror rows changed, and after a pull the server's
+  /// catalog invalidation prompted whatever it held (drift watches also
+  /// work; these are for invalidating server-backed views).
   Stream<void> get catalogChanged => _catalogChanged.stream;
+
+  /// Fires when the server answers the cursor a subscribe presented with
+  /// nothing changed in the catalog after it: what was read is current,
+  /// and only reads that failed want asking again.
+  Stream<void> get catalogCurrent => _catalogCurrent.stream;
+
+  /// The catalog position presented on each subscribe: how far this
+  /// engine has acted on what the catalog said, the `since` of the last
+  /// invalidation whose pass it reported or of an answer saying nothing
+  /// changed, or where a snapshot it reported stands. Never the mirror's
+  /// cursor alone, which a pull moves past changes no entry carries
+  /// without reporting them. Held across sockets, and seeded from the
+  /// mirror's cursor at the first subscribe: a process that starts reads
+  /// every list afresh.
+  ///
+  /// Another account signing in drops it: the server binds a position to
+  /// its account's grants. That account presents none until its first
+  /// walk has run, and is then seeded from the mirror's cursor, for the
+  /// same reason: a sign-in reads every list afresh. So does a process
+  /// that starts on a mirror another account walked last.
+  String? _actedSince;
+  var _actedSeeded = false;
+
+  /// The account [_actedSince] is held for, the last one named.
+  String? _actedFor;
+
+  /// Whether the next walk's pull seeds [_actedSince].
+  var _seedOnWalk = false;
+
+  void _acted(String since) {
+    _actedSince = since;
+    _actedSeeded = true;
+    _seedOnWalk = false;
+  }
+
+  /// What a frame said of the catalog's entities that changed: the ones
+  /// an invalidation named, or that it left some unnamed, as a resync
+  /// that covers the catalog leaves them all. One event per frame that
+  /// says either, as it arrives, so ahead of the [catalogChanged] its
+  /// pull ends in and whatever pull is already running. A frame that
+  /// says neither says nothing here.
+  Stream<CatalogNames> get catalogNamed => _catalogNamed.stream;
 
   /// Per-user playback states that moved: an item's own, announced with
   /// the state the mirror now holds, or an artist's or album's star or
@@ -202,8 +266,21 @@ class SyncEngine {
 
   /// The signed-in account: whose queued writes a flush sends and whose
   /// marks a pull mirrors. The outbox outlives a session, so what an
-  /// account queued waits for it. Set by the app as a session begins.
-  String? account;
+  /// account queued waits for it. Set by the app as a session begins,
+  /// and cleared as one ends.
+  String? get account => _account;
+  String? _account;
+  set account(String? value) {
+    _account = value;
+    // Cleared between sessions: the position waits for whoever signs in.
+    if (value == null) return;
+    final held = _actedFor;
+    _actedFor = value;
+    if (held == null || held == value) return;
+    _actedSince = null;
+    _actedSeeded = true;
+    _seedOnWalk = true;
+  }
 
   /// Fires when a queued preference patch reached the server: whose it
   /// was, the document the server stored, and what of the patch still
@@ -228,14 +305,33 @@ class SyncEngine {
   bool _caughtUp = false;
 
   /// Starts the engine: reconcile now, then follow invalidations.
-  Future<void> start() async {
+  ///
+  /// [unreached] is the app having already found the server out of reach
+  /// (a session opened from memory): [SyncStatus.retrying] then holds from
+  /// here, with no failure of the engine's own, until a connect answers.
+  Future<void> start({bool unreached = false}) async {
     if (_running) return;
     _running = true;
+    _retrying = unreached;
     _connect();
+  }
+
+  /// The device's network came back: a socket waiting out its backoff
+  /// tries now, and from the first wait again. One up, or on its way, is
+  /// left be. True when the socket stood up through it, so no connect is
+  /// coming to catch up.
+  bool networkBack() {
+    if (_channel != null) return _current.online;
+    _reconnect?.cancel();
+    _backoff.reset();
+    _connect();
+    return false;
   }
 
   Future<void> stop() async {
     _running = false;
+    // Here, not with the status below: a start() meanwhile begins clean.
+    _retrying = false;
     _reconnect?.cancel();
     // A start after this connects from the first wait.
     _backoff.reset();
@@ -251,6 +347,8 @@ class SyncEngine {
     stop();
     _status.close();
     _catalogChanged.close();
+    _catalogCurrent.close();
+    _catalogNamed.close();
     _playStateChanged.close();
     _serverEvents.close();
     _serverResets.close();
@@ -264,6 +362,7 @@ class SyncEngine {
     _current = SyncStatus(
       connection: c,
       lastSyncAt: synced ? DateTime.now() : _current.lastSyncAt,
+      retrying: _retrying,
     );
     if (!_status.isClosed) _status.add(_current);
   }
@@ -315,9 +414,20 @@ class SyncEngine {
       onDone: _onChannelDown,
       subscribe: () async {
         final cursors = await _cursors();
+        if (!_actedSeeded) {
+          _actedSeeded = true;
+          // A mirror another account walked last holds that account's
+          // position: none is presented, and the first walk seeds one.
+          final walkedFor = cursors.serverAccount;
+          if (walkedFor == null || walkedFor == account) {
+            _actedSince = cursors.catalogSince;
+          } else {
+            _seedOnWalk = true;
+          }
+        }
+        final catalogSince = _actedSince;
         return jsonEncode({
-          if (cursors.catalogSince != null)
-            'catalogSince': cursors.catalogSince,
+          'catalogSince': ?catalogSince,
           if (cursors.serverSince != null) 'serverSince': cursors.serverSince,
         });
       },
@@ -333,6 +443,7 @@ class SyncEngine {
             return;
           }
           up = true;
+          _retrying = false;
           _setStatus(SyncConnection.connected);
           onConnected?.call();
           await _serialized(reconcile);
@@ -355,6 +466,9 @@ class SyncEngine {
   void _down({required bool inDoubt}) {
     if (!_running) return;
     _channel = null;
+    // A session in doubt is the server answering, not a link that failed:
+    // a sign-out ends this way, and its screens must not read offline.
+    _retrying = !inDoubt;
     _setStatus(SyncConnection.offline);
     _reconnect?.cancel();
     _reconnect = Timer(_backoff.take(), _connect);
@@ -368,11 +482,23 @@ class SyncEngine {
     } on FormatException {
       return;
     }
+    // Before the pull or the re-mirror the frame prompts, which may wait
+    // behind one under way.
+    final named = catalogFrameNames(frame);
+    if (named != null && !_catalogNamed.isClosed) _catalogNamed.add(named);
     switch (frame['type']) {
       case 'invalidate':
         switch (frame['topic']) {
           case 'catalog':
-            _serialized(pullCatalog);
+            final since = catalogFrameSince(frame);
+            // An answer saying nothing changed after the cursor presented
+            // asks for no pull: the connect's own walk pulls from it.
+            if (catalogFrameUnchanged(frame)) {
+              if (since != null) _acted(since);
+              if (!_catalogCurrent.isClosed) _catalogCurrent.add(null);
+            } else {
+              _serialized(() => _pullCatalog(hinted: true, heard: since));
+            }
           case 'user':
             _serialized(pullServer);
           case 'player':
@@ -461,13 +587,14 @@ class SyncEngine {
   Future<void> _ensureCatalogMirror() async {
     final cursors = await _cursors();
     if (cursors.catalogSince == null) {
-      await _snapshotCatalog();
+      await _snapshotCatalog(account);
     } else {
-      await pullCatalog();
+      await _pullCatalog(hinted: false, walk: true);
     }
   }
 
-  Future<void> _snapshotCatalog() async {
+  /// [owner] is the account the work began for.
+  Future<void> _snapshotCatalog(String? owner) async {
     String? cursor;
     String? since;
     // By ULID: an item whose kind changed between two page reads comes
@@ -551,7 +678,7 @@ class SyncEngine {
       }
     });
     await _saveCatalogCursor(since);
-    _catalogChanged.add(null);
+    _reportCatalogChange(acted: since, owner: owner);
     reclaim.forEach(_itemsRemoved.add);
     asked.gone.forEach(_itemsRemoved.add);
   }
@@ -764,11 +891,31 @@ class SyncEngine {
 
   /// Pulls catalog deltas to the tail. A sync-reset drops the mirror
   /// and snapshots again.
-  Future<void> pullCatalog() async {
+  ///
+  /// [hinted] is a pull the server's catalog invalidation prompted. It
+  /// reports a change even when the delta held nothing: what moved may
+  /// be an entity no entry carries (a portrait, a cover, a name).
+  /// The invalidation the server answers a subscribe with counts: an
+  /// entity changed while the socket was down is in no delta, so that
+  /// frame is the only word a returning client gets, unless it says
+  /// nothing in the catalog changed after the cursor: that one prompts no
+  /// pull. A pull no frame prompted stays silent on an empty delta.
+  Future<void> pullCatalog({bool hinted = false}) =>
+      _pullCatalog(hinted: hinted);
+
+  /// [pullCatalog], for a frame that said the catalog stood at [heard]
+  /// when it was sent: a pass this reports has acted on it. [walk] is a
+  /// connect's own pull.
+  Future<void> _pullCatalog({
+    required bool hinted,
+    String? heard,
+    bool walk = false,
+  }) async {
+    final owner = account;
     final cursors = await _cursors();
     var since = cursors.catalogSince;
     if (since == null) {
-      await _snapshotCatalog();
+      await _snapshotCatalog(owner);
       return;
     }
     try {
@@ -904,10 +1051,11 @@ class SyncEngine {
         if (!page.more) break;
       }
       await _saveCatalogCursor(since);
-      if (changed) _catalogChanged.add(null);
+      if (walk && _seedOnWalk && account == owner) _acted(since);
+      if (changed || hinted) _reportCatalogChange(acted: heard, owner: owner);
     } on WaxDeckApiException catch (e) {
       if (e.code == 'sync-reset') {
-        await resyncCatalog();
+        await _resyncCatalog(owner);
         return;
       }
       _handleApiFailure(e);
@@ -915,13 +1063,15 @@ class SyncEngine {
   }
 
   /// Drops the catalog mirror and re-mirrors from a fresh snapshot.
-  Future<void> resyncCatalog() async {
+  Future<void> resyncCatalog() => _resyncCatalog(account);
+
+  Future<void> _resyncCatalog(String? owner) async {
     await db
         .into(db.syncCursors)
         .insertOnConflictUpdate(
           const SyncCursorsCompanion(id: Value(1), catalogSince: Value(null)),
         );
-    await _snapshotCatalog();
+    await _snapshotCatalog(owner);
   }
 
   /// Pulls the caller's server-state deltas; play states land in the
@@ -1761,6 +1911,14 @@ class SyncEngine {
     return e.code == 'not-found' || e.code == 'invalid-request';
   }
 
+  /// A pass, which reads everything again: what was said up to [acted],
+  /// when known, has been acted on, for [owner], the account the pass
+  /// began for. One begun for an account since gone moves no position.
+  void _reportCatalogChange({String? acted, required String? owner}) {
+    if (acted != null && owner == account) _acted(acted);
+    _catalogChanged.add(null);
+  }
+
   void _handleApiFailure(WaxDeckApiException e) {
     // The server words every 401 of its own so; one in no words of its own
     // is something in front of it, and as transient as any other failure.
@@ -1853,9 +2011,9 @@ class SyncEngine {
   ///
   /// The play state and the queue's entries go where the download goes:
   /// with it, or alone where the device holds none. Left with a download
-  /// that is to be reclaimed, they play its bytes offline (and stream
-  /// meanwhile, the server answering either prefix of a track or a book)
-  /// and follow the item once its free settles ([settleFree]).
+  /// that is to be reclaimed, they play its bytes, online or not (a
+  /// stream, where one is wanted, answered for either prefix of a track or
+  /// a book), and follow the item once its free settles ([settleFree]).
   Future<bool> _rekey(
     String from,
     String to, {

@@ -1,13 +1,16 @@
 // Package events is the WebSocket event hub: it turns the service's
 // lossy change-wakeup hints into coalesced, per-connection invalidation
-// frames. Frames carry no data (clients pull the sync endpoints), so a
-// connection's pending state is a handful of booleans instead of a
-// queue: overflow is impossible by construction, and a slow client
-// costs those flags, not memory.
+// frames. Frames carry no entity data (clients pull the sync endpoints),
+// so a connection's pending state is a handful of flags, one position
+// and one bounded set of pids instead of a queue: a set that would
+// outgrow its bound becomes a flag, which the frame carries in place of
+// the names, so overflow is impossible by construction, and a slow
+// client costs that fixed state, not memory.
 package events
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 )
@@ -28,6 +31,20 @@ const (
 type Frame struct {
 	Type  string `json:"type"`
 	Topic string `json:"topic,omitempty"`
+	// Pids names the entities a catalog invalidation covers, sorted; nil
+	// when it names none and on every other frame.
+	Pids []string `json:"pids,omitempty"`
+	// Unnamed says entities a catalog invalidation covers changed and are
+	// not in Pids; never set beside Pids.
+	Unnamed bool `json:"unnamed,omitempty"`
+	// Unchanged says a catalog invalidation is only the answer to a
+	// subscribing cursor that nothing in the catalog moved after; never
+	// set beside Pids or Unnamed.
+	Unchanged bool `json:"unchanged,omitempty"`
+	// Since is the catalog position a catalog invalidation covers up to,
+	// as a cursor the account may present when it subscribes again; empty
+	// when it could not be had, and on every other frame.
+	Since string `json:"since,omitempty"`
 }
 
 // Frame types.
@@ -41,7 +58,50 @@ const (
 type wakeSource interface {
 	CatalogWakeups() <-chan struct{}
 	UserEventWakeups() <-chan string
+	// DrainCatalogChanges takes the pids of the entities behind the
+	// catalog wakes since it was last asked; unnamed says entities
+	// changed that it cannot name, and unknown that a wake had no row
+	// behind it. None of the three is a wake with nothing to name.
+	DrainCatalogChanges() (pids []string, unnamed, unknown bool)
+	// CatalogPosition is where the catalog stream stands: every change up
+	// to it is in the drain that follows or an earlier one. order sorts
+	// positions, a newer one larger; cover is the newest show cover move
+	// it covers; pos is handed back to CatalogFrameFor.
+	CatalogPosition() (order, cover int64, pos string)
+	// CatalogFrameFor reads the account as a catalog invalidation is
+	// built: the cursor at pos for it, "" for none or when it could not be
+	// read, and, for a frame with names, those of them it may be told, in
+	// order; unnamed says it could not decide them all.
+	CatalogFrameFor(userID, pos string, pids []string) (since string, named []string, unnamed bool)
+	// CatalogChangesSince is what changed after a cursor the account
+	// presented, named as a drain names it, with the position the answer
+	// covers up to; unnamed for a cursor the stream cannot serve, and
+	// unchanged when nothing in the catalog moved after one it can.
+	CatalogChangesSince(userID, cursor string) (pids []string, unnamed, unchanged bool, order, cover int64, pos string)
 }
+
+// catalogMove is what one catalog invalidation stands for.
+type catalogMove struct {
+	// pids names the entities that changed, at most MaxCatalogPIDs.
+	pids []string
+	// unnamed says entities changed that pids does not name.
+	unnamed bool
+	// unknown says the catalog may be another one: names that share its
+	// frame are dropped.
+	unknown bool
+	// unchanged says it is an answer to a subscribing cursor that nothing
+	// in the catalog moved after.
+	unchanged bool
+	// order, cover and pos are the position the move covers up to, as
+	// the source gave them; pos is empty for a move that has none.
+	order int64
+	cover int64
+	pos   string
+}
+
+// MaxCatalogPIDs is the most entities one catalog invalidation names,
+// the contract's bound, and so the most a connection holds pending.
+const MaxCatalogPIDs = 64
 
 // coalesceWindow batches invalidations so a bulk edit becomes a few
 // frames, not thousands.
@@ -68,6 +128,7 @@ func New(src wakeSource) *Hub {
 // Conn is one subscribed connection. The transport layer owns the
 // socket; the hub only marks pending topics and wakes it.
 type Conn struct {
+	hub       *Hub
 	userID    string
 	sessionID string          // the session that opened it; "" for none
 	topics    map[string]bool // nil means every topic
@@ -81,10 +142,28 @@ type Conn struct {
 	tuned   bool
 	pending struct {
 		catalog bool
-		user    bool
-		player  bool
-		radio   bool
-		resync  bool
+		// catalogPids is what the owed catalog invalidation names, at most
+		// MaxCatalogPIDs; catalogPlain says it names nothing, because the
+		// names outgrew the set, could not all be had, or may be another
+		// catalog's; catalogUnnamed says an entity changed that it does
+		// not name.
+		catalogPids    map[string]struct{}
+		catalogPlain   bool
+		catalogUnnamed bool
+		// catalogPos is the newest position the owed catalog invalidation
+		// covers up to, catalogOrder and catalogCover its order and cover
+		// stamp; empty for none.
+		catalogPos   string
+		catalogOrder int64
+		catalogCover int64
+		// catalogStirred says something other than an unchanged answer
+		// joined the owed catalog invalidation: a move, a plain mark or a
+		// resync.
+		catalogStirred bool
+		user           bool
+		player         bool
+		radio          bool
+		resync         bool
 		// resyncCatalog is a resync of the catalog stream alone.
 		resyncCatalog bool
 	}
@@ -100,7 +179,7 @@ type Conn struct {
 // everything: spurious invalidations are harmless by the model, while a
 // connection that looks live but hears nothing is silent staleness.
 func (h *Hub) Register(userID, sessionID string, topics []string) *Conn {
-	c := &Conn{userID: userID, sessionID: sessionID, wake: make(chan struct{}, 1), ended: make(chan struct{})}
+	c := &Conn{hub: h, userID: userID, sessionID: sessionID, wake: make(chan struct{}, 1), ended: make(chan struct{})}
 	if len(topics) > 0 {
 		c.topics = make(map[string]bool, len(topics))
 		for _, t := range topics {
@@ -202,7 +281,12 @@ func (c *Conn) tunedTo(stations map[string]struct{}) bool {
 
 // Mark queues an invalidation, or for TypeResync a resync of the catalog
 // stream or of every stream (an empty topic), and wakes the writer.
-// Invalidations for unsubscribed topics are dropped.
+// Invalidations for unsubscribed topics are dropped. A catalog
+// invalidation queued here has no names of its own and leaves alone
+// those the frame holds; like a resync, it keeps the frame from saying
+// it is unchanged. A resync drops them, and any that join the
+// frame after it: the catalog they were read from may be gone. Names
+// dropped that way are owed as unnamed.
 func (c *Conn) Mark(frameType, topic string) {
 	if frameType == TypeInvalidate && !c.wants(topic) {
 		return
@@ -211,10 +295,13 @@ func (c *Conn) Mark(frameType, topic string) {
 	switch {
 	case frameType == TypeResync && topic == TopicCatalog:
 		c.pending.resyncCatalog = true
+		c.unnameCatalog()
 	case frameType == TypeResync:
 		c.pending.resync = true
+		c.unnameCatalog()
 	case topic == TopicCatalog:
 		c.pending.catalog = true
+		c.pending.catalogStirred = true
 	case topic == TopicUser:
 		c.pending.user = true
 	case topic == TopicPlayer:
@@ -229,21 +316,144 @@ func (c *Conn) Mark(frameType, topic string) {
 	}
 }
 
+// unnameCatalog makes the catalog invalidation owed, or the next one
+// queued before a take, name nothing and never say it is unchanged; names
+// it held become unnamed. c.mu is held.
+func (c *Conn) unnameCatalog() {
+	c.pending.catalogStirred = true
+	if len(c.pending.catalogPids) > 0 {
+		c.pending.catalogUnnamed = true
+	}
+	c.pending.catalogPlain = true
+	c.pending.catalogPids = nil
+}
+
+// markCatalog queues a catalog invalidation for the move and wakes the
+// writer. Names add up until the frame is taken, and a move with nothing
+// to name leaves them be. Past MaxCatalogPIDs, or sharing the frame with
+// an unnamed or unknown move, they are dropped and the frame owed is
+// unnamed. The frame covers up to the newest position of its moves: of
+// two at one order, the one covering the newer show cover move (an
+// answer queued after a live move may have read the older), else the
+// later queued. It is unchanged only while every move it holds is.
+func (c *Conn) markCatalog(m catalogMove) {
+	if !c.wants(TopicCatalog) {
+		return
+	}
+	c.mu.Lock()
+	c.pending.catalog = true
+	c.pending.catalogStirred = c.pending.catalogStirred || !m.unchanged
+	if m.pos != "" && (c.pending.catalogPos == "" || m.order > c.pending.catalogOrder ||
+		m.order == c.pending.catalogOrder && m.cover >= c.pending.catalogCover) {
+		c.pending.catalogPos, c.pending.catalogOrder, c.pending.catalogCover = m.pos, m.order, m.cover
+	}
+	switch {
+	case m.unnamed:
+		c.unnameCatalog()
+		c.pending.catalogUnnamed = true
+	case m.unknown:
+		c.unnameCatalog()
+	case len(m.pids) == 0:
+	case c.pending.catalogPlain:
+		c.pending.catalogUnnamed = true
+	default:
+		if c.pending.catalogPids == nil {
+			c.pending.catalogPids = make(map[string]struct{}, len(m.pids))
+		}
+		for _, pid := range m.pids {
+			c.pending.catalogPids[pid] = struct{}{}
+			if len(c.pending.catalogPids) > MaxCatalogPIDs {
+				c.unnameCatalog()
+				break
+			}
+		}
+	}
+	c.mu.Unlock()
+	select {
+	case c.wake <- struct{}{}:
+	default:
+	}
+}
+
+// MarkCatalogSince answers a subscribe that presented a catalog cursor:
+// it asks the source what changed after it, here on the caller's
+// goroutine, never the hub's loop, and queues that as a catalog move, so
+// it follows the rules every move does and joins what is owed.
+func (c *Conn) MarkCatalogSince(cursor string) {
+	if !c.wants(TopicCatalog) {
+		return
+	}
+	if c.hub.src == nil {
+		c.Mark(TypeInvalidate, TopicCatalog)
+		return
+	}
+	pids, unnamed, unchanged, order, cover, pos := c.hub.src.CatalogChangesSince(c.userID, cursor)
+	if unnamed || len(pids) > MaxCatalogPIDs {
+		pids, unnamed = nil, true
+	}
+	unchanged = unchanged && !unnamed && len(pids) == 0
+	c.markCatalog(catalogMove{pids: pids, unnamed: unnamed, unchanged: unchanged, order: order, cover: cover, pos: pos})
+}
+
 // Wake signals that pending frames exist.
 func (c *Conn) Wake() <-chan struct{} { return c.wake }
 
-// TakePending returns and clears the queued frames, in send order.
+// TakePending returns and clears the queued frames, in send order. The
+// catalog invalidation names, of what it covers, what the account may be
+// told, asked as the frame is built: grants move under a live
+// connection, and a pid outside them is never named. Names it could not
+// decide are sent as unnamed; none it may be told, as the bare frame.
+// The same read mints the account's cursor at the frame's position.
 func (c *Conn) TakePending() []Frame {
+	out, catalog, named, unnamed, unchanged, pos := c.takePending()
+	if catalog < 0 {
+		return out
+	}
+	f := &out[catalog]
+	switch {
+	case c.hub.src == nil:
+		unnamed, named = unnamed || len(named) > 0, nil
+	case pos != "" || len(named) > 0:
+		var undecided bool
+		f.Since, named, undecided = c.hub.src.CatalogFrameFor(c.userID, pos, named)
+		unnamed = unnamed || undecided
+	}
+	switch {
+	case unnamed:
+		f.Unnamed = true
+	case len(named) > 0:
+		f.Pids = named
+	default:
+		f.Unchanged = unchanged
+	}
+	return out
+}
+
+// takePending is TakePending before the account is asked about: the
+// frames, where the catalog invalidation sits among them (-1 for none),
+// either the pids it may name, sorted, or that it left entities unnamed,
+// whether it holds nothing but unchanged answers, and the position it
+// covers up to.
+func (c *Conn) takePending() (out []Frame, catalog int, named []string, unnamed, unchanged bool, pos string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	var out []Frame
+	catalog = -1
 	if c.pending.resync {
 		out = append(out, Frame{Type: TypeResync})
 	} else if c.pending.resyncCatalog {
 		out = append(out, Frame{Type: TypeResync, Topic: TopicCatalog})
 	}
 	if c.pending.catalog {
+		catalog = len(out)
 		out = append(out, Frame{Type: TypeInvalidate, Topic: TopicCatalog})
+		unnamed, unchanged, pos = c.pending.catalogUnnamed, !c.pending.catalogStirred, c.pending.catalogPos
+		if !c.pending.catalogPlain {
+			named = make([]string, 0, len(c.pending.catalogPids))
+			for pid := range c.pending.catalogPids {
+				named = append(named, pid)
+			}
+			slices.Sort(named)
+		}
 	}
 	if c.pending.user {
 		out = append(out, Frame{Type: TypeInvalidate, Topic: TopicUser})
@@ -256,7 +466,9 @@ func (c *Conn) TakePending() []Frame {
 	}
 	c.pending.catalog, c.pending.user, c.pending.player = false, false, false
 	c.pending.radio, c.pending.resync, c.pending.resyncCatalog = false, false, false
-	return out
+	c.pending.catalogPids, c.pending.catalogPlain, c.pending.catalogUnnamed = nil, false, false
+	c.pending.catalogPos, c.pending.catalogOrder, c.pending.catalogCover, c.pending.catalogStirred = "", 0, 0, false
+	return out, catalog, named, unnamed, unchanged, pos
 }
 
 // Run consumes wakeup hints and flushes coalesced invalidations to the
@@ -280,11 +492,37 @@ func (h *Hub) Run(ctx context.Context) error {
 			if !catalogDirty && len(dirtyUsers) == 0 && len(stations) == 0 {
 				continue
 			}
-			h.flush(catalogDirty, dirtyUsers, stations)
+			var moved catalogMove
+			if catalogDirty {
+				moved = h.catalogMoved()
+			}
+			h.flush(catalogDirty, moved, dirtyUsers, stations)
 			catalogDirty = false
 			clear(dirtyUsers)
 		}
 	}
+}
+
+// catalogMoved takes what the catalog invalidation about to be flushed
+// stands for. A source that could not name everything, or named more
+// than a frame holds, is unnamed with no pids; a wake with nothing to
+// name (a genre's, which has no pid, or a spare one) has no names. It
+// asks after the wake, so everything the wake stood for is in the
+// answer, and first takes a wake still waiting: the source records a
+// row before it wakes, so that wake's row is in this answer too, and
+// left waiting it would cost a second frame for nothing. The position
+// is read before the drain, so the drain holds every change up to it.
+func (h *Hub) catalogMoved() catalogMove {
+	select {
+	case <-h.src.CatalogWakeups():
+	default:
+	}
+	order, cover, pos := h.src.CatalogPosition()
+	pids, unnamed, unknown := h.src.DrainCatalogChanges()
+	if unnamed || len(pids) > MaxCatalogPIDs {
+		return catalogMove{unnamed: true, unknown: unknown, order: order, cover: cover, pos: pos}
+	}
+	return catalogMove{pids: pids, unknown: unknown, order: order, cover: cover, pos: pos}
 }
 
 // MarkPlayerAll queues a player-topic invalidation on every
@@ -335,7 +573,9 @@ func (h *Hub) markAllAs(frameType, topic string) {
 	}
 }
 
-func (h *Hub) flush(catalog bool, users map[string]struct{}, stations map[string]struct{}) {
+// flush marks what the tick gathered on every connection; moved is
+// catalogMoved's answer for the catalog invalidation.
+func (h *Hub) flush(catalog bool, moved catalogMove, users map[string]struct{}, stations map[string]struct{}) {
 	h.mu.Lock()
 	conns := make([]*Conn, 0, len(h.conns))
 	for c := range h.conns {
@@ -344,7 +584,7 @@ func (h *Hub) flush(catalog bool, users map[string]struct{}, stations map[string
 	h.mu.Unlock()
 	for _, c := range conns {
 		if catalog {
-			c.Mark(TypeInvalidate, TopicCatalog)
+			c.markCatalog(moved)
 		}
 		if _, ok := users[c.userID]; ok {
 			c.Mark(TypeInvalidate, TopicUser)

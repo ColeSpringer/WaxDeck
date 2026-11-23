@@ -702,7 +702,7 @@ void main() {
         caption: '1 track',
         shape: ArtworkShape.square,
         semanticsId: 'bucket-1',
-        artwork: (_) => null,
+        artwork: WaxArtwork((_) => null),
       );
 
       expect(known.title, 'Jazz');
@@ -1197,7 +1197,7 @@ void main() {
           createdAt: DateTime.utc(2026, 7, 1),
         ),
         subtitle: 'Playing',
-        artwork: (_) => null,
+        artwork: WaxArtwork((_) => null),
         semanticsId: 'radio-rs-1',
       );
 
@@ -1306,6 +1306,7 @@ void main() {
       bool finished = false,
       StatsMediaType mediaType = StatsMediaType.music,
     }) => ListenLogEntry(
+      sessionId: 's-1',
       pid: 'tr-1',
       title: title,
       artist: artist,

@@ -6,13 +6,12 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/art_source_label.dart';
 import '../l10n/l10n.dart';
-import '../music/album_detail.dart';
-import '../music/music_controllers.dart';
 import '../providers.dart';
 import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import '../sync/catalog_writes.dart';
 import 'metadata_controller.dart';
 import 'metadata_form.dart';
 import 'rename_section.dart';
@@ -234,100 +233,92 @@ class _WorkbenchBulkPaneState extends ConsumerState<WorkbenchBulkPane> {
     final seedAsync = ref.watch(_bulkSeedProvider(_seedKey));
     // Kept warm for the genre picker, the way the item editor keeps it.
     ref.watch(canonicalGenresProvider);
+    final seed = seedAsync.value;
+    final staged = seed == null ? null : _staged(seed);
     return Semantics(
       container: true,
       explicitChildNodes: true,
       identifier: SemanticsIds.workbenchBulkPane,
-      child: switch (seedAsync) {
-        AsyncValue(value: final seed?) => _form(seed),
-        AsyncValue(hasError: true) => Padding(
-          padding: const EdgeInsets.all(WaxSpace.s16),
-          child: AsyncFailureCard.from(
-            seedAsync,
-            title: l10n.metadataLoadError,
-            onRetry: () => ref.invalidate(_bulkSeedProvider(_seedKey)),
+      child: WaxFootedPane(
+        body: switch (seedAsync) {
+          AsyncValue(value: final loaded?) => _form(loaded, staged!),
+          AsyncValue(hasError: true) => Padding(
+            padding: const EdgeInsets.all(WaxSpace.s16),
+            child: AsyncFailureCard.from(
+              seedAsync,
+              title: l10n.metadataLoadError,
+              onRetry: () => ref.invalidate(_bulkSeedProvider(_seedKey)),
+            ),
           ),
-        ),
-        _ => const SkeletonShapes(shape: SkeletonShape.list),
-      },
+          _ => const SkeletonShapes(shape: SkeletonShape.list),
+        },
+        foot: staged == null
+            ? null
+            : MetadataSaveBar(
+                count: staged.length,
+                busy: _busy || widget.pids.length > metadataBulkEditCap,
+                // The save is the pane's one write.
+                saving: _busy,
+                onSave: () => _save(staged),
+                saveSemanticsId: SemanticsIds.workbenchBulkSave,
+                writeBackFailures: _writeBackFailures,
+                onDismissFailures: () =>
+                    setState(() => _writeBackFailures = const []),
+              ),
+      ),
     );
   }
 
-  Widget _form(BulkSeed seed) {
+  Widget _form(BulkSeed seed, Map<String, String> staged) {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
-    final staged = _staged(seed);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(WaxSpace.s16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                SectionHeader(
-                  title: l10n.metadataBulkTitle(widget.pids.length),
-                ),
-                for (final field in seed.kindFields.fields) ...<Widget>[
-                  _fieldRow(seed, field.name, staged),
-                  const SizedBox(height: WaxSpace.s12),
-                ],
-                const SizedBox(height: WaxSpace.s8),
-                WaxSettingRow(
-                  title: l10n.metadataWriteBackTitle,
-                  info: l10n.metadataWriteBackHelp,
-                  control: WaxSwitch(
-                    label: l10n.metadataWriteBackTitle,
-                    value: _writeBack,
-                    semanticsId: SemanticsIds.metadataWriteback,
-                    onChanged: _busy
-                        ? null
-                        : (v) => setState(() => _writeBack = v),
-                  ),
-                ),
-                WaxSettingRow(
-                  title: l10n.metadataBulkLockedPolicy,
-                  control: WaxChoice<BulkLockedPolicy>(
-                    label: l10n.metadataBulkLockedPolicy,
-                    value: _policy,
-                    semanticsId: SemanticsIds.workbenchBulkLockedPolicy,
-                    options: BulkLockedPolicy.values,
-                    labelFor: (policy) => switch (policy) {
-                      BulkLockedPolicy.fail => l10n.metadataBulkLockedFail,
-                      BulkLockedPolicy.skip => l10n.metadataBulkLockedSkip,
-                      BulkLockedPolicy.force => l10n.metadataBulkLockedForce,
-                    },
-                    onChanged: _busy
-                        ? null
-                        : (v) => setState(() => _policy = v),
-                  ),
-                ),
-                const SizedBox(height: WaxSpace.s8),
-                // What the endpoint always does, said where the save is
-                // decided: it locks what it writes, and one batch stops
-                // at a thousand items.
-                WaxProse(
-                  l10n.metadataBulkLockNote,
-                  style: WaxType.caption.copyWith(color: colors.textTertiary),
-                ),
-                const SizedBox(height: WaxSpace.s16),
-              ],
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(WaxSpace.s16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SectionHeader(title: l10n.metadataBulkTitle(widget.pids.length)),
+          for (final field in seed.kindFields.fields) ...<Widget>[
+            _fieldRow(seed, field.name, staged),
+            const SizedBox(height: WaxSpace.s12),
+          ],
+          const SizedBox(height: WaxSpace.s8),
+          WaxSettingRow(
+            title: l10n.metadataWriteBackTitle,
+            info: l10n.metadataWriteBackHelp,
+            control: WaxSwitch(
+              label: l10n.metadataWriteBackTitle,
+              value: _writeBack,
+              semanticsId: SemanticsIds.metadataWriteback,
+              onChanged: _busy ? null : (v) => setState(() => _writeBack = v),
             ),
           ),
-        ),
-        MetadataSaveBar(
-          count: staged.length,
-          busy: _busy || widget.pids.length > metadataBulkEditCap,
-          // The save is the pane's one write.
-          saving: _busy,
-          onSave: () => _save(staged),
-          saveSemanticsId: SemanticsIds.workbenchBulkSave,
-          writeBackFailures: _writeBackFailures,
-          onDismissFailures: () =>
-              setState(() => _writeBackFailures = const []),
-        ),
-      ],
+          WaxSettingRow(
+            title: l10n.metadataBulkLockedPolicy,
+            control: WaxChoice<BulkLockedPolicy>(
+              label: l10n.metadataBulkLockedPolicy,
+              value: _policy,
+              semanticsId: SemanticsIds.workbenchBulkLockedPolicy,
+              options: BulkLockedPolicy.values,
+              labelFor: (policy) => switch (policy) {
+                BulkLockedPolicy.fail => l10n.metadataBulkLockedFail,
+                BulkLockedPolicy.skip => l10n.metadataBulkLockedSkip,
+                BulkLockedPolicy.force => l10n.metadataBulkLockedForce,
+              },
+              onChanged: _busy ? null : (v) => setState(() => _policy = v),
+            ),
+          ),
+          const SizedBox(height: WaxSpace.s8),
+          // What the endpoint always does, said where the save is
+          // decided: it locks what it writes, and one batch stops at a
+          // thousand items.
+          WaxProse(
+            l10n.metadataBulkLockNote,
+            style: WaxType.caption.copyWith(color: colors.textTertiary),
+          ),
+          const SizedBox(height: WaxSpace.s16),
+        ],
+      ),
     );
   }
 
@@ -462,6 +453,7 @@ class _WorkbenchBulkPaneState extends ConsumerState<WorkbenchBulkPane> {
     // The answer outlives this pane when the visitor leaves meanwhile: said
     // and refreshed through what is read here.
     final container = ProviderScope.containerOf(context, listen: false);
+    final writes = ref.read(catalogWritesProvider);
     final albumPid = widget.albumPid;
     final seedKey = _seedKey;
     try {
@@ -505,20 +497,10 @@ class _WorkbenchBulkPaneState extends ConsumerState<WorkbenchBulkPane> {
         actionLabel: door != null ? l10n.metadataBulkOpenNewAlbum : null,
         onAction: door,
       );
-      // The edited rows changed under every read that holds them.
-      container
-        ..invalidate(_bulkSeedProvider(seedKey))
-        ..invalidate(albumDetailProvider(albumPid))
-        ..invalidate(
-          musicItemsProvider((
-            dimension: MusicDimension.albums,
-            segment: albumPid,
-            domain: BrowseDomain.wholeLibrary,
-          )),
-        );
-      for (final pid in result.edited) {
-        container.invalidate(metadataControllerProvider(pid));
-      }
+      // The edited rows changed under every read that holds them, and
+      // under this form's own seed.
+      writes.landed();
+      container.invalidate(_bulkSeedProvider(seedKey));
     } on WaxDeckApiException catch (e) {
       // A locked refusal gains the half the server cannot know: the
       // choice on this form that gets past it.

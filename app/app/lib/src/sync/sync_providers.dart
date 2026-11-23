@@ -75,11 +75,15 @@ final syncStatusProvider = StreamProvider.autoDispose<SyncStatus>((ref) {
   return engine.status;
 });
 
-/// True when the engine has decided the server is unreachable; the UI
-/// shows the offline affordances and reads flip to the mirror.
+/// Whether the screens take the server for out of reach: they show the
+/// offline affordances and reads flip to the mirror. The engine's word
+/// alone: with the socket not up, it is past a failure, or was started on
+/// a session opened from memory, and stays so through its retries until a
+/// connect answers. A first connect still out is not offline. The artwork
+/// store keeps a stricter reading of its own (`serverReachable`).
 final offlineProvider = Provider.autoDispose<bool>((ref) {
   final engine = ref.watch(syncEngineProvider);
   if (engine == null) return false;
   final status = ref.watch(syncStatusProvider).value ?? engine.current;
-  return engine.started && !status.online;
+  return engine.started && !status.online && status.retrying;
 });

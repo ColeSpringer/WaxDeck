@@ -1,17 +1,25 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/artwork/artwork_store.dart';
 import 'package:waxdeck/src/l10n/explain_error.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_es.dart';
 import 'package:waxdeck/src/metadata/entity_editor_screen.dart';
+import 'package:waxdeck/src/music/artist_screen.dart';
+import 'package:waxdeck/src/music/index_screen.dart';
+import 'package:waxdeck/src/music/listing_screen.dart';
+import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/shell/navigation_history.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
+import 'package:waxdeck/src/sync/catalog_reads.dart';
+import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -26,17 +34,61 @@ import 'wax_finders.dart';
 const _artist = 'ar-01HZX5N8QW3F4V9T2B7KD3M9R6';
 const _group = 'rg-01HZX5N8QW3F4V9T2B7KD3M9R6';
 
-FakeRepository _repo({bool admin = true}) => FakeRepository(
-  sessionState: SessionState(
-    authenticated: true,
-    user: WaxDeckUser(
-      id: 'us-1',
-      username: admin ? 'admin' : 'listener',
-      roles: <String>[admin ? 'admin' : 'member'],
-    ),
+SessionState _session({bool admin = true}) => SessionState(
+  authenticated: true,
+  user: WaxDeckUser(
+    id: 'us-1',
+    username: admin ? 'admin' : 'listener',
+    roles: <String>[admin ? 'admin' : 'member'],
   ),
+);
+
+/// A library with nothing to say of any entity: no member lists under
+/// one, and no card answers for one.
+FakeRepository _bare({bool admin = true}) => FakeRepository(
+  sessionState: _session(admin: admin),
   items: [testItem('tr-1')],
 );
+
+/// [_bare], with the entities these tests edit in it: each answers its
+/// card, as one that is there does.
+FakeRepository _repo({bool admin = true}) => _bare(admin: admin)
+  ..entityCards[_artist] = _artistCard(_artist, _oldName)
+  ..entityCards[_survivor] = _artistCard(_survivor, _newName)
+  ..entityCards[_group] = const EntityCard(
+    pid: _group,
+    kind: EntityCardKind.releaseGroup,
+    title: 'Long Exposure',
+  );
+
+/// A library whose card read fails.
+class _CardReadFails extends FakeRepository {
+  _CardReadFails() : super(sessionState: _session());
+
+  @override
+  Future<EntityResolution> resolveEntities(List<String> pids) async {
+    throw const WaxDeckApiException(
+      code: 'internal',
+      message: 'boom',
+      statusCode: 500,
+    );
+  }
+}
+
+/// A library whose card read does not answer until [answer] completes.
+class _CardReadWaits extends FakeRepository {
+  _CardReadWaits() : super(sessionState: _session());
+
+  final answer = Completer<void>();
+
+  @override
+  Future<EntityResolution> resolveEntities(List<String> pids) async {
+    await answer.future;
+    return super.resolveEntities(pids);
+  }
+}
+
+const _notHere = 'That is not here any more.';
 
 Future<void> _pump(
   WidgetTester tester,
@@ -51,6 +103,36 @@ Future<void> _pump(
     tester,
     EntityEditorScreen(entity: entity, pid: pid),
     container: appContainer(repo: repo),
+  );
+}
+
+/// Hands back one small image whatever is asked for.
+class _OneImage implements FilePickerPort {
+  @override
+  bool get canPickFolders => false;
+
+  @override
+  Future<List<PickedAudioFile>> pickAudioFiles({
+    String audioLabel = '',
+    String anyLabel = '',
+    UploadFormatSets formats = const UploadFormatSets(),
+  }) async => const [];
+
+  @override
+  Future<FolderPick> pickAudioFolder({
+    UploadFormatSets formats = const UploadFormatSets(),
+  }) async => const FolderPick();
+
+  @override
+  Future<PickedAudioFile?> pickFile({
+    required Set<String> extensions,
+    required String label,
+    String anyLabel = '',
+  }) async => PickedAudioFile(
+    name: 'cover.png',
+    size: 64,
+    openRead: ([int? start, int? end]) =>
+        Stream<List<int>>.value(Uint8List(64)),
   );
 }
 
@@ -73,18 +155,118 @@ FakeRepository _merging() {
   return repo;
 }
 
+const _oldName = 'The Bree Trio';
+const _newName = 'The Bree Quartet';
+
+EntityCard _artistCard(String pid, String title) =>
+    EntityCard(pid: pid, kind: EntityCardKind.artist, title: title);
+
+FacetBucket _artistBucket(String pid, String label) =>
+    FacetBucket(key: pid.substring(3), label: label, count: 1, entityPid: pid);
+
+/// A library whose artists index holds [_artist] under [_oldName].
+FakeRepository _indexed() {
+  final repo = _repo();
+  repo.facets['artist'] = [_artistBucket(_artist, _oldName)];
+  repo.facetItems['artist ${_artist.substring(3)}'] = [testItem('tr-1')];
+  repo.entityCards[_artist] = _artistCard(_artist, _oldName);
+  return repo;
+}
+
+/// The whole app on the artists index, the artist's page opened from its
+/// row and the editor from that page's overflow.
+Future<GoRouter> _openFromIndex(
+  WidgetTester tester,
+  FakeRepository repo, {
+  ArtworkStore? artwork,
+  FilePickerPort? picker,
+}) async {
+  tester.view.physicalSize = const Size(1600, 2400);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  final container = appContainer(
+    repo: repo,
+    artwork: artwork,
+    extra: [if (picker != null) filePickerProvider.overrideWithValue(picker)],
+  );
+  await pumpWholeApp(tester, container: container);
+  final router = container.read(routerProvider)
+    ..go(WaxRoute.musicIndex(MusicDimension.artists));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(_oldName));
+  await tester.pumpAndSettle();
+  await tester.tap(find.bySemanticsIdentifier(SemanticsIds.entityOverflow));
+  await tester.pumpAndSettle();
+  await tester.tap(find.bySemanticsIdentifier(SemanticsIds.entityEditMetadata));
+  await tester.pumpAndSettle();
+  return router;
+}
+
+/// Types [_newName] into the rename box, applies and confirms; the
+/// catalog becomes [after] while the server holds the answer.
+Future<void> _rename(
+  WidgetTester tester,
+  FakeRepository repo, {
+  required void Function() after,
+}) async {
+  final gate = repo.renameEntityGate = Completer<void>();
+  final field = find.bySemanticsIdentifier(
+    SemanticsIds.entityRenameField('name'),
+  );
+  await tester.ensureVisible(field);
+  await tester.pumpAndSettle();
+  await tester.enterText(field, _newName);
+  await tester.pumpAndSettle();
+  final apply = find.bySemanticsIdentifier(SemanticsIds.entityRenameApply);
+  await tester.ensureVisible(apply);
+  await tester.pumpAndSettle();
+  await tester.tap(apply);
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.bySemanticsIdentifier(SemanticsIds.entityRenameConfirm),
+  );
+  await tester.pumpAndSettle();
+  after();
+  gate.complete();
+  await tester.pumpAndSettle();
+}
+
+/// The arrow of the page on top.
+Future<void> _back(WidgetTester tester) async {
+  await tester.tap(find.bySemanticsIdentifier(SemanticsIds.navBack).last);
+  await tester.pumpAndSettle();
+}
+
+/// The credit of each row the artist page of [pid] holds.
+List<String?> _credits(WidgetTester tester, String pid) {
+  final container = ProviderScope.containerOf(
+    tester.element(find.byType(ArtistScreen)),
+    listen: false,
+  );
+  final listing = (
+    dimension: MusicDimension.artists,
+    segment: pid,
+    domain: BrowseDomain.wholeLibrary,
+  );
+  return [
+    for (final item in container.read(musicItemsProvider(listing)).value!.items)
+      item.artist,
+  ];
+}
+
 /// The whole app at a desktop window, the artist's editor pushed over
 /// Music as the artist's overflow opens it.
 Future<(GoRouter, ProviderContainer)> _openInApp(
   WidgetTester tester,
-  FakeRepository repo,
-) async {
+  FakeRepository repo, {
+  String from = WaxRoute.music,
+}) async {
   tester.view.physicalSize = const Size(1600, 1200);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final container = appContainer(repo: repo);
   await pumpWholeApp(tester, container: container);
-  final router = container.read(routerProvider)..go(WaxRoute.music);
+  final router = container.read(routerProvider)..go(from);
   await tester.pumpAndSettle();
   unawaited(router.push<void>(WaxRoute.metadata(_artist)));
   await tester.pumpAndSettle();
@@ -157,6 +339,48 @@ void main() {
     expect(edit.entityPid, _artist);
     expect(edit.edits, {'mbid': 'b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d'});
     expect(edit.writeBack, isFalse);
+  });
+
+  testWidgets('a catalog refresh keeps what is being typed and takes what '
+      'changed elsewhere', (tester) async {
+    const elsewhere = 'c4d1a6e0-2f0b-4a53-9d8c-5d1f3e8a7b21';
+    final repo = _repo();
+    repo.entityCurationByKey['artist/$_artist'] = const [
+      EntityCuratedField(
+        field: 'sort',
+        value: 'Bree Trio, The',
+        source: 'user',
+        locked: true,
+      ),
+    ];
+    await _pump(tester, repo, entity: EditableEntity.artist, pid: _artist);
+    await tester.enterText(_field('sort'), 'Half-typed');
+    await tester.pump();
+
+    // Another administrator changes both fields, and the catalog says so.
+    repo.entityCurationByKey['artist/$_artist'] = const [
+      EntityCuratedField(
+        field: 'sort',
+        value: 'Changed Elsewhere',
+        source: 'user',
+        locked: true,
+      ),
+      EntityCuratedField(
+        field: 'mbid',
+        value: elsewhere,
+        source: 'user',
+        locked: true,
+      ),
+    ];
+    ProviderScope.containerOf(
+      tester.element(find.byType(EntityEditorScreen)),
+      listen: false,
+    ).read(catalogFanOutProvider).sweep(CatalogRefresh.head);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Half-typed'), findsOneWidget);
+    expect(find.text('Changed Elsewhere'), findsNothing);
+    expect(find.text(elsewhere), findsOneWidget);
   });
 
   testWidgets('an uncurated field has no source chip; a curated one names it', (
@@ -311,7 +535,9 @@ void main() {
 
   testWidgets('clearing an mbid that merges once a page was opened over the '
       'editor leaves that page up, offers the survivor in one message, and '
-      'back does not return to the editor merged away', (tester) async {
+      "back returns to the survivor's editor, not the one merged away", (
+    tester,
+  ) async {
     final repo = _merging();
     final (router, _) = await _openInApp(tester, repo);
     repo.editEntityGate = Completer<void>();
@@ -338,18 +564,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(AppLocalizationsEn().metadataMergedReady), findsOneWidget);
 
+    // The editor under that page is the survivor's now.
     tester.element(find.byType(WaxScaffold).last).back();
     await tester.pumpAndSettle();
-    expect(_top(router), WaxRoute.music);
-    expect(find.byType(EntityEditorScreen, skipOffstage: false), findsNothing);
+    expect(_top(router), WaxRoute.metadata(_survivor));
+    EntityEditorScreen editor() => tester.widget<EntityEditorScreen>(
+      find.byType(EntityEditorScreen, skipOffstage: false),
+    );
+    expect(editor().pid, _survivor);
 
+    // Offered where the visitor was; here it is up already.
     offer.onAction!();
     await tester.pumpAndSettle();
     expect(_top(router), WaxRoute.metadata(_survivor));
-    expect(
-      tester.widget<EntityEditorScreen>(find.byType(EntityEditorScreen)).pid,
-      _survivor,
-    );
+    expect(editor().pid, _survivor, reason: 'no second copy over itself');
+
+    tester.element(find.byType(EntityEditorScreen)).back();
+    await tester.pumpAndSettle();
+    expect(_top(router), WaxRoute.music);
+    expect(find.byType(EntityEditorScreen, skipOffstage: false), findsNothing);
   });
 
   testWidgets('clearing an mbid that merges once back left the editor offers '
@@ -559,6 +792,150 @@ void main() {
     expect(repo.entityEdits, isEmpty);
   });
 
+  testWidgets('an artist renamed from their page is under the new name on '
+      'the page, on its rows and in the index behind it', (tester) async {
+    final repo = _indexed();
+    final router = await _openFromIndex(tester, repo);
+    expect(_top(router), WaxRoute.metadata(_artist));
+
+    await _rename(
+      tester,
+      repo,
+      after: () {
+        repo.facets['artist'] = [_artistBucket(_artist, _newName)];
+        repo.facetItems['artist ${_artist.substring(3)}'] = [
+          testItem('tr-1', artist: _newName),
+        ];
+        repo.entityCards[_artist] = _artistCard(_artist, _newName);
+      },
+    );
+    expect(tester.takeException(), isNull);
+    expect(_top(router), WaxRoute.metadata(_artist));
+
+    await _back(tester);
+    expect(_top(router), WaxRoute.musicBucket(MusicDimension.artists, _artist));
+    final page = find.byType(ArtistScreen);
+    expect(
+      find.descendant(of: page, matching: find.text(_newName)),
+      findsWidgets,
+    );
+    expect(find.text(_oldName), findsNothing);
+    expect(_credits(tester, _artist), [_newName]);
+
+    await _back(tester);
+    expect(_top(router), WaxRoute.musicIndex(MusicDimension.artists));
+    expect(find.byType(MusicIndexScreen), findsOneWidget);
+    expect(find.text(_newName), findsOneWidget);
+    expect(find.text(_oldName), findsNothing);
+  });
+
+  testWidgets('an artist cover set in the editor is asked for under a new '
+      'name by the index row behind it', (tester) async {
+    final repo = _indexed();
+    final store = NetworkArtworkStore(baseUrl: '');
+    addTearDown(store.dispose);
+    final art = repo.artUrlFor(_artist);
+
+    /// What the index row asks the network for, covered or not.
+    String rowAsks() {
+      final image = tester.widget<Image>(
+        find.descendant(
+          of: find.byType(MusicIndexScreen, skipOffstage: false),
+          matching: find.byType(Image, skipOffstage: false),
+          skipOffstage: false,
+        ),
+      );
+      return ((image.image as ResizeImage).imageProvider as NetworkImage).url;
+    }
+
+    final router = await _openFromIndex(
+      tester,
+      repo,
+      artwork: store,
+      picker: _OneImage(),
+    );
+    expect(rowAsks(), '$art?size=64');
+
+    final set = find.bySemanticsIdentifier(SemanticsIds.artSlotSet('front'));
+    await tester.ensureVisible(set);
+    await tester.pumpAndSettle();
+    await tester.tap(set);
+    await tester.pumpAndSettle();
+    expect(repo.entityArtworkCalls.single.entityPid, _artist);
+
+    await _back(tester);
+    await _back(tester);
+    expect(_top(router), WaxRoute.musicIndex(MusicDimension.artists));
+    // The bucket the index read again is equal to the one it held: the
+    // row is rebuilt all the same, and asks under the tag.
+    expect(
+      rowAsks(),
+      matches(
+        RegExp(
+          '^${RegExp.escape(art)}'
+          r'\?size=64&v=\d+$',
+        ),
+      ),
+    );
+  });
+
+  testWidgets('an artist a rename merged away leaves the visitor on the '
+      'survivor: its editor, then its page under its own name, then the '
+      'index', (tester) async {
+    final repo = _indexed()
+      ..renameEntityResult = const EntityRenameResult(
+        entityPid: _artist,
+        outcome: EntityRenameOutcome.merged,
+        members: 1,
+        credits: 1,
+        mergedInto: _survivor,
+      );
+    final router = await _openFromIndex(tester, repo);
+
+    await _rename(
+      tester,
+      repo,
+      after: () {
+        repo.facets['artist'] = [_artistBucket(_survivor, _newName)];
+        repo.facetItems
+          ..remove('artist ${_artist.substring(3)}')
+          ..['artist ${_survivor.substring(3)}'] = [
+            testItem('tr-1', artist: _newName),
+          ];
+        repo.entityCards
+          ..remove(_artist)
+          ..[_survivor] = _artistCard(_survivor, _newName);
+        repo.departedEntityPids.add(_artist);
+      },
+    );
+    expect(tester.takeException(), isNull);
+    expect(_top(router), WaxRoute.metadata(_survivor));
+    expect(
+      tester.widget<EntityEditorScreen>(find.byType(EntityEditorScreen)).pid,
+      _survivor,
+    );
+
+    await _back(tester);
+    expect(
+      _top(router),
+      WaxRoute.musicBucket(MusicDimension.artists, _survivor),
+    );
+    final page = find.byType(ArtistScreen);
+    expect(tester.widget<ArtistScreen>(page).pid, _survivor);
+    expect(
+      find.descendant(of: page, matching: find.text(_newName)),
+      findsWidgets,
+    );
+    expect(find.text(_oldName), findsNothing);
+    expect(_credits(tester, _survivor), [_newName]);
+
+    await _back(tester);
+    expect(_top(router), WaxRoute.musicIndex(MusicDimension.artists));
+    expect(find.byType(MusicIndexScreen), findsOneWidget);
+    expect(find.text(_newName), findsOneWidget);
+    expect(find.text(_oldName), findsNothing);
+  });
+
   testWidgets('the release-group rename takes both keying fields', (
     tester,
   ) async {
@@ -632,4 +1009,187 @@ void main() {
     expect(find.text('Only administrators can edit an artist'), findsOneWidget);
     expect(find.textContaining('Editing a track'), findsNothing);
   });
+
+  group('an entity that is gone', () {
+    // No member lists under it and its card answers nothing: deleted, or
+    // merged away, elsewhere.
+    for (final (entity, pid) in <(EditableEntity, String)>[
+      (EditableEntity.artist, _artist),
+      (EditableEntity.releaseGroup, _group),
+    ]) {
+      testWidgets('${entity.name}: with no member and a card that resolves '
+          'nothing the editor says it is not here, and draws no form', (
+        tester,
+      ) async {
+        final repo = _bare();
+        await _pump(tester, repo, entity: entity, pid: pid);
+
+        expect(repo.resolvedEntityPids, contains(equals(<String>[pid])));
+        expect(find.text('Could not load the metadata'), findsOneWidget);
+        expect(find.text(_notHere), findsOneWidget);
+        expect(find.text('Try again'), findsNothing);
+        expect(_field('sort'), findsNothing);
+        expect(
+          find.bySemanticsIdentifier(SemanticsIds.metadataSave),
+          findsNothing,
+        );
+      });
+    }
+
+    testWidgets('with no member, the editor waits for the card: neither a '
+        'form nor gone, then the form once the card answers', (tester) async {
+      final repo = _CardReadWaits()
+        ..entityCards[_artist] = _artistCard(_artist, _oldName);
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await mountApp(
+        tester,
+        const EntityEditorScreen(entity: EditableEntity.artist, pid: _artist),
+        container: appContainer(repo: repo),
+      );
+      for (var i = 0; i < 3; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(find.text(_notHere), findsNothing);
+      expect(_field('sort'), findsNothing);
+      expect(find.byType(SkeletonShapes), findsOneWidget);
+
+      repo.answer.complete();
+      await tester.pumpAndSettle();
+      expect(find.text(_notHere), findsNothing);
+      expect(_field('sort'), findsOneWidget);
+    });
+
+    testWidgets('with no member, a card read that fails leaves the form: a '
+        'failed read says nothing of whether it is there', (tester) async {
+      await _pump(
+        tester,
+        _CardReadFails(),
+        entity: EditableEntity.artist,
+        pid: _artist,
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text(_notHere), findsNothing);
+      expect(_field('sort'), findsOneWidget);
+    });
+
+    testWidgets('a member lists under it though no card answers: the form, '
+        'under the name the member gives', (tester) async {
+      final repo = _bare()
+        ..facetItems['artist ${_artist.substring(3)}'] = [testItem('tr-1')];
+      await _pump(tester, repo, entity: EditableEntity.artist, pid: _artist);
+
+      expect(find.text(_notHere), findsNothing);
+      expect(_field('sort'), findsOneWidget);
+    });
+  });
+
+  for (final merged in [false, true]) {
+    testWidgets('an artist ${merged ? 'a rename merged away' : 'renamed'} is '
+        'read again by the index under its editor', (tester) async {
+      final repo = _repo();
+      if (merged) {
+        repo.renameEntityResult = const EntityRenameResult(
+          entityPid: _artist,
+          outcome: EntityRenameOutcome.merged,
+          members: 1,
+          credits: 1,
+          mergedInto: _survivor,
+        );
+      }
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final container = await pumpApp(
+        tester,
+        const EntityEditorScreen(entity: EditableEntity.artist, pid: _artist),
+        container: appContainer(repo: repo),
+        pushed: true,
+      );
+      // The artists index, as the page under the editor holds it.
+      final index = container.listen(
+        musicIndexProvider((
+          dimension: MusicDimension.artists,
+          sort: FacetSort.label,
+          domain: BrowseDomain.music,
+        )),
+        (_, _) {},
+      );
+      addTearDown(index.close);
+      await tester.pumpAndSettle();
+      int indexReads() =>
+          repo.facetReads.where((read) => read.dimension == 'artist').length;
+      final before = indexReads();
+
+      final field = find.bySemanticsIdentifier(
+        SemanticsIds.entityRenameField('name'),
+      );
+      await tester.ensureVisible(field);
+      await tester.pumpAndSettle();
+      await tester.enterText(field, 'The Bree Quartet');
+      await tester.pumpAndSettle();
+      final apply = find.bySemanticsIdentifier(SemanticsIds.entityRenameApply);
+      await tester.ensureVisible(apply);
+      await tester.pumpAndSettle();
+      await tester.tap(apply);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.entityRenameConfirm),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repo.renameEntityCalls, hasLength(1));
+      expect(indexReads(), before + 1);
+    });
+  }
+
+  // A save can dissolve a release group whether or not it merged the
+  // artist: the group's page goes the way a merged record's does.
+  for (final merged in [true, false]) {
+    testWidgets('clearing an mbid that ${merged ? 'merges' : 'keeps'} the '
+        'artist and folds a release group: back from the editor reaches the '
+        'group it became', (tester) async {
+      const goneGroup = 'rg-01HZX5N8QW3F4V9T2B7KDGONEG';
+      const keptGroup = 'rg-01HZX5N8QW3F4V9T2B7KDKEPTG';
+      final gonePage = WaxRoute.musicBucket(
+        MusicDimension.releaseGroups,
+        goneGroup,
+      );
+      final keptPage = WaxRoute.musicBucket(
+        MusicDimension.releaseGroups,
+        keptGroup,
+      );
+      final repo = _merging()
+        ..entityEditResult = MetadataEditResult(
+          applied: true,
+          mergedInto: merged ? _survivor : null,
+          folded: const [FoldedEntity(pid: goneGroup, into: keptGroup)],
+        );
+      for (final group in [goneGroup, keptGroup]) {
+        repo.facetItems['release-group ${group.substring(3)}'] = [
+          testItem('tr-1'),
+        ];
+      }
+      final (router, _) = await _openInApp(tester, repo, from: gonePage);
+
+      await _clearMbid(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(_top(router), WaxRoute.metadata(merged ? _survivor : _artist));
+      tester.element(find.byType(EntityEditorScreen)).back();
+      await tester.pumpAndSettle();
+      expect(_top(router), keptPage);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is MusicListingScreen && widget.segment == goneGroup,
+          skipOffstage: false,
+        ),
+        findsNothing,
+      );
+    });
+  }
 }

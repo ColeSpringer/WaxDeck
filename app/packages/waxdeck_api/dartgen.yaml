@@ -476,7 +476,7 @@ hand:
     ignores: [previousPid]
   RuleNode: {covers: [type, nodes, node, field, op, value, values]}
   SessionInfo:
-    covers: [authenticated, user, server]
+    covers: [authenticated, user, server, sessionId]
     # getSession hands it to the transport, not to the class.
     ignores: [csrfToken]
 

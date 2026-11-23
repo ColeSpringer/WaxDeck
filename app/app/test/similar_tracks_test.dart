@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/discovery/track_list_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/sync/catalog_writes.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -74,6 +75,32 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.itemMenuSheet(_similarPid)),
       findsOneWidget,
     );
+  });
+
+  testWidgets('a row of the answer renamed while the list is up is named '
+      'anew by the next sweep, and opening it asks nothing', (tester) async {
+    final repo = FakeRepository(
+      items: [testItem(_similarPid, title: 'Kindred Spirit')],
+    );
+    final container = appContainer(repo: repo);
+    await pumpApp(
+      tester,
+      TrackListScreen(
+        title: 'More like this',
+        basis: MixBasis.sonic,
+        items: <ItemSummary>[testItem(_similarPid, title: 'Kindred Groove')],
+        idPrefix: 'similar',
+      ),
+      container: container,
+    );
+    expect(find.text('Kindred Groove'), findsOneWidget);
+    expect(repo.resolvedItemPids, isEmpty);
+
+    container.read(catalogWritesProvider).landed();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Kindred Spirit'), findsOneWidget);
+    expect(find.text('Kindred Groove'), findsNothing);
   });
 
   testWidgets('a row of the answer wears its play count, from one read', (

@@ -6,6 +6,7 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../sync/sync_providers.dart';
+import 'downloads_controller.dart';
 import 'wifi_only_gate.dart';
 
 /// Where one item's download to this device stands.
@@ -196,6 +197,7 @@ class DownloadStateController extends Notifier<DownloadState> {
     if (port == null) return;
     final sync = ref.read(syncEngineProvider);
     final artwork = ref.read(artworkStoreProvider);
+    final container = ref.container;
     _report(const DownloadState.transferring(0));
     // Listen before enqueuing so a fast completion cannot slip past, and
     // stop on any ending: a failed or canceled file never sends the
@@ -265,7 +267,11 @@ class DownloadStateController extends Notifier<DownloadState> {
     if (cause is Error) Zone.current.handleUncaughtError(cause, trace!);
     // Only once the audio is on disk: a pinned cover for an item that
     // cannot play is a promise about nothing.
-    if (complete) await artwork.pinForOffline(pid, artUrl);
+    if (complete) {
+      await artwork.pinForOffline(pid, artUrl);
+      // The list was rebuilt when the audio landed, before its cover had.
+      container.invalidate(downloadsProvider);
+    }
   }
 
   Future<void> _fillMarks(SyncEngine? sync) async {

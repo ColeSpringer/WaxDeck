@@ -21,6 +21,7 @@ import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
+import 'package:waxdeck/src/sync/catalog_reads.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -191,6 +192,35 @@ void main() {
       'Mogwai',
       'Zebra',
     ]);
+  });
+
+  testWidgets('the rail stands inside the insets of the edge it is on, '
+      'and the rows clear it there', (tester) async {
+    const insets = FakeViewPadding(right: 40, bottom: 30);
+    tester.view
+      ..padding = insets
+      ..viewPadding = insets;
+    final repository = FakeRepository()
+      ..facets['artist'] = <FacetBucket>[_artist('Mogwai'), _artist('Zebra')];
+    await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.artists),
+      repository,
+    );
+
+    final rail = tester.getRect(find.byType(FastScrollRail));
+    expect(rail.right, 900 - 40, reason: 'the side inset');
+    expect(rail.bottom, 1200 - 30 - WaxSpace.s8, reason: 'the bottom inset');
+    expect(
+      tester.getRect(find.byType(MediaListRow).first).right,
+      rail.left,
+      reason: 'the rows',
+    );
+    expect(
+      tester.widget<ShellMessageMargin>(find.byType(ShellMessageMargin)).right,
+      900 - rail.left,
+      reason: "the page's messages keep clear of the rail where it stands",
+    );
   });
 
   testWidgets('artist and album rows ask for artwork, and a release-group '
@@ -1675,7 +1705,7 @@ void main() {
       });
     });
 
-    group('an index read lasts as long as the index is open', () {
+    group('an index follows the library it lists', () {
       const screen = MusicIndexScreen(
         dimension: MusicDimension.artists,
         domain: BrowseDomain.books,
@@ -1698,9 +1728,24 @@ void main() {
         await pumpApp(tester, screen, container: container);
       }
 
-      testWidgets('an index opened empty shows a book that arrived since', (
-        tester,
-      ) async {
+      testWidgets('an index opened empty shows a book that arrives while '
+          'it is open', (tester) async {
+        final repository = FakeRepository()
+          ..facets['artist|kind|book'] = <FacetBucket>[];
+        final container = await _pump(tester, screen, repository);
+        expect(find.text('No authors yet'), findsOneWidget);
+
+        repository.facets['artist|kind|book'] = <FacetBucket>[
+          author('F. Herbert', 'ar-1'),
+        ];
+        container.read(catalogFanOutProvider).sweep(CatalogRefresh.head);
+        await tester.pumpAndSettle();
+        expect(find.text('F. Herbert'), findsOneWidget);
+        expect(find.text('No authors yet'), findsNothing);
+      });
+
+      testWidgets('an index left and opened again shows a book that arrived '
+          'since', (tester) async {
         final repository = FakeRepository()
           ..facets['artist|kind|book'] = <FacetBucket>[];
         final container = await _pump(tester, screen, repository);

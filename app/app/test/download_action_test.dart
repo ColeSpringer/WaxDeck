@@ -115,6 +115,9 @@ class _Net implements ConnectivityPort {
     return _costs.stream;
   }
 
+  @override
+  Stream<void> get returns => const Stream<void>.empty();
+
   void move(ConnectionCost cost) {
     now = cost;
     _costs.add(cost);

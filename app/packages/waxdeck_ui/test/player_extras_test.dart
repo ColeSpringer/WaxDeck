@@ -223,6 +223,52 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.bySemanticsIdentifier('follow'), findsNothing);
     });
+
+    testWidgets('the same words handed over again leave a reader where '
+        'they scrolled, and other words put the list back', (tester) async {
+      final position = ValueNotifier(const Duration(seconds: 30));
+      addTearDown(position.dispose);
+      // A list of its own each time, as a read answered again builds one.
+      List<LyricLine> words(String of) => <LyricLine>[
+        for (var i = 0; i < 60; i++)
+          LyricLine(
+            at: Duration(seconds: i),
+            text: '$of $i',
+          ),
+      ];
+      Future<void> hand(List<LyricLine> lines) => _pump(
+        tester,
+        LyricsView(
+          position: position,
+          lines: lines,
+          followSemanticsId: 'follow',
+        ),
+        size: const Size(400, 400),
+        reducedMotion: true,
+      );
+      double offset() => tester
+          .state<ScrollableState>(find.byType(Scrollable))
+          .position
+          .pixels;
+
+      await hand(words('Line'));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView), const Offset(0, -400));
+      await tester.pumpAndSettle();
+      final away = offset();
+      expect(find.bySemanticsIdentifier('follow'), findsOneWidget);
+
+      await hand(words('Line'));
+      await tester.pumpAndSettle();
+      expect(offset(), away);
+      expect(find.bySemanticsIdentifier('follow'), findsOneWidget);
+
+      await hand(words('Verse'));
+      await tester.pumpAndSettle();
+      expect(find.text('Verse 30'), findsOneWidget);
+      expect(offset(), isNot(away));
+      expect(find.bySemanticsIdentifier('follow'), findsNothing);
+    });
   });
 
   group('visualizer', () {

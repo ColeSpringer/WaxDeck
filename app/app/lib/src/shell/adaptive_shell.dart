@@ -869,7 +869,7 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
       // Playback's one home on every screen, outside the branch
       // navigators so it survives every navigation, and the panel it
       // opens beside the content where there is room for one.
-      bottom: const DeckBarHost(),
+      bottom: ref.watch(deckBarDrawsProvider) ? const DeckBarHost() : null,
       panel: shellSidePanel(ref),
       banners: lifecycleBanners(context, ref),
       content: widget.shell,

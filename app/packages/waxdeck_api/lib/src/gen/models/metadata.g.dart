@@ -445,6 +445,7 @@ class EntityRenameResult {
     required this.credits,
     this.mergedInto,
     this.movedAlbums = const [],
+    this.folded = const [],
     this.writeBackFailures = const [],
   });
 
@@ -466,6 +467,12 @@ class EntityRenameResult {
   /// under, which an album rename can do when the new anchor or title implies a
   /// group the album was not in.
   final List<String> movedAlbums;
+
+  /// The other albums and release groups this rename dissolved, each with the
+  /// one its members now sit on: an artist merged into another folds a release
+  /// whose title the survivor already has. Empty when none did, and when they
+  /// could not be read; the rename stands either way.
+  final List<FoldedEntity> folded;
 
   /// How many items carried the rename.
   final int members;
@@ -548,6 +555,19 @@ class FieldProvenance {
 
   /// When the value last changed.
   final DateTime? updatedAt;
+}
+
+/// An album or release group a write dissolved, and the one of the same kind
+/// that its members now sit on. The first pid no longer answers; talk about
+/// `into` instead.
+class FoldedEntity {
+  const FoldedEntity({required this.pid, required this.into});
+
+  /// The dissolved album (`al-`) or release group (`rg-`).
+  final String pid;
+
+  /// The surviving album or release group.
+  final String into;
 }
 
 /// How and where the item entered the library: recorded evidence first, and a
@@ -1042,6 +1062,7 @@ class MetadataEditResult {
     this.warnings = const [],
     this.mergedInto,
     this.movedAlbums = const [],
+    this.folded = const [],
   });
 
   /// Always true; the catalog committed.
@@ -1064,6 +1085,12 @@ class MetadataEditResult {
   /// and their titles put them in a group of their own. Their members are no
   /// longer reachable through the edited group.
   final List<String> movedAlbums;
+
+  /// The other albums and release groups an entity edit dissolved by re-keying
+  /// the entity, which only an `mbid` clear does, each with the one its members
+  /// now sit on. Empty for every other edit, when none was dissolved, and when
+  /// they could not be read; the edit stands either way.
+  final List<FoldedEntity> folded;
 }
 
 /// The editor's field vocabulary.

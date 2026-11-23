@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_data/waxdeck_data.dart'
+    show DownloadManagerPort, DownloadProgress, LocalPlayback;
 import 'package:waxdeck_player/waxdeck_player.dart';
 
 import '../connect/connect_controller.dart';
@@ -37,6 +39,10 @@ part 'now_playing/now_playing_failure.dart';
 part 'now_playing/now_playing_preload.dart';
 part 'now_playing/now_playing_install.dart';
 part 'now_playing/now_playing_queue.dart';
+
+/// An entry prepared behind the playing item, with what the engine holds
+/// for it: the stream [info] was minted from, or a device [copy].
+typedef _Armed = ({QueueEntry entry, PlayInfo? info, LocalPlayback? copy});
 
 /// How close to the end of the playing item the next one is prepared.
 ///
@@ -181,14 +187,14 @@ abstract class _NowPlayingCore extends Notifier<NowPlaying> {
   /// appends), landing the way the start would have.
   ({String entryId, bool play})? _unplayable;
 
-  /// The entry handed to the engine to play next, with the play-info it
-  /// was minted from; null when nothing is prepared.
-  ({QueueEntry entry, PlayInfo info})? _preload;
+  /// The entry handed to the engine to play next, with what it plays;
+  /// null when nothing is prepared.
+  _Armed? _preload;
 
   /// Set between a crossing and the queue catching up with it, so the
-  /// entry change that follows adopts the playing stream instead of
+  /// entry change that follows adopts the playing media instead of
   /// loading over it.
-  ({QueueEntry entry, PlayInfo info})? _adopting;
+  _Armed? _adopting;
 
   /// The token of the start that is still running, when one is. A start
   /// occupies the state with an entry and no session for as long as it
@@ -209,6 +215,22 @@ abstract class _NowPlayingCore extends Notifier<NowPlaying> {
   /// every one of them re-asks the server for a play state and mints a
   /// stream token for an item that will never be prepared.
   String? _refusedNext;
+
+  /// The next entry the download store holds no copy of, looked up once
+  /// while it stays next, as [_refusedNext] is asked once, and again once
+  /// its download completes.
+  String? _uncopiedNext;
+
+  /// The download of the next entry ([_watchedNext]), watched once it is
+  /// armed from its copy or found without one: a removal or a refresh
+  /// before the crossing re-arms the copy, and a download completing arms
+  /// an entry that had none.
+  StreamSubscription<DownloadProgress>? _downloadWatch;
+  String? _watchedNext;
+
+  /// The armed record whose download changed, for the next reconcile to
+  /// drop and arm again.
+  _Armed? _copyWent;
   int _startToken = 0;
   int? _pendingPositionMs;
   bool _pendingPaused = false;
@@ -244,12 +266,17 @@ abstract class _NowPlayingCore extends Notifier<NowPlaying> {
   /// for want of the server, so the server coming back starts it.
   bool _resumeOnReconnect = false;
 
-  /// When a failure armed [_resumeOnReconnect] while the link still read
-  /// up, as it does for a moment after a stream breaks. The arm holds only
-  /// if the link goes down within [_outageGrace] of it; otherwise it was
-  /// no outage, and the pane waits for a press. Null once the outage is
-  /// seen, or when the link already read down.
+  /// When a failure armed [_resumeOnReconnect] while the link read up, as
+  /// it does for a moment after a stream breaks. The arm holds only if the
+  /// link turns away from up within [_outageGrace] of it; otherwise it was
+  /// no outage, and the pane waits for a press. Null once the link has
+  /// turned, and for a failure it did not read up at: one met while it
+  /// read down or had not answered yet has no clock, and stands.
   DateTime? _armedOnline;
+
+  /// Whether the offer raised for the failed start standing said it will
+  /// continue by itself. Read only while [_resumeOnReconnect] holds.
+  bool _saidOffline = false;
 
   /// A load of the app's own is opening the item and means to play it:
   /// a start in flight, or the live session reopening its stream
@@ -290,7 +317,7 @@ abstract class _NowPlayingCore extends Notifier<NowPlaying> {
 
   ParkedEntry? get parked;
   Future<void> _start(QueueEntry entry, {bool useSavedPosition, bool ordinary});
-  Future<void> _adopt(QueueEntry entry, PlayInfo info);
+  Future<void> _adopt(QueueEntry entry, _Armed armed);
   Future<void> _release(PlaybackSession? session, _Farewell farewell);
 }
 
@@ -372,12 +399,19 @@ class NowPlayingController extends _NowPlayingCore
     // The server coming back is when a start that failed for want of it
     // is worth trying again, and when held listens can go. On the
     // container: nothing need be watching playback when it happens.
+    //
+    // Back is any turn to up, a session's first connect included: the
+    // link reads no answer yet until then, and a press made meanwhile
+    // failed for want of the server all the same. An outage is counted
+    // from any turn away from up, so a link that goes quiet and comes
+    // back without ever reading down (the engine stopped and started)
+    // lapses an old failure as a drop does.
     final link = ref.container.listen<bool?>(liveConnectionProvider, (
       previous,
       next,
     ) {
-      if (next == false) _outageBegan();
-      if (previous == false && next == true) _onServerBack();
+      if (next != true) _outageBegan(down: next == false);
+      if (next == true && previous != true) _onServerBack();
     });
     ref.onDispose(link.close);
     // Radio drives the engine itself, so the item playing has to let go
@@ -413,6 +447,7 @@ class NowPlayingController extends _NowPlayingCore
       unawaited(_boundarySub?.cancel());
       unawaited(_lostSub?.cancel());
       unawaited(_refusedSub?.cancel());
+      unawaited(_downloadWatch?.cancel());
       _feeder.dispose();
       unawaited(_release(_session, _Farewell.stop));
       // Not through _setSession: the container is going away, and there
@@ -491,6 +526,47 @@ class NowPlayingController extends _NowPlayingCore
     _parkFollowsKnown();
   }
 
+  /// Holds [item] for [pid], read again and drawn differently: the same
+  /// item, renamed, credited anew or moved. An episode keeps what the
+  /// lookup's row lacks, the show its settings hang off. The entry playing
+  /// is named anew where it stands; the session keeps the summary it
+  /// started with, of which it reads only what such a change leaves alone.
+  void redrawSummary(String pid, ItemSummary item) {
+    final playing = state.entry?.pid == pid ? state.item : null;
+    final held = _known[pid] ?? playing;
+    final next = held is EpisodeSummary && item is! EpisodeSummary
+        ? _episodeRedrawn(held, item)
+        : item;
+    if (_known.containsKey(pid) || next.mediaType != MediaType.podcast) {
+      _known[pid] = next;
+    }
+    _parkFollowsKnown();
+    if (playing == null) return;
+    state = NowPlaying(
+      entry: state.entry,
+      item: next,
+      session: state.session,
+      error: state.error,
+      loading: state.loading,
+    );
+  }
+
+  /// Reads the playing book's detail again and, where its chapter marks
+  /// moved, publishes what plays anew so what draws them redraws. The
+  /// session, its stream and its place are not touched.
+  Future<void> rereadBook() async {
+    final session = state.session;
+    if (session == null || !await session.rereadBook()) return;
+    if (!ref.mounted || !identical(state.session, session)) return;
+    state = NowPlaying(
+      entry: state.entry,
+      item: state.item,
+      session: session,
+      error: state.error,
+      loading: state.loading,
+    );
+  }
+
   /// Counts the starts this controller has begun.
   ///
   /// A caller that has to answer for one reads this before and after:
@@ -502,6 +578,25 @@ class NowPlayingController extends _NowPlayingCore
   /// hands back the same instance every time.
   int get startGeneration => _startToken;
 }
+
+/// [held] with the row [now] draws: an episode's own fields kept, and
+/// any the generated model gains.
+EpisodeSummary _episodeRedrawn(EpisodeSummary held, ItemSummary now) =>
+    held.copyWith(
+      mediaType: now.mediaType,
+      title: now.title,
+      durationMs: now.durationMs,
+      artist: () => now.artist,
+      album: () => now.album,
+      artistPid: () => now.artistPid,
+      albumPid: () => now.albumPid,
+      trackNumber: () => now.trackNumber,
+      discNumber: () => now.discNumber,
+      sortKey: () => now.sortKey,
+      artistSort: () => now.artistSort,
+      artistSortKey: () => now.artistSortKey,
+      artUrl: () => now.artUrl,
+    );
 
 /// The one playback owner.
 final nowPlayingProvider = NotifierProvider<NowPlayingController, NowPlaying>(

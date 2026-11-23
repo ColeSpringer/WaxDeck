@@ -232,7 +232,9 @@ void main() {
       expect((failures.single as MediaTrouble).fault, MediaFault.source);
     });
 
-    test('a downloaded file is never minted again', () async {
+    test('a downloaded file that fails turns to the server, and with none '
+        'to be had plays on from the device once; failing again it is '
+        'said', () async {
       repo.playInfoError = const WaxDeckApiException(
         code: 'transport-unreachable',
         message: 'offline',
@@ -242,7 +244,19 @@ void main() {
           local: {_trackPid: testLocal('/downloads/a.flac')},
         ),
       );
+      engine.advance(const Duration(seconds: 20));
+      await settle();
       final calls = repo.playInfoCalls.length;
+      final loads = engine.loadedUrls.length;
+
+      engine.failPlayback();
+      await settle();
+      expect(failures, isEmpty);
+      expect(engine.loadedUrls, hasLength(loads + 1));
+      expect(engine.loadedUrl, Uri.file('/downloads/a.flac').toString());
+      expect(engine.position, const Duration(seconds: 20));
+      expect(engine.playing, isTrue);
+
       engine.failPlayback();
       await settle();
       expect(repo.playInfoCalls, hasLength(calls));

@@ -24,7 +24,15 @@ import 'routes.dart';
 /// the visit it lands on. A visit behind or ahead is matched by the entry,
 /// which keeps a visit's locations and page keys; landing on neither, the
 /// list starts over there. An entry of a location forgotten is passed on
-/// the way, never shown.
+/// the way, never shown; one of a location that became another shows its
+/// visit, which the list kept as that one's, until that one is forgotten
+/// in turn.
+///
+/// The list and what [forget] was told are the session's own, held in
+/// memory. After a reload each entry resolves by what the server says
+/// then, so an entry of a merged or deleted record that the session had
+/// not written over shows the "not here" state, as anything deleted
+/// elsewhere does.
 ///
 /// Built beside the router and found through it, so a router built
 /// without one (a widget test's host) answers null and back leaves the
@@ -39,7 +47,8 @@ class WaxHistory {
     _unlisten = browser?.listen(_browserMoved);
   }
 
-  static const _kept = 50;
+  /// How many visits the list holds, the oldest dropped first.
+  static const _bound = 50;
 
   /// How many of what [forget] was given are kept, oldest dropped first:
   /// a delete names up to three per item, and one album holds up to 500,
@@ -73,8 +82,10 @@ class WaxHistory {
 
   /// The last visit recorded in each branch, by branch index, for a tab
   /// tap to bring back: without what [forget] was given since, or null
-  /// where nothing of it stays. Kept when [forget] drops the visit from
-  /// the list, as go_router keeps the branch's stack.
+  /// where nothing of it stays, and with the pages of a location that
+  /// became another moved there, none taken (see [_become]). Kept when
+  /// [forget] drops the visit from the list, as go_router keeps the
+  /// branch's stack.
   final _lastIn = <int, _Visit?>{};
 
   /// The pages taken from a branch's last visit while the branch was off
@@ -114,9 +125,14 @@ class WaxHistory {
   /// The pop the browser is making, until the step it takes has landed.
   _Popping? _popping;
 
-  /// The entry the engine writes to, which the browser is going back to
-  /// until it is there: forward again under a dialog a browser back is
-  /// closing, or from where a step landed that the app's own move overtook.
+  /// The entry the router is on, which the browser is going back to until
+  /// it is there: forward again under a dialog a browser back is closing,
+  /// from where a step landed that the app's own move overtook, or from
+  /// the newest entry, forgotten, where a pass ran out. The engine writes
+  /// to it, except where a landing this history took put the router there
+  /// and what it held went as the pass began (see [_landedOn]): the engine
+  /// never heard of that entry, and on the way back this is the only place
+  /// it is kept.
   int? _returning;
 
   /// What that back closes once the browser is there again: closed first,
@@ -130,6 +146,25 @@ class WaxHistory {
   /// screen up again are passed without counting.
   int? _passed;
 
+  /// The entry a landing this history took put the router on, while a pass
+  /// that began from there is on its way: what the landing held went as
+  /// the pass began, so the engine heard of neither, and the move the pass
+  /// ends in is counted from here (see [_browserMoved]). Until that move
+  /// is heard, or the pass given up.
+  ///
+  /// By design, not kept while the browser is being sent back to that
+  /// entry, a step that cannot be called off. A move of the visitor's own
+  /// heard before it lands (a third, inside the round trip of the second)
+  /// is counted from the entry the engine holds the app to be on, the one
+  /// the landing left, and the step then lands from wherever that move
+  /// went: a page on the way can show before the browser settles, which
+  /// it does with the address and the screen agreed. A go being told again
+  /// on such a way back (see [_unheard]) is dropped by that move the same
+  /// way, unwritten, and is undone. Telling the visitor's move from the
+  /// step's own landing would take a record of every step asked of the
+  /// browser and not yet landed, which this history does not keep.
+  int? _landedOn;
+
   /// Gives up the step last asked of the browser, until a move is heard.
   Timer? _answer;
 
@@ -141,9 +176,11 @@ class WaxHistory {
   /// held: that move stands, and what it wrote goes to the engine's entry.
   var _navigated = false;
 
-  /// Whether a pop the app's own move overtook has landed, and what was
-  /// held waits for the frame after it to go past the entry it landed on.
-  var _endingPop = false;
+  /// What a landing held, while it waits for the frame after it to be
+  /// written (see [_writeHeldSoon]): past the entry a pop the app's own
+  /// move overtook landed on, or over an entry of a location that became
+  /// another.
+  _HeldWrite? _writing;
 
   /// Whether the app has asked the router for a move that is not drawn
   /// yet, nor its entry written: until the frame that builds it, and in a
@@ -162,15 +199,20 @@ class WaxHistory {
   /// moves on from in that frame is written as it does (see [_write]).
   ({bool inPlace})? _unwritten;
 
-  /// The visit the app's last move added, and what a tab tap on its
-  /// branch brought back before it, until the next change is read.
+  /// The visit the app's last move added, with what a tab tap on its
+  /// branch brought back before it and the visits ahead it took the place
+  /// of, until the next change is read.
   _Added? _added;
 
-  /// That visit, where a browser move came before the engine was told of
-  /// the move: the browser has no entry of it and no frame drew it, so it
-  /// goes from the list, and from its branch, as the router follows the
-  /// browser.
-  _Added? _unheard;
+  /// A move of the app's that a browser move came before the engine was
+  /// told of: the browser has no entry of it and no frame drew it, so the
+  /// visit it added, where it added one, goes from the list, and from its
+  /// branch, as the router follows the browser. Until then, or until the
+  /// browser is sent back to the entry the move was made on and the move
+  /// is written after all: over that entry where it was a swap, else past
+  /// it. A move of the visitor's own heard on that way back drops it
+  /// unwritten instead, and a go is undone (see [_landedOn]).
+  _Unheard? _unheard;
 
   /// How many browser moves have been heard, so a give-up that waited can
   /// tell whether one landed meanwhile.
@@ -184,8 +226,9 @@ class WaxHistory {
   /// gone to with, newest last: an entry keeps a push's key, not its extra.
   final _forgottenPushes = <String>{};
 
-  /// What [forget] was told stands in for a location, by its path.
-  final _standIns = <String, String>{};
+  /// Where a location [forget] was told became another is now, by its
+  /// path, where a browser keeps entries of it.
+  final _nowAt = <String, String>{};
 
   /// The match list the last change arrived at.
   var _last = RouteMatchList.empty;
@@ -213,17 +256,17 @@ class WaxHistory {
   /// Whether a step back through the browser is under way, a browser
   /// move is passing entries (forgotten ones, copies of what is on screen,
   /// ones that would only put the sign-in screen up again), or the browser
-  /// is going back to the entry the engine writes to (forward again under
-  /// a dialog its back is closing, or after the app moved meanwhile): each
+  /// is going back to the entry the router is on (see [_returning]): each
   /// moves on past an entry it did not want by itself. A step the app's
-  /// own move overtook is under way until it lands too.
+  /// own move overtook is under way until it lands too, and a landing until
+  /// what it held is written.
   bool get stepping =>
       _arrowBack != null ||
       _popping != null ||
       _passed != null ||
       _returning != null ||
       _holding ||
-      _endingPop;
+      _writing != null;
 
   /// The completers the visits hold for whoever awaits their pushes, with
   /// those a tab tap would bring back.
@@ -363,7 +406,7 @@ class WaxHistory {
     _arrowBack = null;
     _passed = null;
     if (marked != null) _settle(departed, config);
-    if (marked != null && unheard != null) _unhear(unheard);
+    if (unheard?.added case final added? when marked != null) _unhear(added);
     final arriving = _visitOf(config, tabTap: _tabTap);
     final move = _moving;
     _moving = null;
@@ -379,6 +422,7 @@ class WaxHistory {
       visit: arriving,
       known: _lastIn.containsKey(arriving.branch),
       last: _lastIn[arriving.branch],
+      ahead: _visits.sublist(_cursor + 1),
     );
     if (arriving.branch case final branch?) {
       _lastIn[branch] = arriving;
@@ -429,10 +473,15 @@ class WaxHistory {
 
   /// Takes the visit of [unheard] out again: the browser was never on an
   /// entry of it, so the visits either side of where it went are those of
-  /// the visit behind, and a tab tap brings its branch back as before.
+  /// the visit behind (the ones ahead it took the place of are put back:
+  /// the browser still holds their entries), and a tab tap brings its
+  /// branch back as before.
   void _unhear(_Added unheard) {
     final visit = unheard.visit;
-    if (_cursor >= 0 && identical(_visits[_cursor], visit)) _drop(_cursor);
+    if (_cursor >= 0 && identical(_visits[_cursor], visit)) {
+      _drop(_cursor);
+      _visits.insertAll(_cursor + 1, unheard.ahead);
+    }
     final branch = visit.branch;
     if (branch == null || !identical(_lastIn[branch], visit)) return;
     if (unheard.known) {
@@ -440,6 +489,16 @@ class WaxHistory {
     } else {
       _lastIn.remove(branch);
     }
+  }
+
+  /// Takes out the visit of a move the app made in this frame, which a
+  /// browser move overtook before the engine was told of it, where this
+  /// history shows what that move landed on itself: the router hears of
+  /// no browser move to take it out at (see [_record]).
+  void _unhearOvertaken() {
+    final unheard = _unheard;
+    _unheard = null;
+    if (unheard?.added case final added?) _unhear(added);
   }
 
   /// Returns to the last visit that is not on screen and still resolves:
@@ -507,37 +566,56 @@ class WaxHistory {
   /// the push's own, for an entity a location carries only in memory.
   ///
   /// A browser entry of [location] is passed on the way rather than
-  /// shown, until the location is visited again. With [where], which an
-  /// entry cannot answer (it keeps no extra), an entry of a push it picks
-  /// out is told by the page key the entry keeps, and one of a visit's own
-  /// page it picks out, or of a sign-in screen, which the list never
-  /// holds, by the location alone. A tab tap brings its branch back
+  /// shown, until the location is visited again, or the tab reloads: what
+  /// was forgotten is the session's (see [WaxHistory]). With [where],
+  /// which an entry cannot answer (it keeps no extra), an entry of a push
+  /// it picks out is told by the page key the entry keeps, and one of a
+  /// visit's own page it picks out, or of a sign-in screen, which the list
+  /// never holds, by the location alone. A tab tap brings its branch back
   /// without it (see [showBranch]), and its page, where it waits in a
   /// branch off screen, leaves that unseen as the branch is next shown.
+  ///
+  /// With [instead], [location] became that one (a record merged into
+  /// another), and every page at or beneath it is the same page there from
+  /// now on, wherever it sits: a visit's own or one pushed in it, in the
+  /// list or in a branch's last visit. Each visit keeps its place with
+  /// those pages moved (see [_asBecame]), and an entry of one shows that
+  /// visit, written over it (see [_landOnKept]), until what it became is
+  /// forgotten itself: its entries are then passed too. Nothing is dropped
+  /// but a page that would lie on itself, of two visits side by side that
+  /// are then one place, one, and a visit the table matches nothing for
+  /// where it would be (see [_asKept]). Told by its path alone: neither
+  /// [anywhere] nor [where] goes with it.
   void forget(
     String location, {
     bool anywhere = false,
     bool Function(Object? extra)? where,
     String? instead,
   }) {
+    assert(
+      instead == null || (!anywhere && where == null),
+      'a location that became another is told by its path',
+    );
     final gone = Uri.parse(location).path;
-    if (instead != null) {
-      _standIns
-        ..remove(gone)
-        ..[gone] = instead;
-      if (_standIns.length > _remembered) {
-        _standIns.remove(_standIns.keys.first);
-      }
-    }
     bool under(String at, Object? extra) =>
         _holds(Uri.parse(at).path, gone, anywhere: anywhere) &&
         (where?.call(extra) ?? true);
 
     // Only a browser keeps entries to pass.
     if (_browser != null) {
+      if (instead != null) {
+        _nowAt
+          ..remove(gone)
+          ..[gone] = instead;
+        if (_nowAt.length > _remembered) {
+          _nowAt.remove(_nowAt.keys.first);
+        }
+      }
       var byLocation = where == null || WaxRoute.authLocations.contains(gone);
       for (final visit in _everyVisit) {
         if (under(visit.root.path, visit.extra)) byLocation = true;
+        // A push that became another is that one's under the key it had.
+        if (instead != null) continue;
         for (final push in visit.pushes) {
           if (under(push.location, push.extra)) {
             _remember(_forgottenPushes, push.pageKey.value);
@@ -549,6 +627,11 @@ class WaxHistory {
       }
     }
 
+    if (instead != null) {
+      _become(gone, instead);
+      _changes.changed();
+      return;
+    }
     for (var i = _visits.length - 1; i >= 0; i--) {
       final visit = _visits[i];
       if (!under(visit.root.path, visit.extra) &&
@@ -581,6 +664,150 @@ class WaxHistory {
       );
     }
     _changes.changed();
+  }
+
+  /// Has every visit held show the pages at or beneath [gone] as those of
+  /// [instead] (see [forget]).
+  void _become(String gone, String instead) {
+    String? became(String path) => _holds(path, gone, anywhere: false)
+        ? instead + path.substring(gone.length)
+        : null;
+    // A branch's last visit is the list's own where it holds it.
+    final kept = Map<_Visit, _Visit?>.identity();
+    _Visit? now(_Visit visit) =>
+        kept.putIfAbsent(visit, () => _asKept(visit, became));
+    final moved = Set<_Visit>.identity();
+    for (var i = _visits.length - 1; i >= 0; i--) {
+      final visit = _visits[i];
+      final to = now(visit);
+      if (to == null) {
+        // The table matches nothing there.
+        _drop(i);
+      } else if (!identical(to, visit)) {
+        moved.add(_visits[i] = to);
+      }
+    }
+    // Two side by side that are one place now are one visit: the one that
+    // kept what it was gone to with stays.
+    for (var i = _visits.length - 1; i > 0; i--) {
+      final (behind, ahead) = (_visits[i - 1], _visits[i]);
+      if (!moved.contains(behind) && !moved.contains(ahead)) continue;
+      if (!ahead.isEntryOf(behind, behind.root)) continue;
+      _drop(moved.contains(ahead) ? i : i - 1);
+    }
+    final shown = _parts(_config).branch;
+    for (final MapEntry(key: branch, value: last) in _lastIn.entries.toList()) {
+      if (last == null) continue;
+      final to = _lastIn[branch] = now(last);
+      // The branch on screen is its caller's to put in place.
+      if (branch == shown || identical(to, last)) continue;
+      // Its pages stay in its navigator as what they became; one cut for
+      // lying on itself leaves unseen as the branch is next shown.
+      final stays = {
+        for (final push in to?.pushes ?? const <_Push>[]) push.pageKey,
+      };
+      final cut = [
+        for (final push in last.pushes)
+          if (!stays.contains(push.pageKey)) push,
+      ];
+      if (cut.isEmpty) continue;
+      _leaveUnseen(
+        branch,
+        pages: [for (final push in cut) push.pageKey],
+        pushes: cut,
+      );
+    }
+  }
+
+  /// [visit] once the pages [became] answers for are what they became (see
+  /// [_asBecame]): the same visit there. [visit] itself where it holds
+  /// none; null where the table matches nothing there.
+  _Visit? _asKept(_Visit visit, String? Function(String path) became) {
+    final to = _asBecame(visit.root, visit.pushes, became);
+    if (to == null) return visit;
+    final list = _rebuild(
+      _Visit(
+        root: to.root,
+        // What it was gone to with was read off the record that went.
+        extra: to.rootMoved ? null : visit.extra,
+        pushes: to.pushes,
+        branch: visit.branch,
+        pages: const <_Page>[],
+        tabTap: visit.tabTap,
+      ),
+    );
+    return list == null ? null : _visitOf(list, tabTap: visit.tabTap);
+  }
+
+  /// [root] and the [pushes] over it once each page [became] answers for
+  /// is what it became: at that location, its tail and its query kept, a
+  /// push under the page key it had and without what it was gone to with.
+  /// Where that leaves a page directly on another at the same place, one a
+  /// page here became, the upper of the two is cut; with [topStays], the
+  /// page on top is kept as it is and the one beneath it cut instead, and
+  /// where that one is the root, both stay and [onRoot] says so. Told by
+  /// the locations alone, so an entry and its visit come out the same
+  /// however many records became another between them. Null where
+  /// [became] answers for none.
+  static ({Uri root, bool rootMoved, List<_Push> pushes, bool onRoot})?
+  _asBecame(
+    Uri root,
+    List<_Push> pushes,
+    String? Function(String path) became, {
+    bool topStays = false,
+  }) {
+    Uri? at(Uri from) {
+      final to = became(from.path);
+      if (to == null) return null;
+      final uri = Uri.parse(to);
+      return from.hasQuery ? uri.replace(query: from.query) : uri;
+    }
+
+    final places = <String>{};
+    final rootNow = at(root);
+    if (rootNow != null) places.add(rootNow.toString());
+    final now = <_Push>[];
+    for (final push in pushes) {
+      final to = at(Uri.parse(push.location));
+      if (to == null) {
+        now.add(push);
+        continue;
+      }
+      places.add(to.toString());
+      now.add(
+        _Push(
+          location: to.toString(),
+          extra: null,
+          pageKey: push.pageKey,
+          navigator: push.navigator,
+          completer: push.completer,
+        ),
+      );
+    }
+    if (places.isEmpty) return null;
+    final base = (rootNow ?? root).toString();
+    final kept = <_Push>[];
+    var onRoot = false;
+    for (final (i, push) in now.indexed) {
+      bool lies() =>
+          places.contains(push.location) &&
+          push.location == (kept.lastOrNull?.location ?? base);
+      if (topStays && i == now.length - 1) {
+        while (kept.isNotEmpty && lies()) {
+          kept.removeLast();
+        }
+        onRoot = lies();
+      } else if (lies()) {
+        continue;
+      }
+      kept.add(push);
+    }
+    return (
+      root: rootNow ?? root,
+      rootMoved: rootNow != null,
+      pushes: kept,
+      onRoot: onRoot,
+    );
   }
 
   /// Adds [it] to [kept] as its newest, the oldest dropped past
@@ -673,11 +900,16 @@ class WaxHistory {
   /// gone to with, from under the page on top, which stays as it is: what
   /// was opened over one of them is then over what lay under it, as a pop
   /// of it would show. A visit's own page with nothing declared beneath it
-  /// (gone to by its link) gives way to what [instead] answers for its
-  /// location, else to its branch's root. Nothing where the page on top
-  /// is one of them, or none is on screen. For a deleted thing's pages,
-  /// still waiting under what the visitor opened over them (the full
-  /// player, a push).
+  /// (gone to by its link) gives way to its branch's root. Nothing where
+  /// the page on top is one of them, or none is on screen. For a deleted
+  /// thing's pages, still waiting under what the visitor opened over them
+  /// (the full player, a push).
+  ///
+  /// One [instead] answers for became that location (see [forget]) and is
+  /// not taken out: it is put there in place, the visit's own page and a
+  /// pushed one alike (see [_asBecame]). Only a page that would then lie
+  /// directly on itself goes, and where that is the visit's own, under the
+  /// page on top, what is declared beneath it stands in.
   ///
   /// Made in place, it never overtakes a step on its way: it waits for
   /// that to land, and is decided from there.
@@ -706,6 +938,8 @@ class WaxHistory {
     ];
     String? declared;
     Uri? root;
+    // Whether the visit's own page became another.
+    var own = false;
     final kept = <_Push>[];
     final cut = <_Push>[];
     final out = <Object>[];
@@ -718,6 +952,9 @@ class WaxHistory {
           kept.add(push);
         } else if (top) {
           return false;
+        } else if (instead?.call(Uri.parse(push.location).path) != null) {
+          // Put where it became, below.
+          kept.add(push);
         } else {
           out.add(push.pageKey);
           cut.add(push);
@@ -732,20 +969,50 @@ class WaxHistory {
       }
       if (gone(page.location, here.extra, page.key)) {
         if (top) return false;
-        final branch = here.branch;
-        final under =
-            declared ??
-            instead?.call(page.location) ??
-            (branch == null ? null : _branchRoots.elementAtOrNull(branch)) ??
-            WaxRoute.home;
-        if (under == page.location) return false;
-        root = Uri.parse(under);
+        if (instead?.call(page.location) != null) {
+          // Put where it became, below.
+          own = true;
+          root = here.root;
+        } else {
+          final branch = here.branch;
+          final under =
+              declared ??
+              (branch == null ? null : _branchRoots.elementAtOrNull(branch)) ??
+              WaxRoute.home;
+          if (under == page.location) return false;
+          root = Uri.parse(under);
+        }
         out.add(page.key);
         continue;
       }
       declared = page.location;
     }
-    if (out.isEmpty) return false;
+    final became = instead == null
+        ? null
+        : _asBecame(here.root, kept, instead, topStays: true);
+    if (became != null) {
+      if (became.rootMoved) root = became.root;
+      final stays = {for (final push in became.pushes) push.pageKey};
+      for (final push in kept) {
+        if (stays.contains(push.pageKey)) continue;
+        out.add(push.pageKey);
+        cut.add(push);
+      }
+      kept
+        ..clear()
+        ..addAll(became.pushes);
+      if (own && became.onRoot) {
+        final branch = here.branch;
+        root = Uri.parse(
+          declared ??
+              (branch == null ? null : _branchRoots.elementAtOrNull(branch)) ??
+              WaxRoute.home,
+        );
+      }
+    } else if (own) {
+      return false;
+    }
+    if (out.isEmpty && became == null) return false;
     final list = _rebuild(
       _Visit(
         root: root ?? here.root,
@@ -971,6 +1238,8 @@ class WaxHistory {
 
   void dispose() {
     _answer?.cancel();
+    // A landing's frame, still to come, has nothing left to write.
+    _writing = null;
     _browser?.drop();
     _unlisten?.call();
     _byRouter[_router] = null;
@@ -1173,18 +1442,26 @@ class WaxHistory {
     // What was on its way has landed, or this move came instead; what it
     // held is decided here.
     _holding = false;
-    _endingPop = false;
+    final writing = _writing;
+    _writing = null;
     final browser = _browser!;
     final at = browser.position;
-    final shown = browser.shown;
+    // A landing this history took left the router on an entry the engine
+    // heard nothing of, while its write is held or a pass that began there
+    // is on its way: counted from there.
+    final landed = writing?.over ?? _landedOn;
+    _landedOn = null;
+    final shown = landed ?? browser.shown;
     final (returning, closing) = (_returning, _closing);
     _returning = null;
     _closing = null;
     if (returning == at || (_navigated && at == shown)) {
       // On the entry the engine writes to, where what it wrote while the
-      // browser was away goes, in order.
+      // browser was away goes, in order. A move it had not been told of
+      // was told as the browser was sent back, and stands with the rest.
       browser.release();
       _navigated = false;
+      _unheard = null;
       _sample();
       _returned(closing);
       return true;
@@ -1220,10 +1497,31 @@ class WaxHistory {
     // move of the app's the engine was never told of with it.
     browser.drop();
     _navigated = false;
+    // A move noted as unheard that a pass has reported since: what was
+    // held of it went above, so the engine is still to be told.
+    final untold = _unreported ? null : _unheard;
     // Not after an ask that changed nothing: no move was recorded, and the
     // visit on screen has its entry.
-    if (_unreported && _undrawn) _unheard = _added;
-    if (_passOver(at, shown)) return true;
+    if (_unreported && _undrawn) {
+      _unheard = (added: _added, inPlace: _unwritten?.inPlace ?? _replacing);
+    }
+    if (_passOver(at, shown)) {
+      // A pass from the entry that landing put the router on goes on
+      // counting from it.
+      if (_passed != null) _landedOn = landed;
+      // Sent back to the entry the router is on, where what the engine was
+      // to be told of it went above: told again, held until the browser is
+      // there. What a landing showed goes over its entry, a move of the
+      // app's past the one it was made on, or over it where it was a swap.
+      if (_returning != null) {
+        if (_returning == landed) {
+          _report(inPlace: true);
+        } else if (untold != null) {
+          _write(_config, inPlace: untold.inPlace);
+        }
+      }
+      return true;
+    }
     _mark(at);
     return false;
   }
@@ -1233,10 +1531,14 @@ class WaxHistory {
   /// move or from the visits and its branch, its opener hears [popping]'s
   /// result, and what the move wrote goes past this entry, which drops the
   /// closed page's own. An entry of something forgotten on the way is
-  /// passed first, as the pop passes it.
+  /// passed first, as the pop passes it; not one of a location that became
+  /// another, whose visit the list kept (see [_keptAt]).
   bool _poppedUnder(_Popping popping) {
     final browser = _browser!;
-    if (_isForgotten(browser) && popping.strays > 0 && browser.canStepBack) {
+    if (_isForgotten(browser) &&
+        _keptAt(browser) == null &&
+        popping.strays > 0 &&
+        browser.canStepBack) {
       popping.strays--;
       _ask(-1);
       return true;
@@ -1251,17 +1553,32 @@ class WaxHistory {
     // What the move wrote, with the closed page's removal, goes once the
     // engine has it all. A move the app makes before then is one more,
     // written after it.
-    _endingPop = true;
+    _writeHeldSoon(past: true);
+    _walked();
+    return true;
+  }
+
+  /// Has what is held at a landing written once the frame after it has
+  /// been, when the engine has it all: [past] the entry the browser is on,
+  /// or as it was told, over that entry. Until then the landing is under
+  /// way (see [stepping]). A browser move heard first decides what is held
+  /// instead (see [_browserMoved]): elsewhere, it is dropped, so nothing is
+  /// written to an entry it was not made for, and where the write was to
+  /// go over the entry landed on, that move is counted from this entry,
+  /// which the engine never heard of, and so is the pass it may begin (see
+  /// [_landedOn]).
+  void _writeHeldSoon({required bool past}) {
+    final browser = _browser!;
+    final mine = _writing = _HeldWrite(over: past ? null : browser.position);
+    _landing ??= Completer<void>();
     WidgetsBinding.instance
       ..addPostFrameCallback((_) {
-        if (!_endingPop) return;
-        _endingPop = false;
-        if (browser.release(past: true)) _sample();
+        if (!identical(_writing, mine)) return;
+        _writing = null;
+        if (browser.release(past: past)) _sample();
         _settled(framed: true);
       })
       ..scheduleFrame();
-    _walked();
-    return true;
   }
 
   /// Takes [popping]'s page out wherever the app's move left it, as its
@@ -1410,6 +1727,7 @@ class WaxHistory {
     _popping = null;
     _arrowBack = null;
     _passed = null;
+    _landedOn = null;
     _returning = null;
     _closing = null;
     _holding = false;
@@ -1496,8 +1814,12 @@ class WaxHistory {
   /// ahead and leave the visits ahead with none: reported at once, as a
   /// replacement. Left to the frame's report under `Router.neglect`, every
   /// move made before that report would be one too, the app's own included.
-  void _inPlace(VoidCallback move) {
-    _reportPending();
+  /// A move of the app's no frame has reported yet is reported first, as
+  /// an entry of its own; not one [move] is [overtaking], which the browser
+  /// left the entry of before the engine was told: [move] takes its place
+  /// in the router, and it is never written.
+  void _inPlace(VoidCallback move, {bool overtaking = false}) {
+    if (!overtaking) _reportPending();
     move();
     _report(inPlace: true);
   }
@@ -1565,6 +1887,9 @@ class WaxHistory {
   /// the app's entries: at the oldest what stands in for it is written
   /// over it, and from the newest, where the browser knows it is, it goes
   /// back to the entry the router is on (else that one is let through).
+  /// One of a location that became another is not passed while a session
+  /// is up: its visit is shown, written over it (see [_landOnKept]), unless
+  /// what it became is forgotten in turn (see [_keptAt]).
   /// A pop's landing is its own, unless the list holds nothing behind and
   /// it lands on something forgotten: the push's base was taken out from
   /// under it. An entry of what is on screen is passed too: landing there
@@ -1576,16 +1901,28 @@ class WaxHistory {
     final passed = _passed;
     _passed = null;
     final forgotten = _isForgotten(browser);
+    // Which side of the entry the router is on the browser is: the way a
+    // pass goes on, and how far a way back is. A landing asks which way
+    // this one move went from the entry last read instead (below), as
+    // [_mark] asks it for an arrival the router hears, so both take the
+    // same neighbour of the cursor first. The two agree wherever the entry
+    // the router is on is the one last read, or the one the engine pushed
+    // just above it. Elsewhere (the engine written to more than once since
+    // the last read, the edge [_landedOn] names) each keeps its own answer,
+    // and a landing whose first neighbour is not its visit takes the other.
     final back = at < shown;
+    // An entry of a location that became another (see [forget]) is its
+    // visit's. Not signed out: the visits went with the session, and the
+    // entry is passed with the others it left.
+    final kept = _nowAt.isEmpty ? null : _keptAt(browser);
+    if (kept != null && !_putsSignInUp(browser)) {
+      _landOnKept(browser, kept, forward: at > _seen, passed: passed);
+      return true;
+    }
     // A pop the list holds steps on past a forgotten entry as the arrow
     // does: its base was taken out from under the page it pops.
     if (_arrowBack case final arrow?) {
-      if (!forgotten || !back || arrow.strays <= 0 || !browser.canStepBack) {
-        return false;
-      }
-      _arrowBack = arrow.withStrays(arrow.strays - 1);
-      _ask(-1);
-      return true;
+      return forgotten && back && _stepOn(arrow);
     }
     if (_popping case final popping?) {
       // What the push was made over was taken out from under it since,
@@ -1617,25 +1954,47 @@ class WaxHistory {
     }
     if (!forgotten && !_isOnScreen(browser)) return false;
     final count = passed ?? 0;
-    if (count >= _strays) return false;
-    if (back ? !browser.canStepBack : !browser.canStepForward) {
-      if (!forgotten) return false;
-      if (back) {
-        // The app's oldest entry, which a pass never leaves the app from:
-        // what stands in for it is written over it.
-        _standInOver(browser, adjacent: shown - at == count + 1);
-        return true;
-      }
-      // The newest, where the browser knows it is (after a reload that
-      // kept nothing it cannot tell, and the entry is let through): the
-      // browser goes back to the entry the router is on.
-      if (!browser.newestKnown) return false;
-      _returning = shown;
-      _ask(shown - at);
+    if (_passOn(count, forward: !back)) return true;
+    // Its allowance spent, or no entry of the app lies that way.
+    if (count >= _strays || !forgotten) return false;
+    if (back) {
+      // The app's oldest entry, which a pass never leaves the app from:
+      // what stands in for it is written over it.
+      _standInOver(browser, adjacent: shown - at == count + 1);
       return true;
     }
+    // The newest, where the browser knows it is (after a reload that
+    // kept nothing it cannot tell, and the entry is let through): the
+    // browser goes back to the entry the router is on.
+    if (!browser.newestKnown) return false;
+    _returning = shown;
+    _ask(shown - at);
+    return true;
+  }
+
+  /// Has a browser move of the visitor's own step on past the entry it is
+  /// on, the way it went, as one more than the [count] it has passed in a
+  /// row; false, having asked nothing, at [_strays] or where no entry of
+  /// the app lies that way.
+  bool _passOn(int count, {required bool forward}) {
+    final browser = _browser!;
+    if (count >= _strays) return false;
+    if (forward ? !browser.canStepForward : !browser.canStepBack) return false;
     _passed = count + 1;
-    _ask(back ? -1 : 1);
+    _ask(forward ? 1 : -1);
+    return true;
+  }
+
+  /// Has [arrow] step on past an entry it did not want, as one more of its
+  /// allowance; false, having asked nothing, where that is spent or no
+  /// entry of the app lies behind. What its caller does then is its own:
+  /// [_passOver] lets the router hear the entry, [_landOnKept] shows the
+  /// visit there, and [_stepPast] (from the delegate's notification and
+  /// [_mark]'s timer) restores the visit the step was after.
+  bool _stepOn(_ArrowBack arrow) {
+    if (arrow.strays <= 0 || !_browser!.canStepBack) return false;
+    _arrowBack = arrow.withStrays(arrow.strays - 1);
+    _ask(-1);
     return true;
   }
 
@@ -1643,25 +2002,31 @@ class WaxHistory {
   /// something forgotten, the router's way and written over that entry:
   /// for a location forgotten, see [_standInFor]; for a push, its base.
   /// [adjacent] where every entry between it and the one on screen was
-  /// passed, so the list holds what stands in just behind.
+  /// passed, so the list holds what stands in just behind. A move the app
+  /// made just before, which the engine was never told of, goes first and
+  /// is never written, as at any landing this history shows itself (see
+  /// [_landOnKept]).
   void _standInOver(BrowserHistoryPort browser, {required bool adjacent}) {
     final to = _isGone(Uri.parse(browser.location).path)
         ? _standInFor(browser.location)
         : browser.location;
-    _inPlace(() => _make(_StandIn(adjacent: adjacent), () => _router.go(to)));
+    _unhearOvertaken();
+    _inPlace(
+      () => _make(_StandIn(adjacent: adjacent), () => _router.go(to)),
+      overtaking: true,
+    );
     _sample();
   }
 
-  /// What stands in for [location], which is forgotten: the page it is
-  /// declared beneath, what [forget] was told stands in for it, else its
-  /// branch's root, else Home; the next one up where that is forgotten
-  /// too.
+  /// What stands in for [location], which is forgotten: what it became
+  /// (see [_became]), the page it is declared beneath, else its branch's
+  /// root, else Home; the next one up where that is forgotten too.
   String _standInFor(String location) {
     var at = Uri.parse(location).path;
     for (var i = 0; i < 8; i++) {
       final to =
+          _became(at) ??
           _router.declaredParentOf(at) ??
-          _standIns[at] ??
           _branchRootOf(at) ??
           WaxRoute.home;
       final path = Uri.parse(to).path;
@@ -1670,6 +2035,142 @@ class WaxHistory {
       at = path;
     }
     return WaxRoute.home;
+  }
+
+  /// What [path] became: where it is at or beneath a location [forget]
+  /// was told became another, and that one has not been visited since,
+  /// the other with [path]'s tail, and what that became in turn. Null
+  /// where it became nothing.
+  String? _became(String path) {
+    String? to;
+    var at = path;
+    for (var i = 0; i < 8; i++) {
+      String? next;
+      for (
+        var end = at.length;
+        end > 0 && next == null;
+        end = at.lastIndexOf('/', end - 1)
+      ) {
+        final gone = at.substring(0, end);
+        if (_nowAt[gone] case final kept? when _isGone(gone)) {
+          next = Uri.parse(kept).path + at.substring(end);
+        }
+      }
+      if (next == null || next == at) break;
+      to = at = next;
+    }
+    return to;
+  }
+
+  /// The visit the entry [browser] is on is now, where a location in it
+  /// became another (see [forget]), its own or a push's whatever lies over
+  /// it: each at what it became, through every one that became another
+  /// since, as the list's visits were moved (see [_asBecame]). Null where
+  /// none did, or the table matches nothing there, or what it is now shows
+  /// something forgotten since (the survivor deleted, a page open over it
+  /// done with): the entry is then forgotten as any other, which the
+  /// location it has says already.
+  _Visit? _keptAt(BrowserHistoryPort browser) {
+    final locations = browser.pushes;
+    final keys = browser.pushKeys;
+    if (keys.length != locations.length) return null;
+    final to = _asBecame(Uri.parse(browser.location), [
+      for (final (i, location) in locations.indexed)
+        _Push(
+          location: location,
+          extra: null,
+          pageKey: ValueKey<String>(keys[i]),
+          navigator: _router.routerDelegate.navigatorKey,
+          completer: null,
+        ),
+    ], _became);
+    if (to == null) return null;
+    final top = to.pushes.lastOrNull;
+    if (_showsForgotten(
+      to.root.toString(),
+      top: top?.location,
+      key: top?.pageKey.value,
+    )) {
+      return null;
+    }
+    final list = _rebuild(
+      _Visit(
+        root: to.root,
+        extra: null,
+        pushes: to.pushes,
+        branch: null,
+        pages: const <_Page>[],
+        tabTap: false,
+      ),
+    );
+    return list == null ? null : _visitOf(list);
+  }
+
+  /// Takes a browser move to an entry of a location that became another,
+  /// where [kept] is the visit that entry is now (see [_keptAt]): the visit
+  /// the list holds for it is shown in its place the router's way, so the
+  /// page that went is never built, and written over the entry once the
+  /// frame after has been (see [_writeHeldSoon]).
+  ///
+  /// A pop lands on it as on its base. A step back lands on it where it
+  /// is the visit the step was after, and else steps on while it may. A
+  /// move of the browser's own passes it where it is what is on screen,
+  /// lands on the visit next to the cursor on the side it went
+  /// ([forward]), then on the other, and on neither the list starts over
+  /// there.
+  ///
+  /// A move the app made just before, in the same frame, which the engine
+  /// was never told of, goes as it does where the router hears the
+  /// browser's move itself: its visit leaves the list first (see
+  /// [_unhearOvertaken]), so the cursor is where the browser left from,
+  /// and the visit shown takes its place in the router with nothing
+  /// reported of it, so it is never written and every entry ahead stays.
+  void _landOnKept(
+    BrowserHistoryPort browser,
+    _Visit kept, {
+    required bool forward,
+    required int? passed,
+  }) {
+    final arrow = _arrowBack;
+    if (_popping case final popping? when !forward) {
+      _arrowBack = null;
+      browser.hold();
+      _writeHeldSoon(past: false);
+      _popOver(popping);
+      _sample();
+      return;
+    }
+    int? to;
+    if (arrow != null) {
+      final after = math.min(arrow.index, _visits.length - 1);
+      if (!_isVisitOf(after, kept, kept.root) && _stepOn(arrow)) return;
+      _arrowBack = null;
+      if (after >= 0) to = after;
+    } else {
+      final onScreen = _showsScreen(kept.root.toString(), [
+        for (final push in kept.pushes) push.location,
+      ]);
+      if (onScreen && _passOn(passed ?? 0, forward: forward)) return;
+      _unhearOvertaken();
+      to = _beside(kept, kept.root, forward: forward);
+    }
+    final departed = _config;
+    final list = to == null ? null : _rebuild(_visits[to]);
+    browser.hold();
+    _writeHeldSoon(past: false);
+    if (list != null) {
+      _inPlace(() => _routerStep(_RestoreTo(to!, list)), overtaking: true);
+    } else if (_rebuild(kept) case final own?) {
+      _inPlace(
+        () =>
+            _make(const _StandIn(adjacent: false), () => _router.restore(own)),
+        overtaking: true,
+      );
+    }
+    _sample();
+    // As a landing does, for a push the move took off.
+    _settle(departed, _config);
+    _walked();
   }
 
   /// The root of the branch [path] is shown in, where it has one.
@@ -1704,12 +2205,22 @@ class WaxHistory {
   /// Whether the entry [browser] is on shows something forgotten: its
   /// location, or the push on top, by where it is or by its page key. A
   /// push with another over it is not what the entry shows.
-  bool _isForgotten(BrowserHistoryPort browser) {
+  bool _isForgotten(BrowserHistoryPort browser) => _showsForgotten(
+    browser.location,
+    top: browser.pushes.lastOrNull,
+    key: browser.pushKeys.lastOrNull,
+  );
+
+  /// Whether [location], with the push [top] on top of it under the page
+  /// key [key], shows something forgotten (see [_isForgotten]).
+  bool _showsForgotten(
+    String location, {
+    required String? top,
+    required String? key,
+  }) {
     bool gone(String location) => _isGone(Uri.parse(location).path);
 
-    final top = browser.pushes.lastOrNull;
-    final key = browser.pushKeys.lastOrNull;
-    return gone(browser.location) ||
+    return gone(location) ||
         (top != null && gone(top)) ||
         (key != null && _forgottenPushes.contains(key));
   }
@@ -1717,11 +2228,16 @@ class WaxHistory {
   /// Whether the entry [browser] is on shows what the router does: its
   /// location, or one the router's redirect sends there, with the same
   /// pushes over it.
-  bool _isOnScreen(BrowserHistoryPort browser) {
+  bool _isOnScreen(BrowserHistoryPort browser) =>
+      _showsScreen(browser.location, browser.pushes);
+
+  /// Whether [location] with [pushed] over it is what the router shows
+  /// (see [_isOnScreen]).
+  bool _showsScreen(String location, List<String> pushed) {
     final pushes = [for (final push in _parts(_config).pushes) push.location];
-    if (!listEquals(browser.pushes, pushes)) return false;
-    if (Uri.parse(browser.location) == _config.uri) return true;
-    return pushes.isEmpty && _resolved(browser.location)?.uri == _config.uri;
+    if (!listEquals(pushed, pushes)) return false;
+    if (Uri.parse(location) == _config.uri) return true;
+    return pushes.isEmpty && _resolved(location)?.uri == _config.uri;
   }
 
   /// Whether the entry [browser] is on would only put the sign-in screen
@@ -1805,13 +2321,9 @@ class WaxHistory {
       return;
     }
     final entry = _router.routeInformationProvider.value.uri;
-    bool lands(int index) =>
-        index >= 0 &&
-        index < _visits.length &&
-        _visits[index].isEntryOf(arriving, entry);
     if (arrow != null) {
       final after = math.min(arrow.index, _visits.length - 1);
-      if (lands(after)) {
+      if (_isVisitOf(after, arriving, entry)) {
         _land(after, arriving);
         return;
       }
@@ -1821,14 +2333,9 @@ class WaxHistory {
         return;
       }
     }
-    final (near, far) = forward
-        ? (_cursor + 1, _cursor - 1)
-        : (_cursor - 1, _cursor + 1);
-    for (final index in <int>[near, far, _cursor]) {
-      if (lands(index)) {
-        _land(index, arriving);
-        return;
-      }
+    if (_beside(arriving, entry, forward: forward) case final index?) {
+      _land(index, arriving);
+      return;
     }
     // Each branch's last visit stays, as go_router's branch stacks do, so
     // a tab tap still leaves out what was forgotten.
@@ -1838,16 +2345,34 @@ class WaxHistory {
     _add(arriving);
   }
 
+  /// Whether the visit at [index] is the one a browser move to the entry
+  /// at [entry], which shows [arriving], landed on (see
+  /// [_Visit.isEntryOf]); false past either end of the list.
+  bool _isVisitOf(int index, _Visit arriving, Uri entry) =>
+      index >= 0 &&
+      index < _visits.length &&
+      _visits[index].isEntryOf(arriving, entry);
+
+  /// The visit a browser move of the visitor's own landed on, where the
+  /// entry at [entry] shows [arriving]: the one next to the cursor on the
+  /// side the browser went ([forward]), then on the other, then the one at
+  /// the cursor. Null where it is none of them.
+  int? _beside(_Visit arriving, Uri entry, {required bool forward}) {
+    final (near, far) = forward
+        ? (_cursor + 1, _cursor - 1)
+        : (_cursor - 1, _cursor + 1);
+    return <int>[
+      near,
+      far,
+      _cursor,
+    ].where((index) => _isVisitOf(index, arriving, entry)).firstOrNull;
+  }
+
   /// Steps past an entry [arrow] did not want, while it may, and else
   /// restores the visit it was after the router's way; false where that
   /// visit no longer resolves.
   bool _stepPast(_ArrowBack arrow) {
-    final browser = _browser!;
-    if (arrow.strays > 0 && browser.canStepBack) {
-      _arrowBack = arrow.withStrays(arrow.strays - 1);
-      _ask(-1);
-      return true;
-    }
+    if (_stepOn(arrow)) return true;
     final after = math.min(arrow.index, _visits.length - 1);
     if (after < 0) return false;
     if (_rebuild(_visits[after]) case final list?) {
@@ -1987,13 +2512,13 @@ class WaxHistory {
   }
 
   /// Puts [visit] just behind the visit at the cursor, which is then on
-  /// it. Past [_kept] the oldest goes, as [_add] drops it, where one lies
+  /// it. Past [_bound] the oldest goes, as [_add] drops it, where one lies
   /// behind [visit]; where none does, nothing goes (neither [visit] nor
   /// the visits ahead, which the browser's forward walks), and the list
   /// stays one over until the next visit added trims it from the front.
   void _insertAtCursor(_Visit visit) {
     _visits.insert(_cursor, visit);
-    if (_visits.length > _kept && _cursor > 0) {
+    if (_visits.length > _bound && _cursor > 0) {
       _visits.removeAt(0);
       _cursor--;
     }
@@ -2003,8 +2528,8 @@ class WaxHistory {
     _visits
       ..removeRange(_cursor + 1, _visits.length)
       ..add(visit);
-    if (_visits.length > _kept) {
-      _visits.removeRange(0, _visits.length - _kept);
+    if (_visits.length > _bound) {
+      _visits.removeRange(0, _visits.length - _bound);
     }
     _cursor = _visits.length - 1;
   }
@@ -2293,9 +2818,14 @@ Object? extraOnTop(GoRouter router) {
 /// with its key and where it is.
 typedef _Page = ({Object key, String location, bool pushed});
 
-/// A visit a move of the app's added, and its branch's last visit before
-/// it, where one was [known].
-typedef _Added = ({_Visit visit, bool known, _Visit? last});
+/// A visit a move of the app's added, its branch's last visit before it,
+/// where one was [known], and the visits [ahead] it took the place of.
+typedef _Added = ({_Visit visit, bool known, _Visit? last, List<_Visit> ahead});
+
+/// A move of the app's the engine was not told of: the visit it [added],
+/// none for one that adds none (a swap, a step up), and whether it is
+/// written over the entry it was made on ([inPlace], a swap) or past it.
+typedef _Unheard = ({_Added? added, bool inPlace});
 
 /// A push on top of a visit's root: where it went, with what, and under
 /// which page key in which navigator.
@@ -2493,9 +3023,13 @@ final class _Climb extends _Move {
   final bool outward;
 }
 
-/// What stands in for an entry of something forgotten the browser landed
-/// on: a visit just behind the one on screen where every entry between was
-/// passed ([adjacent]), else where the list starts over.
+/// What a browser landing shows in place of the entry it is on, where the
+/// list holds no visit for it. For an entry of something forgotten, what
+/// stands in: a visit just behind the one on screen where every entry
+/// between was passed ([adjacent]), else where the list starts over. For
+/// an entry of a location that became another whose visit is not beside
+/// the cursor, nothing stands in: what the entry is now is shown (see
+/// [WaxHistory._landOnKept]), and the list starts over there.
 final class _StandIn extends _Move {
   const _StandIn({required this.adjacent});
 
@@ -2523,6 +3057,16 @@ final class _BrowserMove {
   const _BrowserMove({required this.forward});
 
   final bool forward;
+}
+
+/// What a landing holds for the frame after it (see
+/// [WaxHistory._writeHeldSoon]), told apart from another landing's.
+final class _HeldWrite {
+  _HeldWrite({required this.over});
+
+  /// The browser's position for the entry it is written over, which the
+  /// landing put the router on; null where it goes past the one landed on.
+  final int? over;
 }
 
 /// A pop the browser makes: the push it takes off, with the completer

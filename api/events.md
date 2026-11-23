@@ -53,13 +53,36 @@ The client sends exactly one subscribe frame, immediately after the upgrade
 { "catalogSince": "abc", "serverSince": "def", "topics": ["catalog", "user"] }
 ```
 
-Cursors are the opaque values the client's mirror is at (from the sync
-endpoints' `nextSince`). The server compares them to the current stream
-positions and immediately sends an `invalidate` per topic the client is
-behind on, then goes live. A client with no mirror yet omits the cursors,
-receives only live invalidations, and snapshots through the sync endpoints;
-subscribing before or after the snapshot are both sound, because
-invalidations carry no data. To change topics, reconnect.
+Cursors are opaque values. `serverSince` is the one the client's mirror is
+at (the sync endpoints' `nextSince`). `catalogSince` is the `since` of the
+last `catalog` invalidation the client acted on (below), or, before it has
+acted on any, a `nextSince` it read all its listings after; not where a
+later pull left a mirror: a pull moves past changes it does not show, so
+an answer to that position does not tell of them. On a connection that takes the cursor's topic the server answers
+each cursor at once, then goes live. A `serverSince` is answered with a
+`user` invalidation. A `catalogSince` is answered with one `catalog`
+invalidation that tells what changed after the cursor as a live one tells
+it (below): `pids` names the entities whose rows changed after it, by the
+rules `pids` follows on every frame, except that a show also names its
+episodes when the server cannot tell whether its cover was what changed (a
+change from before the server last started, or one behind many cover
+changes). `unnamed` is sent in place of names when more changed than fit,
+when the server could not read what changed in time, when it cannot decide
+for the account whether it may see a name (as on a live frame), and when
+the server cannot serve the cursor: another
+server's, an earlier catalog generation's, one older than the history it
+keeps or from before what the account may see last changed, or not a
+cursor, which a pull of `/sync/catalog` from it refuses (410 `sync-reset`,
+or 400 for what is not a cursor). The frame carries neither when nothing
+that has a pid changed after the cursor, and then asks for a pull and a
+refresh of listings as any other `catalog` invalidation does, unless it
+carries `unchanged` (below): nothing in the catalog changed after the
+cursor.
+
+A client with no cursor omits them, receives only live invalidations, and
+snapshots through the sync endpoints; subscribing before or after the
+snapshot are both sound, because invalidations carry no entity data. To
+change topics, reconnect.
 
 Topic names the server does not recognize are ignored. Omitting `topics`,
 sending an empty list, or sending a list with no recognized names all
@@ -84,7 +107,116 @@ Invalidation, coalesced over roughly 250 ms windows:
 
 The named stream moved: pull the matching sync endpoint (`catalog` topic:
 `/sync/catalog`; `user` topic: `/sync/server`) from the client's own cursor.
+A `catalog` invalidation carrying `unchanged` (below) is the exception: it
+asks for nothing.
 One frame can cover many changes, and a redundant pull is harmless.
+
+A `catalog` invalidation may also name the entities that changed, at most
+64 of them:
+
+```json
+{ "type": "invalidate", "topic": "catalog", "pids": ["ar-01J...", "al-01J..."] }
+```
+
+`pids` names items, albums, artists, release groups, series and podcast
+shows. A changed track names its album beside it, whose cover can be the
+track's, and none of the album's other tracks. A changed album names its
+tracks beside it, and a podcast show whose cover was set or cleared through
+the API its episodes: they draw its cover when they have none of their own,
+and those in the trash are left out. An album or show that is gone names
+none, and so does a show that changed any other way, a cover that came with
+its feed included. A changed artist or release group names nothing beside
+it. It names the entities whose cached copies, covers above all, a client
+should drop, never a replacement for the pull, and it is not everything the
+frame covers: a genre has no pid and is named nowhere, so the client pulls
+and refreshes its listings either way, as on every `catalog` invalidation
+but one carrying `unchanged`. A named entity may already be gone.
+An item is named with its kind's prefix as it is now, and one that is gone
+with the track prefix whatever its kind was, so a client matches an item by
+what follows the prefix.
+
+A `catalog` invalidation without `pids` or `unchanged` means anything in
+the catalog may have changed. A connection whose account is not an
+administrator and has `granted` library access, a tag rule, or
+`explicitContent` off is sent only the names it may see, decided as each
+frame is sent: an item it may see; an album, release group or artist that
+an item it may see, named in the same frame, belongs to; and a podcast show
+when it may see the podcast library and, with `explicitContent` off, an
+episode named in the same frame says the show is not marked explicit. An
+item that is gone, an album or release group whose items named in the frame
+it may see none of, and a show it may not see are left out. Where the frame
+does not decide whether the account may see a name (an album or release
+group with no item of it named, an artist that no item it may see named in
+the frame belongs to, a series, or, with `explicitContent` off, a show with
+no episode of it named), that account's frame carries `unnamed` in place of
+`pids`. A frame that names nothing such an account may see carries neither.
+No other frame carries `pids`, and a client may ignore it.
+
+A `catalog` invalidation that leaves changed entities out of `pids` says so:
+
+```json
+{ "type": "invalidate", "topic": "catalog", "unnamed": true }
+```
+
+`unnamed` is true when entities of the kinds `pids` names changed and the
+frame does not name them, so everything a client cached of any entity,
+covers above all, may be stale. The server sends it when the entities to
+name, those named beside a changed one included, are more than fit; when it
+could not read which entities changed; when a `resync` or a catalog repair
+was coalesced with the changes, in either order; in answer to a subscribe
+whose `catalogSince` it cannot serve; and, in place of `pids`, to a
+connection whose account could not be read as the frame was sent or for
+which it cannot decide whether a name may be seen. It is never false and
+never beside `pids`. A `catalog` invalidation with neither says nothing
+about which entities changed: the server sends that for a change it has
+nothing to name for (a genre, a catalog repair), for changes an earlier
+frame already named, for names the account may see none of, and in answer
+to a subscribe whose `catalogSince` nothing that has a pid changed after.
+Such a frame asks for the pull and a refresh of listings like any other,
+unless it carries `unchanged`. Any other invalidation that names nothing
+and is coalesced with changes leaves their `pids` in the frame. No other
+frame carries `unnamed`, and a client may ignore it.
+
+The answer to a subscribe's `catalogSince` says so when nothing in the
+catalog changed after the cursor:
+
+```json
+{ "type": "invalidate", "topic": "catalog", "unchanged": true, "since": "YzJ8MDFK..." }
+```
+
+`unchanged` is true when the frame answers only the cursor a subscribe
+presented and nothing in the catalog changed after it: no entity the frame
+would name or leave unnamed, and nothing that has no pid, a genre for one.
+What changes only users' own state (plays, stars, ratings, bookmarks,
+queues, playlists), files, libraries, jobs or accounts does not count: no
+live `catalog` invalidation is sent for those either. It is the one
+`catalog` invalidation that asks a client for no pull and no refresh: what
+it holds from that cursor is current. It covers only what changed after the
+cursor presented, which is why that cursor is the `since` of the last
+`catalog` invalidation the client acted on (or, before it has acted on any,
+a `nextSince` it read all its listings after) and not where a later pull
+left a mirror: a pull moves past changes it does not show. It is never false and never
+beside `pids` or `unnamed`, and it is absent on the answer when anything in
+the catalog changed after the cursor or the server cannot serve it, and
+when a live change, any other `catalog` invalidation, or a `resync` was
+coalesced with the answer, in either order. No other frame carries
+`unchanged`, and a client may ignore it.
+
+A `catalog` invalidation carries the catalog position it covers up to:
+
+```json
+{ "type": "invalidate", "topic": "catalog", "since": "YzJ8MDFK..." }
+```
+
+`since` is an opaque catalog cursor of the form the sync endpoints hand out
+as `nextSince`, minted for the connection's account; a frame that covers
+several changes carries the newest position among them. A client that acted
+on the frame presents it as `catalogSince` when it subscribes again, to be
+told what changed while it was away. A mirror keeps the `nextSince` its own pulls hand it: a frame
+announces changes and delivers none, so a mirror that pulled from `since`
+would skip them. `since` is absent when the server could not read the
+account as the frame was sent. No other frame carries it, and a client may
+ignore it.
 
 Resync:
 

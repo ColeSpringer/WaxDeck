@@ -192,6 +192,60 @@ void main() {
       expect(feed.span, _s(500));
     });
 
+    group('a book read again while it plays', () {
+      BookDetail edition({required String second, int partCount = 1}) =>
+          testBook(
+            bookPid,
+            durationMs: 120000,
+            partCount: partCount,
+            chapters: [
+              const ChapterMark(index: 0, title: 'Prologue', startMs: 0),
+              ChapterMark(index: 1, title: second, startMs: 30000),
+            ],
+          );
+
+      Future<(PlaybackSession, FakeRepository)> playing() async {
+        final repo = FakeRepository()
+          ..books[bookPid] = edition(second: 'The Road');
+        final session = await started(
+          testItem(bookPid, mediaType: MediaType.audiobook, durationMs: 120000),
+          repo,
+        );
+        return (session, repo);
+      }
+
+      test('draws the marks an edit renamed, at the next follow', () async {
+        final (session, repo) = await playing();
+        final feed = feedOf(session, BookTimelineScope.chapter);
+        engine.advance(_s(40));
+        await pumpEventQueue();
+        expect(feed.window.value.chapter?.title, 'The Road');
+
+        repo.books[bookPid] = edition(second: 'The Road Goes Ever On');
+        expect(await session.rereadBook(), isTrue);
+        feed.follow(session, BookTimelineScope.chapter);
+
+        expect(feed.window.value.chapter?.title, 'The Road Goes Ever On');
+      });
+
+      test('changes nothing where the marks are the same', () async {
+        final (session, repo) = await playing();
+        final held = session.book;
+        repo.books[bookPid] = edition(second: 'The Road');
+
+        expect(await session.rereadBook(), isFalse);
+        expect(session.book, same(held));
+      });
+
+      test('keeps the marks it plays by where the parts moved', () async {
+        final (session, repo) = await playing();
+        repo.books[bookPid] = edition(second: 'Elsewhere', partCount: 2);
+
+        expect(await session.rereadBook(), isFalse);
+        expect(session.book?.chapters[1].title, 'The Road');
+      });
+    });
+
     test('following what it already follows does nothing', () async {
       final repo = FakeRepository()
         ..books[bookPid] = testBook(

@@ -28,8 +28,10 @@ class ArtworkPinRecord {
   /// The rung the bytes were fetched at.
   final int sizePx;
 
-  /// The URL the bytes came from, so a re-pin asks for the same variant
-  /// rather than whatever the item's front slot has become.
+  /// The URL of the picture the bytes are of, so a re-pin asks for the
+  /// same variant rather than whatever the item's front slot has become:
+  /// where they came from, or where the server has named that picture
+  /// since ([ArtworkPinStore.recordUrl]).
   final String artUrl;
 
   /// The validator the server gave these bytes; a re-pin presents it and
@@ -40,6 +42,9 @@ class ArtworkPinRecord {
   final int sizeBytes;
   final DateTime pinnedAt;
 }
+
+/// A pin's place in the order [ArtworkPinStore.pinsAfter] reads them in.
+typedef PinCursor = ({String pid, int sizePx});
 
 /// Where pinned artwork is recorded. The files themselves are the
 /// caller's: this store knows their paths, not their bytes.
@@ -55,6 +60,19 @@ abstract class ArtworkPinStore {
   Future<List<ArtworkPinRecord>> pinsToDraw(String pid);
 
   Future<void> put(ArtworkPinRecord pin);
+
+  /// Records that the picture [pin] holds is at [artUrl] now, where it is
+  /// still the pin held: of that size, pinned at that instant. One
+  /// replaced or removed meanwhile is left alone, and no row is made.
+  Future<void> recordUrl(ArtworkPinRecord pin, String artUrl);
+
+  /// The next [limit] of every pin there is, past [after] or from the
+  /// first, in an order that holds while pins come and go: a walk of
+  /// them all can stop anywhere and pick up from its last pin.
+  Future<List<ArtworkPinRecord>> pinsAfter(
+    PinCursor? after, {
+    required int limit,
+  });
 
   /// Drops exactly the pins listed, each by its size and the instant it was
   /// pinned, and no others: a cover the device pinned since (another size,
@@ -117,6 +135,42 @@ class DriftArtworkPinStore implements ArtworkPinStore {
   }
 
   @override
+  Future<void> recordUrl(ArtworkPinRecord pin, String artUrl) async {
+    // An update of the row as it was read, never an upsert: a pin taken
+    // back meanwhile must not come back as a row with no file.
+    await (db.update(db.artworkPins)..where(
+          (t) =>
+              t.pid.equals(pin.pid) &
+              t.sizePx.equals(pin.sizePx) &
+              t.pinnedAt.equals(pin.pinnedAt),
+        ))
+        .write(ArtworkPinsCompanion(artUrl: Value(artUrl)));
+  }
+
+  @override
+  Future<List<ArtworkPinRecord>> pinsAfter(
+    PinCursor? after, {
+    required int limit,
+  }) async {
+    // The primary key's own order, so a page is a range read of it.
+    final query = db.select(db.artworkPins)
+      ..orderBy([
+        (t) => OrderingTerm.asc(t.pid),
+        (t) => OrderingTerm.asc(t.sizePx),
+      ])
+      ..limit(limit);
+    if (after != null) {
+      query.where(
+        (t) =>
+            t.pid.isBiggerThanValue(after.pid) |
+            (t.pid.equals(after.pid) &
+                t.sizePx.isBiggerThanValue(after.sizePx)),
+      );
+    }
+    return (await query.get()).map(_record).toList();
+  }
+
+  @override
   Future<void> removeExactly(String pid, List<OwedPin> pins) async {
     for (final pin in pins) {
       await (db.delete(db.artworkPins)..where(
@@ -174,6 +228,15 @@ class NoArtworkPinStore implements ArtworkPinStore {
 
   @override
   Future<void> put(ArtworkPinRecord pin) async {}
+
+  @override
+  Future<void> recordUrl(ArtworkPinRecord pin, String artUrl) async {}
+
+  @override
+  Future<List<ArtworkPinRecord>> pinsAfter(
+    PinCursor? after, {
+    required int limit,
+  }) async => const [];
 
   @override
   Future<void> removeExactly(String pid, List<OwedPin> pins) async {}

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 
+import 'refresh_in_place.dart';
+
 /// Pacing and deferral for the live invalidation fan-out.
 ///
 /// The server already coalesces change hints into a 250 ms window per
@@ -37,10 +39,16 @@ import 'package:flutter_riverpod/misc.dart';
 /// invalidation can be applied. A build slower than the window is not
 /// restarted; it finishes, and the data it fetched before the change is
 /// replaced one window later.
+///
+/// A write this client made is a run of its own, made outside the pacer
+/// the moment the server answered, and [PacedRefresh.owe] is how the
+/// pacer hears of it: one more run is owed once the server has caught
+/// up with itself.
 class PacedRefresh {
   PacedRefresh({
     required this.fanOut,
     this.retry,
+    this.owed,
     this.window = const Duration(seconds: 1),
   });
 
@@ -52,12 +60,22 @@ class PacedRefresh {
   /// contract. Null falls back to [fanOut], making retries full runs.
   final bool Function()? retry;
 
+  /// The full fan-out for the run [owe] asked for, on its echo or at the
+  /// window's end: that run is the first to see the server caught up
+  /// with the write, and a run of hints may not end for a long while
+  /// after it. Null falls back to [fanOut].
+  final bool Function()? owed;
+
   /// How close together two runs may come.
   final Duration window;
 
   Timer? _cooldown;
   var _pendingHint = false;
   var _owesRetry = false;
+  var _awaitsEcho = false;
+
+  /// Whether the next full run is the one [owe] asked for.
+  var _owedRun = false;
   var _disposed = false;
 
   /// A change hint for this topic. After [dispose] it is a no-op: a
@@ -65,11 +83,36 @@ class PacedRefresh {
   /// still deliver one, and it must not revive a dead session's timer.
   void hint() {
     if (_disposed) return;
+    if (_awaitsEcho) {
+      // The echo of the write [owe] was told of: the server has caught
+      // up, so the owed run is made now, whatever is left of the window.
+      _awaitsEcho = false;
+      _pendingHint = false;
+      _cooldown?.cancel();
+      _cooldown = null;
+    }
     if (_cooldown != null) {
       _pendingHint = true;
       return;
     }
     _run(full: true);
+  }
+
+  /// The topic's fan-out was just run from outside, for a write this
+  /// client made, and one more run is owed: what the server answers the
+  /// instant a write returns can lag the write. The run is made on the
+  /// next [hint], which the server sends once it has caught up, or at
+  /// the window's end when none comes, as [owed] either way. The window
+  /// starts over here, so the owed run never shares an instant with the
+  /// one it follows, and it covers whatever was pending or deferred
+  /// before.
+  void owe() {
+    if (_disposed) return;
+    _cooldown?.cancel();
+    _cooldown = Timer(window, _release);
+    _pendingHint = true;
+    _awaitsEcho = true;
+    _owedRun = true;
   }
 
   void _run({required bool full}) {
@@ -82,8 +125,15 @@ class PacedRefresh {
     // next window re-runs in full, which also supersedes whatever
     // partial debt the broken run left behind.
     try {
-      final complete = full ? fanOut() : (retry ?? fanOut)();
+      final run = !full
+          ? retry ?? fanOut
+          : _owedRun
+          ? owed ?? fanOut
+          : fanOut;
+      final complete = run();
       _owesRetry = !complete;
+      // Kept through a throw: the rerun is as owed as this one.
+      _owedRun = false;
     } catch (_) {
       _pendingHint = true;
       rethrow;
@@ -95,6 +145,7 @@ class PacedRefresh {
   void _release() {
     if (_disposed) return;
     _cooldown = null;
+    _awaitsEcho = false;
     // A hint outranks a retry: the full run covers everything a partial
     // one would have, and recomputes what is owed from scratch.
     if (_pendingHint) {
@@ -115,14 +166,23 @@ class PacedRefresh {
     _cooldown = null;
     _pendingHint = false;
     _owesRetry = false;
+    _awaitsEcho = false;
+    _owedRun = false;
   }
 }
 
+/// How many quiet spells a run of hints that never pauses waits before
+/// [QuietRefresh] runs anyway, and again after each such run.
+const kQuietCeiling = 6;
+
 /// Runs a fan-out once its hints stop coming for [quiet]: the trailing
 /// edge alone, for a read worth asking again after a run of changes
-/// rather than during one. What a run left owed (a first build it would
-/// not interrupt) is asked again a [quiet] later, under the same
-/// contract as [PacedRefresh].
+/// rather than during one. A server is not always silent for that long,
+/// so a run that never pauses is also answered [kQuietCeiling] quiet
+/// spells after its first hint, and every as many after, for as long as
+/// it lasts. What a run left owed (a first build it would not interrupt)
+/// is asked again a [quiet] later, under the same contract as
+/// [PacedRefresh].
 class QuietRefresh {
   QuietRefresh({required this.fanOut, this.retry, required this.quiet});
 
@@ -130,28 +190,61 @@ class QuietRefresh {
   final bool Function()? retry;
   final Duration quiet;
 
-  Timer? _timer;
+  /// Ends when the hints have stopped for [quiet].
+  Timer? _pause;
+
+  /// Ends when the run has gone on for as long as it may unanswered.
+  Timer? _ceiling;
+
+  Timer? _retry;
+
+  /// Whether a hint came since the last run.
+  var _heard = false;
   var _disposed = false;
 
-  /// A change hint: the run waits for the hints to stop.
+  /// A change hint: the run waits for the hints to stop, or for its
+  /// ceiling.
   void hint() {
     if (_disposed) return;
-    _timer?.cancel();
-    _timer = Timer(quiet, () => _run(full: true));
+    _heard = true;
+    _retry?.cancel();
+    _retry = null;
+    _pause?.cancel();
+    _pause = Timer(quiet, _paused);
+    _ceiling ??= Timer(quiet * kQuietCeiling, _reachedCeiling);
+  }
+
+  void _paused() {
+    _pause = null;
+    _ceiling?.cancel();
+    _ceiling = null;
+    // The ceiling's run already answered every hint before it.
+    if (_heard) _run(full: true);
+  }
+
+  void _reachedCeiling() {
+    _ceiling = Timer(quiet * kQuietCeiling, _reachedCeiling);
+    _run(full: true);
   }
 
   void _run({required bool full}) {
-    _timer = null;
+    _retry?.cancel();
+    _retry = null;
     if (_disposed) return;
+    _heard = false;
     final complete = full ? fanOut() : (retry ?? fanOut)();
-    if (!complete) _timer = Timer(quiet, () => _run(full: false));
+    if (!complete) _retry = Timer(quiet, () => _run(full: false));
   }
 
   /// Drops whatever is pending and ignores every later call.
   void dispose() {
     _disposed = true;
-    _timer?.cancel();
-    _timer = null;
+    for (final timer in [_pause, _ceiling, _retry]) {
+      timer?.cancel();
+    }
+    _pause = null;
+    _ceiling = null;
+    _retry = null;
   }
 }
 
@@ -167,8 +260,13 @@ class QuietRefresh {
 /// turned that mark into a fetch nobody asked for, on every sweep, for
 /// every once-opened screen. The hooks carry the states passively:
 /// birth and every change, with disposal pruning the set.
+///
+/// It keeps, the same way, which providers hold an error: a read that
+/// failed and was not asked again since, which a reconnect asks again
+/// whatever the server says changed.
 final class FirstBuildObserver extends ProviderObserver {
   final _building = <ProviderBase<Object?>>{};
+  final _errored = <ProviderBase<Object?>>{};
 
   /// Whether [provider]'s first build is in flight: its state is a bare
   /// loading, with no previous value to show and no error. That is
@@ -176,6 +274,10 @@ final class FirstBuildObserver extends ProviderObserver {
   /// a reload copies it forward, so neither reads as bare.
   bool inFirstBuild(ProviderBase<Object?> provider) =>
       _building.contains(provider);
+
+  /// Whether [provider]'s state holds an error: failed, or retrying
+  /// after a failure.
+  bool inError(ProviderBase<Object?> provider) => _errored.contains(provider);
 
   static bool _isBareLoading(Object? state) =>
       state is AsyncValue<Object?> &&
@@ -188,6 +290,11 @@ final class FirstBuildObserver extends ProviderObserver {
       _building.add(provider);
     } else {
       _building.remove(provider);
+    }
+    if (state is AsyncValue<Object?> && state.hasError) {
+      _errored.add(provider);
+    } else {
+      _errored.remove(provider);
     }
   }
 
@@ -222,11 +329,13 @@ final class FirstBuildObserver extends ProviderObserver {
   @override
   void didDisposeProvider(ProviderObserverContext context) {
     _building.remove(context.provider);
+    _errored.remove(context.provider);
   }
 
   @override
   void didUnmountProvider(ProviderObserverContext context) {
     _building.remove(context.provider);
+    _errored.remove(context.provider);
   }
 }
 
@@ -239,9 +348,16 @@ class InvalidationFanOut {
     required this.container,
     this.providers = const [],
     this.families = const [],
+    this.pagedProviders = const [],
+    this.pagedFamilies = const [],
+    this.owed,
+    this.failed,
     this.firstBuilds,
     this.prelude,
-  });
+  }) : assert(
+         owed != null || (pagedProviders.isEmpty && pagedFamilies.isEmpty),
+         'a paged listing is told its depth through the ledger',
+       );
 
   final ProviderContainer container;
 
@@ -251,6 +367,16 @@ class InvalidationFanOut {
   /// The topic's families, applied per live instance so one instance
   /// mid-first-build defers alone rather than holding back the family.
   final List<Family> families;
+
+  /// Those of [providers] and [families] that page and refresh in place.
+  /// A sweep tells each, through [owed], the depth it owes before it
+  /// invalidates it.
+  final List<ProviderBase<Object?>> pagedProviders;
+  final List<Family> pagedFamilies;
+  final OwedDepths? owed;
+
+  /// The paged listings whose last refresh failed, for [sweepUnhealthy].
+  final FailedRefreshes? failed;
 
   /// The ledger of in-flight first builds. Null means no ledger is
   /// registered and everything is invalidated unconditionally, which is
@@ -263,32 +389,71 @@ class InvalidationFanOut {
   final void Function()? prelude;
 
   /// What a run left alone mid-first-build, owed an invalidation.
-  final _owed = <ProviderBase<Object?>>{};
+  final _deferred = <ProviderBase<Object?>>{};
 
-  bool sweep() {
+  /// The full fan-out, each paged listing owed [depth]. A deferred one
+  /// keeps the depth it was told for the retry that reaches it.
+  bool sweep([CatalogRefresh depth = CatalogRefresh.head]) {
     prelude?.call();
-    _owed.clear();
+    _deferred.clear();
+    owed?.prune();
     for (final family in families) {
+      final paged = pagedFamilies.contains(family);
       // Snapshotted: invalidation schedules work on the container, and
       // the enumeration should not be live while it happens.
       for (final reference in container.allProviders(family: family).toList()) {
+        if (paged) owed?.owe(reference.provider, depth);
         _apply(reference.provider);
       }
     }
-    providers.forEach(_apply);
-    return _owed.isEmpty;
+    for (final provider in providers) {
+      if (pagedProviders.contains(provider)) owed?.owe(provider, depth);
+      _apply(provider);
+    }
+    return _deferred.isEmpty;
+  }
+
+  /// Invalidates only the reads that are not current: one that holds an
+  /// error, and a paged listing whose last refresh failed, owed the extent
+  /// it held, as a run's quiet edge reads it, which may have failed too.
+  /// With no ledger nothing can be told apart, and every read is swept.
+  /// What it defers joins what a [retry] applies.
+  bool sweepUnhealthy() {
+    final ledger = firstBuilds;
+    failed?.prune();
+    bool unhealthy(ProviderBase<Object?> provider) =>
+        ledger == null ||
+        ledger.inError(provider) ||
+        (failed?.failedLast(provider) ?? false);
+    for (final family in families) {
+      final paged = pagedFamilies.contains(family);
+      for (final reference in container.allProviders(family: family).toList()) {
+        final provider = reference.provider;
+        if (!unhealthy(provider)) continue;
+        if (paged) owed?.owe(provider, CatalogRefresh.loaded);
+        _apply(provider);
+      }
+    }
+    for (final provider in providers) {
+      if (!unhealthy(provider)) continue;
+      if (pagedProviders.contains(provider)) {
+        owed?.owe(provider, CatalogRefresh.loaded);
+      }
+      _apply(provider);
+    }
+    return _deferred.isEmpty;
   }
 
   bool retry() {
-    final owed = _owed.toList();
-    _owed.clear();
-    owed.forEach(_apply);
-    return _owed.isEmpty;
+    final deferred = _deferred.toList();
+    _deferred.clear();
+    deferred.forEach(_apply);
+    return _deferred.isEmpty;
   }
 
   void _apply(ProviderBase<Object?> provider) {
     if (firstBuilds?.inFirstBuild(provider) ?? false) {
-      _owed.add(provider);
+      _deferred.add(provider);
       return;
     }
     // On an instance that has since been disposed this is a no-op, and

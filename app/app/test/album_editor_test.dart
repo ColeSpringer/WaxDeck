@@ -1,6 +1,8 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/metadata/release_workbench.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/sync/catalog_reads.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -249,6 +251,48 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('typed-by-hand'), findsOneWidget);
     expect(find.text('999999999999'), findsNothing);
+  });
+
+  testWidgets('a catalog refresh keeps what is being typed and takes what '
+      'changed elsewhere', (tester) async {
+    final repo = _repo();
+    await _pump(tester, repo);
+    expect(find.text('you'), findsNothing);
+
+    await tester.enterText(
+      _byId(SemanticsIds.metadataField('barcode')),
+      'typed-by-hand',
+    );
+    await tester.pumpAndSettle();
+    // Another administrator sets the barcode and the label, and the
+    // catalog says so.
+    repo.albums[_album] = const AlbumDetail(
+      pid: _album,
+      title: 'Long Exposure',
+      barcode: '999999999999',
+      label: 'Elsewhere Sound',
+      country: 'US & Europe',
+    );
+    repo.entityCurationByKey['album/$_album'] = const [
+      EntityCuratedField(
+        field: 'label',
+        value: 'Elsewhere Sound',
+        source: 'user',
+        locked: true,
+      ),
+    ];
+    ProviderScope.containerOf(
+      tester.element(find.byType(ReleaseWorkbench)),
+      listen: false,
+    ).read(catalogFanOutProvider).sweep(CatalogRefresh.head);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('typed-by-hand'), findsOneWidget);
+    expect(find.text('999999999999'), findsNothing);
+    expect(find.text('Elsewhere Sound'), findsOneWidget);
+    // The label's source is the curation read, which the sweep reached too.
+    expect(find.text('you'), findsOneWidget);
   });
 
   // The server normalizes barcode and country on the way in, so what

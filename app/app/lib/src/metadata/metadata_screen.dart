@@ -17,6 +17,7 @@ import '../shell/in_flight.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import '../sync/catalog_writes.dart';
 import 'acquisition_sheet.dart';
 import 'artwork_manager.dart';
 import 'chapter_section.dart';
@@ -92,12 +93,10 @@ class MetadataScreen extends ConsumerWidget {
       semanticsId: SemanticsIds.metadataEditor,
       onBack: () => context.back(),
       backSemanticsId: SemanticsIds.navBack,
-      // A filling sliver rather than a body, so the pane can keep its
-      // save bar under its own scroll the same way it does when it is
-      // mounted beside the workbench's list.
-      slivers: <Widget>[
-        SliverFillRemaining(hasScrollBody: true, child: MetadataPane(pid: pid)),
-      ],
+      // A fill rather than a body, so the pane can keep its save bar
+      // under its own scroll, on the page's foot, the same way it does
+      // when it is mounted beside the workbench's list.
+      fill: MetadataPane(pid: pid),
     );
   }
 }
@@ -117,7 +116,6 @@ class MetadataPane extends ConsumerStatefulWidget {
     super.key,
     required this.pid,
     this.embedded = false,
-    this.onSaved,
     this.onDirtyChanged,
     this.mayLeave,
   });
@@ -135,12 +133,6 @@ class MetadataPane extends ConsumerStatefulWidget {
   /// belongs to the list beside it - and takes pane gutters rather than
   /// the page's.
   final bool embedded;
-
-  /// Fired after a save committed, for a host whose other panes read
-  /// the same item: the controller refetches only itself, so a list
-  /// beside this pane would keep the old title without it. Fired
-  /// whether or not this pane is still up.
-  final VoidCallback? onSaved;
 
   /// Reports whether the draft holds anything unsaved, so a host that
   /// replaces this pane on a selection change can ask before it
@@ -233,7 +225,6 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
   Future<void> _save(MetadataEditorState state) => _run(_Work.save, () async {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider);
-    final onSaved = widget.onSaved;
     final changes = _draft.changes(state);
     if (changes.isEmpty) return;
     final outcome = await ref
@@ -251,10 +242,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
       setState(() => _writeBackFailures = outcome.writeBackFailures);
       _reportDirty();
     }
-    // Even a refused save committed the calls before the refusal, so
-    // the host's other readers of this item are stale either way; and
-    // what it says is said where the visitor is, this pane up or not.
-    onSaved?.call();
+    // What it says is said where the visitor is, this pane up or not.
     final messages = <String>[
       ...outcome.warnings,
       // A locked field keeps the server's sentence, which names the
@@ -399,41 +387,38 @@ class _MetadataPaneState extends ConsumerState<MetadataPane>
     final padding = widget.embedded
         ? const EdgeInsets.all(WaxSpace.s16)
         : sizeClass.gutter.add(const EdgeInsets.only(bottom: WaxSpace.s32));
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Expanded(
-          child: switch (editor) {
-            AsyncData(:final value) => SingleChildScrollView(
-              padding: padding,
-              child: _body(context, value, changes!, sizeClass),
-            ),
-            AsyncValue(hasError: true) => Padding(
-              padding: padding,
-              child: AsyncFailureCard.from(
-                editor,
-                title: context.l10n.metadataLoadError,
-                onRetry: () =>
-                    ref.invalidate(metadataControllerProvider(widget.pid)),
-              ),
-            ),
-            _ => const SkeletonShapes(shape: SkeletonShape.detail),
-          },
+    return WaxFootedPane(
+      body: switch (editor) {
+        AsyncData(:final value) => SingleChildScrollView(
+          padding: padding,
+          child: _body(context, value, changes!, sizeClass),
         ),
-        // Gated on the same pattern as the body: a bar offering Save
-        // over an error state (or a skeleton) would be saving against a
-        // state the pane is not showing.
-        if (editor case AsyncData(:final value))
-          MetadataSaveBar(
-            count: changes!.count,
-            busy: busy,
-            saving: busyBy(_Work.save),
-            onSave: () => _save(value),
-            writeBackFailures: _writeBackFailures,
-            onDismissFailures: () =>
-                setState(() => _writeBackFailures = const []),
+        AsyncValue(hasError: true) => Padding(
+          padding: padding,
+          child: AsyncFailureCard.from(
+            editor,
+            title: context.l10n.metadataLoadError,
+            onRetry: () =>
+                ref.invalidate(metadataControllerProvider(widget.pid)),
           ),
-      ],
+        ),
+        _ => const SkeletonShapes(shape: SkeletonShape.detail),
+      },
+      // Gated on the same pattern as the body: a bar offering Save over
+      // an error state (or a skeleton) would be saving against a state
+      // the pane is not showing.
+      foot: switch (editor) {
+        AsyncData(:final value) => MetadataSaveBar(
+          count: changes!.count,
+          busy: busy,
+          saving: busyBy(_Work.save),
+          onSave: () => _save(value),
+          writeBackFailures: _writeBackFailures,
+          onDismissFailures: () =>
+              setState(() => _writeBackFailures = const []),
+        ),
+        _ => null,
+      },
     );
   }
 
@@ -780,7 +765,7 @@ class _Header extends ConsumerWidget {
     if (request == null || !context.mounted) return;
     final repository = ref.read(repositoryProvider);
     // The answer outlives this editor when the visitor leaves meanwhile.
-    final container = ProviderScope.containerOf(context, listen: false);
+    final writes = ref.read(catalogWritesProvider);
     try {
       if (request.clear) {
         await repository.clearItemAcquisition(
@@ -806,10 +791,8 @@ class _Header extends ConsumerWidget {
           force: true,
         );
       }
-      // Through what was read before the await: the ref may be a
-      // disposed one by now, and invalidating through it throws into a
-      // discarded future.
-      container.invalidate(metadataControllerProvider(pid));
+      // The editor is among the reads this sweeps.
+      writes.landed();
       messenger.show(
         request.clear ? l10n.metadataOriginRemoved : l10n.metadataOriginSaved,
       );

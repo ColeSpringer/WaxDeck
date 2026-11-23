@@ -11,8 +11,7 @@ import '../providers.dart';
 import '../shell/async_box_face.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
-import 'books_controller.dart';
-import 'series_controller.dart';
+import '../sync/catalog_writes.dart';
 
 /// Reads series pages until the list is exhausted, or until [atLeast]
 /// of them are in hand.
@@ -193,6 +192,7 @@ Future<void> _merge({
   required BookSeries survivor,
   required String loser,
 }) async {
+  final writes = container.read(catalogWritesProvider);
   try {
     await container
         .read(repositoryProvider)
@@ -201,11 +201,8 @@ Future<void> _merge({
           survivorPid: survivor.pid,
           loserPids: <String>[loser],
         );
-    container
-      ..invalidate(bookSeriesProvider)
-      ..invalidate(bookSeriesCountProvider)
-      ..invalidate(bookSeriesDetailProvider)
-      ..invalidate(bookDetailProvider);
+    // The series reads, and each book that names its series.
+    writes.landed();
     messenger.show(l10n.bookSeriesMergeDone(survivor.name));
   } on WaxDeckApiException catch (e) {
     messenger.show(explainRefusal(l10n, e), channel: ShellChannel.seriesMerge);

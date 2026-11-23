@@ -33,33 +33,47 @@ final liveLinkProvider = NotifierProvider<LiveLink, bool?>(LiveLink.new);
 
 /// Whether this client is reaching the server's live channel, or null
 /// where this build has no live channel to speak of (a widget test, a
-/// session that has not started one).
+/// session that has not started one) or has had no answer from it yet.
 ///
 /// The two platforms answer from different places for the same reason:
 /// native runs a sync engine whose status is already a stream, and web
-/// runs an invalidation listener that reports as it goes.
+/// runs an invalidation listener that reports as it goes. False is a link
+/// lost or a server that did not answer, on native what the screens call
+/// offline ([offlineProvider]). A first connect still out is neither up
+/// nor down: no banner stands for it, and the socket coming up after it
+/// is a turn to up like any other to whoever listens for one.
 final liveConnectionProvider = Provider.autoDispose<bool?>((ref) {
   final engine = ref.watch(syncEngineProvider);
   if (engine != null) {
-    if (!engine.started) return null;
+    // Watched before anything is answered: `started` says nothing when it
+    // moves, and a status comes with every start.
     final status = ref.watch(syncStatusProvider).value ?? engine.current;
-    return status.online;
+    if (!engine.started) return null;
+    if (status.online) return true;
+    return ref.watch(offlineProvider) ? false : null;
   }
   return ref.watch(liveLinkProvider);
 });
 
 /// Whether the server was replaced under this client.
 ///
-/// A restart is exactly when the socket comes back, so every reconnect
-/// re-probes the unauthenticated health endpoint, which already carries
-/// the build and the API version. The first answer is the baseline; a
-/// later one that disagrees means the binary this client was talking to
-/// is gone, and the bundle in this tab was built against it.
+/// A restart is exactly when the socket comes back, so every turn of the
+/// link to up re-probes the unauthenticated health endpoint, which already
+/// carries the build and the API version. The first answer is the
+/// baseline; a later one that disagrees means the binary this client was
+/// talking to is gone, and the bundle in this tab was built against it.
+///
+/// The baseline is one server's. It outlives a session, so a server
+/// updated between a sign-out and the next sign-in is said; another
+/// address starts over, the next server's first answer being its own
+/// baseline and no update.
 class ServerBuildWatcher extends Notifier<bool> {
   String? _baseline;
 
   @override
   bool build() {
+    ref.watch(serverBaseUrlProvider);
+    _baseline = null;
     ref.listen(liveConnectionProvider, (previous, next) {
       if (next == true && previous != true) unawaited(_probe());
     }, fireImmediately: true);
@@ -67,9 +81,11 @@ class ServerBuildWatcher extends Notifier<bool> {
   }
 
   Future<void> _probe() async {
+    final server = ref.read(serverBaseUrlProvider);
     try {
       final health = await ref.read(repositoryProvider).health();
-      if (!ref.mounted) return;
+      // An answer from the address before this one says nothing of this.
+      if (!ref.mounted || ref.read(serverBaseUrlProvider) != server) return;
       // The API version counts as much as the build: a bundle from
       // before a contract change is the case the banner exists for.
       final seen = '${health.version}/${health.apiVersion}';

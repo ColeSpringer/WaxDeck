@@ -71,6 +71,12 @@ const _ids = DeckBarIds(
   more: SemanticsIds.deckMore,
 );
 
+/// Whether [DeckBarHost] draws anything: the shell leaves the slot
+/// empty otherwise, so the window's bottom inset goes to the chrome.
+final deckBarDrawsProvider = Provider<bool>(
+  (ref) => ref.watch(nowPlayingSlotProvider) is! EmptySlot,
+);
+
 /// The deck bar, bound to what this app is playing.
 ///
 /// It lives in the shell's own slot, outside every branch navigator, so

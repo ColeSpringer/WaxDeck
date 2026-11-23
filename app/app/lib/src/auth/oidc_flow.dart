@@ -34,6 +34,13 @@ abstract interface class LoopbackReceiverPort {
   Future<void> close();
 }
 
+/// What a native flow ends with when the one who started it no longer
+/// wants it once its code is in: the code is never redeemed, so no session
+/// is made.
+class OidcAbandoned implements Exception {
+  const OidcAbandoned();
+}
+
 /// Runs the client half of the OIDC login flows against the ports above.
 /// Pure logic, no widget coupling; tests drive it with fakes.
 ///
@@ -100,11 +107,13 @@ class OidcLoginFlow {
       urlOpener.open(provider.startUrl);
 
   /// App mode (Android): open the browser and wait for the waxdeck://auth
-  /// deep link carrying the one-time code, then exchange it.
+  /// deep link carrying the one-time code, then exchange it, unless
+  /// [wanted] says otherwise by then ([OidcAbandoned]).
   Future<LoginResult> loginWithDeepLink(
     OidcProvider provider, {
     String? deviceName,
     Duration timeout = defaultTimeout,
+    bool Function()? wanted,
   }) async {
     final links = deepLinks;
     if (links == null) {
@@ -126,8 +135,10 @@ class OidcLoginFlow {
     await urlOpener.open(
       startUrlFor(provider, mode: 'app', challenge: deriveChallenge(verifier)),
     );
+    final arrived = await code;
+    if (wanted != null && !wanted()) throw const OidcAbandoned();
     return repository.oidcExchange(
-      code: await code,
+      code: arrived,
       verifier: verifier,
       deviceName: deviceName,
     );
@@ -135,12 +146,14 @@ class OidcLoginFlow {
 
   /// Loopback mode (desktop): bind a localhost listener that answers the
   /// redirect with [page], open the browser, and exchange the code the
-  /// redirect delivers.
+  /// redirect delivers, unless [wanted] says otherwise by then
+  /// ([OidcAbandoned]).
   Future<LoginResult> loginWithLoopback(
     OidcProvider provider, {
     required LoopbackPage page,
     String? deviceName,
     Duration timeout = defaultTimeout,
+    bool Function()? wanted,
   }) async {
     final bind = bindLoopbackReceiver;
     if (bind == null) {
@@ -158,6 +171,7 @@ class OidcLoginFlow {
         ),
       );
       final code = await receiver.code.timeout(timeout);
+      if (wanted != null && !wanted()) throw const OidcAbandoned();
       return await repository.oidcExchange(
         code: code,
         verifier: verifier,

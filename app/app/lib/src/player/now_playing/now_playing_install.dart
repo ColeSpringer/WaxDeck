@@ -123,7 +123,12 @@ mixin _NowPlayingInstall
       // is safe to let go of.
       _feeder.started();
       _skipRun = 0;
-      state = NowPlaying(entry: entry, item: item, session: session);
+      // A row read again while this loaded is the one to draw.
+      final named = switch (_known[entry.pid]) {
+        final held? when held.mediaType == item.mediaType => held,
+        _ => item,
+      };
+      state = NowPlaying(entry: entry, item: named, session: session);
       _sessionEntryLoaded = true;
       await _syncPreload();
     } on Object catch (error) {
@@ -174,10 +179,11 @@ mixin _NowPlayingInstall
     }
   }
 
-  /// Takes over a stream the engine is already playing, after it crossed
-  /// out of the previous item and into this one.
+  /// Takes over the media the engine is already playing, after it crossed
+  /// out of the previous item and into this one ([armed]: a stream, or a
+  /// device copy).
   @override
-  Future<void> _adopt(QueueEntry entry, PlayInfo info) async {
+  Future<void> _adopt(QueueEntry entry, _Armed armed) async {
     // The same bail every other start-class entry point has: radio took
     // the engine between the crossing and the queue catching up, so the
     // stream is the station's and there is nothing of this item's to
@@ -207,7 +213,7 @@ mixin _NowPlayingInstall
       }
       // A replacement timeline minted while the outgoing one played is
       // swapped in here, at the seam that is happening now, before the
-      // session that will own the stream exists. Nothing to do in the
+      // session that will own the media exists. Nothing to do in the
       // ordinary case, where the crossing was inside the timeline
       // already loaded.
       final swapped = await _feeder.settleSwap(entry);
@@ -220,7 +226,10 @@ mixin _NowPlayingInstall
         return;
       }
       final session = _build(item, timeline: _feeder.slotAt(entry));
-      final adopting = session.adopt(info);
+      final copy = armed.copy;
+      final adopting = copy != null
+          ? session.adoptCopy(copy)
+          : session.adopt(armed.info!);
       _install(session, entry);
       // Published as soon as the session exists rather than once it
       // settles: the item is already playing and this session speaks

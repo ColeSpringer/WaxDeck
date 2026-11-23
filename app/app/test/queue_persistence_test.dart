@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
+import 'package:waxdeck/src/downloads/held_covers.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_persistence.dart';
@@ -11,6 +12,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
 import 'app_host.dart';
+import 'artwork_fixtures.dart';
 import 'debug_prints.dart';
 import 'fakes.dart';
 
@@ -293,6 +295,123 @@ void main() {
       expect(offer.savedAt, DateTime.utc(2026, 7, 25));
     });
 
+    test('the offer carries the cover pinned for its item', () async {
+      // Read with no server: the pin is the only cover the deck bar can
+      // draw, and the store reaches it only through a URL.
+      const pid = 'tr-01JZX5N8QW3F4V9T2B7KDSOWHAT';
+      const art = 'http://deck.local:4420/api/v1/items/$pid/art';
+      final db = inMemoryMirrorDatabase();
+      addTearDown(db.close);
+      await db
+          .into(db.mirrorItems)
+          .insert(
+            MirrorItemsCompanion.insert(
+              pid: pid,
+              ulid: pid.substring(3),
+              mediaType: 'music',
+              title: 'So What',
+              durationMs: 545000,
+              sortKey: 'so what',
+            ),
+          );
+      await DriftArtworkPinStore(db).put(
+        ArtworkPinRecord(
+          pid: pid,
+          sizePx: 1024,
+          // Pinned while the server was at another address.
+          artUrl: 'http://old.local:4420/api/v1/items/$pid/art',
+          etag: '"1024"',
+          localPath: '/art/$pid-1024.img',
+          sizeBytes: 1024,
+          pinnedAt: DateTime.utc(2026, 11, 18),
+        ),
+      );
+      final store = RecordingQueueStore()
+        ..saved = StoredQueue(
+          entries: const [
+            StoredQueueEntry(queueId: 'q0', pid: pid, sourceRank: 0),
+          ],
+          currentIndex: 0,
+          shuffled: false,
+          repeat: 'off',
+          sourceKind: 'album',
+          sourceLabel: 'Kind of Blue',
+          nextQueueId: 1,
+          updatedAt: DateTime.utc(2026, 7, 25),
+        );
+
+      final offer = await _container(
+        store,
+        db: db,
+        repository: ArtUnderBase('http://deck.local:4420'),
+      ).read(queueRestoreProvider.future);
+
+      expect(offer!.currentItem!.artUrl, art);
+    });
+
+    test('a cover pinned for a held download after the offer was read '
+        'reaches the offer', () async {
+      // A launch offline after a sign-out took the pins: the offer reads
+      // its item with no cover, and the server comes into reach later.
+      const pid = 'tr-01JZX5N8QW3F4V9T2B7KDSOWHAT';
+      const art = 'http://deck.local:4420/api/v1/items/$pid/art';
+      final db = inMemoryMirrorDatabase();
+      addTearDown(db.close);
+      await db
+          .into(db.mirrorItems)
+          .insert(
+            MirrorItemsCompanion.insert(
+              pid: pid,
+              ulid: pid.substring(3),
+              mediaType: 'music',
+              title: 'So What',
+              durationMs: 545000,
+              sortKey: 'so what',
+            ),
+          );
+      final store = RecordingQueueStore()
+        ..saved = StoredQueue(
+          entries: const [
+            StoredQueueEntry(queueId: 'q0', pid: pid, sourceRank: 0),
+          ],
+          currentIndex: 0,
+          shuffled: false,
+          repeat: 'off',
+          sourceKind: 'album',
+          sourceLabel: 'Kind of Blue',
+          nextQueueId: 1,
+          updatedAt: DateTime.utc(2026, 7, 25),
+        );
+      final downloads = FakeDownloads()
+        ..setStored(const <DownloadedItem>[
+          DownloadedItem(pid: pid, sizeBytes: 1024, files: 1, complete: true),
+        ]);
+      addTearDown(downloads.dispose);
+      final container = appContainer(
+        repo: ArtUnderBase('http://deck.local:4420'),
+        mirror: db,
+        downloads: downloads,
+        artwork: _PinsWhenAsked(db),
+        extra: [
+          queueStoreProvider.overrideWithValue(store),
+          queueSaveDebounceProvider.overrideWithValue(_tick),
+        ],
+      );
+      final shown = container.listen(queueRestoreProvider, (_, _) {});
+      addTearDown(shown.close);
+      final before = await container.read(queueRestoreProvider.future);
+      expect(before!.currentItem!.artUrl, isNull);
+
+      await pinHeldCovers(container);
+      await _settle();
+
+      final after = container.read(queueRestoreProvider).value!;
+      expect(after.currentItem!.artUrl, art);
+      expect(after.currentItem!.title, 'So What');
+      expect(after.queue, same(before.queue));
+      expect(after.savedAt, before.savedAt);
+    });
+
     test(
       'a server-side session is offered with the real item behind it',
       () async {
@@ -511,4 +630,31 @@ void main() {
       expect(container.read(queueControllerProvider).isEmpty, isTrue);
     });
   });
+}
+
+/// Pins a cover in the mirror for each held download it is handed, and
+/// says so, as the native store does once the server answers.
+class _PinsWhenAsked extends FakeArtworkStore {
+  _PinsWhenAsked(this.db);
+
+  final MirrorDatabase db;
+
+  @override
+  void pinHeld(Map<String, String> held, {void Function(String pid)? landed}) =>
+      unawaited(() async {
+        for (final MapEntry(key: pid, value: artUrl) in held.entries) {
+          await DriftArtworkPinStore(db).put(
+            ArtworkPinRecord(
+              pid: pid,
+              sizePx: 1024,
+              artUrl: artUrl,
+              etag: '"1024"',
+              localPath: '/art/$pid-1024.img',
+              sizeBytes: 1024,
+              pinnedAt: DateTime.utc(2026, 11, 18),
+            ),
+          );
+          landed?.call(pid);
+        }
+      }());
 }

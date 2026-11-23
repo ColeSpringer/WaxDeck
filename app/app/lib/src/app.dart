@@ -148,6 +148,11 @@ class _ReducedMotion extends ConsumerWidget {
 /// goes to setup. Both answers arrive asynchronously, and neither the
 /// library nor the login form is the right thing to show meanwhile.
 ///
+/// A read that failed is answered, for the gate: Riverpod goes on asking
+/// for most of a minute, and a device whose server is out of reach needs
+/// the sign-in form, and the way to another server, before that. The
+/// redirect follows whatever a later asking answers.
+///
 /// It gates the first frame only. Once the router is up it stays up:
 /// signing out resolves the first-run probe again, and swapping the
 /// router back out for a spinner would tear down the navigator in the
@@ -170,12 +175,14 @@ class _BootGateState extends ConsumerState<_BootGate> {
     if (_started) return widget.child;
 
     final auth = ref.watch(authControllerProvider);
-    // A failed probe counts as answered: it means signed out.
-    var probing = auth.isLoading && !auth.hasValue;
+    var probing = _out(auth);
     final signedIn = auth.value?.authenticated ?? false;
     if (!probing && !signedIn) {
-      final bootstrap = ref.watch(bootstrapRequiredProvider);
-      probing = bootstrap.isLoading && !bootstrap.hasValue;
+      // The probe's own failure: what awaits it stays plainly loading
+      // until Riverpod has stopped asking.
+      probing =
+          _out(ref.watch(bootstrapRequiredProvider)) &&
+          !ref.watch(bootstrapStatusProvider).hasError;
     }
     if (probing) {
       return const ShellMessageArea(
@@ -189,4 +196,9 @@ class _BootGateState extends ConsumerState<_BootGate> {
     });
     return widget.child;
   }
+
+  /// Whether [read] has yet to answer or fail. Riverpod reports one it is
+  /// asking again as loading, carrying the failure.
+  static bool _out(AsyncValue<Object?> read) =>
+      read.isLoading && !read.hasValue && !read.hasError;
 }

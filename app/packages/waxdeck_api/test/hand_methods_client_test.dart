@@ -10,7 +10,12 @@ const _user = {
   'uploadEnabled': false,
 };
 
-const _loginAnswer = {'user': _user, 'token': 'tok-1', 'csrfToken': 'csrf-1'};
+const _loginAnswer = {
+  'user': _user,
+  'token': 'tok-1',
+  'csrfToken': 'csrf-1',
+  'sessionId': 'se-1',
+};
 
 const _timeline = {
   'pid': 'tl-1',

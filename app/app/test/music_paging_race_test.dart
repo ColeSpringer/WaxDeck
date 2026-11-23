@@ -58,7 +58,7 @@ final _library = <ItemSummary>[
 ];
 
 void main() {
-  test('a rebuild during loadMore is not overwritten', () async {
+  test('a refresh during loadMore waits for the page and keeps it', () async {
     final repo = GatedRepository(items: _library);
     final container = appContainer(repo: repo);
     final keepAlive = container.listen(musicItemsProvider(_tracks), (_, _) {});
@@ -68,26 +68,33 @@ void main() {
     expect(first.items, hasLength(MusicItemsController.pageSize));
     expect(first.hasMore, isTrue);
 
-    // Start paging, then restart the listing while the fetch is in
+    // Start paging, then refresh the listing while the fetch is in
     // flight, which is what a catalog invalidation does to an index that
     // is loading its second page.
-    repo.gate = Completer<void>();
+    final gate = repo.gate = Completer<void>();
     final loadMore = container
         .read(musicItemsProvider(_tracks).notifier)
         .loadMore();
     container.invalidate(musicItemsProvider(_tracks));
-    final rebuilt = await container.read(musicItemsProvider(_tracks).future);
-    expect(rebuilt.items, hasLength(MusicItemsController.pageSize));
-
-    // The stale page must be dropped, not appended over the new listing.
-    repo.gate!.complete();
-    await loadMore;
-    final after = container.read(musicItemsProvider(_tracks)).requireValue;
+    await container.pump();
+    await pumpEventQueue();
     expect(
-      after.items,
-      hasLength(MusicItemsController.pageSize),
-      reason: 'a stale page was appended to a listing that had restarted',
+      repo.listItemsCalls.where((call) => call.cursor == null),
+      hasLength(1),
+      reason: 'the refresh restarted the listing under a page in flight',
     );
+
+    repo.gate = null;
+    gate.complete();
+    await loadMore;
+    await container.pump();
+    final after = await container.read(musicItemsProvider(_tracks).future);
+    expect(
+      after.items.map((item) => item.pid),
+      _library.map((item) => item.pid),
+      reason: 'the page in flight was dropped, or read twice',
+    );
+    expect(after.loadingMore, isFalse);
   });
 
   test('a non-API failure mid-page does not wedge paging', () async {

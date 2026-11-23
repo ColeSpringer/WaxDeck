@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/art_slot.dart';
 import '../artwork/art_source_label.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
@@ -11,6 +12,7 @@ import '../providers.dart';
 import '../shell/in_flight.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import '../sync/catalog_writes.dart';
 import '../uploads/audio_drop_area.dart';
 import '../uploads/file_picker_port.dart';
 
@@ -36,42 +38,6 @@ const kArtworkExtensions = {
 /// refused with a sentence rather than with a 400 after the upload.
 const kArtworkMaxBytes = 16 * 1024 * 1024;
 
-/// One artwork slot an item can hold. Only `front` walks the album and
-/// artist chain; the rest resolve at the item's own level.
-enum ArtSlot {
-  front('front'),
-  back('back'),
-  disc('disc'),
-  booklet('booklet'),
-  background('background');
-
-  const ArtSlot(this.role);
-
-  final String role;
-
-  /// The slot's name where it stands on its own, over its tile.
-  String labelOf(AppLocalizations l10n) => switch (this) {
-    front => l10n.artSlotFront,
-    back => l10n.artSlotBack,
-    disc => l10n.artSlotDisc,
-    booklet => l10n.artSlotBooklet,
-    background => l10n.artSlotBackground,
-  };
-
-  /// The same name inside a sentence, which English lower-cases and
-  /// other languages may need an article for. A key of its own rather
-  /// than a fold applied to the label: lower-casing is an English rule
-  /// wearing a formatting disguise, and the sentences around it cannot
-  /// know the gender of the words in this list.
-  String inlineOf(AppLocalizations l10n) => switch (this) {
-    front => l10n.artSlotFrontInline,
-    back => l10n.artSlotBackInline,
-    disc => l10n.artSlotDiscInline,
-    booklet => l10n.artSlotBookletInline,
-    background => l10n.artSlotBackgroundInline,
-  };
-}
-
 /// Every artwork role, what is in it, and the verbs that fill or empty
 /// it. Own-versus-inherited is what the grid exists to answer: a front
 /// cover drawn here may belong to the album.
@@ -84,7 +50,6 @@ class ArtworkManager extends ConsumerStatefulWidget {
     this.writeBack = false,
     this.pinnable = true,
     this.domain = WaxDomain.music,
-    this.onChanged,
   });
 
   final String pid;
@@ -119,15 +84,6 @@ class ArtworkManager extends ConsumerStatefulWidget {
   /// server always refuses is worse than no switch. Ignored for
   /// entities, whose pin rides its own endpoint.
   final bool pinnable;
-
-  /// Called after this grid changes what the entity's artwork is.
-  ///
-  /// The reads this widget owns are invalidated for it; a screen drawing
-  /// the same cover from a read of its own - a detail read carrying the
-  /// resolved source, say - has to be told, and this manager has no
-  /// business knowing which provider that is. Called whether or not this
-  /// grid is still up, so it must not reach through its host's ref.
-  final VoidCallback? onChanged;
 
   @override
   ConsumerState<ArtworkManager> createState() => _ArtworkManagerState();
@@ -206,7 +162,9 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
       return;
     }
     final repository = ref.read(repositoryProvider);
-    final refresh = _refresher(slot);
+    final writes = ref.read(catalogWritesProvider);
+    final url = _urlFor(slot);
+    final redraw = _redrawer();
     await runAs((role: slot.role, action: _ArtAction.set), () async {
       try {
         // Whole in memory, unlike an upload: the endpoint takes one body.
@@ -231,7 +189,8 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
                 role: slot.role,
                 writeBack: writeBack,
               );
-        await refresh();
+        writes.landed(artUrls: {url});
+        redraw();
         messenger.show(
           result.writeBackFailures.isEmpty
               ? l10n.artworkReplaced(slot.labelOf(l10n))
@@ -258,7 +217,9 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
     if (!confirmed || !mounted) return;
     final messenger = ref.read(shellMessengerProvider);
     final repository = ref.read(repositoryProvider);
-    final refresh = _refresher(slot);
+    final writes = ref.read(catalogWritesProvider);
+    final url = _urlFor(slot);
+    final redraw = _redrawer();
     await runAs((role: slot.role, action: _ArtAction.clear), () async {
       try {
         final entity = widget.entityType;
@@ -271,7 +232,8 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
             role: slot.role,
           );
         }
-        await refresh();
+        writes.landed(artUrls: {url});
+        redraw();
         messenger.show(l10n.artworkCleared(slot.labelOf(l10n)));
       } on WaxDeckApiException catch (e) {
         messenger.show(explainError(l10n, e));
@@ -279,27 +241,22 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
     });
   }
 
-  /// What refreshes [slot] once a write to it lands, read before it is
-  /// sent: the write may land once this grid has gone. The store's own
-  /// eviction is the cache bust: it notes the URL as replaced and asks
-  /// for it under a new `v` everywhere. A counter here would bust a URL
-  /// only this screen draws.
-  Future<void> Function() _refresher(ArtSlot slot) {
-    final store = ref.read(artworkStoreProvider);
-    final url = _urlFor(slot);
+  /// What this grid redraws of its own once a write to a slot lands,
+  /// read before the write is sent: it may land once the grid has gone.
+  /// The rest is the write path's: the slot listing is one of the
+  /// catalog's reads, and the cover's eviction there is the cache bust,
+  /// which notes the URL as replaced and asks for it under a new `v`
+  /// everywhere. A counter here would bust a URL only this screen draws.
+  VoidCallback _redrawer() {
     final container = ProviderScope.containerOf(context, listen: false);
     final pid = widget.pid;
     final entity = widget.entityType;
-    final onChanged = widget.onChanged;
-    return () async {
-      await store.evict(url);
-      container.invalidate(itemArtRolesProvider(pid));
+    return () {
       // Setting an entity's front cover pins it and clearing one leaves
       // the pin as it stood, so the switch below is stale either way.
       if (entity != null) {
         container.invalidate(entityArtLockProvider((type: entity, pid: pid)));
       }
-      onChanged?.call();
       if (mounted) setState(() {});
     };
   }
@@ -330,9 +287,9 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider);
     final repository = ref.read(repositoryProvider);
+    final writes = ref.read(catalogWritesProvider);
     final container = ProviderScope.containerOf(context, listen: false);
     final pid = widget.pid;
-    final onChanged = widget.onChanged;
     await runAs((role: slot.role, action: _ArtAction.pin), () async {
       try {
         if (entity == null) {
@@ -351,12 +308,12 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager>
         }
         // Through what was read before the await: the pin may have been
         // written while this screen was being left, and a disposed ref
-        // throws, escaping into the future the switch discards.
+        // throws, escaping into the future the switch discards. The slot
+        // listing, which says which pin holds a slot, is swept.
+        writes.landed();
         if (entity != null) {
           container.invalidate(entityArtLockProvider((type: entity, pid: pid)));
         }
-        container.invalidate(itemArtRolesProvider(pid));
-        onChanged?.call();
         messenger.show(switch ((front, locked)) {
           (true, true) => l10n.artworkLockPinned,
           (true, false) => l10n.artworkLockUnpinned,

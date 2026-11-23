@@ -137,6 +137,163 @@ func TestLoadQueue(t *testing.T) {
 	}
 }
 
+// TestStatusCrossingAReloadIsNotTheReloads: a device reports on what it
+// plays when it likes, so a status of the media session a reload
+// replaces can be on the wire as the LOAD goes out, and is read after
+// it. Taken as the reload's own, it moved playback back to where the
+// reload had moved it from.
+func TestStatusCrossingAReloadIsNotTheReloads(t *testing.T) {
+	r, drv := newTestDriver(t)
+	ctx := context.Background()
+	items := testItems(3)
+	media := func(ev connect.DriverEvent) bool { return ev.Volume == nil }
+	if err := drv.Load(ctx, items, 0, 0, true); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	waitEvent(t, drv, "the first load's media report", media)
+
+	r.CrossNextLoad()
+	if err := drv.Load(ctx, items, 1, 4_000, true); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	ev := waitEvent(t, drv, "a media report after the reload", media)
+	if ev.Index != 1 || ev.PositionMS != 4_000 {
+		t.Fatalf("the first media report after the reload reads item %d at %dms, want item 1 at 4000", ev.Index, ev.PositionMS)
+	}
+}
+
+// TestAFailedLoadLeavesWhatPlaysReporting: a load the device refuses
+// leaves the media it was playing playing, and that media's reports
+// are all the session will hear about it, its end included.
+func TestAFailedLoadLeavesWhatPlaysReporting(t *testing.T) {
+	r, drv := newTestDriver(t)
+	ctx := context.Background()
+	items := testItems(2)
+	if err := drv.Load(ctx, items[:1], 0, 0, true); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	waitEvent(t, drv, "playing event", func(ev connect.DriverEvent) bool { return ev.Playing })
+
+	r.FailNextLoad("NOT_FOUND")
+	if err := drv.Load(ctx, items[1:], 0, 0, true); err == nil {
+		t.Fatal("a load the device refused succeeded")
+	}
+	r.Advance(5)
+	r.PushStatus()
+	waitEvent(t, drv, "a report on the media still playing", func(ev connect.DriverEvent) bool {
+		return ev.Volume == nil && ev.Playing && ev.PositionMS >= 5_000
+	})
+	r.FinishCurrent()
+	waitEvent(t, drv, "the media still playing finishing", func(ev connect.DriverEvent) bool { return ev.Finished })
+}
+
+// TestAReceiverKeepingItsSessionIDStillFinishes: a receiver that keeps
+// the media session id across loads names the replaced session in
+// every report on the new load, those it sends before its reply
+// included. Dropped as the replaced session's, the new media never
+// counted as played and its end never finished the load.
+func TestAReceiverKeepingItsSessionIDStillFinishes(t *testing.T) {
+	r, drv := newTestDriver(t)
+	ctx := context.Background()
+	items := testItems(2)
+	r.KeepSessionID()
+	if err := drv.Load(ctx, items[:1], 0, 0, true); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	waitEvent(t, drv, "playing event", func(ev connect.DriverEvent) bool { return ev.Playing })
+
+	r.AnnounceNextLoad()
+	if err := drv.Load(ctx, items[1:], 0, 0, true); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	r.FinishCurrent()
+	waitEvent(t, drv, "the reload finishing", func(ev connect.DriverEvent) bool { return ev.Finished })
+}
+
+// TestStatusCrossingASeekIsNotTheSeeks: a status of the playhead a seek
+// moves away from can be on the wire as the SEEK goes out. Stamped as
+// current, the session took it after writing the seek's position and
+// the scrubber jumped back.
+func TestStatusCrossingASeekIsNotTheSeeks(t *testing.T) {
+	r, drv := newTestDriver(t)
+	ctx := context.Background()
+	lc, ok := drv.(connect.LoadCounter)
+	if !ok {
+		t.Fatal("the driver does not number its loads")
+	}
+	media := func(ev connect.DriverEvent) bool { return ev.Volume == nil }
+	if err := drv.Load(ctx, testItems(1), 0, 0, true); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	waitEvent(t, drv, "the load's media report", media)
+	for len(drv.Events()) > 0 {
+		<-drv.Events()
+	}
+
+	r.Advance(7)
+	r.CrossNextSeek()
+	if err := drv.SeekTo(ctx, 90_000); err != nil {
+		t.Fatalf("SeekTo: %v", err)
+	}
+	ev := waitEvent(t, drv, "a current media report after the seek", func(ev connect.DriverEvent) bool {
+		return media(ev) && ev.Load == lc.CurrentLoad()
+	})
+	if ev.PositionMS < 90_000 {
+		t.Fatalf("the first current media report after the seek reads %dms, want the seek's 90000", ev.PositionMS)
+	}
+}
+
+// waitCurrent waits, well inside the status poll's interval, for a media
+// report stamped with the current load that satisfies ok: what the
+// reply to a command says, not what the next poll would.
+func waitCurrent(t *testing.T, drv connect.Driver, what string, ok func(connect.DriverEvent) bool) {
+	t.Helper()
+	lc := drv.(connect.LoadCounter)
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case ev := <-drv.Events():
+			if ev.Volume == nil && ev.Load == lc.CurrentLoad() && ok(ev) {
+				return
+			}
+		case <-deadline:
+			t.Fatalf("no current report of %s before the next poll", what)
+		}
+	}
+}
+
+// TestALoadReportsFromItsReply: a receiver that answers a LOAD and
+// broadcasts nothing has said what it plays in the reply alone.
+func TestALoadReportsFromItsReply(t *testing.T) {
+	_, drv := newTestDriver(t)
+	if err := drv.Load(context.Background(), testItems(1), 0, 30_000, true); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	waitCurrent(t, drv, "the load playing", func(ev connect.DriverEvent) bool {
+		return ev.Playing && ev.PositionMS >= 30_000
+	})
+}
+
+// TestASeekFromPausedReportsFromItsReply: a seek resumes playback, and a
+// receiver that broadcasts nothing says so in the reply alone.
+func TestASeekFromPausedReportsFromItsReply(t *testing.T) {
+	r, drv := newTestDriver(t)
+	ctx := context.Background()
+	if err := drv.Load(ctx, testItems(1), 0, 0, false); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	waitCurrent(t, drv, "the load paused", func(ev connect.DriverEvent) bool { return !ev.Playing })
+	if got := r.PlayerState(); got != "PAUSED" {
+		t.Fatalf("player state = %q, want PAUSED before the seek", got)
+	}
+	if err := drv.SeekTo(ctx, 90_000); err != nil {
+		t.Fatalf("SeekTo: %v", err)
+	}
+	waitCurrent(t, drv, "the seek playing", func(ev connect.DriverEvent) bool {
+		return ev.Playing && ev.PositionMS >= 90_000
+	})
+}
+
 func TestLoadQueuePausedPausesAfterStart(t *testing.T) {
 	r, drv := newTestDriver(t)
 	if err := drv.Load(context.Background(), testItems(2), 0, 0, false); err != nil {

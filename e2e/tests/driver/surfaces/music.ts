@@ -10,7 +10,7 @@ import {
 } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { chooseFromMenu, chooseOnce, clickThrough } from '../gestures';
+import { chooseFromMenu, chooseOnce, clickThrough, wheelIntoReach } from '../gestures';
 
 /// The dimensions the hub offers, which are also the index locations.
 export type MusicDimension = 'artists' | 'albums' | 'tracks' | 'genres' | 'years';
@@ -29,6 +29,34 @@ export class Music extends Surface {
   /// A row in an index: an artist, an album, a genre, a year.
   bucket(nth: number): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.indexBucket(nth)));
+  }
+
+  /// An index row by the name it shows. Rows are numbered by position,
+  /// which other workers' imports shift, so a spec names the one it
+  /// means. Anchored at the row's start.
+  indexRow(label: string): Locator {
+    const rows = `${semPrefix(SemanticsIdPrefixes.indexBucket)}:not(${semPrefix(SemanticsIdPrefixes.indexBucketMore)})`;
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return this.ctx.page.locator(rows).filter({ hasText: new RegExp(`^${escaped}`) });
+  }
+
+  /// Open an artist from the Artists index by name, settling on the
+  /// header's verbs. Through the row, so the page opens with the row's
+  /// label as the index had it.
+  async openArtist(label: string): Promise<void> {
+    const row = this.indexRow(label);
+    await wheelIntoReach(this.ctx.page, row);
+    await expect(row, `one Artists row reads ${label}`).toHaveCount(1);
+    await clickThrough(row, this.entityShuffle());
+  }
+
+  /// The entity editor's door in the open artist page's overflow.
+  async editEntity(settled: Locator): Promise<void> {
+    await chooseFromMenu(
+      this.entityOverflow(),
+      this.ctx.page.locator(sem(SemanticsIds.entityEditMetadata)),
+      { settled },
+    );
   }
 
   /// A row inside an opened bucket.

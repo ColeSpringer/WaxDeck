@@ -134,6 +134,7 @@ func (s *Server) ListListenLog(ctx context.Context, req ListListenLogRequestObje
 	out := ListenLogPage{Sessions: []ListenLogEntry{}}
 	for _, e := range res.Sessions {
 		entry := ListenLogEntry{
+			SessionId: e.SessionID,
 			Pid:       e.PID,
 			MediaType: StatsMediaType(e.MediaType),
 			StartedAt: e.StartedAt,

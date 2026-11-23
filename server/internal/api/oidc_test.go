@@ -415,6 +415,7 @@ func TestOidcCodeFlowWithChallenge(t *testing.T) {
 	if lr.User.Username != "samwise" || lr.Token == "" {
 		t.Fatalf("exchange login = %+v", lr)
 	}
+	wantSessionID(t, "exchange", &lr.SessionId, currentSession(t, ts, lr.Token))
 }
 
 func mustQueryParam(t *testing.T, rawURL, key string) string {

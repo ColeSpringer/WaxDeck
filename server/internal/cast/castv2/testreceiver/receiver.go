@@ -150,6 +150,17 @@ type Receiver struct {
 	actions  []string
 	loads    []LoadRecord
 	lastSeek float64
+
+	// crossLoad makes the next load arrive behind a status of the
+	// session it replaces; crossSeek does the same for the next seek.
+	crossLoad bool
+	crossSeek bool
+	// announceLoad makes the next load broadcast its own status before
+	// the reply goes out.
+	announceLoad bool
+	// keepSessionID makes loads keep the media session id, which some
+	// receivers do.
+	keepSessionID bool
 }
 
 const (
@@ -333,6 +344,18 @@ func (r *Receiver) receiverStatusLocked(requestID int) string {
 
 func (r *Receiver) handleMedia(sc *senderConn, msg castv2.Message, req request) {
 	r.mu.Lock()
+	isLoad := req.Type == "LOAD" || req.Type == "QUEUE_LOAD"
+	cross := (r.crossLoad && isLoad) || (r.crossSeek && req.Type == "SEEK")
+	if cross {
+		if isLoad {
+			r.crossLoad = false
+		} else {
+			r.crossSeek = false
+		}
+		r.mu.Unlock()
+		r.broadcast()
+		r.mu.Lock()
+	}
 	r.actions = append(r.actions, req.Type)
 	switch req.Type {
 	case "LOAD":
@@ -344,7 +367,7 @@ func (r *Receiver) handleMedia(sc *senderConn, msg castv2.Message, req request) 
 				fmt.Sprintf(`{"type":"LOAD_FAILED","requestId":%d,"reason":%q}`, req.RequestID, reason)))
 			return
 		}
-		r.media.sessionID++
+		r.newSessionLocked()
 		var ct float64
 		if req.CurrentTime != nil {
 			ct = *req.CurrentTime
@@ -369,7 +392,7 @@ func (r *Receiver) handleMedia(sc *senderConn, msg castv2.Message, req request) 
 			CurrentTimeSeconds: ct,
 		})
 	case "QUEUE_LOAD":
-		r.media.sessionID++
+		r.newSessionLocked()
 		var ct float64
 		if req.CurrentTime != nil {
 			ct = *req.CurrentTime
@@ -419,6 +442,10 @@ func (r *Receiver) handleMedia(sc *senderConn, msg castv2.Message, req request) 
 		}
 	case "GET_STATUS":
 	}
+	announce := r.announceLoad && isLoad
+	if announce {
+		r.announceLoad = false
+	}
 	payload := r.mediaStatusLocked(req.RequestID)
 	fetch := r.fetch
 	var urls []string
@@ -440,7 +467,19 @@ func (r *Receiver) handleMedia(sc *senderConn, msg castv2.Message, req request) 
 			}
 		}
 	}
+	if announce {
+		r.broadcast()
+	}
 	sc.send(reply(msg, castv2.NamespaceMedia, payload))
+}
+
+// newSessionLocked mints the media session a load plays under; r.mu
+// held.
+func (r *Receiver) newSessionLocked() {
+	if r.keepSessionID && r.media.sessionID != 0 {
+		return
+	}
+	r.media.sessionID++
 }
 
 func loadedItem(m mediaJSON, autoplay bool) LoadedItem {
@@ -528,6 +567,42 @@ func (r *Receiver) FetchMedia() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.fetch = true
+}
+
+// CrossNextLoad makes the receiver broadcast the status of what is
+// playing just before it takes the next LOAD or QUEUE_LOAD: a status a
+// device sent as the sender sent the load, so the two crossed on the
+// wire and the sender reads it after its request went out.
+func (r *Receiver) CrossNextLoad() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.crossLoad = true
+}
+
+// CrossNextSeek is CrossNextLoad for the next SEEK: the status of the
+// playhead the seek moves away from, read after the seek went out.
+func (r *Receiver) CrossNextSeek() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.crossSeek = true
+}
+
+// AnnounceNextLoad makes the receiver broadcast the next load's status
+// before it answers the LOAD, the way a device announces a change as it
+// makes it, so the sender reads the new media playing before the reply.
+func (r *Receiver) AnnounceNextLoad() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.announceLoad = true
+}
+
+// KeepSessionID makes every load keep the media session id the first
+// one minted, as some receivers do: nothing in a status then tells the
+// media a load replaced from the media it loaded.
+func (r *Receiver) KeepSessionID() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.keepSessionID = true
 }
 
 // RunForeignApp makes the device report somebody else's application

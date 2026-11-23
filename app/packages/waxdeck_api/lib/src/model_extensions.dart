@@ -78,6 +78,64 @@ extension ItemSummaryX on ItemSummary {
   }
 }
 
+extension EpisodeSummaryX on EpisodeSummary {
+  /// Copy with individual fields replaced. A nullable field takes a
+  /// function, so that null can be what replaces it.
+  EpisodeSummary copyWith({
+    String? pid,
+    MediaType? mediaType,
+    String? title,
+    int? durationMs,
+    String? Function()? artist,
+    String? Function()? album,
+    String? Function()? artistPid,
+    String? Function()? albumPid,
+    int? Function()? trackNumber,
+    int? Function()? discNumber,
+    String? Function()? sortKey,
+    String? Function()? artistSort,
+    String? Function()? artistSortKey,
+    String? Function()? artUrl,
+    String? showPid,
+    DateTime? publishedAt,
+    bool? downloaded,
+    int? Function()? season,
+    int? Function()? episodeNumber,
+    String? Function()? episodeType,
+    String? Function()? fetchState,
+    String? Function()? fetchError,
+    bool? explicit,
+    bool? hasTranscript,
+    bool? hasEnclosure,
+  }) => EpisodeSummary(
+    pid: pid ?? this.pid,
+    mediaType: mediaType ?? this.mediaType,
+    title: title ?? this.title,
+    durationMs: durationMs ?? this.durationMs,
+    artist: artist == null ? this.artist : artist(),
+    album: album == null ? this.album : album(),
+    artistPid: artistPid == null ? this.artistPid : artistPid(),
+    albumPid: albumPid == null ? this.albumPid : albumPid(),
+    trackNumber: trackNumber == null ? this.trackNumber : trackNumber(),
+    discNumber: discNumber == null ? this.discNumber : discNumber(),
+    sortKey: sortKey == null ? this.sortKey : sortKey(),
+    artistSort: artistSort == null ? this.artistSort : artistSort(),
+    artistSortKey: artistSortKey == null ? this.artistSortKey : artistSortKey(),
+    artUrl: artUrl == null ? this.artUrl : artUrl(),
+    showPid: showPid ?? this.showPid,
+    publishedAt: publishedAt ?? this.publishedAt,
+    downloaded: downloaded ?? this.downloaded,
+    season: season == null ? this.season : season(),
+    episodeNumber: episodeNumber == null ? this.episodeNumber : episodeNumber(),
+    episodeType: episodeType == null ? this.episodeType : episodeType(),
+    fetchState: fetchState == null ? this.fetchState : fetchState(),
+    fetchError: fetchError == null ? this.fetchError : fetchError(),
+    explicit: explicit ?? this.explicit,
+    hasTranscript: hasTranscript ?? this.hasTranscript,
+    hasEnclosure: hasEnclosure ?? this.hasEnclosure,
+  );
+}
+
 extension ItemFileX on ItemFile {
   bool get isCopy => role == 'alternate';
 }
@@ -87,6 +145,57 @@ extension AlbumDetailX on AlbumDetail {
   /// header with five blank labels is worse than no block.
   bool get hasIdentity =>
       (barcode ?? label ?? catalogNumber ?? media ?? country) != null;
+}
+
+extension SubscriptionSettingsX on SubscriptionSettings {
+  /// Field-wise replacement, the shape every writer lays its changes over a
+  /// fresh read with, so a field the contract gains reaches all of them:
+  /// the PUT replaces the object, and an omission resets that field. A
+  /// nullable field takes a function, so that null can be what replaces
+  /// it.
+  SubscriptionSettings copyWith({
+    int? Function()? retentionKeep,
+    bool? autoDownload,
+    EpisodeFilter? Function()? autoDownloadFilter,
+    String? Function()? folder,
+    bool? private,
+    double? Function()? speed,
+    bool? Function()? trimSilence,
+    bool? Function()? voiceBoost,
+    int? Function()? skipIntroSeconds,
+    int? Function()? skipOutroSeconds,
+  }) => SubscriptionSettings(
+    retentionKeep: retentionKeep == null ? this.retentionKeep : retentionKeep(),
+    autoDownload: autoDownload ?? this.autoDownload,
+    autoDownloadFilter: autoDownloadFilter == null
+        ? this.autoDownloadFilter
+        : autoDownloadFilter(),
+    folder: folder == null ? this.folder : folder(),
+    private: private ?? this.private,
+    speed: speed == null ? this.speed : speed(),
+    trimSilence: trimSilence == null ? this.trimSilence : trimSilence(),
+    voiceBoost: voiceBoost == null ? this.voiceBoost : voiceBoost(),
+    skipIntroSeconds: skipIntroSeconds == null
+        ? this.skipIntroSeconds
+        : skipIntroSeconds(),
+    skipOutroSeconds: skipOutroSeconds == null
+        ? this.skipOutroSeconds
+        : skipOutroSeconds(),
+  );
+}
+
+extension BookSettingsX on BookSettings {
+  /// Field-wise replacement, for the reason [SubscriptionSettingsX.copyWith]
+  /// gives.
+  BookSettings copyWith({
+    double? Function()? speed,
+    bool? Function()? voiceBoost,
+    bool? Function()? trimSilence,
+  }) => BookSettings(
+    speed: speed == null ? this.speed : speed(),
+    voiceBoost: voiceBoost == null ? this.voiceBoost : voiceBoost(),
+    trimSilence: trimSilence == null ? this.trimSilence : trimSilence(),
+  );
 }
 
 extension EpisodeFilterX on EpisodeFilter {

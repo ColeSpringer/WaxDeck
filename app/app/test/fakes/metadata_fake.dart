@@ -85,6 +85,10 @@ mixin FakeMetadata on FakeRepositoryState implements MetadataApi {
   /// merge branch sets one; the default is the plain rename that keeps
   /// the pid.
   EntityRenameResult? renameEntityResult;
+
+  /// What the next [editEntity] answers, where a test sets it, in place of
+  /// the answer [entityEditMergesInto] shapes.
+  MetadataEditResult? entityEditResult;
   final List<({String entityType, String entityPid, int byteCount})>
   entityArtworkCalls = [];
   final List<({String entityType, String entityPid})> clearEntityArtworkCalls =
@@ -813,6 +817,8 @@ mixin FakeMetadata on FakeRepositoryState implements MetadataApi {
         );
       }
     }
+    final canned = entityEditResult;
+    if (canned != null) return canned;
     final survivor = entityEditMergesInto;
     if (survivor != null && edits['mbid'] == '') {
       return MetadataEditResult(applied: true, mergedInto: survivor);

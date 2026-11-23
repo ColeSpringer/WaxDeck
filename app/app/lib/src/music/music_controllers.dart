@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -8,6 +9,7 @@ import '../library/page_walk.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../settings/prefs_controller.dart';
+import '../sync/refresh_in_place.dart';
 
 /// A dimension the music hub offers an index of.
 ///
@@ -170,19 +172,16 @@ class MusicIndexState {
   bool get hasMore => nextCursor != null;
 
   bool get hasFloor => anchoredAt != null;
-
-  MusicIndexState copyWith({bool? loadingMore}) => MusicIndexState(
-    buckets: buckets,
-    nextCursor: nextCursor,
-    loadingMore: loadingMore ?? this.loadingMore,
-    anchoredAt: anchoredAt,
-  );
 }
 
 /// Pages one index's buckets. One instance per (dimension, order): the
 /// two orders are two listings with two cursor spaces, and the server
 /// refuses a cursor carried across them.
-class MusicIndexController extends AsyncNotifier<MusicIndexState> {
+///
+/// A catalog change refreshes it in place: the window it has loaded and
+/// the floor it was anchored on are kept.
+class MusicIndexController extends AsyncNotifier<MusicIndexState>
+    with RefreshedInPlace<FacetBucket, MusicIndexState> {
   MusicIndexController(this.key);
 
   final MusicIndexKey key;
@@ -190,17 +189,12 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
   /// Big enough that the common index arrives whole in one round trip.
   static const pageSize = 500;
 
-  /// Bumped by every [build] so an in-flight [loadMore] can tell its
-  /// listing was replaced and drop its result rather than appending to a
-  /// list that no longer exists.
-  var _generation = 0;
-
-  /// Whether the read [generation] started has lost its reader: the index
-  /// was left (it is disposed with its screen), or rebuilt under it.
-  bool _gone(int generation) => !ref.mounted || generation != _generation;
-
   /// Watched in [build], so flipping the preference reloads open indexes.
   var _showUnknown = true;
+
+  /// The rail letter the window starts at; null when it starts at the
+  /// head.
+  String? _anchoredAt;
 
   /// Here rather than at the three places the screen reads a bucket list,
   /// so rows, rail, and letter seek cannot disagree. Paging is unharmed:
@@ -214,78 +208,85 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
   }
 
   @override
-  Future<MusicIndexState> build() async {
-    _generation++;
+  ProviderBase<Object?> get self => musicIndexProvider(key);
+
+  @override
+  int get pageRows => pageSize;
+
+  @override
+  int? get walkLimit => 1;
+
+  @override
+  Object rowKey(FacetBucket row) => row.key;
+
+  @override
+  MusicIndexState shape(
+    PagedRows<FacetBucket> held, {
+    required bool loadingMore,
+  }) => MusicIndexState(
+    buckets: held.rows,
+    nextCursor: held.nextCursor,
+    loadingMore: loadingMore,
+    anchoredAt: _anchoredAt,
+  );
+
+  @override
+  void startingOver() => _anchoredAt = null;
+
+  Future<FacetPage> _page(
+    WaxDeckRepository repository, {
+    String? cursor,
+    String? startsAt,
+  }) => repository.listFacets(
+    key.dimension.wireName,
+    sort: key.sort,
+    cursor: cursor,
+    startsAt: startsAt,
+    facet: key.domain.scopeFacet,
+    facetKey: key.domain.scopeKey,
+    limit: pageSize,
+  );
+
+  /// From the head of the window: the floor of an anchored one, which a
+  /// refresh re-reads from rather than from the first bucket.
+  @override
+  Future<PagedRows<FacetBucket>> readRows({
+    required int want,
+    String? from,
+    int? maxPages,
+    bool Function()? stop,
+  }) {
+    final repository = ref.read(repositoryProvider);
+    final floor = _anchoredAt;
+    return walkRows(
+      (cursor) async {
+        final page = await _page(
+          repository,
+          cursor: cursor,
+          startsAt: cursor == null ? floor : null,
+        );
+        return (rows: _shown(page.buckets), nextCursor: page.nextCursor);
+      },
+      want: want,
+      from: from,
+      maxPages: maxPages,
+      stop: stop,
+    );
+  }
+
+  @override
+  Future<MusicIndexState> build() {
     _showUnknown = ref.watch(
       prefsControllerProvider.select(
         (prefs) => prefs.value?.browseShowUnknown ?? true,
       ),
     );
-    final page = await ref
-        .watch(repositoryProvider)
-        .listFacets(
-          key.dimension.wireName,
-          sort: key.sort,
-          facet: key.domain.scopeFacet,
-          facetKey: key.domain.scopeKey,
-          limit: pageSize,
-        );
-    return MusicIndexState(
-      buckets: _shown(page.buckets),
-      nextCursor: page.nextCursor,
-    );
+    return buildInPlace(source: (ref.watch(repositoryProvider), _showUnknown));
   }
 
   /// Fetches the next page and appends it. Answers whether anything was
   /// added, so a caller paging toward a letter knows when to stop.
-  Future<bool> loadMore() async {
-    final current = state.value;
-    if (current == null || !current.hasMore || current.loadingMore) {
-      return false;
-    }
-    final generation = _generation;
-    state = AsyncData(current.copyWith(loadingMore: true));
-    try {
-      final page = await ref
-          .read(repositoryProvider)
-          .listFacets(
-            key.dimension.wireName,
-            sort: key.sort,
-            cursor: current.nextCursor,
-            facet: key.domain.scopeFacet,
-            facetKey: key.domain.scopeKey,
-            limit: pageSize,
-          );
-      if (_gone(generation)) return false;
-      state = AsyncData(
-        MusicIndexState(
-          buckets: <FacetBucket>[...current.buckets, ..._shown(page.buckets)],
-          nextCursor: page.nextCursor,
-          // An append does not drop the floor: losing it here would take
-          // the way back to the head away mid-scroll.
-          anchoredAt: current.anchoredAt,
-        ),
-      );
-      return page.buckets.isNotEmpty;
-    } on WaxDeckApiException {
-      // An expected transport or server error. Keep what we have;
-      // scrolling near the end again retries.
-      if (!_gone(generation)) {
-        state = AsyncData(current.copyWith(loadingMore: false));
-      }
-      return false;
-    } catch (_) {
-      // Anything else is a defect, not a hiccup: a decode failure, a bad
-      // cast. Release the paging guard first - loadingMore is what keeps
-      // two fetches from racing, so leaving it set would wedge paging
-      // permanently and silently - then let the error reach the app's
-      // error handler instead of vanishing here.
-      if (!_gone(generation)) {
-        state = AsyncData(current.copyWith(loadingMore: false));
-      }
-      rethrow;
-    }
-  }
+  Future<bool> loadMore() => loadMoreInPlace();
 
   /// Re-anchors the listing on [letter], replacing what was loaded with
   /// a window starting at the server's seek. Only for a letter not
@@ -293,66 +294,23 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
   /// drops. The rail's `#` never reaches here; no prefix names it.
   Future<bool> anchorAt(String letter) async {
     if (key.sort != FacetSort.label) return false;
-    // A loadMore in flight is abandoned without clearing its own guard,
-    // so the snapshot this may restore has to clear it or paging wedges
-    // for the provider's life.
-    final settled = state.value;
-    final previous = settled == null
-        ? state
-        : AsyncData(settled.copyWith(loadingMore: false));
-    final generation = ++_generation;
-    // Replaced, not extended, so this reads as a load rather than
-    // loadMore's trailing spinner - the same state a sort flip shows.
-    state = const AsyncLoading<MusicIndexState>();
-    try {
-      final page = await ref
-          .read(repositoryProvider)
-          .listFacets(
-            key.dimension.wireName,
-            sort: key.sort,
-            startsAt: letter,
-            facet: key.domain.scopeFacet,
-            facetKey: key.domain.scopeKey,
-            limit: pageSize,
-          );
-      if (_gone(generation)) return false;
-      if (page.buckets.isEmpty) {
-        // Past the last bucket is a legitimately empty page. Committing
-        // it would trade the listing, and the rail with it, for nothing.
-        state = previous;
-        return false;
-      }
-      state = AsyncData(
-        MusicIndexState(
-          buckets: _shown(page.buckets),
-          nextCursor: page.nextCursor,
-          anchoredAt: letter,
-        ),
-      );
-      return true;
-    } on WaxDeckApiException {
-      // Keep the listing rather than trading it for an error screen.
-      if (!_gone(generation)) state = previous;
-      return false;
-    } catch (_) {
-      // A defect. Put a usable listing back first, or the screen is a
-      // permanent skeleton with no retry on it.
-      if (!_gone(generation)) state = previous;
-      rethrow;
-    }
+    final repository = ref.read(repositoryProvider);
+    return replaceInPlace(() async {
+      final page = await _page(repository, startsAt: letter);
+      // Past the last bucket is a legitimately empty page. Committing
+      // it would trade the listing, and the rail with it, for nothing.
+      if (page.buckets.isEmpty) return null;
+      return (rows: _shown(page.buckets), nextCursor: page.nextCursor);
+    }, adopt: () => _anchoredAt = letter);
   }
 
   /// Drops any floor and reloads from the head.
-  void reset() {
-    _generation++;
-    ref.invalidateSelf();
-  }
+  void reset() => startOver();
 }
 
 /// Disposed with the index: a visit reads the account's library as it
-/// stands, and the window holds still while the index is open. An index
-/// left open on a tab keeps its rows until it is left and re-entered;
-/// only the hub's count follows the catalog.
+/// stands, and while it is open the catalog fan-out refreshes it in
+/// place.
 final musicIndexProvider = AsyncNotifierProvider.autoDispose
     .family<MusicIndexController, MusicIndexState, MusicIndexKey>(
       MusicIndexController.new,
@@ -442,16 +400,12 @@ class MusicItemsState {
   final bool loadingMore;
 
   bool get hasMore => nextCursor != null;
-
-  MusicItemsState copyWith({bool? loadingMore}) => MusicItemsState(
-    items: items,
-    nextCursor: nextCursor,
-    loadingMore: loadingMore ?? this.loadingMore,
-  );
 }
 
-/// Pages the items of one bucket, or of the whole music library.
-class MusicItemsController extends AsyncNotifier<MusicItemsState> {
+/// Pages the items of one bucket, or of the whole music library. A
+/// catalog change refreshes it in place, the rows it has loaded kept.
+class MusicItemsController extends AsyncNotifier<MusicItemsState>
+    with RefreshedInPlace<ItemSummary, MusicItemsState> {
   MusicItemsController(this.listing);
 
   final MusicListing listing;
@@ -468,11 +422,24 @@ class MusicItemsController extends AsyncNotifier<MusicItemsState> {
   /// long list, which is what the index pages at for the same reason.
   static const pageSize = kQueueCap;
 
-  var _generation = 0;
+  @override
+  ProviderBase<Object?> get self => musicItemsProvider(listing);
 
-  /// Whether the walk [generation] started has lost its reader: the
-  /// listing was left, or rebuilt under it.
-  bool _gone(int generation) => !ref.mounted || generation != _generation;
+  @override
+  int get pageRows => pageSize;
+
+  @override
+  Object rowKey(ItemSummary row) => row.pid;
+
+  @override
+  MusicItemsState shape(
+    PagedRows<ItemSummary> held, {
+    required bool loadingMore,
+  }) => MusicItemsState(
+    items: held.rows,
+    nextCursor: held.nextCursor,
+    loadingMore: loadingMore,
+  );
 
   /// A page reader over the repository as it is now, so a walk reads its
   /// pages through one repository rather than through the ref each time.
@@ -500,23 +467,37 @@ class MusicItemsController extends AsyncNotifier<MusicItemsState> {
     );
   }
 
+  /// A first read and a next page ask for one row and no page limit: to
+  /// the first page with rows on it, past pages the listing emptied
+  /// (rows the caller may not see are dropped after the page is cut),
+  /// never "nothing here" over rows a page further on. No further, so a
+  /// later page that fails takes nothing this read showed and a run of
+  /// short pages is not walked to fill a quota; the screen asks for more
+  /// as it needs it, a list too short to scroll included.
   @override
-  Future<MusicItemsState> build() async {
-    final generation = ++_generation;
-    // Watched rather than read so a sign-in swap rebuilds the listing.
-    ref.watch(repositoryProvider);
-    // To the first page with rows on it, past pages the listing emptied
-    // (rows the caller may not see are dropped after the page is cut):
-    // never "nothing here" over rows a page further on. No further, so a
-    // later page that fails takes nothing this read showed and a run of
-    // short pages is not walked to fill a quota; the screen asks for
-    // more as it needs it, a list too short to scroll included.
-    final walk = await readPages(
-      _pages(),
-      want: 1,
-      stop: () => _gone(generation),
+  Future<PagedRows<ItemSummary>> readRows({
+    required int want,
+    String? from,
+    int? maxPages,
+    bool Function()? stop,
+  }) {
+    final page = _pages();
+    return walkRows(
+      (cursor) async {
+        final next = await page(cursor);
+        return (rows: next.items, nextCursor: next.nextCursor);
+      },
+      want: want,
+      from: from,
+      maxPages: maxPages,
+      stop: stop,
     );
-    return MusicItemsState(items: walk.items, nextCursor: walk.nextCursor);
+  }
+
+  @override
+  Future<MusicItemsState> build() {
+    // Watched rather than read so a sign-in swap rebuilds the listing.
+    return buildInPlace(source: ref.watch(repositoryProvider));
   }
 
   /// The listing's items to its end, or until more than [atMost] are
@@ -537,38 +518,7 @@ class MusicItemsController extends AsyncNotifier<MusicItemsState> {
   }
 
   Future<void> loadMore() async {
-    final current = state.value;
-    if (current == null || !current.hasMore || current.loadingMore) return;
-    final generation = _generation;
-    state = AsyncData(current.copyWith(loadingMore: true));
-    try {
-      // To the next page with rows on it, past pages the listing
-      // emptied: one that adds nothing gives the screen nothing to ask
-      // again from.
-      final walk = await readPages(
-        _pages(),
-        from: current.nextCursor,
-        want: 1,
-        stop: () => _gone(generation),
-      );
-      if (_gone(generation)) return;
-      state = AsyncData(
-        MusicItemsState(
-          items: <ItemSummary>[...current.items, ...walk.items],
-          nextCursor: walk.nextCursor,
-        ),
-      );
-    } on WaxDeckApiException {
-      if (_gone(generation)) return;
-      state = AsyncData(current.copyWith(loadingMore: false));
-    } catch (_) {
-      // Same split as the index controller: release the guard for every
-      // failure, surface the ones that are defects.
-      if (!_gone(generation)) {
-        state = AsyncData(current.copyWith(loadingMore: false));
-      }
-      rethrow;
-    }
+    await loadMoreInPlace();
   }
 }
 

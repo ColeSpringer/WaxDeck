@@ -52,7 +52,12 @@ const _userJson = {
 Map<String, Object> _loginJson({
   String token = 'tok-1',
   String csrf = 'csrf-1',
-}) => {'user': _userJson, 'token': token, 'csrfToken': csrf};
+}) => {
+  'user': _userJson,
+  'token': token,
+  'csrfToken': csrf,
+  'sessionId': 'se-1',
+};
 
 (_RecordingAdapter, WaxDeckClient) _client() {
   final adapter = _RecordingAdapter();

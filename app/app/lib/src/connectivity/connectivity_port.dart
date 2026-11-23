@@ -36,6 +36,10 @@ abstract interface class ConnectivityPort {
   /// Cost changes, for readers that hold a state rather than asking at
   /// the moment they act.
   Stream<ConnectionCost> get costs;
+
+  /// Each time a transport comes up after the device had none, for reads
+  /// that failed meanwhile. Still no answer to whether one is up now.
+  Stream<void> get returns;
 }
 
 /// The port over `connectivity_plus`.
@@ -68,6 +72,37 @@ class PluginConnectivity implements ConnectivityPort {
   @override
   Stream<ConnectionCost> get costs =>
       _plugin.onConnectivityChanged.map(_classify).distinct();
+
+  /// The plugin's stream is broadcast and says its first answer to its
+  /// first listener only, so where nothing has been heard yet the device
+  /// is asked. A failure is no return, so errors go unheard.
+  @override
+  Stream<void> get returns {
+    StreamSubscription<List<ConnectivityResult>>? changes;
+    bool? offline;
+    late final StreamController<void> out;
+    void heard(List<ConnectivityResult> results) {
+      final none = results.contains(ConnectivityResult.none);
+      if (offline == true && !none) out.add(null);
+      offline = none;
+    }
+
+    out = StreamController<void>(
+      onListen: () {
+        changes = _plugin.onConnectivityChanged.listen(
+          heard,
+          onError: (Object _) {},
+        );
+        Future.sync(_plugin.checkConnectivity).then((results) {
+          if (offline == null) heard(results);
+        }, onError: (Object _) {});
+      },
+      onPause: () => changes?.pause(),
+      onResume: () => changes?.resume(),
+      onCancel: () => changes?.cancel(),
+    );
+    return out.stream;
+  }
 
   /// The plugin reports every transport the device has up at once, so a
   /// laptop on wifi with a VPN answers two. Any unmetered transport
@@ -110,6 +145,9 @@ class UnmeteredConnectivity implements ConnectivityPort {
 
   @override
   Stream<ConnectionCost> get costs => const Stream<ConnectionCost>.empty();
+
+  @override
+  Stream<void> get returns => const Stream<void>.empty();
 }
 
 /// The port for this platform.

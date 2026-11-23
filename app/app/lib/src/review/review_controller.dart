@@ -1,9 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../sync/catalog_writes.dart';
+import '../sync/refresh_in_place.dart';
 
 /// Lifecycle filter above the review list. Each value is a server-side
 /// status, `decided` included, so pages come back full rather than
@@ -82,79 +85,92 @@ class ReviewQueueState {
   final bool loadError;
 
   bool get hasMore => nextCursor != null;
-
-  ReviewQueueState copyWith({bool? loadingMore, bool? loadError}) =>
-      ReviewQueueState(
-        entries: entries,
-        nextCursor: nextCursor,
-        loadingMore: loadingMore ?? this.loadingMore,
-        loadError: loadError ?? this.loadError,
-      );
 }
 
 /// Pages the review queue with keyset cursors, filtered by lifecycle
 /// state. Decisions refetch the queue and the stats so rows and chip
 /// counts stay in agreement.
-class ReviewQueueController extends AsyncNotifier<ReviewQueueState> {
+///
+/// A refetch is in place: the rows loaded are kept, so a pane open on an
+/// entry far down the queue still has its neighbours once it is decided.
+class ReviewQueueController extends AsyncNotifier<ReviewQueueState>
+    with RefreshedInPlace<ReviewEntry, ReviewQueueState> {
   static const pageSize = 50;
 
-  /// Bumped by every [build] so an in-flight [loadMore] can tell its
-  /// listing was replaced and drop its result.
-  var _generation = 0;
+  /// Whether the last page fetch failed.
+  var _loadError = false;
 
   @override
-  Future<ReviewQueueState> build() async {
-    _generation++;
+  ProviderBase<Object?> get self => reviewQueueProvider;
+
+  @override
+  int get pageRows => pageSize;
+
+  @override
+  int? get walkLimit => 1;
+
+  @override
+  Object rowKey(ReviewEntry row) => row.id;
+
+  @override
+  ReviewQueueState shape(
+    PagedRows<ReviewEntry> held, {
+    required bool loadingMore,
+  }) => ReviewQueueState(
+    entries: held.rows,
+    nextCursor: held.nextCursor,
+    loadingMore: loadingMore,
+    loadError: _loadError,
+  );
+
+  @override
+  void startingOver() => _loadError = false;
+
+  @override
+  Future<PagedRows<ReviewEntry>> readRows({
+    required int want,
+    String? from,
+    int? maxPages,
+    bool Function()? stop,
+  }) {
+    final repository = ref.read(repositoryProvider);
+    final status = ref.read(reviewFilterProvider).status;
+    return walkRows(
+      (cursor) async {
+        final page = await repository.listReviewQueue(
+          status: status,
+          cursor: cursor,
+          limit: pageSize,
+        );
+        return (rows: page.entries, nextCursor: page.nextCursor);
+      },
+      want: want,
+      from: from,
+      maxPages: maxPages,
+      stop: stop,
+    );
+  }
+
+  @override
+  Future<ReviewQueueState> build() {
     // Keyed on the account: the repository moves only with the server,
-    // and the next account starts from its own first page.
-    ref.watch(signedInAccountProvider);
+    // and the next account starts from its own first page. So does
+    // another filter.
+    final account = ref.watch(signedInAccountProvider);
     final filter = ref.watch(reviewFilterProvider);
-    final page = await ref
-        .watch(repositoryProvider)
-        .listReviewQueue(status: filter.status, limit: pageSize);
-    return ReviewQueueState(entries: page.entries, nextCursor: page.nextCursor);
+    final repository = ref.watch(repositoryProvider);
+    return buildInPlace(source: (account, filter, repository));
   }
 
   /// Fetches the next page and appends it. No-op while a fetch is
-  /// running or once the last page was reached.
+  /// running or once the last page was reached. A fetch that fails keeps
+  /// the rows and flags the failure, which the screen surfaces as a
+  /// transient notice; scrolling near the end again retries.
   Future<void> loadMore() async {
-    final current = state.value;
-    if (current == null || !current.hasMore || current.loadingMore) return;
-    final generation = _generation;
-    state = AsyncData(current.copyWith(loadingMore: true, loadError: false));
-    try {
-      final filter = ref.read(reviewFilterProvider);
-      final page = await ref
-          .read(repositoryProvider)
-          .listReviewQueue(
-            status: filter.status,
-            cursor: current.nextCursor,
-            limit: pageSize,
-          );
-      if (generation != _generation) return;
-      state = AsyncData(
-        ReviewQueueState(
-          entries: [...current.entries, ...page.entries],
-          nextCursor: page.nextCursor,
-        ),
-      );
-    } on WaxDeckApiException {
-      // An expected transport or server error. Keep what we have;
-      // scrolling near the end again retries.
-      if (generation != _generation) return;
-      // Keep what we have and flag the failure; scrolling near the end again
-      // retries, and the screen surfaces a transient notice on the flag.
-      state = AsyncData(current.copyWith(loadingMore: false, loadError: true));
-    } catch (_) {
-      // A defect, not a hiccup. Release the paging guard first or it
-      // wedges paging silently, then let the error out.
-      if (generation == _generation) {
-        state = AsyncData(
-          current.copyWith(loadingMore: false, loadError: true),
-        );
-      }
-      rethrow;
-    }
+    await loadMoreInPlace(
+      started: () => _loadError = false,
+      failed: () => _loadError = true,
+    );
   }
 
   /// Decides one entry and returns the server's answer: the entry as
@@ -164,6 +180,7 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState> {
     String action, {
     String? candidateMbid,
   }) async {
+    final writes = ref.read(catalogWritesProvider);
     final result = await ref
         .read(repositoryProvider)
         .decideReviewEntry(
@@ -171,6 +188,8 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState> {
           action: action,
           candidateMbid: candidateMbid,
         );
+    // A decision applied rewrites the items it was about.
+    writes.landed();
     _refresh([entryId]);
     return result;
   }
@@ -180,9 +199,11 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState> {
     List<String> entryIds,
     String action,
   ) async {
+    final writes = ref.read(catalogWritesProvider);
     final outcomes = await ref
         .read(repositoryProvider)
         .decideReviewBulk(entryIds, action: action);
+    writes.landed();
     _refresh([
       for (final outcome in outcomes)
         if (outcome.ok) outcome.entryId,
@@ -202,6 +223,8 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState> {
     // stream: deciding the last entry and going home would otherwise
     // leave the banner standing over an empty queue.
     ref.invalidate(pendingReviewCountProvider);
+    // A decision made here can be on any row loaded.
+    owe(CatalogRefresh.loaded);
     ref.invalidateSelf();
   }
 }
@@ -272,6 +295,7 @@ class ReviewEntryController extends AsyncNotifier<ReviewEntryDetail> {
     String action, {
     String? candidateMbid,
   }) async {
+    final writes = ref.read(catalogWritesProvider);
     final result = await ref
         .read(repositoryProvider)
         .decideReviewEntry(
@@ -279,6 +303,7 @@ class ReviewEntryController extends AsyncNotifier<ReviewEntryDetail> {
           action: action,
           candidateMbid: candidateMbid,
         );
+    writes.landed();
     _refresh();
     return result;
   }
@@ -286,7 +311,9 @@ class ReviewEntryController extends AsyncNotifier<ReviewEntryDetail> {
   /// Undoes an applied decision: the metadata it changed is restored and
   /// the entry is marked reverted, which is final.
   Future<void> revert() async {
+    final writes = ref.read(catalogWritesProvider);
     await ref.read(repositoryProvider).revertReviewEntry(entryId);
+    writes.landed();
     _refresh();
   }
 
@@ -311,6 +338,11 @@ class ReviewEntryController extends AsyncNotifier<ReviewEntryDetail> {
 
   void _refresh() {
     if (!ref.mounted) return;
+    // Through the ledger, not the queue's notifier: reading that would
+    // build a queue nobody has open.
+    ref
+        .read(owedDepthsProvider)
+        .owe(reviewQueueProvider, CatalogRefresh.loaded);
     ref.invalidate(reviewQueueProvider);
     ref.invalidate(reviewStatsProvider);
     // See ReviewQueueController._refresh: home's banner rides these.

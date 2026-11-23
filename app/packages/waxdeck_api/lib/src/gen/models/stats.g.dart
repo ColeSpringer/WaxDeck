@@ -23,6 +23,7 @@ class HeatmapDay {
 /// One recorded listen session.
 class ListenLogEntry {
   const ListenLogEntry({
+    required this.sessionId,
     required this.pid,
     required this.mediaType,
     required this.startedAt,
@@ -34,6 +35,11 @@ class ListenLogEntry {
     this.artist,
     this.skippedMs,
   });
+
+  /// The session's own id, unique within the caller's log: the one its client
+  /// reported, or one the server minted for a session it recorded itself (a
+  /// scrobble, an import, a radio tune-in).
+  final String sessionId;
 
   /// The item that was played.
   final String pid;

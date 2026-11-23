@@ -32,22 +32,18 @@ class ReviewEntryScreen extends StatelessWidget {
       semanticsId: SemanticsIds.adminReviewEntry,
       onBack: () => context.back(fallback: WaxRoute.review),
       backSemanticsId: SemanticsIds.navBack,
-      // A filling sliver, not a body: the view pins its decision bar
-      // under a scroll of its own, which needs a bounded height.
-      slivers: <Widget>[
-        SliverFillRemaining(
-          hasScrollBody: true,
-          child: ReviewEntryView(
-            entryId: entryId,
-            // Back to the list rather than on to the next entry: on a
-            // page of its own, another submission opened unasked is the
-            // surprise, and the list is the overview.
-            onDecided: () =>
-                unawaited(leaveDecided(context, entryId, WaxRoute.review)),
-            leavesOnDecided: true,
-          ),
-        ),
-      ],
+      // A fill, not a body: the view pins its decision bar under a
+      // scroll of its own, which needs a bounded height, on the page's
+      // foot.
+      fill: ReviewEntryView(
+        entryId: entryId,
+        // Back to the list rather than on to the next entry: on a page of
+        // its own, another submission opened unasked is the surprise, and
+        // the list is the overview.
+        onDecided: () =>
+            unawaited(leaveDecided(context, entryId, WaxRoute.review)),
+        leavesOnDecided: true,
+      ),
     );
   }
 }
@@ -332,39 +328,39 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
   Widget build(BuildContext context) {
     final pending = ref.watch(pendingActionsProvider);
     final entry = ref.watch(reviewEntryProvider(widget.entryId));
+    final face = resolveAsyncFace(entry);
     // The skeleton between one entry and the next: a message clear of the
     // last one's buttons is kept there for these.
     return ShellMessageClearance.pending(
-      pending: resolveAsyncFace(entry) is AsyncFaceWaiting,
-      // The shared face rather than a switch on the state's type: a read
-      // Riverpod is retrying is a loading state carrying its error, which
-      // a type switch drew as a skeleton for as long as the retries ran.
-      child: AsyncBoxFace<ReviewEntryDetail>(
-        state: entry,
-        skeleton: SkeletonShape.detail,
-        errorTitle: context.l10n.reviewEntryLoadError,
-        onRetry: () => ref.invalidate(reviewEntryProvider(widget.entryId)),
-        builder: (context, value) => Column(
-          children: <Widget>[
-            Expanded(child: _body(context, value)),
-            // Working down the queue, each confirmation would otherwise
-            // lie over the next entry's buttons.
-            ShellMessageClearance(
-              child: _ActionBar(
-                detail: value,
-                candidate: _selectedCandidate(value),
-                busy: pending.contains(
-                  PendingAction.reviewEntry(widget.entryId),
-                ),
-                busyBy: (action) => pending.contains(
-                  PendingAction.reviewAction(widget.entryId, action),
-                ),
-                onDecide: _decide,
-                onRevert: _revert,
-              ),
-            ),
-          ],
+      pending: face is AsyncFaceWaiting,
+      child: WaxFootedPane(
+        // The shared face rather than a switch on the state's type: a read
+        // Riverpod is retrying is a loading state carrying its error, which
+        // a type switch drew as a skeleton for as long as the retries ran.
+        body: AsyncBoxFace<ReviewEntryDetail>(
+          state: entry,
+          skeleton: SkeletonShape.detail,
+          errorTitle: context.l10n.reviewEntryLoadError,
+          onRetry: () => ref.invalidate(reviewEntryProvider(widget.entryId)),
+          builder: _body,
         ),
+        foot: switch (face) {
+          // Working down the queue, each confirmation would otherwise lie
+          // over the next entry's buttons.
+          AsyncFaceLoaded(:final value) => ShellMessageClearance(
+            child: _ActionBar(
+              detail: value,
+              candidate: _selectedCandidate(value),
+              busy: pending.contains(PendingAction.reviewEntry(widget.entryId)),
+              busyBy: (action) => pending.contains(
+                PendingAction.reviewAction(widget.entryId, action),
+              ),
+              onDecide: _decide,
+              onRevert: _revert,
+            ),
+          ),
+          _ => null,
+        },
       ),
     );
   }
@@ -580,14 +576,9 @@ class _ActionBar extends StatelessWidget {
       busy: busyBy('discard'),
       onPressed: busy ? null : () => onDecide('discard'),
     );
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surface1,
-        border: Border(top: BorderSide(color: colors.hairline)),
-      ),
-      padding: const EdgeInsets.all(WaxSpace.s12),
-      child: SafeArea(
-        top: false,
+    return WaxFootBar(
+      child: Padding(
+        padding: const EdgeInsets.all(WaxSpace.s12),
         child: decided
             ? Row(
                 children: <Widget>[

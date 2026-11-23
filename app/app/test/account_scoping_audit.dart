@@ -113,8 +113,10 @@ const Map<String, String> _sameForEveryAccount = <String, String>{
   'syncEngineProvider': _infrastructure,
   // Whether the server takes the compound save: a capability of the server.
   'compoundSaveProvider': _serverVocabulary,
-  // Commands, routes, the forget action and what carries a play to the
-  // queue, which read only when they run.
+  // Commands, routes, the forget action, what carries a play to the
+  // queue and what looks the queue up when a write lands, which read
+  // only when they run.
+  'catalogWritesProvider': _readsWhenRun,
   'commandRegistryProvider': _readsWhenRun,
   'connectBinderProvider': _readsWhenRun,
   'connectControllerProvider': _readsWhenRun,

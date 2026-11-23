@@ -9,14 +9,13 @@ import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
-import '../home/home_shelves.dart';
 import '../music/entity_facts.dart';
-import '../music/music_controllers.dart';
 import '../shell/navigation_history.dart';
 import '../shell/router.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import '../sync/catalog_writes.dart';
 
 /// Whether this account is offered destructive catalog verbs.
 ///
@@ -108,6 +107,7 @@ Future<void> _confirmDelete(
   final container = ProviderScope.containerOf(context, listen: false);
   final messenger = container.read(shellMessengerProvider);
   final repo = container.read(repositoryProvider);
+  final writes = container.read(catalogWritesProvider);
   // Permanent deletion is admin-only on the server whatever the delete
   // right says, so the radio for it is drawn only where it can succeed
   // - hidden, never disabled, and never a 403 for the option offered.
@@ -128,7 +128,8 @@ Future<void> _confirmDelete(
           mode: mode,
           dryRun: dryRun,
         );
-  // What a files delete changes is the item's file list and its copies.
+  // A files delete refused for what the list no longer holds: the item's
+  // file list and its copies are read again, nothing having landed.
   void rereadFiles() {
     if (filePids == null) return;
     container
@@ -194,16 +195,11 @@ Future<void> _confirmDelete(
   if (mode == null) return;
   try {
     final result = await delete(mode: mode);
-    rereadFiles();
-    // The listings that could be showing what just went: the music
-    // listing this was opened from, and the home shelves, which draw
-    // the same items from the other side. The catalog invalidation is
-    // on its way too, and arrives whenever the socket does; this is
-    // what makes the row leave now rather than shortly.
-    container.invalidate(musicItemsProvider);
-    for (final provider in homeShelfProviders) {
-      container.invalidate(provider);
-    }
+    // Every read that could be showing what just went: the listing this
+    // was opened from, the index under it, the item's own file list, the
+    // home shelves. The server's hint is on its way too, and arrives
+    // whenever the socket does; this is what makes the row leave now.
+    writes.landed();
     // What went, then how many stayed, then the server's sentences: a
     // copy that took a deleted file's place, which keeps the item where
     // the listing still shows it, and each file that stayed and why.

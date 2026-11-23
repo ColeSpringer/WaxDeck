@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:waxdeck_data/waxdeck_data.dart';
 
+import 'catalog_cursor.dart';
+
 /// The web build's slice of live sync: follow the event channel and
 /// turn invalidation frames into provider refreshes. No mirror, no
 /// outbox; the SPA stays server-backed, so "catch up" is simply
@@ -14,15 +16,18 @@ class LiveInvalidations {
     required this.onCatalog,
     required this.onUser,
     this.onUserCatchUp,
+    this.cursor,
   });
 
   /// The most frames a socket that came back holds while its session is
   /// read. Past it they all go, and the catch-up reads every topic again
-  /// instead: an invalidation or a resync names a topic and carries no
-  /// more, and [onConnected] is where the Connect layer registers, watches
+  /// instead: an invalidation or a resync asks for its topic to be read
+  /// again, and [onConnected] is where the Connect layer registers, watches
   /// and tunes again, which the server answers with the state as it is.
-  /// Only a reply to a command sent meanwhile is lost, and it times out as
-  /// one sent on a socket that dropped does.
+  /// What a frame let go said of the catalog's entities that changed goes
+  /// with it, so the catch-up tells [onCatalogNamed] that entities went
+  /// unnamed. One thing is lost: a reply to a command sent meanwhile
+  /// times out as one sent on a socket that dropped does.
   static const mostHeld = 64;
 
   final EventsChannelFactory channelFactory;
@@ -35,6 +40,22 @@ class LiveInvalidations {
   final void Function()? onUserCatchUp;
 
   void _userCatchUp() => (onUserCatchUp ?? onUser)();
+
+  /// The newest catalog position heard, presented on each subscribe so
+  /// the server names what changed after it. Null subscribes with none.
+  final CatalogCursor? cursor;
+
+  /// What a frame said of the catalog's entities that changed: the ones
+  /// an invalidation named, or that it left some unnamed, as a resync
+  /// that covers the catalog leaves them all. Handed on just before
+  /// [onCatalog] for the same frame; a frame that says neither calls
+  /// [onCatalog] alone.
+  void Function(CatalogNames names)? onCatalogNamed;
+
+  /// The server's answer to the cursor presented said nothing in the
+  /// catalog changed after it: in place of [onCatalog], for the reads
+  /// that are not current alone (one that failed).
+  void Function()? onCatalogCurrent;
 
   /// Player-topic invalidations: endpoint and session lists changed.
   void Function()? onPlayer;
@@ -82,6 +103,9 @@ class LiveInvalidations {
   /// Whether the socket has been down since it last came up.
   bool _wasDown = false;
 
+  /// Whether the socket is up and has caught up.
+  bool _caughtUp = false;
+
   /// Whether the socket came back and the session has not said it is
   /// still this client's.
   bool _unvouched = false;
@@ -93,19 +117,36 @@ class LiveInvalidations {
   /// Whether more than [mostHeld] frames came while the session was read.
   bool _spilled = false;
 
+  /// Whether a frame let go for that said which entities changed, or
+  /// that some did.
+  bool _spilledNames = false;
+
+  /// Whether the next catalog frame is the server's answer to the cursor
+  /// this socket presented, which then says whether the catalog changed
+  /// while it was away.
+  bool _answerDue = false;
+
   void start() {
     if (_running) return;
     _running = true;
+    // Read before this tab's screens are: another tab may store a newer
+    // position before the first connect, and this one's lists are not
+    // as new as that.
+    cursor?.since;
     _connect();
   }
 
   /// The network came back: a socket waiting out its backoff tries now,
   /// and from the first step again. One up, or on its way, is left be.
-  void networkBack() {
-    if (!_running || _channel != null) return;
+  /// True when the socket stood up through it, caught up, so no catch-up
+  /// is coming.
+  bool networkBack() {
+    if (!_running) return false;
+    if (_channel != null) return _caughtUp;
     _reconnect?.cancel();
     _backoff.reset();
     _connect();
+    return false;
   }
 
   void stop() {
@@ -113,6 +154,7 @@ class LiveInvalidations {
     _reconnect?.cancel();
     _channel?.close();
     _channel = null;
+    _caughtUp = false;
     _held = null;
     // A start after this is a first connect: nothing held back, and the
     // backoff from the first step.
@@ -123,12 +165,19 @@ class LiveInvalidations {
 
   void _connect() {
     if (!_running) return;
+    _caughtUp = false;
+    _answerDue = false;
     final channel = _channel = channelFactory(
       onFrame: _onFrame,
       onDone: _onDown,
-      // No mirror means no cursors: subscribe empty and receive live
-      // invalidations only.
-      subscribe: () async => jsonEncode(const <String, Object?>{}),
+      // No mirror means no user cursor, and the catalog's is only the
+      // newest position heard: the server then names what changed after
+      // it. With none, live invalidations only.
+      subscribe: () async {
+        final since = cursor?.since;
+        _answerDue = since != null;
+        return jsonEncode(<String, Object?>{'catalogSince': ?since});
+      },
     );
     // The error handler rides `then` rather than a chained catchError:
     // chained, it would also catch what the success body throws, and a
@@ -158,6 +207,7 @@ class LiveInvalidations {
         _unvouched = true;
         _held = [];
         _spilled = false;
+        _spilledNames = false;
         asking().then(
           (ours) => _answered(channel, ours: ours),
           onError: (Object _) => _answered(channel, ours: true),
@@ -178,17 +228,21 @@ class LiveInvalidations {
     _held = null;
     if (!ours) return;
     _unvouched = false;
-    _catchUp(everyTopic: _spilled);
+    _catchUp(everyTopic: _spilled, unnamed: _spilledNames);
     for (final frame in held ?? const <String>[]) {
       if (!_running || !identical(_channel, channel)) return;
       _hear(frame);
     }
   }
 
-  void _catchUp({bool everyTopic = false}) {
+  void _catchUp({bool everyTopic = false, bool unnamed = false}) {
+    _caughtUp = true;
     onConnected?.call();
-    // The socket may have been down across changes; refresh once.
-    onCatalog();
+    if (unnamed) _sayNames(const CatalogNames.unnamed());
+    // The socket may have been down across changes; refresh once, unless
+    // the server's answer to the cursor presented is still to be heard:
+    // that says whether anything changed.
+    if (!_answerDue) onCatalog();
     _userCatchUp();
     if (everyTopic) {
       onPlayer?.call();
@@ -203,6 +257,7 @@ class LiveInvalidations {
     final inDoubt =
         failed != null || _channel?.closeCode == sessionEndedCloseCode;
     _channel = null;
+    _caughtUp = false;
     _wasDown = true;
     _unvouched = false;
     _held = null;
@@ -216,16 +271,45 @@ class LiveInvalidations {
     // What a socket that came back says waits on its session's answer.
     if (_unvouched) {
       final held = _held;
-      if (held == null) return;
+      if (held == null) {
+        // Let go like the rest of a spill.
+        if (_spilled && !_spilledNames) _spilledNames = _saysNames(data);
+        return;
+      }
       if (held.length < mostHeld) {
         held.add(data);
       } else {
+        _spilledNames = held.any(_saysNames) || _saysNames(data);
         _held = null;
         _spilled = true;
+        // The answer may be among what goes, so the catch-up refreshes.
+        _answerDue = false;
       }
       return;
     }
     _hear(data);
+  }
+
+  /// Whether the frame [data] says something of the catalog's entities
+  /// that changed.
+  static bool _saysNames(String data) {
+    final Object? frame;
+    try {
+      frame = jsonDecode(data);
+    } on FormatException {
+      return false;
+    }
+    return frame is Map<String, Object?> && catalogFrameNames(frame) != null;
+  }
+
+  /// The refresh, and what is heard after, do not hang on the names'
+  /// listener: its throw is reported as itself.
+  void _sayNames(CatalogNames names) {
+    try {
+      onCatalogNamed?.call(names);
+    } on Object catch (error, stack) {
+      Zone.current.handleUncaughtError(error, stack);
+    }
   }
 
   void _hear(String data) {
@@ -235,11 +319,20 @@ class LiveInvalidations {
     } on FormatException {
       return;
     }
+    if (catalogFrameSince(frame) case final since?) cursor?.heard(since);
+    // Before the refresh the frame prompts.
+    if (catalogFrameNames(frame) case final named?) _sayNames(named);
     switch (frame['type']) {
       case 'invalidate':
         switch (frame['topic']) {
           case 'catalog':
-            onCatalog();
+            // An answer saying nothing changed after the cursor presented:
+            // only what failed to read is read again.
+            if (catalogFrameUnchanged(frame)) {
+              onCatalogCurrent?.call();
+            } else {
+              onCatalog();
+            }
           case 'user':
             onUser();
           case 'player':

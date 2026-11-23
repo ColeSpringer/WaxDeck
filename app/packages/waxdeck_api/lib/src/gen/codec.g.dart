@@ -2753,6 +2753,18 @@ EntityRenameResult decodeEntityRenameResult(
           (v, at) => wireList(v, at, wireString),
         ) ??
         const [],
+    folded:
+        readOptional(
+          json,
+          'folded',
+          type,
+          (v, at) => wireList(
+            v,
+            at,
+            (e, at) => decodeFoldedEntity(wireObject(e, at), ctx),
+          ),
+        ) ??
+        const [],
     members: readRequired(json, 'members', type, wireInt),
     credits: readRequired(json, 'credits', type, wireInt),
     writeBackFailures:
@@ -2775,6 +2787,7 @@ Map<String, Object?> encodeEntityRenameResult(EntityRenameResult value) => {
   'outcome': value.outcome.wireName,
   'mergedInto': ?value.mergedInto,
   'movedAlbums': value.movedAlbums,
+  'folded': [for (final e in value.folded) encodeFoldedEntity(e)],
   'members': value.members,
   'credits': value.credits,
   'failures': [
@@ -3207,6 +3220,19 @@ FileDiagnosticPage decodeFileDiagnosticPage(
 Map<String, Object?> encodeFileDiagnosticPage(FileDiagnosticPage value) => {
   'diagnostics': [for (final e in value.diagnostics) encodeFileDiagnostic(e)],
   'nextCursor': ?value.nextCursor,
+};
+
+FoldedEntity decodeFoldedEntity(Map<String, Object?> json, WireContext ctx) {
+  const type = 'FoldedEntity';
+  return FoldedEntity(
+    pid: readRequired(json, 'pid', type, wireString),
+    into: readRequired(json, 'into', type, wireString),
+  );
+}
+
+Map<String, Object?> encodeFoldedEntity(FoldedEntity value) => {
+  'pid': value.pid,
+  'into': value.into,
 };
 
 GenreNode decodeGenreNode(Map<String, Object?> json, WireContext ctx) {
@@ -4451,6 +4477,7 @@ ListenLogEntry decodeListenLogEntry(
 ) {
   const type = 'ListenLogEntry';
   return ListenLogEntry(
+    sessionId: readRequired(json, 'sessionId', type, wireString),
     pid: readRequired(json, 'pid', type, wireString),
     title: readOptional(json, 'title', type, wireString),
     artist: readOptional(json, 'artist', type, wireString),
@@ -4470,6 +4497,7 @@ ListenLogEntry decodeListenLogEntry(
 }
 
 Map<String, Object?> encodeListenLogEntry(ListenLogEntry value) => {
+  'sessionId': value.sessionId,
   'pid': value.pid,
   'title': ?value.title,
   'artist': ?value.artist,
@@ -4728,12 +4756,14 @@ LoginResult decodeLoginResult(Map<String, Object?> json, WireContext ctx) {
       (v, at) => decodeWaxDeckUser(wireObject(v, at), ctx),
     ),
     token: readRequired(json, 'token', type, wireString),
+    sessionId: readRequired(json, 'sessionId', type, wireString),
   );
 }
 
 Map<String, Object?> encodeLoginResult(LoginResult value) => {
   'user': encodeWaxDeckUser(value.user),
   'token': value.token,
+  'sessionId': value.sessionId,
 };
 
 Lyrics decodeLyrics(Map<String, Object?> json, WireContext ctx) {
@@ -5138,6 +5168,18 @@ MetadataEditResult decodeMetadataEditResult(
           (v, at) => wireList(v, at, wireString),
         ) ??
         const [],
+    folded:
+        readOptional(
+          json,
+          'folded',
+          type,
+          (v, at) => wireList(
+            v,
+            at,
+            (e, at) => decodeFoldedEntity(wireObject(e, at), ctx),
+          ),
+        ) ??
+        const [],
   );
 }
 
@@ -5149,6 +5191,7 @@ Map<String, Object?> encodeMetadataEditResult(MetadataEditResult value) => {
   'warnings': value.warnings,
   'mergedInto': ?value.mergedInto,
   'movedAlbums': value.movedAlbums,
+  'folded': [for (final e in value.folded) encodeFoldedEntity(e)],
 };
 
 MetadataFields decodeMetadataFields(
@@ -10520,12 +10563,25 @@ WsEventFrame decodeWsEventFrame(Map<String, Object?> json, WireContext ctx) {
   return WsEventFrame(
     type: readRequired(json, 'type', type, wireString),
     topic: readOptional(json, 'topic', type, wireString),
+    pids: readOptional(
+      json,
+      'pids',
+      type,
+      (v, at) => wireList(v, at, wireString),
+    ),
+    unnamed: readOptional(json, 'unnamed', type, wireBool),
+    unchanged: readOptional(json, 'unchanged', type, wireBool),
+    since: readOptional(json, 'since', type, wireString),
   );
 }
 
 Map<String, Object?> encodeWsEventFrame(WsEventFrame value) => {
   'type': value.type,
   'topic': ?value.topic,
+  'pids': ?value.pids,
+  'unnamed': ?value.unnamed,
+  'unchanged': ?value.unchanged,
+  'since': ?value.since,
 };
 
 WsPingFrame decodeWsPingFrame(Map<String, Object?> json, WireContext ctx) {

@@ -231,6 +231,42 @@ void main() {
     });
   });
 
+  testWidgets("the decision bar's surface reaches the window's edges at the "
+      'foot of the page, its controls and the entry above it clear of the '
+      'insets', (tester) async {
+    const insets = FakeViewPadding(left: 40, right: 30, bottom: 20);
+    tester.view
+      ..physicalSize = const Size(1000, 900)
+      ..devicePixelRatio = 1
+      ..padding = insets
+      ..viewPadding = insets;
+    addTearDown(tester.view.reset);
+    await mountApp(
+      tester,
+      const ReviewEntryScreen(entryId: 'rv-1'),
+      container: appContainer(repo: _repoWith(_detail())),
+      routed: false,
+    );
+    await tester.pumpAndSettle();
+
+    final bar = tester.getRect(find.byType(WaxFootBar));
+    expect((bar.left, bar.right, bar.bottom), (0.0, 1000.0, 900.0));
+    final approve = tester.getRect(
+      find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
+    );
+    expect(approve.left, 40 + 12.0, reason: 'its controls, the start');
+    expect(approve.bottom, 900 - 20 - 12.0, reason: 'its controls, the foot');
+    final entry = tester.getRect(
+      find
+          .descendant(
+            of: find.byType(ReviewEntryView),
+            matching: find.byType(ListView),
+          )
+          .first,
+    );
+    expect((entry.left, entry.right, entry.bottom), (40.0, 970.0, bar.top));
+  });
+
   group('the pane', () {
     testWidgets('holds its diff table at the width it declares', (
       tester,

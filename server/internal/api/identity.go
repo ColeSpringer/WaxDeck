@@ -46,7 +46,10 @@ func (s *Server) Bootstrap(ctx context.Context, req BootstrapRequestObject) (Boo
 	}
 	setCookie := s.newSessionCookie(created.Token)
 	return Bootstrap200JSONResponse{
-		Body:    LoginResponse{User: userJSON(acct.User), Token: created.Token, CsrfToken: created.CSRFToken},
+		Body: LoginResponse{
+			User: userJSON(acct.User), Token: created.Token, CsrfToken: created.CSRFToken,
+			SessionId: created.Session.ID,
+		},
 		Headers: Bootstrap200ResponseHeaders{SetCookie: &setCookie},
 	}, nil
 }
@@ -64,6 +67,7 @@ func (s *Server) RefreshToken(ctx context.Context, _ RefreshTokenRequestObject) 
 	}
 	return RefreshToken200JSONResponse(LoginResponse{
 		User: principalJSON(p.User), Token: token, CsrfToken: p.Session.CSRFToken,
+		SessionId: p.Session.ID,
 	}), nil
 }
 

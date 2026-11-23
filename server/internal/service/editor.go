@@ -69,6 +69,13 @@ type EditOutcomeDTO struct {
 	Warnings    []string
 	MergedInto  string
 	MovedAlbums []string
+	Folded      []FoldedDTO
+}
+
+// FoldedDTO is an album or release group a write dissolved, and the one
+// its members now sit on, as API pids.
+type FoldedDTO struct {
+	PID, Into string
 }
 
 // BulkEditOutcomeDTO reports a bulk edit's per-item outcomes.

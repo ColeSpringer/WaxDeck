@@ -268,10 +268,15 @@ class SessionState {
     required this.authenticated,
     this.user,
     this.serverReadOnly = false,
+    this.sessionId,
   });
 
   final bool authenticated;
   final WaxDeckUser? user;
+
+  /// The id of the session that answered, as the device list names it;
+  /// null when none did.
+  final String? sessionId;
 
   /// The server-wide read-only switch as of this read: uploads, edits that
   /// write files and deletions are refused for every account. False when
@@ -279,6 +284,24 @@ class SessionState {
   final bool serverReadOnly;
 
   String get _wire => jsonEncode(encodeSessionState(this));
+
+  /// This session as text a client keeps between launches, for
+  /// [fromStored] to read back. It names the account and its rights and
+  /// holds no credential.
+  String toStored() => _wire;
+
+  /// The session [text] holds, or null when it holds none: text this
+  /// build did not write, or wrote in a shape it no longer reads.
+  static SessionState? fromStored(String text) {
+    try {
+      return decodeSessionState(
+        wireObject(jsonDecode(text), 'SessionState'),
+        const WireContext(baseUrl: ''),
+      );
+    } on FormatException {
+      return null;
+    }
+  }
 
   @override
   bool operator ==(Object other) =>
@@ -538,6 +561,7 @@ SessionState decodeSessionState(Map<String, Object?> json, WireContext ctx) {
           (v, at) => decodeSessionServer(wireObject(v, at), ctx),
         )?.readOnly ??
         false,
+    sessionId: readOptional(json, 'sessionId', type, wireString),
   );
 }
 
@@ -545,4 +569,5 @@ Map<String, Object?> encodeSessionState(SessionState value) => {
   'authenticated': value.authenticated,
   if (value.user case final v?) 'user': encodeWaxDeckUser(v),
   'server': encodeSessionServer(SessionServer(readOnly: value.serverReadOnly)),
+  if (value.sessionId case final v?) 'sessionId': v,
 };

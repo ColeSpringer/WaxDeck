@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../books/book_dimension.dart';
 import '../l10n/l10n.dart';
 import '../music/music_controllers.dart';
 import '../providers.dart';
@@ -12,6 +13,7 @@ import '../shell/async_box_face.dart';
 import '../shell/navigation_history.dart';
 import '../shell/routes.dart';
 import '../shell/shell_messages.dart';
+import '../sync/catalog_writes.dart';
 import 'metadata_form.dart';
 
 /// Where an edit's answer takes the page whose record it edited. Read from
@@ -34,27 +36,25 @@ class EditFollow {
 
   /// The record was merged into [survivor]. While the visitor is on the
   /// page that asked or on another of the record's (any visit of its
-  /// editor, its album, artist or release group page), the survivor's
-  /// takes its place, saying [said]; otherwise one message offers the
-  /// survivor where they are. Either way no page of the record is shown
-  /// again: taken out from under the page on top, and every visit of it
-  /// forgotten. [also] goes under either message.
+  /// editor, its album, artist or release group page, an artist's author
+  /// page), the survivor's takes its place, saying [said]; otherwise one
+  /// message offers the survivor where they are. Either way no page of
+  /// the record is shown again and none is lost: each is the survivor's
+  /// from then on, under the page on top, in every visit behind or ahead
+  /// and in a branch off screen, so back reaches the survivor's page
+  /// whichever door opened the record's. Only a page that would then lie
+  /// directly on itself goes (see [WaxHistory.forget]). [also] goes under
+  /// either message. Each release the write [folded] is followed the same
+  /// way, into the one it became.
   Future<void> merged(
     String survivor, {
     required String Function(AppLocalizations l10n) said,
     List<String Function(AppLocalizations l10n)> also = const [],
+    List<FoldedEntity> folded = const [],
   }) async {
     final to = WaxRoute.metadata(survivor);
-    final pages = _pagesOf(pid, survivor);
-    String? instead(String location) {
-      for (final (gone, kept) in pages) {
-        if (location == gone || location.startsWith('$gone/')) {
-          return kept + location.substring(gone.length);
-        }
-      }
-      return null;
-    }
-
+    final pages = [..._pagesOf(pid, survivor), ..._foldedPages(folded)];
+    final instead = _insteadOf(pages);
     String lines(AppLocalizations l10n, String first) =>
         <String>[first, for (final line in also) line(l10n)].join('\n');
     closeFinished(closing);
@@ -67,6 +67,55 @@ class EditFollow {
       _messenger.showLocalized((l10n) => lines(l10n, said(l10n)));
       _swap(swapTo!);
     }
+    _rewrite(pages, instead);
+    if (on) return;
+    _messenger.showLocalized(
+      (l10n) => lines(l10n, l10n.metadataMergedReady),
+      actionLabelOf: (l10n) => l10n.commonOpen,
+      // Not over itself, where back has reached it since.
+      onAction: () {
+        if (pageOnTop(_router)?.location == to) return;
+        unawaited(_router.pushInShell<void>(to));
+      },
+    );
+  }
+
+  /// The write kept the record and dissolved the releases in [folded]:
+  /// each one's pages are the one it became, as [merged] makes a merged
+  /// record's, on screen where one is on top and everywhere behind it.
+  /// Nothing is said: the record's own message says what the write did.
+  Future<void> folded(List<FoldedEntity> folded) async {
+    if (folded.isEmpty) return;
+    final pages = _foldedPages(folded);
+    final instead = _insteadOf(pages);
+    String? swapTo;
+    final on = await stillOnTop(_router, (page) {
+      swapTo = instead(page.location);
+      return swapTo != null;
+    });
+    if (on) _swap(swapTo!);
+    _rewrite(pages, instead);
+  }
+
+  /// Each page of [pages]' first, and every location beneath it, as the
+  /// second's; null for a location of none of them.
+  static String? Function(String location) _insteadOf(
+    List<(String, String)> pages,
+  ) => (location) {
+    for (final (gone, kept) in pages) {
+      if (location == gone || location.startsWith('$gone/')) {
+        return kept + location.substring(gone.length);
+      }
+    }
+    return null;
+  };
+
+  /// Puts [instead]'s page in place of each of [pages]' gone ones under
+  /// the page on top, in every visit and the browser's entries.
+  void _rewrite(
+    List<(String, String)> pages,
+    String? Function(String location) instead,
+  ) {
     final history = WaxHistory.of(_router);
     history?.takeOutFromUnder(
       (location, _) => instead(Uri.parse(location).path) != null,
@@ -75,25 +124,30 @@ class EditFollow {
     for (final (gone, kept) in pages) {
       history?.forget(gone, instead: kept);
     }
-    if (on) return;
-    _messenger.showLocalized(
-      (l10n) => lines(l10n, l10n.metadataMergedReady),
-      actionLabelOf: (l10n) => l10n.commonOpen,
-      onAction: () => unawaited(_router.pushInShell<void>(to)),
-    );
   }
 
+  static List<(String, String)> _foldedPages(List<FoldedEntity> folded) => [
+    for (final fold in folded) ..._pagesOf(fold.pid, fold.into),
+  ];
+
   /// The pages of [gone], each with the page of [survivor] it stands for:
-  /// its editor, and for an album, artist or release group its own page.
+  /// its editor, for an album, artist or release group its own page, and
+  /// for an artist the author page the books open under the same pid.
   static List<(String, String)> _pagesOf(String gone, String survivor) => [
     (WaxRoute.metadata(gone), WaxRoute.metadata(survivor)),
     for (final dimension in MusicDimension.values)
       if (dimension.entityPrefix case final prefix?
-          when gone.startsWith(prefix))
+          when gone.startsWith(prefix)) ...[
         (
           WaxRoute.musicBucket(dimension, gone),
           WaxRoute.musicBucket(dimension, survivor),
         ),
+        if (BookDimension.byDimension(dimension) case final books?)
+          (
+            WaxRoute.bookBucket(books, gone),
+            WaxRoute.bookBucket(books, survivor),
+          ),
+      ],
   ];
 
   /// Opens [location], as the visitor asked: in place of the page while
@@ -199,7 +253,7 @@ class EntityRenameSection extends ConsumerStatefulWidget {
     required this.busy,
     required this.onBusyChanged,
     required this.follow,
-    required this.onRenamed,
+    this.onRenamed,
     this.canApply = true,
     this.onDirtyChanged,
   });
@@ -232,9 +286,10 @@ class EntityRenameSection extends ConsumerStatefulWidget {
   /// route to replace.
   final EditFollow? Function() follow;
 
-  /// Called when the row survived, for whatever the caller has to
-  /// refetch, whether or not this section is still up.
-  final VoidCallback onRenamed;
+  /// Called when the row survived, for a read of the caller's own that
+  /// the catalog's registry does not hold, whether or not this section
+  /// is still up.
+  final VoidCallback? onRenamed;
 
   /// Extra precondition on the apply button, for a caller that knows
   /// one: the album pane refuses a release it counts no members on.
@@ -406,6 +461,7 @@ class _EntityRenameSectionState extends ConsumerState<EntityRenameSection> {
     final copy = widget.copy;
     final onRenamed = widget.onRenamed;
     final follow = widget.follow();
+    final writes = ref.read(catalogWritesProvider);
     try {
       // The rename enumerates the members server-side, which is the
       // point: a client-drained list that stopped short would move the
@@ -423,6 +479,9 @@ class _EntityRenameSectionState extends ConsumerState<EntityRenameSection> {
             writeBack: _writeBack,
             force: true,
           );
+      // Merged or not: the members moved under every read that holds
+      // them.
+      writes.landed();
       final merged = result.outcome == EntityRenameOutcome.merged;
       final warning = <String Function(AppLocalizations l10n)>[
         if (result.writeBackFailures.isNotEmpty)
@@ -444,17 +503,26 @@ class _EntityRenameSectionState extends ConsumerState<EntityRenameSection> {
       // is gone.
       if (result.mergedInto case final survivor? when merged) {
         if (follow != null) {
-          unawaited(follow.merged(survivor, said: copy.merged, also: warning));
+          unawaited(
+            follow.merged(
+              survivor,
+              said: copy.merged,
+              also: warning,
+              folded: result.folded,
+            ),
+          );
         } else {
           messenger.show(said(copy.merged(l10n)));
         }
         return;
       }
+      // The record stayed, and the releases it left are gone all the same.
+      unawaited(follow?.folded(result.folded));
       // Said where the visitor is, this section up or not.
       messenger.show(
         said(merged ? copy.merged(l10n) : copy.renamed(result.members)),
       );
-      onRenamed();
+      onRenamed?.call();
     } on WaxDeckApiException catch (e) {
       messenger.show(explainRefusal(l10n, e));
     } finally {

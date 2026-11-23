@@ -721,6 +721,44 @@ note.
   track can be filed when its key's audio is the trashed file's.
   Shipped workaround: such a vector is refused as `not-found` and its
   work dropped; a restore queues the track for a full analysis.
+- **Art has no version a URL can carry.** Item views, entity cards and
+  facet buckets carry nothing that changes when an entity's picture
+  does, so WaxDeck's art URLs name the entity alone and their responses
+  are fresh for a day and may be served stale for a week more: a cover
+  replaced by enrichment, a scan or another device keeps drawing the
+  old bytes on every client that already had it. Working a version out
+  in WaxDeck is a provenance chain walk per row on every listing read,
+  which `docs/deferred-work.md` measured and ruled out for the has-art
+  signal. Wanted: the resolved front-art source hash (or an art-change
+  sequence) on item views, entity cards and facet buckets, so every art
+  URL can carry it and the response can be immutable. Shipped
+  workaround: the catalog invalidation frame names the entities whose
+  rows changed, the album beside each changed track, the tracks beside
+  each changed album and the episodes beside a show whose cover was set
+  in the editor, or says that entities changed which it does not name,
+  and a client drops its cached covers to match: every picture of a
+  named entity as it is named while a five-second window names at most
+  64 entities and leaves none unnamed, and every cover at once, a
+  window after a busier stretch (a scan) slows, not as each changes. A
+  client that was away presents the position it last heard and is told
+  what changed after it. A cover derived from a row the log did not
+  name (a member deleted or moved away, a release group's, an artist's
+  or a genre's picture drawn by what has none of its own, a cover that
+  came with a show's feed) keeps the old picture until the cache
+  expires.
+- **An entity rename's report does not name the releases it folded.**
+  `EntityRenameReport` (and `EntityEditReport` for an `mbid` clear)
+  names the survivor of the entity renamed and the albums that moved
+  between release groups, not the other albums and release groups the
+  write dissolved into others: an artist merged into another folds its
+  release group of a title the survivor has, and its album too where
+  both editions sit in one folder. `RenameEntity` already reads the
+  members' albums before and after inside its transaction
+  (`albumGroupsTx`). Wanted: the folded pairs, each dissolved album or
+  release group with the one it went into, on both reports. Shipped
+  workaround: WaxDeck reads the members' releases before and after the
+  write (one query each side, at most 5000 members) and answers the
+  pairs as `folded`; the two reads are not the write's transaction.
 
 ## WaxTap
 

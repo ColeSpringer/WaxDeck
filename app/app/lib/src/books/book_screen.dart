@@ -25,8 +25,10 @@ import '../podcasts/episode_screen.dart' show formatCueTimestamp;
 import '../podcasts/show_notes.dart';
 import '../podcasts/speed_slider.dart';
 import '../providers.dart';
+import '../queue/queue_recheck.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
+import '../settings/client_prefs.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/navigation_history.dart';
@@ -36,6 +38,7 @@ import '../shell/server_health.dart';
 import '../shell/shell_messages.dart';
 import '../tools/tool_tasks_provider.dart';
 import 'book_dimension.dart';
+import 'book_summary.dart';
 import 'books_controller.dart';
 import 'series_merge.dart';
 
@@ -144,17 +147,6 @@ class _BookScreenState extends ConsumerState<BookScreen> {
   }
 }
 
-/// Builds the summary the player needs from the book detail.
-ItemSummary bookItemSummary(BookDetail book) => ItemSummary(
-  pid: book.pid,
-  mediaType: MediaType.audiobook,
-  title: book.title,
-  artist: book.authors.isEmpty ? null : book.authors.join(', '),
-  album: book.series,
-  durationMs: book.durationMs,
-  artUrl: book.artUrl,
-);
-
 /// Starts [book] at [positionMs] on the book timeline. Playback lands
 /// in the dock; the full player is the listener's own step.
 ///
@@ -172,6 +164,9 @@ void playBook(WidgetRef ref, BookDetail book, {required int positionMs}) {
         ),
         positionMs: positionMs,
       );
+  // The server's row for the book as it is now, which the composed row
+  // is not, for what a later lookup is compared with.
+  unawaited(ref.read(queueRecheckProvider).redraw());
 }
 
 /// Cover, contributors, where the listener stands, and the verbs.
@@ -973,7 +968,11 @@ final bookResumeProvider = FutureProvider.autoDispose
       (ref, pid) => ref.watch(repositoryProvider).getBookResume(pid),
     );
 
-/// Per-book playback settings editor; Save PUTs the complete object.
+/// Per-book playback settings editor. Save reads the stored settings and
+/// PUTs them back with only what was changed here laid over them: the
+/// endpoint replaces the object, and what the sheet read when it opened may
+/// be older than a rate the player stored meanwhile, or another device's
+/// change.
 class BookSettingsSheet extends ConsumerStatefulWidget {
   const BookSettingsSheet({
     required this.pid,
@@ -992,14 +991,59 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
   late double _speed;
   late bool _voiceBoost;
   late bool _trimSilence;
+
+  /// What the fields stand on while nobody has changed them: what the
+  /// screen had, then what is stored once it is read.
+  late BookSettings _base = widget.initial;
   var _busy = false;
+
+  // A field with nothing stored is drawn as playback has it: at this
+  // device's default.
+  late final double _defaultSpeed = ref.read(bookSpeedProvider);
+  late final bool _defaultBoost = ref.read(voiceBoostDefaultProvider);
+  late final bool _defaultTrim = ref.read(trimSilenceDefaultProvider);
 
   @override
   void initState() {
     super.initState();
-    _speed = widget.initial.speed ?? 1.0;
-    _voiceBoost = widget.initial.voiceBoost ?? false;
-    _trimSilence = widget.initial.trimSilence ?? false;
+    _speed = _base.speed ?? _defaultSpeed;
+    _voiceBoost = _base.voiceBoost ?? _defaultBoost;
+    _trimSilence = _base.trimSilence ?? _defaultTrim;
+    unawaited(_readStored(ref.read(repositoryProvider)));
+  }
+
+  /// [value] for a copy to take, or null while it is still [atOpen].
+  static T Function()? _changed<T>(T value, T atOpen) =>
+      value == atOpen ? null : () => value;
+
+  /// The stored settings, read as the sheet opens: the screen's copy may be
+  /// older than a rate the player stored since. A field still as it opened
+  /// takes them; one already changed here keeps its change. Unread, the
+  /// sheet stays on what the screen had.
+  Future<void> _readStored(WaxDeckRepository repository) async {
+    final BookSettings stored;
+    try {
+      stored =
+          (await repository.getBook(widget.pid)).settings ??
+          const BookSettings();
+    } on WaxDeckApiException {
+      return;
+    }
+    if (!mounted) return;
+    final base = _base;
+    final speed = _speed == (base.speed ?? _defaultSpeed);
+    final boost = _voiceBoost == (base.voiceBoost ?? _defaultBoost);
+    final trim = _trimSilence == (base.trimSilence ?? _defaultTrim);
+    setState(() {
+      _base = stored.copyWith(
+        speed: speed ? null : () => base.speed,
+        voiceBoost: boost ? null : () => base.voiceBoost,
+        trimSilence: trim ? null : () => base.trimSilence,
+      );
+      if (speed) _speed = stored.speed ?? _defaultSpeed;
+      if (boost) _voiceBoost = stored.voiceBoost ?? _defaultBoost;
+      if (trim) _trimSilence = stored.trimSilence ?? _defaultTrim;
+    });
   }
 
   Future<void> _save() async {
@@ -1012,17 +1056,19 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
     final route = ModalRoute.of(context);
     final l10n = context.l10n;
     final pid = widget.pid;
+    final opened = _base;
+    final speed = _changed(_speed, opened.speed ?? _defaultSpeed);
+    final boost = _changed(_voiceBoost, opened.voiceBoost ?? _defaultBoost);
+    final trim = _changed(_trimSilence, opened.trimSilence ?? _defaultTrim);
+    final repository = container.read(repositoryProvider);
     try {
-      await container
-          .read(repositoryProvider)
-          .putBookSettings(
-            pid,
-            BookSettings(
-              speed: _speed,
-              voiceBoost: _voiceBoost,
-              trimSilence: _trimSilence,
-            ),
-          );
+      // A read that fails writes nothing, and is said as a failed save is.
+      final stored =
+          (await repository.getBook(pid)).settings ?? const BookSettings();
+      await repository.putBookSettings(
+        pid,
+        stored.copyWith(speed: speed, voiceBoost: boost, trimSilence: trim),
+      );
       container.invalidate(bookDetailProvider(pid));
       // Only while this sheet is still there: a save outlives a sheet
       // somebody swiped away, and popping then takes the book screen

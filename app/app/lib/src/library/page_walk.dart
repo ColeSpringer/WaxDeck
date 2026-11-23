@@ -94,24 +94,54 @@ Future<PageWalk> _walk(
   required bool Function()? stop,
   required bool keepOnFailure,
 }) async {
+  final walk = await walkRows<ItemSummary>(
+    (cursor) async {
+      final page = await fetch(cursor);
+      return (rows: page.items, nextCursor: page.nextCursor);
+    },
+    want: want,
+    maxPages: maxPages,
+    from: from,
+    stop: stop,
+    keepOnFailure: keepOnFailure,
+  );
+  return PageWalk(items: walk.rows, nextCursor: walk.nextCursor);
+}
+
+/// A run of a listing's rows, and the cursor to read on from: null once
+/// the listing's end was read.
+typedef PagedRows<RowT> = ({List<RowT> rows, String? nextCursor});
+
+/// The walk under [walkPages] and [readPages], for a listing of any row:
+/// pages from [from] until [want] rows are in hand, the listing ends, or
+/// [maxPages] were read (no budget when null). [stop] and [keepOnFailure]
+/// are [walkPages]'s.
+Future<PagedRows<RowT>> walkRows<RowT>(
+  Future<PagedRows<RowT>> Function(String? cursor) page, {
+  required int want,
+  String? from,
+  int? maxPages,
+  bool Function()? stop,
+  bool keepOnFailure = false,
+}) async {
   assert(
     want > 0 && (maxPages == null || maxPages > 0),
     'a walk that reads nothing proves nothing',
   );
-  final items = <ItemSummary>[];
+  final rows = <RowT>[];
   var cursor = from;
   for (var read = 0; maxPages == null || read < maxPages; read++) {
-    final ItemPage page;
+    final PagedRows<RowT> next;
     try {
-      page = await fetch(cursor);
+      next = await page(cursor);
     } on WaxDeckApiException {
-      if (!keepOnFailure || items.isEmpty) rethrow;
+      if (!keepOnFailure || rows.isEmpty) rethrow;
       break;
     }
-    items.addAll(page.items);
-    cursor = page.nextCursor;
-    if (cursor == null || items.length >= want) break;
+    rows.addAll(next.rows);
+    cursor = next.nextCursor;
+    if (cursor == null || rows.length >= want) break;
     if (stop?.call() ?? false) break;
   }
-  return PageWalk(items: items, nextCursor: cursor);
+  return (rows: rows, nextCursor: cursor);
 }

@@ -928,7 +928,7 @@ class BackgroundDownloadManager implements DownloadManagerPort {
       return null;
     }
     for (final r in rows) {
-      if (!File(r.localPath).existsSync()) {
+      if (!await File(r.localPath).exists()) {
         return null; // evicted outside our control; treat as absent
       }
     }

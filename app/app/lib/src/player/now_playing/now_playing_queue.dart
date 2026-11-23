@@ -164,7 +164,7 @@ mixin _NowPlayingQueue
       final adopting = _adopting;
       _adopting = null;
       if (adopting != null && adopting.entry.queueId == entry.queueId) {
-        _inFlight = _adopt(entry, adopting.info);
+        _inFlight = _adopt(entry, adopting);
       } else {
         _inFlight = _start(entry);
       }

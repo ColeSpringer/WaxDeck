@@ -68,6 +68,7 @@ abstract interface class PlaybackApi {
     String pid, {
     int? positionMs,
     bool? voiceBoost,
+    bool? voiceBoostDefault,
     int? maxBitrateKbps,
     bool? hls,
   });

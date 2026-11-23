@@ -51,7 +51,8 @@ class MusicListingScreen extends ConsumerStatefulWidget {
   /// The bucket's display label, when the caller had one. A visitor
   /// arriving cold has no `extra` - a reload or a shared link drops it -
   /// so the screen names itself from what it loads instead, and the
-  /// listing itself never depends on this.
+  /// listing itself never depends on this. An artist's card, once read,
+  /// names the bucket over it.
   final String? label;
 
   /// What the bucket drills over: music, or the whole library where the
@@ -86,15 +87,17 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
   @override
   void loadMore() => ref.read(musicItemsProvider(_listing).notifier).loadMore();
 
-  /// What to call this list when nothing handed it a name.
+  /// What to call this list: the name in hand ([_given]), else one
+  /// worked out here.
   ///
-  /// A year bucket names itself: its key is the year. An artist or album
-  /// bucket is a pid, and a genre bucket is a catalog id, so the items
-  /// themselves are the only thing on hand that carries the label - the
-  /// first row of an artist's listing knows the artist's name.
+  /// A year bucket names itself: its key is the year. An album or release
+  /// group bucket is a pid, so its first row is what carries the name
+  /// ([_derived]). An artist's is never read off a row, whose artist field
+  /// is a credit, and a genre's key is a catalog id: either falls back to
+  /// what its dimension is called.
   String _title(List<ItemSummary> items) {
-    final given = widget.label;
-    if (given != null && given.isNotEmpty) return given;
+    final given = _given;
+    if (given != null) return given;
     final l10n = context.l10n;
     final dimension = widget.dimension;
     if (dimension == null) return l10n.musicTracksTitle;
@@ -109,8 +112,8 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
   /// with the queue, so the title's localized fallbacks must not reach
   /// it. Empty where the bucket has no name to give.
   String _sourceName(List<ItemSummary> items) {
-    final given = widget.label;
-    if (given != null && given.isNotEmpty) return given;
+    final given = _given;
+    if (given != null) return given;
     if (widget.dimension == MusicDimension.years) return widget.segment;
     // The bucket that is the absence of a value has no name of its own
     // and no entity behind it to ask: the title's localized fallback is
@@ -119,17 +122,23 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
     return _derived(items) ?? '';
   }
 
+  /// The bucket's name in hand: the artist's card, which a rename
+  /// reaches, else the caller's label, read when the page was opened.
+  String? get _given {
+    final label = widget.label;
+    return _entityName ?? (label == null || label.isEmpty ? null : label);
+  }
+
   /// The bucket's name worked out from what is in it.
   ///
   /// Never from an item for an artist: a track's artist field is its
   /// *credit* ("Dom Kennedy feat. Ty Dolla $ign"), so the first row of a
   /// catalogue names the artist no better than any other row does. The
-  /// entity's own card answers instead, which is what the artist screen
-  /// one level up does with the same handle.
+  /// entity's own card answers instead ([_given]), which is what the
+  /// artist screen one level up does with the same handle.
   String? _derived(List<ItemSummary> items) {
     final first = items.firstOrNull;
     return switch (widget.dimension) {
-      MusicDimension.artists => _entityName,
       // A release group is named for the record, and every edition of it
       // carries that name, so the first row has it.
       MusicDimension.albums || MusicDimension.releaseGroups => first?.album,
@@ -309,10 +318,23 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
     // Watched here and nowhere else. Only for an artist bucket that is
     // one: the absent-value bucket travels as a sentinel, and resolving
     // that as a pid is a request for something that cannot exist.
-    _entityName =
+    final card =
         dimension == MusicDimension.artists &&
             widget.segment != musicUnknownSegment
-        ? ref.watch(entityCardProvider(widget.segment)).value?.title
+        ? ref.watch(entityCardProvider(widget.segment))
+        : null;
+    _entityName = card?.value?.title;
+    // The listing answers an empty page for any key, so an empty artist
+    // bucket says nothing about whether the artist is there; their card
+    // does, as on the artist's own page.
+    final unproven =
+        card != null && state.hasValue && !state.hasError && items.isEmpty
+        ? unprovenEntityFace(
+            context,
+            card,
+            errorTitle: context.l10n.musicArtistLoadError,
+            onRetry: () => ref.invalidate(entityCardProvider(widget.segment)),
+          )
         : null;
 
     return NotificationListener<ScrollEndNotification>(
@@ -359,15 +381,18 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
           const SearchAction(),
         ],
         slivers: <Widget>[
-          AsyncSliverFace<MusicItemsState>(
-            state: state,
-            skeletonFills: true,
-            errorTitle: context.l10n.musicListingLoadError,
-            onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
-            // The list draws its own empty row, which names the bucket
-            // it is empty for, so there is no empty face here.
-            builder: (context, value) => _list(value, store),
-          ),
+          if (unproven != null)
+            unproven
+          else
+            AsyncSliverFace<MusicItemsState>(
+              state: state,
+              skeletonFills: true,
+              errorTitle: context.l10n.musicListingLoadError,
+              onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
+              // The list draws its own empty row, which names the bucket
+              // it is empty for, so there is no empty face here.
+              builder: (context, value) => _list(value, store),
+            ),
         ],
       ),
     );

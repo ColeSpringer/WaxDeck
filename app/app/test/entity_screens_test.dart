@@ -2,14 +2,17 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/books/book_bucket_screen.dart';
 import 'package:waxdeck/src/books/book_dimension.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/library/item_kind.dart';
+import 'package:waxdeck/src/music/album_detail.dart';
 import 'package:waxdeck/src/music/album_screen.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/entity_facts.dart';
+import 'package:waxdeck/src/music/index_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/player/play_progress.dart';
@@ -17,6 +20,7 @@ import 'package:waxdeck/src/metadata/metadata_screen.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -54,6 +58,77 @@ ItemSummary _track(
 );
 
 Finder _byId(String id) => find.bySemanticsIdentifier(id);
+
+/// A library whose album goes with its last track, as the server's does:
+/// out of the albums the index lists.
+class _AlbumsDeleted extends FakeRepository {
+  _AlbumsDeleted({super.sessionState});
+
+  @override
+  Future<DeleteItemsResult> deleteLibraryItems({
+    required List<String> pids,
+    String? mode,
+    bool dryRun = false,
+  }) async {
+    final result = await super.deleteLibraryItems(
+      pids: pids,
+      mode: mode,
+      dryRun: dryRun,
+    );
+    if (!dryRun) {
+      facetItems['album 1'] = const <ItemSummary>[];
+      facets['album'] = [
+        for (final bucket in facets['album']!)
+          if (bucket.entityPid != 'al-1') bucket,
+      ];
+    }
+    return result;
+  }
+}
+
+/// A library whose card read fails, and counts how often it was asked.
+class _CardReadFails extends FakeRepository {
+  var asked = 0;
+
+  @override
+  Future<EntityResolution> resolveEntities(List<String> pids) async {
+    asked++;
+    throw const WaxDeckApiException(
+      code: 'internal',
+      message: 'boom',
+      statusCode: 500,
+    );
+  }
+}
+
+/// A library whose card read does not answer until [answer] completes.
+class _CardReadWaits extends FakeRepository {
+  final answer = Completer<void>();
+
+  @override
+  Future<EntityResolution> resolveEntities(List<String> pids) async {
+    await answer.future;
+    return super.resolveEntities(pids);
+  }
+}
+
+/// [screen] mounted over [repository] and pumped a few frames, for a read
+/// that never settles.
+Future<void> _mount(
+  WidgetTester tester,
+  Widget screen,
+  FakeRepository repository,
+) async {
+  tester.view.physicalSize = const Size(900, 1400);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await mountApp(tester, screen, container: appContainer(repo: repository));
+  for (var i = 0; i < 3; i++) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+}
+
+const _notHere = 'That is not here any more.';
 
 Future<ProviderContainer> _pump(
   WidgetTester tester,
@@ -385,6 +460,42 @@ void main() {
       expect(find.text('Nothing in this album'), findsNothing);
       expect(find.text('Could not load this album'), findsOneWidget);
       expect(find.text('That is not here any more.'), findsOneWidget);
+      expect(find.text('Try again'), findsNothing);
+      expect(_byId(SemanticsIds.entityPlay), findsNothing);
+    });
+
+    testWidgets('an album that goes while it is drawn is not here, as one '
+        'opened cold is', (tester) async {
+      // Its own read held from before and failing now, as a page the
+      // history lands back on holds it.
+      final repository = FakeRepository()
+        ..albums['al-1'] = const AlbumDetail(pid: 'al-1', title: 'Gullwing')
+        ..facetItems['album 1'] = <ItemSummary>[_track('Bellwether', track: 1)];
+      final container = await _pump(
+        tester,
+        const AlbumScreen(pid: 'al-1'),
+        repository,
+      );
+      expect(find.text('Bellwether'), findsOneWidget);
+
+      repository
+        ..albums.remove('al-1')
+        ..facetItems.remove('album 1');
+      container
+        ..invalidate(
+          musicItemsProvider((
+            dimension: MusicDimension.albums,
+            segment: 'al-1',
+            domain: BrowseDomain.wholeLibrary,
+          )),
+        )
+        ..invalidate(albumDetailProvider('al-1'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bellwether'), findsNothing);
+      expect(find.text('Nothing in this album'), findsNothing);
+      expect(find.text('Could not load this album'), findsOneWidget);
+      expect(find.text(_notHere), findsOneWidget);
       expect(find.text('Try again'), findsNothing);
       expect(_byId(SemanticsIds.entityPlay), findsNothing);
     });
@@ -789,6 +900,43 @@ void main() {
       );
     });
 
+    testWidgets('an album deleted from its own screen is gone from the '
+        'albums index at once', (tester) async {
+      final repository = _AlbumsDeleted(sessionState: _adminSession)
+        ..facets['album'] = const <FacetBucket>[
+          FacetBucket(key: '1', label: 'Gullwing', count: 2, entityPid: 'al-1'),
+          FacetBucket(key: '2', label: 'Tern', count: 5, entityPid: 'al-2'),
+        ]
+        ..facetItems['album 1'] = <ItemSummary>[
+          _track('One', track: 1),
+          _track('Two', track: 2),
+        ];
+      await _pump(tester, const Scaffold(), repository);
+      GoRouter.of(
+        tester.element(find.byType(Scaffold)),
+      ).go(WaxRoute.musicBucket(MusicDimension.albums, 'al-1'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlbumScreen), findsOneWidget);
+      expect(
+        find.byType(MusicIndexScreen, skipOffstage: false),
+        findsOneWidget,
+      );
+
+      await tester.tap(_byId(SemanticsIds.entityOverflow));
+      await tester.pumpAndSettle();
+      await tester.tap(_byId(SemanticsIds.itemMenuDelete));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.itemDeleteConfirm),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlbumScreen), findsNothing);
+      expect(find.byType(MusicIndexScreen), findsOneWidget);
+      expect(find.text('Tern'), findsOneWidget);
+      expect(find.text('Gullwing'), findsNothing);
+    });
+
     testWidgets('an album delete a file shares offers the file\'s other '
         'tracks with the album\'s', (tester) async {
       final repository = FakeRepository(sessionState: _adminSession)
@@ -1017,6 +1165,189 @@ void main() {
   });
 
   group('the music listing', () {
+    testWidgets('an artist bucket is titled by the artist\'s card over the '
+        'caller\'s label, and the queue it plays is named the same', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[_track('One')]
+        ..entityCards['ar-1'] = const EntityCard(
+          pid: 'ar-1',
+          kind: EntityCardKind.artist,
+          title: 'The Bree Quartet',
+        );
+      tester.view.physicalSize = const Size(900, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final container = appContainer(repo: repository);
+      await mountApp(
+        tester,
+        const MusicListingScreen(
+          dimension: MusicDimension.artists,
+          segment: 'ar-1',
+          label: 'The Bree Trio',
+        ),
+        container: container,
+      );
+      // The label holds the title until the card answers.
+      expect(find.text('The Bree Trio'), findsOneWidget);
+
+      await tester.pumpAndSettle();
+      expect(find.text('The Bree Trio'), findsNothing);
+      expect(find.text('The Bree Quartet'), findsOneWidget);
+
+      await tester.tap(find.text('One'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(
+        container.read(queueControllerProvider).source.label,
+        'The Bree Quartet',
+      );
+      await _stop(tester, container);
+    });
+
+    testWidgets('an artist bucket whose card is not there keeps the label', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[_track('One')];
+      await _pump(
+        tester,
+        const MusicListingScreen(
+          dimension: MusicDimension.artists,
+          segment: 'ar-1',
+          label: 'The Bree Trio',
+        ),
+        repository,
+      );
+
+      expect(find.text('The Bree Trio'), findsOneWidget);
+    });
+
+    testWidgets('an artist bucket whose card read fails keeps the label, and '
+        'asks once', (tester) async {
+      final repository = _CardReadFails()
+        ..facetItems['artist 1'] = <ItemSummary>[_track('One')];
+      await _pump(
+        tester,
+        const MusicListingScreen(
+          dimension: MusicDimension.artists,
+          segment: 'ar-1',
+          label: 'The Bree Trio',
+        ),
+        repository,
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(repository.asked, 1, reason: 'a decoration is not retried');
+      expect(find.text('The Bree Trio'), findsOneWidget);
+      expect(find.text('One'), findsOneWidget);
+    });
+
+    // The listing answers an empty page for any key, so an empty artist
+    // bucket is proven by the artist's card, as the artist's page is.
+    for (final label in <String?>[null, 'The Bree Trio']) {
+      testWidgets('an artist bucket with nothing listed whose card resolves '
+          'nothing is not here, ${label == null ? 'opened cold' : 'whatever '
+                    'label it was opened with'}', (tester) async {
+        await _pump(
+          tester,
+          MusicListingScreen(
+            dimension: MusicDimension.artists,
+            segment: 'ar-gone',
+            label: label,
+          ),
+          FakeRepository(),
+        );
+
+        expect(find.text('Nothing in this artist'), findsNothing);
+        expect(find.text('Could not load this artist'), findsOneWidget);
+        expect(find.text(_notHere), findsOneWidget);
+        expect(find.text('Try again'), findsNothing);
+        if (label != null) expect(find.text(label), findsOneWidget);
+      });
+    }
+
+    testWidgets('an artist bucket with nothing listed waits for the card, '
+        'neither empty nor gone, and is not here once it answers nothing', (
+      tester,
+    ) async {
+      final repository = _CardReadWaits();
+      await _mount(
+        tester,
+        const MusicListingScreen(
+          dimension: MusicDimension.artists,
+          segment: 'ar-gone',
+          label: 'The Bree Trio',
+        ),
+        repository,
+      );
+
+      expect(find.text('Nothing in this artist'), findsNothing);
+      expect(find.text(_notHere), findsNothing);
+      expect(find.byType(SkeletonShapes), findsOneWidget);
+      expect(find.text('The Bree Trio'), findsOneWidget);
+
+      repository.answer.complete();
+      await tester.pumpAndSettle();
+      expect(find.text(_notHere), findsOneWidget);
+    });
+
+    testWidgets('an artist bucket with nothing listed whose card read fails '
+        'keeps the label, and offers the read again rather than saying it '
+        'is gone', (tester) async {
+      final repository = _CardReadFails();
+      await _pump(
+        tester,
+        const MusicListingScreen(
+          dimension: MusicDimension.artists,
+          segment: 'ar-1',
+          label: 'The Bree Trio',
+        ),
+        repository,
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('The Bree Trio'), findsOneWidget);
+      expect(find.text(_notHere), findsNothing);
+      expect(find.text('Could not load this artist'), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
+    });
+
+    testWidgets('an artist bucket with nothing listed whose card answers is '
+        'drawn empty, and one that is no artist asks for no card', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..entityCards['ar-1'] = const EntityCard(
+          pid: 'ar-1',
+          kind: EntityCardKind.artist,
+          title: 'The Bree Quartet',
+        );
+      await _pump(
+        tester,
+        const MusicListingScreen(
+          dimension: MusicDimension.artists,
+          segment: 'ar-1',
+        ),
+        repository,
+      );
+      expect(find.text('Nothing in this artist'), findsOneWidget);
+      expect(find.text(_notHere), findsNothing);
+
+      final genres = FakeRepository();
+      await _pump(
+        tester,
+        const MusicListingScreen(
+          dimension: MusicDimension.genres,
+          segment: 'ge-1',
+        ),
+        genres,
+      );
+      expect(find.text('Nothing in this genre'), findsOneWidget);
+      expect(genres.resolvedEntityPids, isEmpty);
+    });
+
     testWidgets('a refresh redraws the tracks it already has', (tester) async {
       final repository = FakeRepository()
         ..facetItems['genre ge-1'] = <ItemSummary>[
@@ -1460,6 +1791,56 @@ void main() {
       expect(find.textContaining('feat. Ty Dolla'), findsNothing);
     });
 
+    testWidgets('is titled by the artist\'s card over the caller\'s label, and '
+        'the queue it plays is named the same', (tester) async {
+      // The label was read off an index row when the page was opened; a
+      // rename since then is on the card and nowhere else.
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[_track('One', track: 1)]
+        ..entityCards['ar-1'] = const EntityCard(
+          pid: 'ar-1',
+          kind: EntityCardKind.artist,
+          title: 'New',
+        );
+      tester.view.physicalSize = const Size(900, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final container = appContainer(repo: repository);
+      await mountApp(
+        tester,
+        const ArtistScreen(pid: 'ar-1', label: 'Old'),
+        container: container,
+      );
+      // The label holds the title until the card answers.
+      expect(find.text('Old'), findsWidgets);
+
+      await tester.pumpAndSettle();
+      expect(find.text('Old'), findsNothing);
+      expect(find.text('New'), findsWidgets);
+
+      await tester.tap(_byId(SemanticsIds.entityPlay));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(container.read(queueControllerProvider).source.label, 'New');
+      await _stop(tester, container);
+    });
+
+    testWidgets("keeps the caller's label where the card read fails, and asks "
+        'once', (tester) async {
+      final repository = _CardReadFails()
+        ..facetItems['artist 1'] = <ItemSummary>[_track('One', track: 1)];
+      await _pump(
+        tester,
+        const ArtistScreen(pid: 'ar-1', label: 'Old'),
+        repository,
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(repository.asked, 1, reason: 'a decoration is not retried');
+      expect(find.text('Old'), findsWidgets);
+      expect(find.text('One'), findsWidgets);
+    });
+
     testWidgets('a link with no name reads the artist off their own card', (
       tester,
     ) async {
@@ -1492,6 +1873,60 @@ void main() {
       expect(find.text('That is not here any more.'), findsOneWidget);
       expect(find.text('Try again'), findsNothing);
       expect(_byId(SemanticsIds.entityPlay), findsNothing);
+    });
+
+    testWidgets('an artist that is gone is not here whatever label the page '
+        'was opened with', (tester) async {
+      await _pump(
+        tester,
+        const ArtistScreen(pid: 'ar-gone', label: 'Old'),
+        FakeRepository(),
+      );
+
+      expect(find.text('Nothing by this artist'), findsNothing);
+      expect(find.text('Could not load this artist'), findsOneWidget);
+      expect(find.text(_notHere), findsOneWidget);
+      expect(find.text('Try again'), findsNothing);
+      expect(_byId(SemanticsIds.entityPlay), findsNothing);
+      expect(find.text('Old'), findsOneWidget, reason: 'the bar, not a header');
+    });
+
+    testWidgets('an artist with nothing listed waits for the card, neither '
+        'empty nor gone, and is not here once it answers nothing', (
+      tester,
+    ) async {
+      final repository = _CardReadWaits();
+      await _mount(
+        tester,
+        const ArtistScreen(pid: 'ar-gone', label: 'Old'),
+        repository,
+      );
+
+      expect(find.text('Nothing by this artist'), findsNothing);
+      expect(find.text(_notHere), findsNothing);
+      expect(find.byType(SkeletonShapes), findsOneWidget);
+      expect(_byId(SemanticsIds.entityPlay), findsNothing);
+
+      repository.answer.complete();
+      await tester.pumpAndSettle();
+      expect(find.text(_notHere), findsOneWidget);
+    });
+
+    testWidgets('an artist with nothing listed whose card read fails keeps '
+        'the label, and offers the read again rather than saying it is gone', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        const ArtistScreen(pid: 'ar-1', label: 'Old'),
+        _CardReadFails(),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Old'), findsOneWidget);
+      expect(find.text(_notHere), findsNothing);
+      expect(find.text('Could not load this artist'), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
     });
 
     testWidgets('an artist with no card falls back to the placeholder', (

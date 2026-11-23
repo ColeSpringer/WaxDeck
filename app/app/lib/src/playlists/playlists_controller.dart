@@ -7,6 +7,7 @@ import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
 import '../auth/auth_controller.dart';
 import '../providers.dart';
+import '../sync/catalog_writes.dart';
 
 /// The playlists visible to the caller: their own plus every shared
 /// one. The listing is small (a household's playlists), so one generous
@@ -288,11 +289,13 @@ class PlaylistDetailController extends AsyncNotifier<PlaylistView> {
   /// from the members until it is reset.
   Future<void> setCover(Uint8List bytes) async {
     final cover = state.value?.playlist.artUrl;
+    final writes = ref.read(catalogWritesProvider);
     await ref
         .read(repositoryProvider)
         .setEntityArtwork('playlist', pid, bytes: bytes);
-    await evictPlaylistCover(ref, cover);
-    ref.invalidateSelf();
+    // This detail is among the reads the sweep covers, as are the pinned
+    // card and the search row that draw the cover; the grid is not.
+    writes.landed(artUrls: {?cover});
     ref.invalidate(playlistsProvider);
   }
 
@@ -300,9 +303,9 @@ class PlaylistDetailController extends AsyncNotifier<PlaylistView> {
   /// generated one rather than leaving the playlist bare.
   Future<void> resetCover() async {
     final cover = state.value?.playlist.artUrl;
+    final writes = ref.read(catalogWritesProvider);
     await ref.read(repositoryProvider).clearEntityArtwork('playlist', pid);
-    await evictPlaylistCover(ref, cover);
-    ref.invalidateSelf();
+    writes.landed(artUrls: {?cover});
     ref.invalidate(playlistsProvider);
   }
 }

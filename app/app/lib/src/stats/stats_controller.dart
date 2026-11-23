@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
 import '../providers.dart';
+import '../sync/refresh_in_place.dart';
 
 /// Ranges the stats surfaces can aggregate over, in display order.
 const statsRanges = ['7d', '30d', '90d', '365d', 'all'];
@@ -120,75 +122,75 @@ class ListenLogState {
   final bool loadingMore;
 
   bool get hasMore => nextCursor != null;
-
-  ListenLogState copyWith({bool? loadingMore}) => ListenLogState(
-    entries: entries,
-    nextCursor: nextCursor,
-    loadingMore: loadingMore ?? this.loadingMore,
-  );
 }
 
-/// Pages the caller's listen log with keyset cursors, newest first.
-/// Changing the client filter re-runs [build], starting over from the
-/// first page.
-class ListenLogController extends AsyncNotifier<ListenLogState> {
+/// Pages the caller's listen log with keyset cursors, newest first, and
+/// refreshes it in place: a sweep reads again what is loaded, where the
+/// log stands. Changing the client filter starts it over.
+class ListenLogController extends AsyncNotifier<ListenLogState>
+    with RefreshedInPlace<ListenLogEntry, ListenLogState> {
   static const pageSize = 50;
 
-  /// Bumped by every [build] so an in-flight [loadMore] can tell its
-  /// listing was replaced and drop its result.
-  var _generation = 0;
+  @override
+  ProviderBase<Object?> get self => listenLogProvider;
 
   @override
-  Future<ListenLogState> build() async {
-    _generation++;
-    ref.watch(signedInAccountProvider);
+  int get pageRows => pageSize;
+
+  @override
+  int? get walkLimit => 1;
+
+  /// One listen, by its own id: two of one item from one start and one
+  /// client (an untimed scrobble naming a song twice) are two.
+  @override
+  Object rowKey(ListenLogEntry row) => row.sessionId;
+
+  @override
+  ListenLogState shape(
+    PagedRows<ListenLogEntry> held, {
+    required bool loadingMore,
+  }) => ListenLogState(
+    entries: held.rows,
+    nextCursor: held.nextCursor,
+    loadingMore: loadingMore,
+  );
+
+  @override
+  Future<PagedRows<ListenLogEntry>> readRows({
+    required int want,
+    String? from,
+    int? maxPages,
+    bool Function()? stop,
+  }) {
+    final repository = ref.read(repositoryProvider);
+    final client = ref.read(listenLogClientProvider);
+    return walkRows(
+      (cursor) async {
+        final page = await repository.listListenLog(
+          client: client,
+          cursor: cursor,
+          limit: pageSize,
+        );
+        return (rows: page.sessions, nextCursor: page.nextCursor);
+      },
+      want: want,
+      from: from,
+      maxPages: maxPages,
+      stop: stop,
+    );
+  }
+
+  @override
+  Future<ListenLogState> build() {
+    final account = ref.watch(signedInAccountProvider);
     final client = ref.watch(listenLogClientProvider);
-    final page = await ref
-        .watch(repositoryProvider)
-        .listListenLog(client: client, limit: pageSize);
-    return ListenLogState(entries: page.sessions, nextCursor: page.nextCursor);
+    final repository = ref.watch(repositoryProvider);
+    return buildInPlace(source: (account, repository, client));
   }
 
   /// Fetches the next page and appends it. No-op while a fetch is
   /// running or once the last page was reached.
-  Future<void> loadMore() async {
-    final current = state.value;
-    if (current == null || !current.hasMore || current.loadingMore) return;
-    final generation = _generation;
-    state = AsyncData(current.copyWith(loadingMore: true));
-    try {
-      final page = await ref
-          .read(repositoryProvider)
-          .listListenLog(
-            client: ref.read(listenLogClientProvider),
-            cursor: current.nextCursor,
-            limit: pageSize,
-          );
-      if (generation != _generation) return;
-      state = AsyncData(
-        ListenLogState(
-          entries: [...current.entries, ...page.sessions],
-          nextCursor: page.nextCursor,
-        ),
-      );
-    } on WaxDeckApiException {
-      // An expected transport or server error. Keep what we have;
-      // scrolling near the end again retries.
-      if (generation != _generation) return;
-      // Keep what we have; scrolling near the end again retries.
-      state = AsyncData(current.copyWith(loadingMore: false));
-    } catch (_) {
-      // Anything else is a defect, not a hiccup: a decode failure,
-      // a bad cast. Release the paging guard first - loadingMore is
-      // what keeps two fetches from racing, so leaving it set would
-      // wedge paging permanently and silently - then let the error
-      // reach the app's error handler instead of vanishing here.
-      if (generation == _generation) {
-        state = AsyncData(current.copyWith(loadingMore: false));
-      }
-      rethrow;
-    }
-  }
+  Future<void> loadMore() => loadMoreInPlace();
 }
 
 final listenLogProvider =

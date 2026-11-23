@@ -45,6 +45,7 @@ enum ShellChannel {
   similarTracks,
   skippedUnplayable,
   spokenEffects,
+  startRetry,
   tasks,
   uploads,
 }
@@ -81,11 +82,11 @@ class ShellMessage {
     this.onAction,
     this.actionSemanticsId,
     this.channel,
+    this.subject,
   }) : actionLabel = null,
        persist = false,
        clearsBar = true,
-       interrupts = false,
-       subject = null;
+       interrupts = false;
 
   /// The words, as a function of the locale drawing them. A message
   /// whose text was fixed where it was raised is one of these too, over
@@ -219,6 +220,7 @@ class ShellMessenger {
     VoidCallback? onAction,
     String? actionSemanticsId,
     ShellChannel? channel,
+    Object? subject,
   }) => _messages._raise(
     ShellMessage.localized(
       build,
@@ -226,6 +228,7 @@ class ShellMessenger {
       onAction: onAction,
       actionSemanticsId: actionSemanticsId,
       channel: channel,
+      subject: subject,
     ).._account = _account,
   );
 }
@@ -331,10 +334,10 @@ _Insets _insetsOf(BuildContext context) => (
   keyboard: MediaQuery.viewInsetsOf(context).bottom,
 );
 
-/// How far above a page's foot a message rests: the keyboard, else the
-/// bottom of the view's padding.
+/// How far above a page's foot a message rests: the keyboard, or the
+/// bottom of the view's padding while the keyboard is shorter than it.
 double _keptAbove(_Insets insets) =>
-    insets.keyboard > 0 ? insets.keyboard : insets.viewPadding.bottom;
+    math.max(insets.keyboard, insets.viewPadding.bottom);
 
 /// [bar] where a floating snack bar rests in a Scaffold under [insets]:
 /// along its foot, inside the padding at its sides and clear of [right],
