@@ -46,7 +46,10 @@ Read by compose itself, not the server. Paths resolve beside
   are mounted read-write into the server, which manages imports and
   sidecar files there, and read-only into the engine; they are the
   roots `music` and `books`, the second an audiobook root, so a folder
-  of plain MP3 parts needs no tagging. An empty folder is fine.
+  of plain MP3 parts needs no tagging. An empty folder is fine. `make up`
+  creates a missing one as the user that runs it; with plain `docker
+  compose`, create it first, or Docker may make it root-owned and
+  unwritable to the server.
 - `WAXDECK_UID` / `WAXDECK_GID`: the user the server and the engine run
   as, so they can write into the folders above. The example sets
   `1000`, the usual first user; `make up` sets them to the user that

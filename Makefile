@@ -336,32 +336,35 @@ images:
 
 dist: images
 
-# Both media folders, resolved the way compose resolves them: a default
-# folder is created, a configured one must exist (a typo would start an
-# empty library), and either must be writable by this user.
+# Both media folders, at the paths compose will mount: compose itself
+# reports the values, and a relative one sits beside compose.yaml. A
+# missing one is created here, as this user, before docker can create it
+# root-owned; either must be writable by this user.
 preflight: deploy/.env
-	@folder() { \
-	   dir="$$2"; \
-	   if [ -z "$$dir" ]; then \
-	     dir=$$(sed -n "s/^$$1=//p" deploy/.env | tail -n 1 | tr -d '\r' \
-	       | sed -e 's/^"\(.*\)"$$/\1/' -e "s/^'\(.*\)'$$/\1/"); \
-	   fi; \
-	   given=$$dir; \
-	   dir=$${dir:-./$$3}; \
-	   case "$$dir" in "~") dir="$$HOME" ;; "~/"*) dir="$$HOME/$${dir#\~/}" ;; /*|[A-Za-z]:*) ;; *) dir="deploy/$${dir#./}" ;; esac; \
-	   if [ -z "$$given" ] || [ "$$given" = "./$$3" ]; then \
-	     mkdir -p "$$dir" || { echo "make up: cannot create $$1=$$dir" >&2; exit 1; }; \
-	   elif [ ! -d "$$dir" ]; then \
-	     echo "make up: $$1=$$dir does not exist; docker would create it empty and root-owned. Point deploy/.env at your folder." >&2; \
-	     exit 1; \
+	@vars=$$($(COMPOSE) config --environment) || exit 1; \
+	 folder() { \
+	   dir=$$(printf '%s\n' "$$vars" | sed -n "s/^$$1=//p"); \
+	   dir=$${dir:-./$$2}; \
+	   case "$$dir" in \
+	     "~") dir="$$HOME" ;; \
+	     "~/"*) dir="$$HOME/$${dir#\~/}" ;; \
+	     /*) ;; \
+	     [A-Za-z]:[/\\]*) case "$$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ;; *) \
+	       to=$$(wslpath -u "$$dir" 2>/dev/null) && to="; under WSL write it as $$to" || to=", usable only from a Windows shell"; \
+	       printf 'make up: %s=%s is a Windows path%s\n' "$$1" "$$dir" "$$to" >&2; exit 1 ;; esac ;; \
+	     *) dir="deploy/$${dir#./}" ;; \
+	   esac; \
+	   if [ ! -d "$$dir" ]; then \
+	     mkdir -p "$$dir" || { printf 'make up: cannot create %s=%s\n' "$$1" "$$dir" >&2; exit 1; }; \
+	     printf 'make up: %s=%s was missing; created it empty\n' "$$1" "$$dir"; \
 	   fi; \
 	   if ! touch "$$dir/.write-probe" 2>/dev/null; then \
-	     echo "make up: $$1=$$dir is not writable by $$(id -un); imports in the container would fail. Fix its ownership or point deploy/.env at another path." >&2; \
+	     printf 'make up: %s=%s is not writable by %s; imports in the container would fail. Fix its ownership or point deploy/.env at another path.\n' "$$1" "$$dir" "$$(id -un)" >&2; \
 	     exit 1; \
 	   fi; \
 	   rm -f "$$dir/.write-probe"; \
 	 }; \
-	 folder WAXDECK_MUSIC "$${WAXDECK_MUSIC-}" music && folder WAXDECK_AUDIOBOOKS "$${WAXDECK_AUDIOBOOKS-}" audiobooks
+	 folder WAXDECK_MUSIC music && folder WAXDECK_AUDIOBOOKS audiobooks
 
 # The stack from this checkout's images. Docker Desktop, macOS runtimes,
 # rootless Docker and a userns-remapped daemon cannot share the host's
