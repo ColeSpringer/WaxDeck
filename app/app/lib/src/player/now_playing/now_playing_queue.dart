@@ -16,27 +16,54 @@ mixin _NowPlayingQueue
   /// saved resume position of that first entry (a book resume, a chapter
   /// start). [shuffle] is the "Shuffle" entry point, which draws from
   /// anywhere in [items].
-  void play(
+  ///
+  /// A listing source ([QueueSourceKind.isListing]) queues one kind: the
+  /// chosen row's, or for a shuffle the source's (music when unscoped).
+  /// One paged under another scope is scoped to that kind and drops its
+  /// cursor, which names the other listing; a draw places itself by the
+  /// last listing item the queue took instead. Answers whether anything
+  /// was queued.
+  bool play(
     List<ItemSummary> items, {
     required QueueSource source,
     int startIndex = 0,
     bool shuffle = false,
     int? positionMs,
   }) {
-    if (items.isEmpty) return;
-    for (final item in items) {
+    var queued = items;
+    var from = startIndex;
+    var scope = source;
+    if (source.kind.isListing && items.isNotEmpty) {
+      final start = items[startIndex.clamp(0, items.length - 1)];
+      final anchor = shuffle
+          ? source.mediaType ?? MediaType.music
+          : start.mediaType;
+      queued = <ItemSummary>[];
+      from = 0;
+      for (final item in items) {
+        if (!continuesKind(anchor, item)) continue;
+        if (identical(item, start)) from = queued.length;
+        queued.add(item);
+      }
+      if (source.mediaType != anchor) {
+        scope = source.copyWith(mediaType: anchor, cursor: '');
+      }
+    }
+    if (queued.isEmpty) return false;
+    for (final item in queued) {
       _known[item.pid] = item;
     }
     _parkFollowsKnown();
     unawaited(
       playPids(
-        [for (final item in items) item.pid],
-        source: source,
-        startIndex: startIndex,
+        [for (final item in queued) item.pid],
+        source: scope,
+        startIndex: from,
         shuffle: shuffle,
         positionMs: positionMs,
       ),
     );
+    return true;
   }
 
   /// Adds [items] to the end of the queue without disturbing what is

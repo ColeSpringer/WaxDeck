@@ -6,12 +6,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/artwork/art_slot.dart';
+import 'package:waxdeck/src/books/book_bucket_screen.dart';
+import 'package:waxdeck/src/books/book_dimension.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/library/item_kind.dart';
 import 'package:waxdeck/src/metadata/artwork_manager.dart';
 import 'package:waxdeck/src/metadata/metadata_controller.dart';
 import 'package:waxdeck/src/metadata/metadata_form.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
+import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/shell/routes.dart';
@@ -1113,6 +1116,55 @@ void main() {
     });
   }
 
+  testWidgets('the artist door of a book opens its author in Books', (
+    tester,
+  ) async {
+    const author = 'ar-01JZX5N8QW3F4V9T2B7KDAUTHR';
+    final repo = _repo();
+    repo.libraryItems
+      ..clear()
+      ..add(
+        testItem('tr-1', title: 'Old Title', mediaType: MediaType.audiobook),
+      );
+    repo.metadataEntityPids['tr-1'] = (
+      artistPid: author,
+      albumPid: null,
+      releaseGroupPid: null,
+    );
+    await _pump(tester, _container(repo), routed: true);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.metadataOpenArtist),
+    );
+    await tester.pumpAndSettle();
+    final bucket = tester.widget<BookBucketScreen>(
+      find.byType(BookBucketScreen),
+    );
+    expect(bucket.dimension, BookDimension.authors);
+    expect(bucket.segment, author);
+    expect(find.byType(ArtistScreen), findsNothing);
+  });
+
+  testWidgets('the artist door of a track opens the artist page', (
+    tester,
+  ) async {
+    const artist = 'ar-01JZX5N8QW3F4V9T2B7KDBREE1';
+    final repo = _repo();
+    repo.metadataEntityPids['tr-1'] = (
+      artistPid: artist,
+      albumPid: null,
+      releaseGroupPid: null,
+    );
+    await _pump(tester, _container(repo), routed: true);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.metadataOpenArtist),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<ArtistScreen>(find.byType(ArtistScreen)).pid, artist);
+    expect(find.byType(BookBucketScreen), findsNothing);
+  });
+
   testWidgets('no entity doors without pids to open', (tester) async {
     await _pump(tester, _container(_repo()), routed: true);
     expect(find.text('Open artist'), findsNothing);
@@ -1586,6 +1638,13 @@ void main() {
 
     expect(repo.setKindCalls.single.pids, ['tr-1']);
     expect(repo.setKindCalls.single.mediaType, 'audiobook');
+    expect(repo.setKindCalls.single.writeBack, isFalse);
+    expect(
+      GoRouter.of(
+        tester.element(find.byType(Navigator).first),
+      ).routerDelegate.currentConfiguration.uri.path,
+      WaxRoute.book('bk-1'),
+    );
   });
 
   testWidgets('the kind change waits for a draft to be saved', (tester) async {

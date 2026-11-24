@@ -3,8 +3,8 @@
   "ids": {
     "albumTrackMore": "album-track-more-{index}",
     "entityAlbum": "entity-album-{pid}",
-    "entityAllBooks": "entity-all-books",
     "entityAllTracks": "entity-all-tracks",
+    "entityAuthorBooks": "entity-author-books",
     "entityEditMetadata": "entity-edit-metadata",
     "entityInstantMix": "entity-instant-mix",
     "entityOverflow": "entity-overflow",

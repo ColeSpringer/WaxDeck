@@ -1,7 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/books/book_bucket_screen.dart';
+import 'package:waxdeck/src/books/book_dimension.dart';
 import 'package:waxdeck/src/home/pinned_controller.dart';
 import 'package:waxdeck/src/home/pinned_shelf.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
+import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -13,6 +16,8 @@ import 'fakes.dart';
 
 const _album = 'al-01JZX5N8QW3F4V9T2B7KDALBUM';
 const _show = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
+const _author = 'ar-01JZX5N8QW3F4V9T2B7KDAUTHOR';
+const _singer = 'ar-01JZX5N8QW3F4V9T2B7KDSINGER';
 const _departed = 'ar-01JZX5N8QW3F4V9T2B7KDGONE01';
 
 Finder _byId(String id) => find.bySemanticsIdentifier(id);
@@ -43,6 +48,18 @@ FakeRepository _repo({List<String> pinned = const <String>[]}) {
     kind: EntityCardKind.podcast,
     title: 'Contact Sheet',
     artist: 'Nightjar Media',
+  );
+  repo.entityCards[_author] = const EntityCard(
+    pid: _author,
+    kind: EntityCardKind.artist,
+    title: 'Ann Writer',
+    mediaTypes: <MediaType>[MediaType.audiobook],
+  );
+  repo.entityCards[_singer] = const EntityCard(
+    pid: _singer,
+    kind: EntityCardKind.artist,
+    title: 'Sam Singer',
+    mediaTypes: <MediaType>[MediaType.music, MediaType.audiobook],
   );
   return repo;
 }
@@ -140,6 +157,34 @@ void main() {
     expect(repo.putPrefsCalls.single.pinned, isEmpty);
     expect(_byId(SemanticsIds.shelf('pinned')), findsNothing);
     expect(shellMessageText(raisedMessage(tester)), 'Unpinned Long Exposure');
+  });
+
+  testWidgets('an author card opens their books, not a music page', (
+    tester,
+  ) async {
+    await _pump(tester, _repo(pinned: <String>[_author]));
+
+    await tester.tap(_byId(SemanticsIds.shelfCard('pinned', _author)));
+    await tester.pumpAndSettle();
+
+    final bucket = tester.widget<BookBucketScreen>(
+      find.byType(BookBucketScreen),
+    );
+    expect(bucket.dimension, BookDimension.authors);
+    expect(bucket.segment, _author);
+    expect(find.byType(ArtistScreen), findsNothing);
+  });
+
+  testWidgets('an artist card with music opens the artist page', (
+    tester,
+  ) async {
+    await _pump(tester, _repo(pinned: <String>[_singer]));
+
+    await tester.tap(_byId(SemanticsIds.shelfCard('pinned', _singer)));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<ArtistScreen>(find.byType(ArtistScreen)).pid, _singer);
+    expect(find.byType(BookBucketScreen), findsNothing);
   });
 
   _showPinGroup();

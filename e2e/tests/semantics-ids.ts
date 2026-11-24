@@ -531,8 +531,8 @@ export const SemanticsIds = {
   // music: The music hub, its indexes, and the buckets they drill.
   albumTrackMore: (index: string | number) => `album-track-more-${index}`,
   entityAlbum: (pid: string | number) => `entity-album-${pid}`,
-  entityAllBooks: 'entity-all-books',
   entityAllTracks: 'entity-all-tracks',
+  entityAuthorBooks: 'entity-author-books',
   entityEditMetadata: 'entity-edit-metadata',
   entityInstantMix: 'entity-instant-mix',
   entityOverflow: 'entity-overflow',
@@ -873,6 +873,8 @@ export const SemanticsIds = {
   reviewIdentifySkipped: 'review-identify-skipped',
   reviewIdentifySubmit: 'review-identify-submit',
   reviewIdentifyToggle: 'review-identify-toggle',
+  reviewMedium: 'review-medium',
+  reviewMediumOption: (wireName: string | number) => `review-medium-${wireName}`,
   reviewOpenUploads: 'review-open-uploads',
   reviewPane: 'review-pane',
   reviewPaneClose: 'review-pane-close',
@@ -1295,6 +1297,7 @@ export const SemanticsIdPrefixes = {
   reviewDuplicateRow: 'review-duplicate-',
   reviewFilter: 'review-filter-',
   reviewIdentifyField: 'review-identify-',
+  reviewMediumOption: 'review-medium-',
   reviewRow: 'review-row-',
   trackMenu: 'track-menu-',
 

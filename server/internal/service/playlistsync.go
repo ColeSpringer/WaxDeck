@@ -1290,7 +1290,7 @@ func (l *Playlists) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask
 		// age-gated video past the enrichment budget must not starve
 		// the entries behind it forever. A skipped entry has no map
 		// row, so the next run simply tries it again.
-		entryIDs, staged, skipped, fetchErr, entriesErr := l.Ingest.fetchAcquireBatch(ctx, t, dp, provider, downloads, owner, 95, true)
+		entryIDs, staged, skipped, fetchErr, entriesErr := l.Ingest.fetchAcquireBatch(ctx, t, dp, provider, downloads, "", owner, 95, true)
 		out.entryIDs = entryIDs
 		out.counts.Queued = staged
 		out.counts.Unavailable += skipped

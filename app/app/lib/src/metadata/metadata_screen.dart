@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/art_source_label.dart';
+import '../books/book_dimension.dart';
 import '../l10n/l10n.dart';
 import '../library/item_kind.dart';
 import '../media_view.dart';
@@ -943,11 +944,14 @@ class _EntityDoors extends StatelessWidget {
             WaxPill(
               label: l10n.metadataOpenArtist,
               semanticsId: SemanticsIds.metadataOpenArtist,
-              // No label: this form holds the track's credit, not the
-              // artist entity's name, and the artist screen resolves
-              // its own card.
+              // No label: this form holds the item's credit, not the
+              // artist entity's name, and the page resolves its own
+              // card. A book's artist is its author, whose page is in
+              // Books.
               onPressed: () => context.push(
-                WaxRoute.musicBucket(MusicDimension.artists, artistPid),
+                metadata.mediaType == MediaType.audiobook
+                    ? WaxRoute.bookBucket(BookDimension.authors, artistPid)
+                    : WaxRoute.musicBucket(MusicDimension.artists, artistPid),
               ),
             ),
           if (albumPid != null)

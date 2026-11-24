@@ -466,3 +466,68 @@ func TestEntityCardsDropABookInTheTrash(t *testing.T) {
 		t.Fatalf("a book in the trash = cards %+v, departed %v; want neither", cards, gone)
 	}
 }
+
+// An artist card names the media the artist spans, so a client opens an
+// author with no music on their books, and counts what that opens: the
+// tracks when there is any music, else the books.
+func TestArtistCardsNameTheirMedia(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin, booksLib := kindsLibrary(t)
+	alder := bucketPID(t, ctx, svc, admin, "artist", "Alder Ames")
+	bertha := bucketPID(t, ctx, svc, admin, "artist", "Bertha Quill")
+	cora := bucketPID(t, ctx, svc, admin, "artist", "Cora Both")
+
+	cards, _, err := svc.Reads.EntityCards(ctx, admin, []string{alder, bertha, cora})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []struct {
+		media string
+		count int
+	}{{"music", 2}, {"audiobook", 2}, {"music,audiobook", 1}}
+	if len(cards) != len(want) {
+		t.Fatalf("cards = %+v, want three", cards)
+	}
+	for i, c := range cards {
+		if got := strings.Join(c.MediaTypes, ","); got != want[i].media {
+			t.Errorf("%s media = %q, want %q", c.Title, got, want[i].media)
+		}
+		if c.ItemCount == nil || *c.ItemCount != want[i].count {
+			t.Errorf("%s count = %v, want %d", c.Title, c.ItemCount, want[i].count)
+		}
+	}
+
+	// Granted the books alone: the musician is out of sight, and the one
+	// with both spans only what the grant offers.
+	reader := &UserCtx{ID: admin.ID, CatalogPID: admin.CatalogPID, Libraries: map[string]bool{booksLib: true}}
+	cards, _, err = svc.Reads.EntityCards(ctx, reader, []string{alder, cora})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 1 || cards[0].PID != cora || strings.Join(cards[0].MediaTypes, ",") != "audiobook" {
+		t.Fatalf("restricted cards = %+v, want Cora Both spanning audiobook", cards)
+	}
+	// Taken in the caller's scope, so answered to them: her one book.
+	if c := cards[0].ItemCount; c == nil || *c != 1 {
+		t.Errorf("a restricted caller's artist card counts %v, want 1", c)
+	}
+}
+
+// A track in the trash leaves its artist's card count, as it leaves the
+// listing the card opens.
+func TestArtistCardCountLeavesTheTrash(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin, _ := kindsLibrary(t)
+	alder := bucketPID(t, ctx, svc, admin, "artist", "Alder Ames")
+	bellows := kindsItem(t, ctx, svc, admin, "Bellows")
+	if _, err := svc.Tools.DeleteItems(ctx, admin, []string{bellows.PID}, "trash", false); err != nil {
+		t.Fatal(err)
+	}
+	cards, _, err := svc.Reads.EntityCards(ctx, admin, []string{alder})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 1 || cards[0].ItemCount == nil || *cards[0].ItemCount != 1 {
+		t.Fatalf("cards = %+v, want Alder Ames counting the one track left", cards)
+	}
+}

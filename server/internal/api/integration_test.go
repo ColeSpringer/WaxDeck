@@ -667,6 +667,11 @@ func TestCatalogBrowse(t *testing.T) {
 	if len(sr.Tracks) != 1 || sr.Tracks[0].Title != "Charlie Song" {
 		t.Fatalf("search tracks = %+v", sr.Tracks)
 	}
+	// A group nothing fills is still an array on the wire.
+	raw := decode[map[string]json.RawMessage](t, get(t, h.ts, "/api/v1/library/search?q=Charlie", h.token))
+	if got := string(raw["authors"]); got != "[]" {
+		t.Fatalf("search authors = %s, want []", got)
+	}
 
 	// Detail carries the source codec.
 	resp = get(t, h.ts, "/api/v1/items/"+page.Items[0].Pid, h.token)

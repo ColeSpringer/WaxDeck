@@ -30,6 +30,9 @@ type Ingest struct {
 	// applyImportHook stands in for the catalog's import apply in a test;
 	// nothing in the server sets it.
 	applyImportHook func(context.Context, *inbox.Plan) (*inbox.Report, error)
+	// editFieldsHook stands in for the catalog's field edit an approval
+	// applies, in a test; nothing in the server sets it.
+	editFieldsHook func(context.Context, []model.ItemFieldEdit, waxbin.EditOptions) (*waxbin.BatchEditResult, error)
 	// batchFinalizeMu serializes upload-batch finalization (the flip,
 	// entry opening, and member linking as one unit): two concurrent
 	// finalizes of one batch would otherwise both gather the same

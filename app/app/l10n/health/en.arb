@@ -377,6 +377,16 @@
       }
     }
   },
+  "healthFoldEntryReady": "Ready to open: {name}",
+  "@healthFoldEntryReady": {
+    "description": "Message when an artist a fold files under was looked up after the administrator had moved on from Health; its action opens their page. {name} is the artist's own name.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "The Beatles"
+      }
+    }
+  },
   "healthGenreWhitelist": "Genre outside the canonical tree",
   "@healthGenreWhitelist": {
     "description": "Name of the health rule `genre-whitelist`, which counts items tagged with a genre the server's genre tree does not have."

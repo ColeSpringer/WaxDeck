@@ -21,9 +21,12 @@ import 'queue_item.dart';
 /// its summary replaced (a book played from its screen composed again from
 /// a fresh read of its detail, as its play composed it) and its row read
 /// again, and the entry playing is named anew where it stands: its session, its stream and its place are
-/// not touched. One that is now another kind has its summary replaced, its
-/// row read again and a park naming it offered anew, so it starts and
-/// reads as what it is. One the server names departed
+/// not touched. One that is now another kind leaves the queue, as a
+/// watched kind change lets it go, whatever the queue was built from: the
+/// conversion was somebody's act. Unless it is the entry playing or
+/// parked, which has its summary replaced, its row read again and a park
+/// naming it offered anew, so it plays on and reads as what it is. One
+/// the server names departed
 /// (folded into a book) leaves the queue as a watched kind change lets it
 /// go, but with no stop: playing, it plays on and the queue moves past it
 /// at its end; parked, what follows takes over the park; standing on the
@@ -109,6 +112,7 @@ class QueueRecheck {
     // By ULID: an item a kind change converted answers under its new prefix.
     final answers = <String, ItemSummary>{};
     final departed = <String>{};
+    final converted = <String>{};
     var missed = false;
     for (var at = 0; at < pids.length; at += itemLookupCap) {
       final ItemResolution resolved;
@@ -147,6 +151,7 @@ class QueueRecheck {
       final composed = held.any((was) => was is ComposedSummary);
       if (held.any((was) => was.mediaType != now.mediaType)) {
         if (!whole) continue;
+        converted.add(ulid);
         playback.refreshSummary(pid, now);
       } else if (held.any(changed)) {
         if (composed) {
@@ -179,6 +184,8 @@ class QueueRecheck {
     // A playing book's chapter marks, which no lookup row carries.
     await playback.rereadBook();
     if (!_ref.mounted || !whole) return;
+    // Every entry of these but the current one; that one plays on.
+    container.read(queueControllerProvider.notifier).dropItems(converted);
     playback.forgetUnqueued();
     _letGo(departed, playback);
   }

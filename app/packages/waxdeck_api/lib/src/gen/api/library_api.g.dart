@@ -22,16 +22,17 @@ abstract interface class LibraryApi {
   /// Keyset-paginated discovery lists over the whole library: newest, recently
   /// added, most played, recently played, random, starred, alphabetical, never
   /// played, rediscover, and in progress. Play-derived lists reflect the
-  /// calling user's own listening state. Most lists span every media type;
-  /// `newest` and `recently-added` do not. `newest` orders by release year,
-  /// which a podcast episode has not got, so it covers music and audiobooks
-  /// only. Pairing it with `mediaType=podcast`, or drilling its `kind`
-  /// dimension to `episode`, is `invalid-request` rather than an empty page
-  /// that would read as "your library holds none". `recently-added` without a
-  /// `mediaType` covers music and audiobooks only, so a show's feed landing its
-  /// backlog does not take the first page; naming `mediaType=podcast`, or
-  /// drilling its `kind` dimension to `episode`, lists the episodes. Episodes
-  /// ordered by publication date live on `/podcasts/episodes`.
+  /// calling user's own listening state. `recently-played`, `random`,
+  /// `starred`, `alphabetical` and `in-progress` span every media type; the
+  /// others do not. `newest` orders by release year, which a podcast episode
+  /// has not got, so it covers music and audiobooks only. Pairing it with
+  /// `mediaType=podcast`, or drilling its `kind` dimension to `episode`, is
+  /// `invalid-request` rather than an empty page that would read as "your
+  /// library holds none". `recently-added`, `never-played`, `rediscover` and
+  /// `most-played` without a `mediaType` cover music and audiobooks only, since
+  /// episodes have their own lists; naming `mediaType=podcast`, or drilling the
+  /// `kind` dimension to `episode`, lists the episodes. Episodes ordered by
+  /// publication date live on `/podcasts/episodes`.
   Future<ItemPage> browse(
     DiscoveryList list, {
     MediaType? mediaType,
@@ -86,10 +87,11 @@ abstract interface class LibraryApi {
 
   /// `GET /library/search`: Search the library.
   ///
-  /// Full-text search across artists, albums, tracks, books, and episodes.
-  /// Results are grouped by kind and ranked within each group; each group is
-  /// capped at `limit` hits. An artist or album is a hit only while at least
-  /// one of its tracks is one the caller can see, by library grant and content
+  /// Full-text search across artists, authors, albums, tracks, books, and
+  /// episodes. Results are grouped by kind and ranked within each group; each
+  /// group is capped at `limit` hits. An artist or album is a hit only while at
+  /// least one of its tracks is one the caller can see, and an author only
+  /// while at least one of their books is, by library grant and content
   /// settings.
   Future<SearchResults> search(String q, {int? limit});
 

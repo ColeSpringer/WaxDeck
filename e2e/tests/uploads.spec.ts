@@ -282,6 +282,9 @@ test('a picked folder uploads its audio and leaves the rest', async ({ app }) =>
 
   await app.nav.enter('home');
   await app.uploads.pickFolder(uploadSrc('Harbour Lights'));
+  // Several files from a folder with no .m4b: nothing is preselected,
+  // so the medium is chosen before the grouping appears.
+  await app.uploads.chooseMedia('music');
   // Auto-detect, which is what a folder is picked for: the disc
   // subfolder rides along as the clustering hint.
   await app.uploads.groupAs('auto');

@@ -263,7 +263,11 @@ class ReviewDecideResult {
 
 /// A decision for one review entry.
 class ReviewDecision {
-  const ReviewDecision({required this.action, this.candidateMbid});
+  const ReviewDecision({
+    required this.action,
+    this.candidateMbid,
+    this.mediaType,
+  });
 
   /// The decision to apply.
   final String action;
@@ -271,6 +275,22 @@ class ReviewDecision {
   /// The candidate to approve; the ranked best when absent. Only meaningful
   /// with `approve`.
   final String? candidateMbid;
+
+  /// The medium the unit is imported as; the entry's own `mediaType` when
+  /// absent. The choice becomes the entry's own medium, so a later decide or
+  /// retry without the field imports as it. Refused with `invalid-request` when
+  /// `approve` would import as `audiobook`, named here or the entry's own (a
+  /// MusicBrainz release is music), when the entry's target library does not
+  /// accept the medium, and when the entry stages no files (a `scan` or
+  /// `rematch` entry, whose items are already in the library: changing their
+  /// kind is the kind-change call's job) and the value differs from the entry's
+  /// own. Once any of the entry's files has entered the library or was already
+  /// in it (`mediumFixed` on the entry), a decide naming a different medium is
+  /// refused with `conflict`; naming the entry's own is not. Where two refusals
+  /// apply, an already decided entry answers `conflict` as every decide does,
+  /// and otherwise these `invalid-request` refusals come before the `conflict`
+  /// over imported files. `skip` and `discard` import nothing and ignore it.
+  final String? mediaType;
 }
 
 /// One review queue entry: an album-sized unit of files awaiting or past a
@@ -312,8 +332,8 @@ class ReviewEntry {
 
   final MediaType mediaType;
 
-  /// Where the unit came from: `scan`, `upload`, or `rematch`. A string, not a
-  /// closed enum.
+  /// Where the unit came from: `scan`, `upload`, `acquisition`, or `rematch`. A
+  /// string, not a closed enum.
   final String origin;
 
   /// Display title for the unit (the album guess).
@@ -378,11 +398,15 @@ class ReviewEntryDetail extends ReviewEntry {
     this.tracks = const [],
     this.candidates = const [],
     this.identifyDeclined = false,
+    this.mediumFixed = false,
     this.identifyOverride,
     this.suggested,
   });
 
-  /// The unit's files in disc and track order.
+  /// The unit's files in order: the disc number they carry, then, for files
+  /// uploaded in a batch, the folder each was sent from (see `UploadGrouping`),
+  /// then track number. An audiobook acquired from a list holds its parts in
+  /// the list's order.
   final List<ReviewTrack> tracks;
 
   /// Scored candidates, ranked best first. For a one-file unit, near-tied
@@ -400,6 +424,11 @@ class ReviewEntryDetail extends ReviewEntry {
   /// without stopping. Finding one still `pending` means the automatic import
   /// could not proceed and it is waiting for a person.
   final bool identifyDeclined;
+
+  /// True once any of the unit's files has entered the library, or was already
+  /// in it: a decide naming a `mediaType` other than the entry's own is then
+  /// refused with `conflict`. Absent while every file is staged.
+  final bool mediumFixed;
 
   /// What the last re-identify searched for in place of the files' own tags.
   /// Absent when nothing was typed. The `tracks` below always report the tags

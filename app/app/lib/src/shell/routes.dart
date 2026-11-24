@@ -343,6 +343,12 @@ abstract final class WaxRoute {
   static const migrate = '$admin/migrate';
 }
 
+/// Where an artist's card opens: the Books author page for an author
+/// ([isAuthorOnly]), the music artist page otherwise.
+String artistLocation(EntityCard card) => isAuthorOnly(card)
+    ? WaxRoute.bookBucket(BookDimension.authors, card.pid)
+    : WaxRoute.musicBucket(MusicDimension.artists, card.pid);
+
 /// A computed track list, held in memory because the server does not
 /// mint an id for it: a mix is an answer, not an entity.
 class TrackListArgs {

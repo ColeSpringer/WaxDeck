@@ -447,6 +447,13 @@ func TestAOneFileImportPlansItsFileOnce(t *testing.T) {
 // decided upload's files go, and any other roots named.
 func managedUploadFixture(t *testing.T, others ...Root) (context.Context, *Library, *UserCtx) {
 	t.Helper()
+	return managedUploadFixtureWith(t, nil, others...)
+}
+
+// managedUploadFixtureWith is managedUploadFixture with the service's
+// configuration adjusted by with.
+func managedUploadFixtureWith(t *testing.T, with func(*Config), others ...Root) (context.Context, *Library, *UserCtx) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	dataDir := t.TempDir()
@@ -456,7 +463,11 @@ func managedUploadFixture(t *testing.T, others ...Root) (context.Context, *Libra
 	}
 	group := supervise.NewGroup(log)
 	roots := append([]Root{{Name: "lib", Path: t.TempDir(), Managed: true}}, others...)
-	svc, err := Open(ctx, Config{DataDir: dataDir, Roots: roots, Logger: log}, store, group)
+	cfg := Config{DataDir: dataDir, Roots: roots, Logger: log}
+	if with != nil {
+		with(&cfg)
+	}
+	svc, err := Open(ctx, cfg, store, group)
 	if err != nil {
 		t.Fatal(err)
 	}

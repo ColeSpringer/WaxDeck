@@ -107,7 +107,7 @@ Widget pinSheetRow(
 }
 
 /// The pin affordance for rows and tiles whose menu holds nothing else:
-/// artist and book search hits, the artist index buckets. A listing
+/// artist, author and book search hits, the artist index buckets. A listing
 /// row's overflow may hold more than one target - a track row pins its
 /// album or its artist, never itself - and each wants a line naming
 /// what it is.

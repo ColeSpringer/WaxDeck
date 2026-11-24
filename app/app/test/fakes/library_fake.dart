@@ -356,9 +356,22 @@ mixin FakeLibrary on FakeRepositoryState implements LibraryApi {
   /// Every pid list [resolveEntities] was asked for, in call order.
   final List<List<String>> resolvedEntityPids = [];
 
+  /// When set, [resolveEntities] waits on it before answering, so a test
+  /// can hold a card open, or fail it, while the visitor acts.
+  Completer<void>? resolveEntitiesGate;
+
+  /// Gates [resolveEntities] answers one call at a time, in call order,
+  /// ahead of [resolveEntitiesGate]: each call waits on the next one.
+  final List<Completer<void>> resolveEntitiesGates = [];
+
   @override
   Future<EntityResolution> resolveEntities(List<String> pids) async {
     resolvedEntityPids.add(List<String>.of(pids));
+    if (resolveEntitiesGates.isNotEmpty) {
+      await resolveEntitiesGates.removeAt(0).future;
+    } else if (resolveEntitiesGate case final gate?) {
+      await gate.future;
+    }
     final error = listError;
     if (error != null) throw error;
     return EntityResolution(

@@ -11,7 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/unicode/norm"
+
 	waxart "github.com/colespringer/waxbin/art"
+	"github.com/colespringer/waxbin/identity"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
@@ -66,6 +69,14 @@ type ItemFilter struct {
 	Library   string
 }
 
+// Where applyItemFilter's scope holds the media type and the facet
+// bucket; a library, when named, follows them.
+const (
+	scopeMediaType = iota
+	scopeFacet
+	scopeFacetKey
+)
+
 // applyItemFilter narrows an item query by media type, facet bucket and
 // library, and answers the canonical scope they name.
 func applyItemFilter(b *query.Builder, filter ItemFilter) (*query.Builder, []string, error) {
@@ -111,7 +122,7 @@ func (l *Reads) listingQuery(ctx context.Context, uc *UserCtx, base *query.Build
 	if err != nil {
 		return nil, nil, err
 	}
-	episodes := (scope[0] == "" || scope[0] == "podcast") && !facetNoEpisodes[scope[1]]
+	episodes := (scope[scopeMediaType] == "" || scope[scopeMediaType] == "podcast") && !facetNoEpisodes[scope[scopeFacet]]
 	return b.WhereNode(l.Playlists.listingNarrow(ctx, uc, subs, episodes)), scope, nil
 }
 
@@ -228,6 +239,7 @@ func (l *Reads) Browse(ctx context.Context, uc *UserCtx, list string, filter Ite
 	}
 	if where, ok := collectionLists[list]; ok {
 		b = b.WhereNode(where())
+		b = leaveEpisodesOut(b, list, filter, scope)
 		page, err := l.lib.QueryPage(ctx, b.Build(), read.Cursor(token), limit, false, model.PID(uc.CatalogPID))
 		if err != nil {
 			return Page{}, classify(err)
@@ -238,20 +250,13 @@ func (l *Reads) Browse(ctx context.Context, uc *UserCtx, list string, filter Ite
 	if !ok {
 		return Page{}, errInvalid("unknown list " + list)
 	}
-	if err := browseScopeKindError(dl, list, filter, scope[1], scope[2]); err != nil {
+	if err := browseScopeKindError(dl, list, filter, scope[scopeFacet], scope[scopeFacetKey]); err != nil {
 		return Page{}, err
 	}
 	if narrow, ok := browseNarrowing[list]; ok {
 		b = b.WhereNode(narrow())
 	}
-	// Episodes have their own lists, so the unfiltered "recently added" is
-	// music and books: a show's feed lands its whole backlog at the head of
-	// a created-at ordering. Naming podcasts, by medium or by the kind
-	// dimension, still lists them.
-	if list == "recently-added" && filter.MediaType == "" &&
-		(scope[1] != "kind" || scope[2] != string(model.KindEpisode)) {
-		b = b.Where("kind", query.OpIsNot, string(model.KindEpisode))
-	}
+	b = leaveEpisodesOut(b, list, filter, scope)
 	// Unconditionally: the state predicate is always there now, so there
 	// is no longer an unfiltered case to short-circuit. The catalog
 	// validates UserPID whenever it compiles a query, so every list
@@ -271,6 +276,26 @@ func (l *Reads) Browse(ctx context.Context, uc *UserCtx, list string, filter Ite
 		return Page{}, classify(err)
 	}
 	return l.pageDTO(ctx, uc, subs, page, key), nil
+}
+
+// episodeFreeLists are the lists Home draws shelves from. Episodes have
+// their own lists, and a show's feed lands its whole backlog (unplayed,
+// newest by creation) where these lists would otherwise hold it.
+var episodeFreeLists = map[string]bool{
+	"recently-added": true,
+	"never-played":   true,
+	"rediscover":     true,
+	"most-played":    true,
+}
+
+// leaveEpisodesOut makes an unfiltered shelf list music and books. Naming
+// podcasts, by medium or by the kind dimension, still lists the episodes.
+func leaveEpisodesOut(b *query.Builder, list string, filter ItemFilter, scope []string) *query.Builder {
+	if episodeFreeLists[list] && filter.MediaType == "" &&
+		(scope[scopeFacet] != "kind" || scope[scopeFacetKey] != string(model.KindEpisode)) {
+		return b.Where("kind", query.OpIsNot, string(model.KindEpisode))
+	}
+	return b
 }
 
 // browseScopeKindError refuses a browse whose filter names a kind the
@@ -429,6 +454,10 @@ const searchMaxCandidates = 5000
 // filtered by entity library attribution: an entity survives when one
 // of the libraries holding its members is granted to the caller.
 //
+// Artists and albums need a track the caller's listings offer, so an
+// author with no music is not an artist. Authors are the people a book
+// hit is filed under (searchAuthors).
+//
 // The state rule rides the query now, as `SearchOptions.States`,
 // so archived items never enter the ranking. That deleted the widening
 // pass this used to carry: the archived filter was the only one that bit
@@ -529,7 +558,7 @@ func (l *Reads) Search(ctx context.Context, uc *UserCtx, q string, limit int) (S
 	}
 	convEntity := func(hits []read.SearchHit, prefix string) ([]SearchHit, error) {
 		// Entities carry no stored library column, so every hit is kept
-		// only when one of its members passes the caller's listing scope,
+		// only when one of its tracks passes the caller's listing scope,
 		// in one facet per kind. The facet is the gate, so a failure can
 		// neither hand the caller entities it may not see nor pass as an
 		// honest empty group: it fails the search.
@@ -537,13 +566,13 @@ func (l *Reads) Search(ctx context.Context, uc *UserCtx, q string, limit int) (S
 		for _, h := range hits {
 			pids = append(pids, h.PID)
 		}
-		live, err := l.visibleEntities(ctx, uc, prefix, pids)
+		live, err := l.entityMemberCounts(ctx, uc, prefix, model.KindTrack, pids)
 		if err != nil {
 			return nil, err
 		}
 		out := make([]SearchHit, 0, len(hits))
 		for _, h := range hits {
-			if !live[h.PID] {
+			if live[h.PID] == 0 {
 				continue
 			}
 			out = append(out, SearchHit{
@@ -599,9 +628,14 @@ func (l *Reads) Search(ctx context.Context, uc *UserCtx, q string, limit int) (S
 	if err != nil {
 		return SearchResults{}, err
 	}
+	authors, err := l.searchAuthors(ctx, uc, q, res.Books)
+	if err != nil {
+		return SearchResults{}, err
+	}
 	return SearchResults{
 		Query:     res.Query,
 		Artists:   artists,
+		Authors:   truncate(authors),
 		Albums:    albums,
 		Tracks:    convItem(res.Tracks, PrefixTrack),
 		Books:     convItem(res.Books, PrefixBook),
@@ -644,29 +678,148 @@ func fullReach(uc *UserCtx) bool {
 // filtered" (a caller of full reach), so a kind missing from
 // entityScopes is an error rather than a set any of them could misread.
 func (l *Reads) visibleEntities(ctx context.Context, uc *UserCtx, prefix string, pids []model.PID) (map[model.PID]bool, error) {
+	counts, err := l.entityMemberCounts(ctx, uc, prefix, "", pids)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[model.PID]bool, len(counts))
+	for pid := range counts {
+		out[pid] = true
+	}
+	return out, nil
+}
+
+// entityMemberCounts is visibleEntities' facet with its counts: how
+// many members of each entity the caller's listings offer, only those
+// of one kind when kind is set. An entity with none is absent.
+func (l *Reads) entityMemberCounts(ctx context.Context, uc *UserCtx, prefix string, kind model.Kind, pids []model.PID) (map[model.PID]int, error) {
 	scope, ok := entityScopes[prefix]
 	if !ok {
 		return nil, &Error{Kind: KindInternal, Err: fmt.Errorf("no visibility scope for entity kind %q", prefix)}
 	}
 	if len(pids) == 0 {
-		return map[model.PID]bool{}, nil
+		return map[model.PID]int{}, nil
 	}
 	values := make([]string, 0, len(pids))
 	for _, pid := range pids {
 		values = append(values, string(pid))
 	}
-	q := l.facetScopeBuilder(ctx, uc).WhereNode(inSet(scope.field, values)).Build()
-	res, err := l.lib.Facet(ctx, q, scope.group, read.FacetOrderLabel, 0, model.PID(""))
+	b := l.facetScopeBuilder(ctx, uc).WhereNode(inSet(scope.field, values))
+	if kind != "" {
+		b = b.Where("kind", query.OpIs, string(kind))
+	}
+	res, err := l.lib.Facet(ctx, b.Build(), scope.group, read.FacetOrderLabel, 0, model.PID(""))
 	if err != nil {
 		return nil, classify(err)
 	}
-	out := make(map[model.PID]bool, len(res.Buckets))
+	out := make(map[model.PID]int, len(res.Buckets))
 	for _, b := range res.Buckets {
 		if b.EntityPID != "" && b.Count > 0 {
-			out[b.EntityPID] = true
+			out[b.EntityPID] = b.Count
 		}
 	}
 	return out, nil
+}
+
+// searchAuthors is search's authors group: the author each book hit is
+// filed under, among the books the caller's listings offer, ranked by
+// name as the artist group is and then in the books' rank order. The
+// catalog's own search gathers artists from tracks alone, so an author
+// is found through their books.
+func (l *Reads) searchAuthors(ctx context.Context, uc *UserCtx, q string, books []read.SearchHit) ([]SearchHit, error) {
+	if len(books) == 0 {
+		return []SearchHit{}, nil
+	}
+	values := make([]string, 0, len(books))
+	for _, h := range books {
+		values = append(values, string(h.PID))
+	}
+	views, err := l.lib.Query(ctx, l.facetScopeBuilder(ctx, uc).
+		Where("kind", query.OpIs, string(model.KindBook)).
+		WhereNode(inSet("pid", values)).Limit(len(values)).Build(), "")
+	if err != nil {
+		return nil, classify(err)
+	}
+	authorOf := make(map[model.PID]model.PID, len(views))
+	for _, v := range views {
+		if v.ArtistPID != "" {
+			authorOf[v.PID] = v.ArtistPID
+		}
+	}
+	var order []model.PID
+	seen := map[model.PID]bool{}
+	for _, h := range books {
+		if a := authorOf[h.PID]; a != "" && !seen[a] {
+			seen[a] = true
+			order = append(order, a)
+		}
+	}
+	if len(order) == 0 {
+		return []SearchHit{}, nil
+	}
+	infos, err := l.lib.EntityByPIDs(ctx, read.EntityArtist, order)
+	if err != nil {
+		return nil, classify(err)
+	}
+	want := newSearchName(q)
+	type ranked struct {
+		hit  SearchHit
+		tier int
+	}
+	rs := make([]ranked, 0, len(order))
+	for _, pid := range order {
+		info := infos[pid]
+		if info == nil {
+			continue
+		}
+		tier := searchTier(newSearchName(info.Name), want)
+		rs = append(rs, ranked{SearchHit{
+			PID:   apiPID(PrefixArtist, pid),
+			Kind:  "author",
+			Title: info.Name,
+			Exact: tier == 0,
+		}, tier})
+	}
+	slices.SortStableFunc(rs, func(a, b ranked) int { return a.tier - b.tier })
+	out := make([]SearchHit, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, r.hit)
+	}
+	return out, nil
+}
+
+// searchName is a name or a query as the catalog's search ranks its
+// artists: the match key with kana folded and compatibility forms read
+// plainly, that key without spaces, and the sort key a query of symbols
+// alone is all it has.
+type searchName struct{ key, joined, sort string }
+
+func newSearchName(s string) searchName {
+	k := strings.Map(model.HiraganaOf, identity.MatchKey(norm.NFKC.String(s)))
+	return searchName{key: k, joined: strings.ReplaceAll(k, " ", ""), sort: model.SortKey(s)}
+}
+
+// searchTier ranks a name against the query as the artist group does: 0
+// the name is the query ("jayz" is Jay-Z), 1 the query begins a word of
+// it, 2 every query word is in it, 3 the rest.
+func searchTier(name, q searchName) int {
+	switch {
+	case q.key == "":
+		if name.sort == q.sort {
+			return 0
+		}
+		return 3
+	case name.key == q.key || name.joined == q.joined:
+		return 0
+	case strings.Contains(" "+name.key, " "+q.key):
+		return 1
+	}
+	for _, w := range strings.Fields(q.key) {
+		if !strings.Contains(name.joined, w) {
+			return 3
+		}
+	}
+	return 2
 }
 
 // entityVisible is visibleEntities for one entity, skipped for a caller

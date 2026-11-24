@@ -15,6 +15,7 @@ import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/shell/shortcuts.dart';
+import 'package:waxdeck/src/uploads/uploads_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -110,11 +111,13 @@ class _RefetchFails extends FakeRepository {
     String entryId, {
     required String action,
     String? candidateMbid,
+    String? mediaType,
   }) async {
     final decided = await super.decideReviewEntry(
       entryId,
       action: action,
       candidateMbid: candidateMbid,
+      mediaType: mediaType,
     );
     _failing = true;
     return decided;
@@ -144,12 +147,14 @@ class _HeldOn extends FakeRepository {
     String entryId, {
     required String action,
     String? candidateMbid,
+    String? mediaType,
   }) async {
     if (entryId == held) await release.future;
     return super.decideReviewEntry(
       entryId,
       action: action,
       candidateMbid: candidateMbid,
+      mediaType: mediaType,
     );
   }
 }
@@ -165,12 +170,14 @@ class _Revertible extends FakeRepository {
     String entryId, {
     required String action,
     String? candidateMbid,
+    String? mediaType,
   }) {
     reviewEntryDetails.remove(entryId);
     return super.decideReviewEntry(
       entryId,
       action: action,
       candidateMbid: candidateMbid,
+      mediaType: mediaType,
     );
   }
 
@@ -193,11 +200,13 @@ class _Warns extends FakeRepository {
     String entryId, {
     required String action,
     String? candidateMbid,
+    String? mediaType,
   }) async {
     final decided = await super.decideReviewEntry(
       entryId,
       action: action,
       candidateMbid: candidateMbid,
+      mediaType: mediaType,
     );
     return ReviewDecideResult(
       entry: decided.entry,
@@ -233,11 +242,13 @@ class _HeldDecisions extends FakeRepository {
     String entryId, {
     required String action,
     String? candidateMbid,
+    String? mediaType,
   }) async {
     final decided = await super.decideReviewEntry(
       entryId,
       action: action,
       candidateMbid: candidateMbid,
+      mediaType: mediaType,
     );
     await release.future;
     return decided;
@@ -520,6 +531,234 @@ void main() {
     expect(repo.decideReviewCalls, hasLength(1));
     expect(repo.decideReviewCalls.single.entryId, 'rv-1');
     expect(repo.decideReviewCalls.single.action, 'approve');
+    expect(repo.decideReviewCalls.single.mediaType, isNull);
+  });
+
+  testWidgets('a sends a staged row\'s medium', (tester) async {
+    final repo = FakeRepository();
+    repo.reviewEntries = [testReviewEntry('rv-1', origin: 'upload')];
+    await _pump(tester, appContainer(repo: repo));
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+    await tester.pumpAndSettle();
+
+    expect(repo.decideReviewCalls.single.action, 'approve');
+    expect(repo.decideReviewCalls.single.mediaType, 'music');
+  });
+
+  testWidgets('a does not approve an audiobook against a release', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.reviewEntries = [
+      testReviewEntry('rv-1', origin: 'upload', mediaType: MediaType.audiobook),
+    ];
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
+    await tester.pumpAndSettle();
+    final raised = <String?>[];
+    container.listen(
+      shellMessagesProvider,
+      (_, next) => raised.add(shellMessageText(next)),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+    await tester.pumpAndSettle();
+    expect(repo.decideReviewCalls, isEmpty);
+    expect(raised, ['Approve is not offered for an audiobook; keep it as is.']);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pumpAndSettle();
+    expect(repo.decideReviewCalls.single.action, 'skip');
+  });
+
+  testWidgets('the medium chosen in the pane reaches the keys', (tester) async {
+    final repo = FakeRepository()
+      ..reviewEntries = [testReviewEntry('rv-1', origin: 'upload')];
+    final container = appContainer(repo: repo);
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pumpOpenEntry(tester, container);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.reviewMediumOption('audiobook')),
+    );
+    await tester.pumpAndSettle();
+    final raised = <String?>[];
+    container.listen(
+      shellMessagesProvider,
+      (_, next) => raised.add(shellMessageText(next)),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+    await tester.pumpAndSettle();
+    expect(repo.decideReviewCalls, isEmpty);
+    expect(raised, ['Approve is not offered for an audiobook; keep it as is.']);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+    await tester.pumpAndSettle();
+    expect(repo.decideReviewCalls.single.action, 'unofficial');
+    expect(repo.decideReviewCalls.single.mediaType, 'audiobook');
+  });
+
+  testWidgets('a medium picked before a track landed is not sent by a key', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..reviewEntries = [testReviewEntry('rv-1', origin: 'upload')];
+    final container = appContainer(repo: repo);
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pumpOpenEntry(tester, container);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.reviewMediumOption('audiobook')),
+    );
+    await tester.pumpAndSettle();
+
+    repo.reviewEntryDetails['rv-1'] = ReviewEntryDetail(
+      id: 'rv-1',
+      kind: 'match',
+      status: 'pending',
+      mediaType: MediaType.music,
+      origin: 'upload',
+      mediumFixed: true,
+      title: 'Neon Meridian',
+      trackCount: 1,
+      createdAt: DateTime.utc(2026, 7, 1),
+      tracks: const [
+        ReviewTrack(pid: 'tr-1', path: 'a.flac', title: 'a', durationMs: 1000),
+      ],
+    );
+    container.invalidate(reviewEntryProvider('rv-1'));
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+    await tester.pumpAndSettle();
+    expect(repo.decideReviewCalls.single.action, 'unofficial');
+    expect(repo.decideReviewCalls.single.mediaType, 'music');
+  });
+
+  ReviewEntryDetail stagedDetail({bool landed = false, String? libraryPid}) =>
+      ReviewEntryDetail(
+        id: 'rv-1',
+        kind: 'match',
+        status: 'pending',
+        mediaType: MediaType.music,
+        origin: 'upload',
+        libraryPid: libraryPid,
+        mediumFixed: landed,
+        title: 'Neon Meridian',
+        trackCount: 1,
+        createdAt: DateTime.utc(2026, 7, 1),
+        tracks: [
+          ReviewTrack(
+            pid: landed ? 'tr-1' : null,
+            path: 'a.flac',
+            title: 'a',
+            durationMs: 1000,
+          ),
+        ],
+      );
+
+  testWidgets('a refused key decision is sent again with the medium the '
+      'entry offers then', (tester) async {
+    final repo = FakeRepository()
+      ..reviewEntries = [testReviewEntry('rv-1', origin: 'upload')];
+    final container = appContainer(repo: repo);
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pumpOpenEntry(tester, container);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.reviewMediumOption('audiobook')),
+    );
+    await tester.pumpAndSettle();
+
+    repo.reviewError = const WaxDeckApiException(
+      code: 'catalog-busy',
+      message: 'a conflicting catalog job is already running',
+      statusCode: 409,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+    await tester.pumpAndSettle();
+    expect(repo.decideReviewCalls.single.mediaType, 'audiobook');
+    final message = container.read(shellMessagesProvider)!;
+    expect(message.actionLabel, 'Retry');
+
+    repo.reviewError = null;
+    repo.reviewEntryDetails['rv-1'] = stagedDetail(landed: true);
+    container.invalidate(reviewEntryProvider('rv-1'));
+    await tester.pumpAndSettle();
+    message.onAction!();
+    await tester.pumpAndSettle();
+    expect(repo.decideReviewCalls, hasLength(2));
+    expect(repo.decideReviewCalls.last.mediaType, 'music');
+  });
+
+  testWidgets('a medium picked on a row whose pane is not open is not sent by '
+      'a key', (tester) async {
+    final repo = FakeRepository()
+      ..reviewEntries = [testReviewEntry('rv-1', origin: 'upload')];
+    final container = appContainer(repo: repo);
+    await _pump(tester, container);
+    await tester.pumpAndSettle();
+    container
+        .read(selectedMediumProvider('rv-1').notifier)
+        .select(MediaType.audiobook);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+    await tester.pumpAndSettle();
+
+    expect(repo.decideReviewCalls.single.mediaType, 'music');
+  });
+
+  testWidgets('a medium the entry\'s library no longer takes is not sent', (
+    tester,
+  ) async {
+    const mixed = UploadTarget(
+      pid: 'lb-1',
+      name: 'Library',
+      mediaTypes: [MediaType.music, MediaType.audiobook],
+      managed: true,
+    );
+    final repo = FakeRepository()
+      ..reviewEntries = [testReviewEntry('rv-1', origin: 'upload')]
+      ..reviewEntryDetails['rv-1'] = stagedDetail(libraryPid: 'lb-1')
+      ..uploadTargets.add(mixed);
+    final container = appContainer(repo: repo);
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pumpOpenEntry(tester, container);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.reviewMediumOption('audiobook')),
+    );
+    await tester.pumpAndSettle();
+
+    repo.uploadTargets
+      ..clear()
+      ..add(
+        const UploadTarget(
+          pid: 'lb-1',
+          name: 'Library',
+          mediaTypes: [MediaType.music],
+          managed: true,
+        ),
+      );
+    container.invalidate(uploadTargetsProvider);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+    await tester.pumpAndSettle();
+
+    expect(repo.decideReviewCalls.single.mediaType, 'music');
   });
 
   testWidgets('deciding the last row keeps the keys working', (tester) async {
@@ -917,6 +1156,124 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.reviewBulkApprove),
       findsNothing,
     );
+  });
+
+  group('a bulk decision and the medium chosen in a pane', () {
+    /// rv-1 open beside the queue and switched to Audiobook, rv-3 an
+    /// audiobook of its own; all three selected.
+    Future<ProviderContainer> pumpSwitched(
+      WidgetTester tester,
+      FakeRepository repo, {
+      List<ReviewEntry> more = const [],
+    }) async {
+      repo.reviewEntries = [
+        testReviewEntry('rv-1', origin: 'upload'),
+        testReviewEntry('rv-2', origin: 'upload', title: 'Second Album'),
+        testReviewEntry(
+          'rv-3',
+          origin: 'upload',
+          title: 'Third Album',
+          mediaType: MediaType.audiobook,
+        ),
+        ...more,
+      ];
+      final container = appContainer(repo: repo);
+      tester.view.physicalSize = const Size(1400, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pumpOpenEntry(tester, container);
+      await tester.tap(
+        find.bySemanticsIdentifier(
+          SemanticsIds.reviewMediumOption('audiobook'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.longPress(_row('rv-1'));
+      await tester.pumpAndSettle();
+      await tester.tap(_row('rv-2'));
+      await tester.pumpAndSettle();
+      await tester.tap(_row('rv-3'));
+      await tester.pumpAndSettle();
+      for (final entry in more) {
+        await tester.tap(_row(entry.id));
+        await tester.pumpAndSettle();
+      }
+      return container;
+    }
+
+    testWidgets('keep as is holds back an entry switched to audiobook', (
+      tester,
+    ) async {
+      final repo = FakeRepository();
+      final container = await pumpSwitched(tester, repo);
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewBulkAsIs));
+      await tester.pumpAndSettle();
+
+      expect(repo.decideBulkCalls.single.entryIds, ['rv-2', 'rv-3']);
+      expect(
+        shellMessageText(container.read(shellMessagesProvider)),
+        'Decided 2 entries\n'
+        '1 entry is set to a medium a bulk decision does not cover; '
+        'open it to decide',
+      );
+    });
+
+    testWidgets('approve never sends an audiobook', (tester) async {
+      final repo = FakeRepository();
+      final container = await pumpSwitched(tester, repo);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.reviewBulkApprove),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repo.decideBulkCalls.single.entryIds, ['rv-2']);
+      expect(
+        shellMessageText(container.read(shellMessagesProvider)),
+        'Decided 1 entry\n'
+        '2 entries are set to a medium a bulk decision does not cover; '
+        'open each to decide',
+      );
+    });
+
+    testWidgets('approve says the duplicates and the medium apart', (
+      tester,
+    ) async {
+      final repo = FakeRepository();
+      final container = await pumpSwitched(
+        tester,
+        repo,
+        more: [
+          testReviewEntry(
+            'rv-4',
+            origin: 'upload',
+            title: 'Fourth Album',
+            duplicateCount: 1,
+          ),
+        ],
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.reviewBulkApprove),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repo.decideBulkCalls.single.entryIds, ['rv-2']);
+      expect(
+        shellMessageText(container.read(shellMessagesProvider)),
+        'Decided 1 entry\n'
+        '1 entry holds duplicates; open it to decide\n'
+        '2 entries are set to a medium a bulk decision does not cover; '
+        'open each to decide',
+      );
+    });
+
+    testWidgets('skip still decides every entry', (tester) async {
+      final repo = FakeRepository();
+      await pumpSwitched(tester, repo);
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewBulkSkip));
+      await tester.pumpAndSettle();
+
+      expect(repo.decideBulkCalls.single.entryIds, ['rv-1', 'rv-2', 'rv-3']);
+    });
   });
 
   testWidgets('a bulk skip still decides entries holding duplicates', (

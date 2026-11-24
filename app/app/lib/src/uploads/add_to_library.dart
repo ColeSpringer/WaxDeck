@@ -52,14 +52,22 @@ MediaType uploadableMediaType(MediaType? type) =>
 
 bool _isM4b(String name) => name.toLowerCase().endsWith('.m4b');
 
-/// The media type a pick of files with these [names] most likely is:
-/// an audiobook when any is an `.m4b`, music otherwise. The person's
-/// choice, where they are asked, wins over it.
-MediaType detectUploadMediaType(Iterable<String> names) =>
-    names.any(_isM4b) ? MediaType.audiobook : MediaType.music;
+/// The media type a pick of audio files named [names] opens the medium
+/// choice on: an audiobook when any is an `.m4b`, music for one file or
+/// loose files, and null for several files from a folder ([foldered]),
+/// which could as well be an album as a book and so are asked rather than
+/// guessed. The person's choice, where they are asked, wins over it.
+MediaType? detectUploadMediaType(List<String> names, {required bool foldered}) {
+  if (names.any(_isM4b)) return MediaType.audiobook;
+  if (names.length > 1 && foldered) return null;
+  return MediaType.music;
+}
 
+// The server folds the same names (server/internal/match/cluster.go,
+// bookDirPattern). The separators are spelled out (space, tab, no-break
+// space, _ . -) because Dart's \s and Go's differ beyond ASCII.
 final _discFolder = RegExp(
-  r'^(disc|disk|cd|part)[\s_.-]*\d+$',
+  r'^(disc|disk|cd|part)[ \t\u00A0_.-]*\d+$',
   caseSensitive: false,
 );
 
@@ -92,7 +100,8 @@ UploadGrouping defaultUploadGrouping(
 /// Opens the add sheet. [fixed] is the kind of the section the caller is
 /// in (music, audiobook): the dialogs then take it instead of asking.
 /// With none, a pick of files is asked what it is and preselected from
-/// its names, and a link is asked with music preselected.
+/// its names and folders (see [detectUploadMediaType]), and a link is
+/// asked with music preselected.
 Future<void> showAddToLibrarySheet(
   BuildContext context,
   WidgetRef ref, {
@@ -419,7 +428,8 @@ Future<void> uploadPickedFiles(
   final container = ProviderScope.containerOf(context, listen: false);
   // An empty file is named rather than sent; when nothing else was
   // picked there is no question to ask about it.
-  final sending = files.where((f) => f.size > 0).length;
+  final nonEmpty = files.where((f) => f.size > 0).toList();
+  final sending = nonEmpty.length;
   if (sending == 0) {
     for (final file in files) {
       messenger.show(l10n.uploadsFileFailed(file.name, l10n.uploadsFileEmpty));
@@ -431,7 +441,12 @@ Future<void> uploadPickedFiles(
   final fixedKind = fixed != null && uploadableMediaTypes.contains(fixed)
       ? fixed
       : null;
-  final kind = fixedKind ?? detectUploadMediaType(files.map((f) => f.name));
+  // What is uploaded is what is asked about: an empty file is only named.
+  final kind =
+      fixedKind ??
+      detectUploadMediaType([
+        for (final f in nonEmpty) f.name,
+      ], foldered: nonEmpty.any((f) => f.relativeDir.isNotEmpty));
   final choice =
       await showDialog<
         ({
@@ -482,7 +497,7 @@ Future<void> uploadPickedFiles(
     }
     try {
       // A file discarded on its way is neither counted nor reported.
-      final sent = await container
+      final accepted = await container
           .read(uploadsProvider.notifier)
           .uploadPicked(
             file,
@@ -491,7 +506,7 @@ Future<void> uploadPickedFiles(
             batchId: batchId,
             identify: choice.identify,
           );
-      if (sent) uploaded++;
+      if (accepted) uploaded++;
     } on WaxDeckApiException catch (e) {
       messenger.show(
         l10n.uploadsFileFailed(
@@ -829,7 +844,9 @@ class MediaTypeDialog extends StatefulWidget {
     this.rememberedTarget = '',
   });
 
-  final MediaType initial;
+  /// What the selector opens on; null opens it with nothing chosen, and
+  /// the confirm waits for a choice.
+  final MediaType? initial;
 
   /// Whether [initial] is the section's own kind: the selector is then
   /// left out and the title names the kind.
@@ -860,7 +877,9 @@ class MediaTypeDialog extends StatefulWidget {
 }
 
 class _MediaTypeDialogState extends State<MediaTypeDialog> {
-  late var _mediaType = uploadableMediaType(widget.initial);
+  late MediaType? _mediaType = widget.initial == null
+      ? null
+      : uploadableMediaType(widget.initial);
   late bool? _identify = widget.initialIdentify;
   late var _grouping = _defaultGrouping(_mediaType);
   var _groupingTouched = false;
@@ -868,7 +887,8 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
   /// See [_AcquireDialogState._target].
   late String _target = widget.rememberedTarget;
 
-  UploadGrouping _defaultGrouping(MediaType kind) => kind == MediaType.audiobook
+  UploadGrouping _defaultGrouping(MediaType? kind) =>
+      kind == MediaType.audiobook
       ? widget.audiobookGrouping ?? UploadGrouping.auto
       : UploadGrouping.auto;
 
@@ -892,7 +912,10 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final several = widget.fileCount > 1;
-    final candidates = uploadTargetsFor(widget.targets, _mediaType);
+    final chosen = _mediaType;
+    final candidates = chosen == null
+        ? const <UploadTarget>[]
+        : uploadTargetsFor(widget.targets, chosen);
     final target = resolveUploadTarget(candidates, _target);
     return AlertDialog(
       backgroundColor: colors.surface2,
@@ -913,30 +936,34 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
                   if (!_groupingTouched) _grouping = _defaultGrouping(value);
                 }),
               ),
-            UploadTargetSelector(
-              candidates: candidates,
-              value: target,
-              onChanged: (value) => setState(() => _target = value),
-            ),
-            if (several) ...<Widget>[
+            // Everything below words itself for the medium, so it waits
+            // for the choice.
+            if (chosen != null) ...<Widget>[
+              UploadTargetSelector(
+                candidates: candidates,
+                value: target,
+                onChanged: (value) => setState(() => _target = value),
+              ),
+              if (several) ...<Widget>[
+                const SizedBox(height: WaxSpace.s16),
+                UploadGroupingSelector(
+                  value: _grouping,
+                  mediaType: chosen,
+                  fileCount: widget.fileCount,
+                  onChanged: (value) => setState(() {
+                    _grouping = value;
+                    _groupingTouched = true;
+                  }),
+                ),
+              ],
               const SizedBox(height: WaxSpace.s16),
-              UploadGroupingSelector(
-                value: _grouping,
-                mediaType: _mediaType,
-                fileCount: widget.fileCount,
-                onChanged: (value) => setState(() {
-                  _grouping = value;
-                  _groupingTouched = true;
-                }),
+              IdentifySwitch(
+                value: _identify,
+                mediaType: chosen,
+                semanticsId: SemanticsIds.uploadIdentify,
+                onChanged: (value) => setState(() => _identify = value),
               ),
             ],
-            const SizedBox(height: WaxSpace.s16),
-            IdentifySwitch(
-              value: _identify,
-              mediaType: _mediaType,
-              semanticsId: SemanticsIds.uploadIdentify,
-              onChanged: (value) => setState(() => _identify = value),
-            ),
           ],
         ),
       ),
@@ -949,12 +976,14 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
         WaxButton(
           label: l10n.uploadsUpload,
           semanticsId: SemanticsIds.uploadMediaConfirm,
-          onPressed: () => Navigator.of(context).pop((
-            mediaType: _mediaType,
-            grouping: _grouping,
-            identify: _identify,
-            libraryPid: candidates.length > 1 ? target : '',
-          )),
+          onPressed: chosen == null
+              ? null
+              : () => Navigator.of(context).pop((
+                  mediaType: chosen,
+                  grouping: _grouping,
+                  identify: _identify,
+                  libraryPid: candidates.length > 1 ? target : '',
+                )),
         ),
       ],
     );
@@ -1033,7 +1062,8 @@ class UploadGroupingSelector extends StatelessWidget {
 
 /// The required media-type selector shared by the file-upload and
 /// URL-acquisition dialogs; only one of them is ever open at a time. It
-/// offers [uploadableMediaTypes], so [value] is one of them.
+/// offers [uploadableMediaTypes], so [value] is one of them, or null
+/// while nothing is chosen yet.
 class MediaTypeSelector extends StatelessWidget {
   const MediaTypeSelector({
     super.key,
@@ -1044,7 +1074,7 @@ class MediaTypeSelector extends StatelessWidget {
          'podcasts are added by subscribing to a feed',
        );
 
-  final MediaType value;
+  final MediaType? value;
   final ValueChanged<MediaType> onChanged;
 
   /// Podcasts are not offered, so they are not worded: the wire name keeps
@@ -1058,15 +1088,18 @@ class MediaTypeSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return WaxChoice<MediaType>(
+    return WaxChoice<MediaType?>(
       label: l10n.uploadsWhatThisIs,
       value: value,
       semanticsId: SemanticsIds.uploadMediaType,
       optionSemanticsIdFor: (type) =>
-          SemanticsIds.uploadMediaTypeOption(type.wireName),
+          SemanticsIds.uploadMediaTypeOption(type?.wireName ?? ''),
       options: uploadableMediaTypes,
-      labelFor: (type) => label(l10n, type),
-      onChanged: onChanged,
+      labelFor: (type) =>
+          type == null ? l10n.uploadsChooseMedium : label(l10n, type),
+      onChanged: (type) {
+        if (type != null) onChanged(type);
+      },
     );
   }
 }

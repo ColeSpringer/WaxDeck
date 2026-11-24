@@ -319,6 +319,7 @@ void main() {
       final results = decodeSearchResults({
         'query': 'pony',
         'artists': <Object?>[],
+        'authors': <Object?>[],
         'albums': <Object?>[],
         'tracks': [
           {

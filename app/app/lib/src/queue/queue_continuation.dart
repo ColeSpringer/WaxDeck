@@ -152,7 +152,13 @@ class QueueContinuation extends Notifier<Set<String>> {
       return;
     }
     if (!ref.mounted) return;
-    if (mix.items.isEmpty) {
+    // Music follows music; the server mixes tracks alone, and this does
+    // not lean on it.
+    final music = [
+      for (final item in mix.items)
+        if (continuesKind(MediaType.music, item)) item,
+    ];
+    if (music.isEmpty) {
       _blockedAt = _blockKey(seed);
       return;
     }
@@ -166,7 +172,7 @@ class QueueContinuation extends Notifier<Set<String>> {
     // source, which would turn an album queue into a window over a scope
     // that does not exist. This wraps `addToEnd`, which caps the queue
     // and seeds the summaries, so the new rows have titles at once.
-    ref.read(nowPlayingProvider.notifier).enqueue(mix.items);
+    ref.read(nowPlayingProvider.notifier).enqueue(music);
     state = _appended = <String>{
       ..._appended,
       for (final e in ref.read(queueControllerProvider).entries)

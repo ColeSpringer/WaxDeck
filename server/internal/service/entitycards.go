@@ -37,6 +37,10 @@ type EntityCard struct {
 	// rule to draw a card is the work the listing path skips too), and a
 	// card showing "0 tracks" for it would be a lie rather than a gap.
 	ItemCount *int
+	// MediaTypes is, on an artist card only, the media of the artist's
+	// items the caller's listings offer: music for a track, audiobook for
+	// a book they author.
+	MediaTypes []string
 }
 
 // maxEntityCards bounds one request, matching the contract's maxItems and
@@ -146,10 +150,10 @@ func (l *Reads) EntityCards(ctx context.Context, uc *UserCtx, apiPIDs []string) 
 }
 
 // entityKindCards resolves the three catalog-entity kinds through
-// EntityByPIDs, gated for a restricted caller by visibleEntities: an
-// entity none of whose members the caller's grants and content rules
-// admit is dropped rather than handed out as a pid the tap cannot
-// follow.
+// EntityByPIDs, gated for a restricted caller by visibleEntities (an
+// artist by artistMedia): an entity none of whose members the caller's
+// grants and content rules admit is dropped rather than handed out as a
+// pid the tap cannot follow.
 //
 // Departed here is a pid the batch read did not answer at all: deleted,
 // merged away, or never real, which the catalog collapses into absence
@@ -172,7 +176,23 @@ func (l *Reads) entityKindCards(ctx context.Context, uc *UserCtx, prefix string,
 		}
 	}
 	var visible map[model.PID]bool
-	if !fullReach(uc) {
+	var media artistMedia
+	if prefix == PrefixArtist {
+		// The artist facet holds tracks and books alone, so the two
+		// kinds' members are all of an artist's: the gate is their union.
+		if media, err = l.artistMedia(ctx, uc, pids); err != nil {
+			return nil, nil, err
+		}
+		if !fullReach(uc) {
+			visible = map[model.PID]bool{}
+			for pid := range media.tracks {
+				visible[pid] = true
+			}
+			for pid := range media.books {
+				visible[pid] = true
+			}
+		}
+	} else if !fullReach(uc) {
 		if visible, err = l.visibleEntities(ctx, uc, prefix, pids); err != nil {
 			return nil, nil, err
 		}
@@ -196,18 +216,62 @@ func (l *Reads) entityKindCards(ctx context.Context, uc *UserCtx, prefix string,
 			Year:   info.Year,
 			Artist: names[pid],
 		}
-		// Catalog-wide, because EntityByPIDs takes no library or content
-		// scope, so the count is answered only to a caller it is true
-		// for. A card advertising nine tracks that opens onto three would
-		// be worse than a card with no count on it, and the contract says
-		// absent is legal.
-		if fullReach(uc) {
+		switch {
+		case prefix == PrefixArtist:
+			// What the card opens, in the caller's scope, so true for
+			// every caller.
+			count := media.count(pid)
+			card.ItemCount = &count
+			card.MediaTypes = media.types(pid)
+		case fullReach(uc):
+			// Catalog-wide, because EntityByPIDs takes no library or
+			// content scope, so the count is answered only to a caller it
+			// is true for. A card advertising nine tracks that opens onto
+			// three would be worse than a card with no count on it, and
+			// the contract says absent is legal.
 			count := info.ItemCount
 			card.ItemCount = &count
 		}
 		out[card.PID] = card
 	}
 	return out, departed, nil
+}
+
+// artistMedia is what an artist's members are, by kind, among what the
+// caller's listings offer: one facet per kind over every requested
+// artist, so a card read costs two statements however many it names.
+type artistMedia struct{ tracks, books map[model.PID]int }
+
+func (l *Reads) artistMedia(ctx context.Context, uc *UserCtx, pids []model.PID) (artistMedia, error) {
+	tracks, err := l.entityMemberCounts(ctx, uc, PrefixArtist, model.KindTrack, pids)
+	if err != nil {
+		return artistMedia{}, err
+	}
+	books, err := l.entityMemberCounts(ctx, uc, PrefixArtist, model.KindBook, pids)
+	if err != nil {
+		return artistMedia{}, err
+	}
+	return artistMedia{tracks: tracks, books: books}, nil
+}
+
+func (m artistMedia) types(pid model.PID) []string {
+	out := []string{}
+	if m.tracks[pid] > 0 {
+		out = append(out, mediaTypeForKind(model.KindTrack))
+	}
+	if m.books[pid] > 0 {
+		out = append(out, mediaTypeForKind(model.KindBook))
+	}
+	return out
+}
+
+// count is what the card opens: the artist's tracks when there is any
+// music, else the books they author.
+func (m artistMedia) count(pid model.PID) int {
+	if n := m.tracks[pid]; n > 0 {
+		return n
+	}
+	return m.books[pid]
 }
 
 // entityArtistNames resolves the artist line for album and release-group

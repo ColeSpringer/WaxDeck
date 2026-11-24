@@ -365,11 +365,11 @@ GoRoute _musicIndexRoute(MusicDimension dimension) => GoRoute(
         if (dimension == MusicDimension.artists)
           GoRoute(
             path: 'tracks',
+            // Music, as the artist page above it is, whatever `in` says.
             builder: (context, state) => MusicListingScreen(
               dimension: dimension,
               segment: state.pathParameters['key']!,
               label: state.extra is String ? state.extra! as String : null,
-              domain: _listingDomain(state),
             ),
           ),
       ],

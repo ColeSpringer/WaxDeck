@@ -151,8 +151,22 @@ note.
   over `item_contributor`, and `author_pid`/`narrator_pid` item fields
   like `credit_artist_pid`. Shipped workaround: the Books Authors index
   enumerates the `artist` dimension scoped to books, which files each
-  book under its first author only; narrators are listed on the book
-  screen and browse nowhere.
+  book under its first author only; search's Authors group names each
+  book hit's first author, and an artist card's `mediaTypes` counts a
+  book only for its first author, so a co-author is neither; narrators
+  are listed on the book screen and browse nowhere.
+- **Search has no author hits.** `Search` builds its artist group from
+  matched track rows and a by-name lookup (`artistByNameQ`) that keeps
+  only an artist credited on a track or an album's artist, so a person
+  credited on books alone never appears in it, and there is no other
+  lookup of an artist by name. Wanted: an authors group beside the
+  artist group, gathered from matched book rows and the same by-name
+  lookup over book authors, under the same library and state narrowing.
+  Shipped workaround: WaxDeck's Authors group is the first authors of
+  the book hits (the capped books group), read back through the
+  caller's listing scope and ranked by name the way the artist group
+  is; it misses an author whose name is the query when none of their
+  books makes the top book hits.
 - **Entity counts include the trash.** `EntityInfo.ItemCount` and
   `TotalDurationMS` count every member, trashed ones included, while
   every listing leaves the trash out, so an album or series holding a
@@ -291,10 +305,23 @@ note.
   anything moves, and again right before each file after the first
   moves, since the earlier ones change what the later ones meet (a
   part joining the book the first made, two staged files claiming one
-  place). Each plan hashes the file's audio. Wanted: one plan over the
-  unit's files that sees each other's destinations and books. Shipped
+  place). Each plan hashes the file's audio. A file planned alone also
+  misses the import's folder rule, so a book is keyed by each part's
+  album else its title: parts that name only their chapters, or disagree
+  on their album, become a book each. Wanted: one plan over the unit's
+  files that sees each other's destinations and books, applies the
+  folder rule across them, and takes the book's title. Shipped
   workaround: a multi-file decision hashes files 2..N twice, inside a
-  request the client gives a long budget.
+  request the client gives a long budget; and before a multi-part book
+  is planned WaxDeck writes one identity into its staged parts where a
+  tag is missing or disagrees across them: the album (the album title
+  typed for it, else an album every part shares, else the folder it was
+  sent from or the list it was acquired from, else what its file names
+  share, else "Untitled audiobook"; never a chapter's title), the author
+  as artist and album artist, and each part's place. An audiobook batch
+  keeps a book's parts in one unit (by album, else by folder) and an
+  audiobook list is one unit, so the parts reach that step together. A
+  unit plan would make the stamp unnecessary.
 - **Importing a book's later parts logs a failed provenance write.**
   Applying an `ImportAcquired` plan (the inbox's `importOne`) stamps
   each placed file with the acquisition through
@@ -875,4 +902,14 @@ note.
 
 ## WaxLabel
 
-(nothing outstanding)
+- **A numbering tag written "3 of 12" reads as no number.**
+  `tag.ParseNumPair` splits the number from its total only at a `/`,
+  so a track or disc number written "3 of 12" (a form some taggers
+  write) parses as 0: the file sorts first in its unit, lands with no
+  track number, and a book's part counts as unnumbered. Wanted: the
+  number before an `of` read as the number, and the total after it as
+  the total. Shipped workaround: none; WaxDeck's own reader
+  (`match.ParseOrdinal`) takes the leading digits, but it only sees the
+  numbers WaxLabel's projection hands it, and reading the raw value
+  past WaxLabel would leave WaxDeck and the catalog disagreeing on a
+  part's place.

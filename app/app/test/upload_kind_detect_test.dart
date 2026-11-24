@@ -3,31 +3,13 @@ import 'package:waxdeck/src/uploads/add_to_library.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-// What the add flows guess about a pick before the person says: the kind
-// from the file names, and an audiobook's grouping from where the files sit.
+// What the add flows guess about a pick before the person says: an
+// audiobook's grouping from where the files sit.
 
 PickedAudioFile _file(String name, [String dir = '']) =>
     PickedAudioFile(name: name, size: 8, relativeDir: dir);
 
 void main() {
-  group('detectUploadMediaType', () {
-    test('any .m4b makes an audiobook, whatever its case', () {
-      expect(detectUploadMediaType(['book.m4b']), MediaType.audiobook);
-      expect(detectUploadMediaType(['BOOK.M4B']), MediaType.audiobook);
-      expect(
-        detectUploadMediaType(['one.flac', 'two.M4b']),
-        MediaType.audiobook,
-      );
-    });
-
-    test('anything else is music', () {
-      expect(detectUploadMediaType(['a.flac', 'b.mp3']), MediaType.music);
-      expect(detectUploadMediaType(['book.m4a']), MediaType.music);
-      expect(detectUploadMediaType(['m4b.mp3']), MediaType.music);
-      expect(detectUploadMediaType(const <String>[]), MediaType.music);
-    });
-  });
-
   group('defaultUploadGrouping', () {
     UploadGrouping bookOf(List<PickedAudioFile> files) =>
         defaultUploadGrouping(MediaType.audiobook, files);
@@ -56,6 +38,44 @@ void main() {
         bookOf([_file('00.mp3', 'Book'), _file('01.mp3', 'Book/CD1')]),
         UploadGrouping.album,
       );
+    });
+
+    // The folder names read as a disc or part of the folder above. The
+    // same list pins the server's fold (server/internal/match/
+    // cluster_test.go, bookSubfolders), so this default and the
+    // server's grouping agree.
+    const bookSubfolders = <String, bool>{
+      'CD1': true,
+      'cd 2': true,
+      'Disc 1': true,
+      'disc_2': true,
+      'Disk-3': true,
+      'DISC.4': true,
+      'Part 1': true,
+      'part 12': true,
+      'Part_3': true,
+      'Part1': true,
+      'Bonus': false,
+      'Disc': false,
+      'Part One': false,
+      'Pt 1': false,
+      'Side A': false,
+      'Vol 1': false,
+      'CD1 Extras': false,
+      'Discography 2': false,
+      'Partita 2': false,
+      'Part\u00A01': true,
+      'Part\u20031': false,
+    };
+
+    test('the subfolders read as a disc or part of their book', () {
+      for (final MapEntry(key: name, value: folds) in bookSubfolders.entries) {
+        expect(
+          bookOf([_file('00.mp3', 'Book'), _file('01.mp3', 'Book/$name')]),
+          folds ? UploadGrouping.album : UploadGrouping.auto,
+          reason: name,
+        );
+      }
     });
 
     test('a folder of book folders is left to the server', () {

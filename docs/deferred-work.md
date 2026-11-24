@@ -375,6 +375,22 @@ Every entry carries a gate tag saying what actually blocks it:
   carry a listen or a star to the item that took it in (a position
   inside a folded chapter means nothing on the book).
 
+- `[decision]` **Books' Authors index lists a book under its first
+  author only.** The index, search's Authors group and an artist card's
+  `mediaTypes` all read the `artist` dimension, which files a book under
+  its first author, so a co-author's books are not under their name and
+  narrators browse nowhere (the ask in upstream-requests.md). WaxBin
+  `eefe570` adds author and narrator groups and `author_pid` and
+  `narrator_pid` fields; taking it needs the WaxBin pin moved past that
+  commit, and the pin stays where it is by the owner's decision of
+  2026-11-13. Lifted when the owner moves the pin.
+
+- `[in-repo]` **Books' Authors index rows offer no pin.** Search's
+  author hits carry the pin sheet artist hits do, and a pinned author
+  opens their page under Books; the rows of the Books Authors index,
+  like Books' other indexes, have no such sheet, so an author is
+  pinned from search only.
+
 ## Localization
 
 - `[in-repo]` **RTL is uncertified.** It rides the first Arabic or

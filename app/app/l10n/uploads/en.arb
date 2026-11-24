@@ -23,6 +23,10 @@
       }
     }
   },
+  "uploadsChooseMedium": "Choose",
+  "@uploadsChooseMedium": {
+    "description": "What the medium choice on the upload dialog reads before one is picked, for files that could be music or an audiobook."
+  },
   "uploadsDiscardBody": "\"{fileName}\" is removed and its quota space freed.",
   "@uploadsDiscardBody": {
     "description": "Body of the discard confirmation. {fileName} is the file's own name.",

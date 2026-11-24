@@ -2,8 +2,6 @@
 
 List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add is not clear.
 
-[10-31-26] Each chapter (separate files) of a book now shows up in the recently added and never played sections under home. If a book contains a bunch of separate files it should really only show as the full book just like how it would if it were just in a singular file.
-
 [10-31-26] When adding music from a url, there should be a way to just accept the top / best match when choosing to identify against musicbrainz instead of putting it in the queue for the user.
 
 [10-31-26] When approving a track against musicbrainz that was obtained from a youtube url (https://www.youtube.com/watch?v=N_qasjqcpjw&list=RDN_qasjqcpjw&start_radio=1), the album artwork used the youtube version rather than the approved version (https://musicbrainz.org/release/20e580f2-1c9c-4df6-af67-f410956cceec). Also, it claims that the music artwork came from the file when it actually came from youtube (but was supposed to come from musicbrainz or some other official artwork store). The youtube artwork should be used when the user doesn't want to do a match or if there isnt a match that was found. So it should pretty much always retrieved but should be overwritten with better sources when possible.
@@ -16,14 +14,8 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 [10-31-26] The notifications page will show notifications that are completed (with the check mark showing so) but you can still click them and it will take you to where the noticiation would have taken you if the task still needed to be completed. For example, if you complete the waiting for review tasks, go to the notifications section, click on the notification, it will take you to the pending queue but the tasks it was for is not actually there. (side note: we need to make a proper back system. the situtation as explainted in this item does not have an obvious way to get back to where you just were even though you clicked a notification from 1 page to bring you there.)
 
-[10-31-26] When listening to music, you can get audiobooks as part of your queue. When listening to music, you should get music (same with the others).
-
 [11-04-26] Tracks downloaded from youtube are not given an album if they are not matched with a musicbrainz source. It should default to something like (title - Single) or something like that for the album when download from youtube and with no match from musicbrainz (including if a user skips the matching step or just marks as unoffical).
 
 [11-04-26] When trying to download a music playlist from youtube, there is not good feedback. If you go to the tasks section, it just says URL download and "Running" but you can't see exactly what its doing or even any progess. You also can't tell if its stuck or doing anything at all. There is also no option to cancel the action (this specifically might be a bigger problem outside of just playlist download and probably is the case for all tasks). NOTE: after waiting awhile i think it didn't work at all. Again, I can't see it updating anything but the playlist is not very large and there is no notice of any of the tracks having been downloaded. (playlist used: https://www.youtube.com/playlist?list=PLdmuawL0MnTd9DVQjap6ZEPHC8gYwUS2C). UPDATE: the playlist was private. we should not even accept private playlists and should give an obvious error message or popup. We should only accept lists we have access to (and videos). we should still have been able to cancel the neverending task (and had better feedback/visuals on what was happening, errors, stuck, whatever). UPDATE 2: The download eventually failed with the error message "URL is a playlist; use Enumerate". Pointless message. Doesn't tell the user anything useful.
 
-[11-04-26] Audiobook author shows under music sections (artist, albums, etcs.). We really need better separation for the various audio types (music, podcasts, audiobooks). They are not meant to intermingle at all.
-
 [11-04-26] In listening stats under top we should include small images next to the list items. At least for artists and albums. Also, what the hell is shows supposed to be? Where are books and podcasts?
-
-[11-04-26] "Treat as audiobook" seems to only be an option for music files but the option is not given to all of them? If its an audiobook users should just be selecting that on import or download. Probably get rid of this

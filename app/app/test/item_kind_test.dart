@@ -533,7 +533,7 @@ void main() {
     expect(engine.playing, isFalse, reason: 'it waits rather than starting');
   });
 
-  testWidgets('a queued track that became a book starts as one', (
+  testWidgets('a queued track that became a book leaves the queue', (
     tester,
   ) async {
     final engine = FakeEngine(
@@ -547,28 +547,105 @@ void main() {
       to: 'audiobook',
       engine: engine,
     );
-    harness.play([testItem(_c), testItem(_a)]);
+    harness.play([testItem(_c), testItem(_a), testItem(_b)]);
     await tester.pumpAndSettle();
-    // A queue row naming it, from the summary the queue was built from.
-    final row = harness.container.listen(queueItemProvider(_a), (_, _) {});
-    addTearDown(row.close);
-    await tester.pumpAndSettle();
-    expect(row.read().value?.mediaType, MediaType.music);
-    // The server answers the old pid with what the item is now.
     repo.libraryItems.add(testItem(_a, mediaType: MediaType.audiobook));
 
     await _confirm(tester);
-    expect(row.read().value?.mediaType, MediaType.audiobook);
-    await harness.playback.next();
-    await tester.pumpAndSettle();
 
-    final now = harness.container.read(nowPlayingProvider);
-    expect(now.entry?.pid, _a);
-    expect(now.session?.item.mediaType, MediaType.audiobook);
+    final queue = harness.container.read(queueControllerProvider);
+    expect([for (final e in queue.entries) e.pid], [_c, _b]);
+    expect(queue.currentEntry?.pid, _c);
+    expect(engine.playing, isTrue, reason: 'what plays is left alone');
   });
 
-  testWidgets('a change that ends after its dialog stopped watching still '
-      'starts what it converted as what it is now', (tester) async {
+  testWidgets('the track playing that became a book stays, as that book', (
+    tester,
+  ) async {
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final repo = _repo();
+    final harness = await _pump(
+      tester,
+      repo,
+      pids: [_a],
+      to: 'audiobook',
+      engine: engine,
+    );
+    harness.play([testItem(_a), testItem(_c)]);
+    await tester.pumpAndSettle();
+    repo.libraryItems.add(testItem(_a, mediaType: MediaType.audiobook));
+
+    await _confirm(tester);
+
+    final queue = harness.container.read(queueControllerProvider);
+    expect([for (final e in queue.entries) e.pid], [_a, _c]);
+    expect(queue.currentEntry?.pid, _a);
+  });
+
+  testWidgets('the playing track converted is read again as that book', (
+    tester,
+  ) async {
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final repo = _repo();
+    final harness = await _pump(
+      tester,
+      repo,
+      pids: [_a],
+      to: 'audiobook',
+      engine: engine,
+    );
+    harness.play([testItem(_a), testItem(_c)]);
+    await tester.pumpAndSettle();
+    final row = harness.container.listen(queueItemProvider(_a), (_, _) {});
+    await tester.pumpAndSettle();
+    expect(row.read().value?.mediaType, MediaType.music);
+    final playing = harness.container.read(nowPlayingProvider.notifier);
+    expect(playing.summaryFor(_a)?.mediaType, MediaType.music);
+    repo.libraryItems.add(testItem(_a, mediaType: MediaType.audiobook));
+
+    await _confirm(tester);
+    await tester.pumpAndSettle();
+
+    expect(row.read().value?.mediaType, MediaType.audiobook);
+    expect(
+      playing.summaryFor(_a)?.mediaType,
+      isNot(MediaType.music),
+      reason: 'what playback held of it is forgotten',
+    );
+    row.close();
+  });
+
+  testWidgets('a converted track that is not queued leaves the queue alone', (
+    tester,
+  ) async {
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final repo = _repo();
+    final harness = await _pump(
+      tester,
+      repo,
+      pids: [_a],
+      to: 'audiobook',
+      engine: engine,
+    );
+    harness.play([testItem(_c), testItem(_b)]);
+    await tester.pumpAndSettle();
+    repo.libraryItems.add(testItem(_a, mediaType: MediaType.audiobook));
+
+    await _confirm(tester);
+
+    final queue = harness.container.read(queueControllerProvider);
+    expect([for (final e in queue.entries) e.pid], [_c, _b]);
+    expect(queue.currentEntry?.pid, _c);
+  });
+
+  testWidgets('a change that ends after its dialog stopped watching lets '
+      'what it converted leave the queue', (tester) async {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
@@ -617,12 +694,11 @@ void main() {
     await tester.pump(kCatalogRefreshWindow);
     await tester.pumpAndSettle();
 
+    // Read as what it is, and not queued behind music any more, as a
+    // watched change lets it go; what was playing plays on.
     expect(row.read().value?.mediaType, MediaType.audiobook);
-    await harness.playback.next();
-    await tester.pumpAndSettle();
-    final now = harness.container.read(nowPlayingProvider);
-    expect(now.entry?.pid, _a);
-    expect(now.session?.item.mediaType, MediaType.audiobook);
+    expect(harness.container.read(queueControllerProvider).pids, [_c]);
+    expect(harness.container.read(nowPlayingProvider).entry?.pid, _c);
     row.close();
     binder.close();
   });

@@ -2540,6 +2540,13 @@ EntityCard decodeEntityCard(Map<String, Object?> json, WireContext ctx) {
     artist: readOptional(json, 'artist', type, wireString),
     year: readOptional(json, 'year', type, wireInt),
     itemCount: readOptional(json, 'itemCount', type, wireInt),
+    mediaTypes: readOptional(
+      json,
+      'mediaTypes',
+      type,
+      (v, at) =>
+          wireList(v, at, (e, at) => wireEnum(e, at, MediaType.fromWire)),
+    ),
   );
 }
 
@@ -2550,6 +2557,8 @@ Map<String, Object?> encodeEntityCard(EntityCard value) => {
   'artist': ?value.artist,
   'year': ?value.year,
   'itemCount': ?value.itemCount,
+  if (value.mediaTypes case final v?)
+    'mediaTypes': [for (final e in v) e.wireName],
 };
 
 EntityCardQuery decodeEntityCardQuery(
@@ -7941,12 +7950,14 @@ ReviewDecision decodeReviewDecision(
   return ReviewDecision(
     action: readRequired(json, 'action', type, wireString),
     candidateMbid: readOptional(json, 'candidateMbid', type, wireString),
+    mediaType: readOptional(json, 'mediaType', type, wireString),
   );
 }
 
 Map<String, Object?> encodeReviewDecision(ReviewDecision value) => {
   'action': value.action,
   'candidateMbid': ?value.candidateMbid,
+  'mediaType': ?value.mediaType,
 };
 
 ReviewEntry decodeReviewEntry(Map<String, Object?> json, WireContext ctx) {
@@ -8054,6 +8065,7 @@ ReviewEntryDetail decodeReviewEntryDetail(
     ),
     identifyDeclined:
         readOptional(json, 'identifyDeclined', type, wireBool) ?? false,
+    mediumFixed: readOptional(json, 'mediumFixed', type, wireBool) ?? false,
     identifyOverride: readOptional(
       json,
       'identifyOverride',
@@ -8090,6 +8102,7 @@ Map<String, Object?> encodeReviewEntryDetail(ReviewEntryDetail value) => {
   'tracks': [for (final e in value.tracks) encodeReviewTrack(e)],
   'candidates': [for (final e in value.candidates) encodeReviewCandidate(e)],
   'identifyDeclined': value.identifyDeclined,
+  'mediumFixed': value.mediumFixed,
   if (value.identifyOverride case final v?)
     'identifyOverride': encodeReviewOverride(v),
   if (value.suggested case final v?) 'suggested': encodeReviewOverride(v),
@@ -8461,6 +8474,13 @@ SearchResults decodeSearchResults(Map<String, Object?> json, WireContext ctx) {
       (v, at) =>
           wireList(v, at, (e, at) => decodeSearchHit(wireObject(e, at), ctx)),
     ),
+    authors: readRequired(
+      json,
+      'authors',
+      type,
+      (v, at) =>
+          wireList(v, at, (e, at) => decodeSearchHit(wireObject(e, at), ctx)),
+    ),
     albums: readRequired(
       json,
       'albums',
@@ -8496,6 +8516,7 @@ SearchResults decodeSearchResults(Map<String, Object?> json, WireContext ctx) {
 Map<String, Object?> encodeSearchResults(SearchResults value) => {
   'query': value.query,
   'artists': [for (final e in value.artists) encodeSearchHit(e)],
+  'authors': [for (final e in value.authors) encodeSearchHit(e)],
   'albums': [for (final e in value.albums) encodeSearchHit(e)],
   'tracks': [for (final e in value.tracks) encodeSearchHit(e)],
   'books': [for (final e in value.books) encodeSearchHit(e)],

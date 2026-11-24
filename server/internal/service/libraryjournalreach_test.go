@@ -238,16 +238,17 @@ func TestTheJournalPlacesAnItemItsLibraryTookAwayNowhere(t *testing.T) {
 		t.Fatal(err)
 	}
 	spare := r.item(t, "Spare Song")
-	var job Job
 	for deadline := time.Now().Add(time.Minute); ; time.Sleep(20 * time.Millisecond) {
-		if job, err = r.svc.Roots.RemoveLibrary(r.ctx, r.admin, info.PID); err == nil {
+		if _, err = r.svc.Roots.RemoveLibrary(r.ctx, r.admin, info.PID); err == nil {
 			break
 		}
 		if KindOf(err) != KindCatalogBusy || time.Now().After(deadline) {
 			t.Fatal(err)
 		}
 	}
-	waitForJob(t, r.ctx, r.svc, bareOf(t, job.PID))
+	// The name is free once the removal's end is followed up, not when the
+	// catalog's job ends.
+	waitFor(t, func() bool { return removalAudit(t, r.ctx, r.svc, info.PID) != nil }, "the removal audited")
 	r.startJournalOver(t)
 	since := r.snapshot(t)
 	if _, err := r.svc.Roots.AddLibrary(r.ctx, r.admin, AddLibraryInput{Name: "spare", Path: spareDir}); err != nil {

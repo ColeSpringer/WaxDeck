@@ -6,6 +6,7 @@
   "uploadsAcquireTasks": "Tareas",
   "uploadsAddTitle": "Añadir a la biblioteca",
   "uploadsBatch": "{count, plural, =1{Subido a la vez, 1 archivo} other{Subidos a la vez, {count} archivos}}",
+  "uploadsChooseMedium": "Elegir",
   "uploadsDiscardBody": "\"{fileName}\" se elimina y se libera su espacio de cuota.",
   "uploadsDiscardConfirm": "Descartar",
   "uploadsDiscardRow": "Descartar la subida",

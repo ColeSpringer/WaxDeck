@@ -59,9 +59,11 @@ abstract class QueueSourcePager {
   /// The next draw against [source], or null when nothing here can page
   /// it or place itself in it.
   ///
-  /// [afterPid] is the entry standing at the queue's frontier, used only
-  /// when the source carries no cursor: the draw pages the source from
-  /// its head until it passes that entry, and continues from there.
+  /// A draw with no cursor pages the source from its head until it passes
+  /// the source's [QueueSource.listedThrough], and continues from there.
+  /// [afterPid], the entry standing at the queue's frontier, stands in for
+  /// it for a source stored before it was kept, and when that item has
+  /// left the listing.
   Future<QueueDraw?> draw(QueueSource source, {String? afterPid});
 }
 
@@ -77,7 +79,12 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
   Future<QueueDraw?> draw(QueueSource source, {String? afterPid}) async {
     final listing = _listing(source);
     if (listing == null) return null;
-    if (source.cursor.isNotEmpty || source.seed != null) {
+    final listedThrough = source.listedThrough;
+    // A seeded source with no cursor places itself too: the server's
+    // shuffle keys each item on its own, so a scope's permutation is the
+    // unscoped one's order narrowed, and the last item taken stands where
+    // the queue left it.
+    if (source.cursor.isNotEmpty) {
       try {
         return await _read(listing, source.cursor, kQueueDrawSize);
       } on WaxDeckApiException catch (error) {
@@ -89,8 +96,24 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
         // permanently invalid, so rethrowing would retry it per track
         // forever while the window kept claiming there was more.
         if (error.code != 'invalid-request') rethrow;
-        return afterPid == null ? null : _place(listing, afterPid);
+        return _placeEither(listing, listedThrough, afterPid);
       }
+    }
+    return _placeEither(listing, listedThrough, afterPid);
+  }
+
+  /// Places by [listedThrough], and by [afterPid] when there is no
+  /// record or the recorded item has left the listing (deleted, or
+  /// converted out of its scope), so the window rolls on rather than
+  /// sealing.
+  Future<QueueDraw?> _placeEither(
+    _Listing listing,
+    String? listedThrough,
+    String? afterPid,
+  ) async {
+    if (listedThrough != null) {
+      final placed = await _place(listing, listedThrough);
+      if (placed != null || afterPid == listedThrough) return placed;
     }
     return afterPid == null ? null : _place(listing, afterPid);
   }
@@ -100,8 +123,10 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
   ///
   /// The whole remainder rather than a draw's worth, because a keyset
   /// cursor names a page boundary and there is no cursor for the middle
-  /// of one. It costs a wider append on the one path that needs placing
-  /// at all, which is a restore.
+  /// of one. It costs a wider append, once per window that lost its
+  /// cursor: a listing played under another scope than it was paged in
+  /// (every whole-library listing, and its shuffle), an ordered window cut
+  /// short, a refused cursor, or a restore that stored none.
   Future<QueueDraw?> _place(_Listing listing, String afterPid) async {
     var cursor = '';
     for (var page = 0; page < _maxPlacementPages; page++) {
@@ -173,16 +198,14 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
         if (dimension == null || segment == null) return null;
         final facet = dimension.wireName;
         final facetKey = musicFacetKey(dimension, segment);
-        // The scope the listing's cursor was minted under.
+        // The scope the listing's cursor was minted under, asked for as
+        // it is, so a draw of 100 is 100 of the kind it plays. Only a
+        // source stored unscoped, whose cursor names the whole bucket, is
+        // held to music after the page is cut.
         final mediaType = source.mediaType;
-        // An unscoped bucket counts whatever carried its artist, books
-        // included, and the screens that queue one leave them out for
-        // the same reason a draw does: a twelve-hour file arriving
-        // between two tracks is not what was asked for. A books bucket
-        // is its books.
-        bool keep(ItemSummary i) =>
-            mediaType == MediaType.audiobook ||
-            i.mediaType != MediaType.audiobook;
+        final keep = mediaType == null
+            ? (ItemSummary i) => continuesKind(MediaType.music, i)
+            : null;
         final seed = source.seed;
         if (seed != null) {
           // Paging the bucket's own listing shuffled each arriving page

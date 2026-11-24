@@ -252,14 +252,18 @@ paths:
         units by the declared grouping intent: `album` opens one
         multi-file review entry over every staged member, `tracks`
         opens one entry per file, and `auto` clusters members into
-        units (albums, or books for an audiobook batch) by their tags
-        and relative paths. Members join by passing `batchId` (and
-        optionally `batchPath`) at session creation and must declare
-        the batch's media type. The batch stays open for 24 hours or
-        until the finalize call; members keep the normal upload
-        retention. Nothing about a single upload changes: a session
-        without a batch opens its own review entry at completion
-        exactly as before.
+        units: a music batch into albums by their tags and relative
+        paths; an audiobook batch into books, where a file with an
+        album tag joins the files naming the same album, a file with
+        none joins the book of its folder when any such file there is
+        a numbered part, and any other file, an `.m4b` with no album
+        tag always, is a book of its own. Members join by passing
+        `batchId` (and optionally `batchPath`) at session creation and
+        must declare the batch's media type. The batch stays open for
+        24 hours or until the finalize call; members keep the normal
+        upload retention. Nothing about a single upload changes: a
+        session without a batch opens its own review entry at
+        completion exactly as before.
       tags: [uploads]
       requestBody:
         required: true
@@ -523,7 +527,8 @@ components:
             The file's directory relative to the picked or dropped
             folder, forward-slash separated (empty or absent for a
             file at the top). The `auto` grouping clusters by it, so
-            disc subfolders (`CD1`, `Disc 2`) fold into one album.
+            disc subfolders (`CD1`, `Disc 2`) fold into one album, and
+            an audiobook's part subfolders (`Part 1`) into one book.
             Must stay relative - absolute paths and `..` segments
             are rejected, as is passing it without `batchId`.
             `fileName` stays a bare name regardless.
@@ -633,11 +638,37 @@ components:
       description: >
         How a batch's staged files reach the review queue: `album`
         opens one multi-file entry over all of them (one album for
-        music, one book in parts for an audiobook, its parts in disc,
-        track and path order), `tracks` opens one entry per file (each
-        its own track or book), and `auto` clusters them into units by
-        their tags and relative paths (disc subfolders fold into
-        their parent).
+        music, one book in parts for an audiobook), `tracks` opens one
+        entry per file (each its own track or book), and `auto`
+        clusters them into units: a music batch into albums by their
+        tags and relative paths (disc subfolders fold into their
+        parent); an audiobook batch into books, files with an album
+        tag by that album whatever folder each sits in and whatever
+        artist it credits, split only where they name different album
+        artists, a file with none into the book of its folder
+        when any such file there is a numbered part (disc and part
+        subfolders such as `CD1` and `Part 2` fold into their parent,
+        and files from no folder share one), and any other file, an
+        `.m4b` with no album tag always, into a book of its own. Under
+        `album` and `auto`, for music and audiobooks alike, a unit's
+        files are ordered by the disc number they carry, then by the
+        folder each was sent from, then by track number, and a unit
+        decided as the other medium keeps that order. Folders
+        compare segment by segment, each name naturally: a run of
+        digits by its number, the text between as text, so `Part 2`
+        comes before `Part 10`, `Vol 1 Part 2` before `Vol 1 Part 10`,
+        `Part 2/CD10` before `Part 10/CD1`, and `Side A` before
+        `Side B`. A disc or track number written with its total
+        (`3/12`) orders by the number before it. An audiobook unit's
+        parts become one book, titled by the first of: the album
+        title given at review (a re-identify's `album`), an album
+        title every part already carries, the name of the folder the
+        files were picked from (an acquisition's list title) unless it
+        names a format or a container rather than a book (such as
+        `Audiobooks`, `MP3` or `New Folder`), a title drawn from what
+        the parts' file names share, and `Untitled audiobook` followed
+        by a short code from the review entry's id, so no two such
+        books are one. Never one part's own track title.
 
     UploadBatchCreate:
       type: object

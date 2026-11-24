@@ -10,6 +10,7 @@ import '../l10n/l10n.dart';
 import '../player/now_playing_controller.dart';
 import '../shell/shell_messages.dart';
 import 'queue_controller.dart';
+import 'queue_state.dart';
 
 /// Dragging a row onto the queue panel.
 ///
@@ -71,20 +72,26 @@ class QueueDrop {
 const int kQueueDropCap = 500;
 
 /// One bucket's items, as many as the queue can hold: what a drop
-/// resolves and what an album card plays.
+/// resolves and what an album card plays. One kind: [mediaType]'s, or
+/// music for an unscoped bucket, asked for in the request (no cursor
+/// outlives this read) so a drop of 500 is 500 of it.
 Future<List<ItemSummary>> bucketItems(
   WaxDeckRepository repository, {
   required String facet,
   required String facetKey,
   MediaType? mediaType,
 }) async {
+  final kind = mediaType ?? MediaType.music;
   final page = await repository.listItems(
-    mediaType: mediaType,
+    mediaType: kind,
     facet: facet,
     facetKey: facetKey,
     limit: kQueueDropCap,
   );
-  return page.items;
+  return [
+    for (final item in page.items)
+      if (continuesKind(kind, item)) item,
+  ];
 }
 
 /// A row that can be picked up with a mouse and dropped on the queue.

@@ -9,6 +9,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'app_host.dart';
+import 'fakes.dart';
 
 const _book = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
 const _episode = 'tr-01JZX5N8QW3F4V9T2B7KDEPISOD';
@@ -58,8 +59,12 @@ class _Opener extends ConsumerWidget {
   );
 }
 
-Future<void> _open(WidgetTester tester, _Opener opener) async {
-  await pumpApp(tester, opener);
+Future<void> _open(
+  WidgetTester tester,
+  _Opener opener, {
+  ProviderContainer? container,
+}) async {
+  await pumpApp(tester, opener, container: container);
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
   expect(_byId(SemanticsIds.itemMenuSheet(opener.pid)), findsOneWidget);
@@ -257,5 +262,31 @@ void main() {
     );
     expect(_byId(SemanticsIds.itemMenuGoArtist), findsOneWidget);
     expect(_byId(SemanticsIds.itemMenuGoAuthor), findsNothing);
+  });
+
+  testWidgets('an administrator\'s track row has no kind change', (
+    tester,
+  ) async {
+    final container = appContainer(
+      repo: FakeRepository(
+        sessionState: const SessionState(
+          authenticated: true,
+          user: WaxDeckUser(
+            id: 'us-1',
+            username: 'admin',
+            roles: <String>['admin'],
+          ),
+        ),
+      ),
+    );
+    await _open(
+      tester,
+      const _Opener(
+        pid: 'tr-01JZX5N8QW3F4V9T2B7KDTRACK1',
+        mediaType: MediaType.music,
+      ),
+      container: container,
+    );
+    expect(_byId(SemanticsIds.itemMenuKindBook), findsNothing);
   });
 }

@@ -12,7 +12,9 @@ mixin FakeReview on FakeRepositoryState implements ReviewApi {
   /// Thrown by the review endpoints when set.
   WaxDeckApiException? reviewError;
 
-  final List<({String entryId, String action, String? candidateMbid})>
+  final List<
+    ({String entryId, String action, String? candidateMbid, String? mediaType})
+  >
   decideReviewCalls = [];
   final List<String> revertedReviewEntryIds = [];
 
@@ -128,11 +130,13 @@ mixin FakeReview on FakeRepositoryState implements ReviewApi {
     String entryId, {
     required String action,
     String? candidateMbid,
+    String? mediaType,
   }) async {
     decideReviewCalls.add((
       entryId: entryId,
       action: action,
       candidateMbid: candidateMbid,
+      mediaType: mediaType,
     ));
     await decideReviewGate?.future;
     final error = reviewError;

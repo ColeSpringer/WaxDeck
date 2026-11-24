@@ -20,7 +20,7 @@ func TestAnUploadIntoAnUnwritableLibraryIsSaidSo(t *testing.T) {
 		}
 	}
 	lockFolder(t, root)
-	_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "")
+	_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
 	if KindOf(err) != KindStorageUnwritable {
 		t.Fatalf("decision = %v (%s), want storage-unwritable", err, KindOf(err))
 	}

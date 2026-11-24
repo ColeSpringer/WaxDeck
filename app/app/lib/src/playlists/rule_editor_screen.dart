@@ -152,7 +152,13 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
     super.initState();
     final rule = widget.editing?.rule;
     if (rule == null) {
-      _root = _DraftNode.group(mode: _GroupMode.all);
+      // A new list is music unless the user removes the condition.
+      _root = _DraftNode.group(
+        mode: _GroupMode.all,
+        children: <_DraftNode>[
+          _DraftNode.condition(field: 'mediaType', op: 'is', value: 'music'),
+        ],
+      );
     } else {
       final draft = _draftFromNode(rule.root);
       if (draft == null) {

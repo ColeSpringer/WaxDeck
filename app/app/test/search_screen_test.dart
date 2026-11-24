@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
+import 'package:waxdeck/src/books/book_bucket_screen.dart';
+import 'package:waxdeck/src/home/pinned_controller.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
@@ -22,6 +24,7 @@ import 'wax_finders.dart';
 
 SearchResults _results({
   List<SearchHit> artists = const <SearchHit>[],
+  List<SearchHit> authors = const <SearchHit>[],
   List<SearchHit> albums = const <SearchHit>[],
   List<SearchHit> tracks = const <SearchHit>[],
   List<SearchHit> episodes = const <SearchHit>[],
@@ -29,6 +32,7 @@ SearchResults _results({
 }) => SearchResults(
   query: 'night',
   artists: artists,
+  authors: authors,
   albums: albums,
   tracks: tracks,
   episodes: episodes,
@@ -433,6 +437,115 @@ void main() {
     // `contains` rather than `.last`: the artist screen also drills
     // `credit-artist` for its "appears on" shelf.
     expect(repository.facetDrills, contains(('artist', '01JZXNIGHTJAR')));
+  });
+
+  testWidgets('an author hit sits under Authors and opens their books', (
+    tester,
+  ) async {
+    final repository = FakeRepository()
+      ..searchResults['night'] = _results(
+        artists: <SearchHit>[_hit('artist', 'Nightjar', pid: 'ar-1')],
+        authors: <SearchHit>[_hit('author', 'Night Writer', pid: 'ar-2')],
+      )
+      ..facetItems['artist 2'] = <ItemSummary>[
+        const ItemSummary(
+          pid: 'bk-1',
+          mediaType: MediaType.audiobook,
+          title: 'The Long Dark',
+          artist: 'Night Writer',
+          durationMs: 3600000,
+        ),
+      ];
+    await _pump(tester, repository, initialQuery: 'night');
+
+    expect(find.text('Authors'), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.searchHit('authors', 0)),
+      findsOneWidget,
+    );
+    // Under its own heading, not the artists one.
+    expect(
+      tester.getTopLeft(find.text('Authors')).dy,
+      greaterThan(tester.getTopLeft(find.text('Nightjar')).dy),
+    );
+
+    await tester.tap(find.text('Night Writer'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BookBucketScreen), findsOneWidget);
+    expect(find.byType(ArtistScreen), findsNothing);
+    expect(repository.facetDrills, contains(('artist', '2')));
+
+    // Pushed over the results, like the artist arm: back is the search.
+    await tester.tap(find.bySemanticsLabel('Back'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchScreen), findsOneWidget);
+  });
+
+  testWidgets('the Authors group caps its hits until it is expanded', (
+    tester,
+  ) async {
+    final repository = FakeRepository()
+      ..searchResults['night'] = _results(
+        authors: <SearchHit>[
+          for (var i = 0; i < 8; i++) _hit('author', 'Writer $i', pid: 'ar-$i'),
+        ],
+      );
+    await _pump(tester, repository, initialQuery: 'night');
+
+    expect(find.byType(MediaListRow), findsNWidgets(searchGroupPreview));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchShowAll('authors')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(MediaListRow), findsNWidgets(8));
+    expect(find.text('Show all'), findsNothing);
+  });
+
+  testWidgets('a person in both Artists and Authors draws in both', (
+    tester,
+  ) async {
+    final repository = FakeRepository()
+      ..searchResults['night'] = _results(
+        artists: <SearchHit>[_hit('artist', 'Night Both', pid: 'ar-1')],
+        authors: <SearchHit>[_hit('author', 'Night Both', pid: 'ar-1')],
+      );
+    await _pump(tester, repository, initialQuery: 'night');
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.searchHit('artists', 0)),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.searchHit('authors', 0)),
+      findsOneWidget,
+    );
+    expect(find.text('Night Both'), findsNWidgets(2));
+  });
+
+  testWidgets('Authors belong to the Audiobooks chip, not the Music one', (
+    tester,
+  ) async {
+    final repository = FakeRepository()
+      ..searchResults['night'] = _results(
+        artists: <SearchHit>[_hit('artist', 'Nightjar')],
+        authors: <SearchHit>[_hit('author', 'Night Writer')],
+      );
+    await _pump(tester, repository, initialQuery: 'night');
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchFilter('music')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Nightjar'), findsOneWidget);
+    expect(find.text('Night Writer'), findsNothing);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchFilter('books')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Night Writer'), findsOneWidget);
+    expect(find.text('Nightjar'), findsNothing);
   });
 
   testWidgets('a capped answer says so rather than looking complete', (
@@ -999,6 +1112,33 @@ void main() {
     );
   });
 
+  testWidgets("an author hit's pin sheet says author", (tester) async {
+    final repository = FakeRepository()
+      ..searchResults['night'] = _results(
+        authors: <SearchHit>[_hit('author', 'Night Writer', pid: 'ar-2')],
+      );
+    final container = await _pump(tester, repository, initialQuery: 'night');
+    final more = find.bySemanticsIdentifier(
+      SemanticsIds.searchHitMore('authors', 0),
+    );
+
+    await tester.tap(more);
+    await tester.pumpAndSettle();
+    expect(find.text('Pin author to Home'), findsOneWidget);
+    expect(find.text('Pin to Home'), findsNothing);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.pinSheetTarget('ar-2')),
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(pinnedEntitiesProvider), contains('ar-2'));
+
+    await tester.tap(more);
+    await tester.pumpAndSettle();
+    expect(find.text('Unpin author from Home'), findsOneWidget);
+    expect(find.text('Unpin from Home'), findsNothing);
+  });
+
   group('the top result', () {
     Finder topResult() =>
         find.bySemanticsIdentifier(SemanticsIds.searchTopResult);
@@ -1106,6 +1246,35 @@ void main() {
 
       expect(topResult(), findsNothing);
       expect(find.text('Night Shift Ep. 4'), findsOneWidget);
+    });
+
+    testWidgets('an author named as the query leads like an artist', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..searchResults['night'] = _results(
+          authors: <SearchHit>[
+            _hit('author', 'Night', pid: 'ar-01JZXNIGHT', exact: true),
+          ],
+          albums: <SearchHit>[_hit('album', 'Night Shift')],
+        )
+        ..facetItems['artist 01JZXNIGHT'] = <ItemSummary>[
+          const ItemSummary(
+            pid: 'bk-1',
+            mediaType: MediaType.audiobook,
+            title: 'The Long Dark',
+            artist: 'Night',
+            durationMs: 3600000,
+          ),
+        ];
+      await _pump(tester, repository, initialQuery: 'night');
+
+      expect(find.text('Top result'), findsOneWidget);
+      expect(topResult(), findsOneWidget);
+
+      await tester.tap(topResultRow());
+      await tester.pumpAndSettle();
+      expect(find.byType(BookBucketScreen), findsOneWidget);
     });
 
     testWidgets('it opens what its group row opens', (tester) async {

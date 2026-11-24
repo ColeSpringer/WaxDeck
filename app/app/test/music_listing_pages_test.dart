@@ -3,13 +3,16 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/metadata/metadata_controller.dart';
 import 'package:waxdeck/src/metadata/metadata_form.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
 import 'package:waxdeck/src/music/index_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
+import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/shell/routes.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -237,6 +240,81 @@ void main() {
     expect(find.byType(MusicIndexScreen), findsOneWidget);
     expect(indexReads(), indexedBefore + 1);
     expect(find.text('Drone'), findsOneWidget);
+  });
+
+  group('a whole-library listing holding every kind', () {
+    // Reached from an album's genre chip, search or a metadata pane: the
+    // bucket lists whatever carries its genre, so the queue a play cuts
+    // from it is what decides the kind.
+    Future<ProviderContainer> pumpMixed(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(900, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final repo = FakeRepository()
+        ..facetItems['genre ge-1'] = <ItemSummary>[
+          testItem('tr-alpha', title: 'Alpha'),
+          testItem('bk-1', mediaType: MediaType.audiobook, title: 'A Book'),
+          testItem('ep-1', mediaType: MediaType.podcast, title: 'An Episode'),
+          testItem('tr-bravo', title: 'Bravo'),
+        ];
+      return pumpApp(
+        tester,
+        const MusicListingScreen(
+          dimension: MusicDimension.genres,
+          segment: 'ge-1',
+          domain: BrowseDomain.wholeLibrary,
+        ),
+        container: appContainer(repo: repo),
+      );
+    }
+
+    Future<void> stop(WidgetTester tester, ProviderContainer container) async {
+      container.read(queueControllerProvider.notifier).clear();
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a row tap queues the tapped kind, from the tapped row', (
+      tester,
+    ) async {
+      final container = await pumpMixed(tester);
+
+      await tester.tap(find.text('Bravo'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final queue = container.read(queueControllerProvider);
+      expect(queue.pids, <String>['tr-alpha', 'tr-bravo']);
+      expect(queue.currentPid, 'tr-bravo');
+      // Scoped to what it plays, so a draw asks for music; the unscoped
+      // cursor names another scope and is left behind.
+      expect(queue.source.mediaType, MediaType.music);
+      expect(queue.source.cursor, isEmpty);
+      await stop(tester, container);
+    });
+
+    testWidgets('Shuffle queues music alone', (tester) async {
+      final container = await pumpMixed(tester);
+
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.listingShuffle));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final queue = container.read(queueControllerProvider);
+      expect(queue.pids.toSet(), <String>{'tr-alpha', 'tr-bravo'});
+      expect(queue.source.mediaType, MediaType.music);
+      await stop(tester, container);
+    });
+
+    testWidgets('a book row still opens its book', (tester) async {
+      final container = await pumpMixed(tester);
+
+      await tester.tap(find.text('A Book'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byType(BookScreen), findsOneWidget);
+      expect(container.read(queueControllerProvider).isEmpty, isTrue);
+    });
   });
 
   test('reading a listing through does not stop at an empty page', () async {

@@ -53,7 +53,7 @@ func listingOf(title string) *source.Enumeration {
 func TestAcquisitionReadsTheOneShotListing(t *testing.T) {
 	l := bareLibrary(&core{})
 	l.Ingest.sourceProviders = []source.Provider{onceSource{}}
-	_, items, err := l.Ingest.acquireList(context.Background(), "https://tube.example/@channel")
+	_, items, _, err := l.Ingest.acquireList(context.Background(), "https://tube.example/@channel")
 	if err != nil {
 		t.Fatal(err)
 	}

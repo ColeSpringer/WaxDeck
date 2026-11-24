@@ -173,6 +173,25 @@ void main() {
     expect(batch.grouping, UploadGrouping.auto);
   });
 
+  testWidgets('several shared files with no .m4b upload as music without '
+      'a prompt', (tester) async {
+    final repo = FakeRepository();
+    await shareFiles(tester, repo, ['one.flac', 'two.flac', 'three.mp3']);
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaType),
+      findsNothing,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+      findsNothing,
+    );
+    final batch = repo.batchesById.values.single;
+    expect(batch.mediaType, MediaType.music);
+    expect(batch.grouping, UploadGrouping.auto);
+    expect(repo.uploadsById, hasLength(3));
+  });
+
   group('the remembered library follows the shared kind', () {
     const music = UploadTarget(
       pid: 'lb-music',

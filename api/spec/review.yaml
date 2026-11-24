@@ -161,10 +161,13 @@ paths:
         "409":
           description: >
             The decision was refused. `conflict`: the entry is already
-            decided, or part of its unit cannot enter the library (the
-            message says why). `read-only`: the server is in read-only
-            mode, or the library an upload or acquisition was staged for
-            is read-only. `catalog-busy`: another job holds the catalog's shared
+            decided, part of its unit cannot enter the library (the
+            message says why), or the decision names a `mediaType` other
+            than the entry's own once part of the unit is in the library
+            (`mediumFixed`).
+            `read-only`: the server is in read-only mode, or the library
+            an upload or acquisition was staged for is read-only.
+            `catalog-busy`: another job holds the catalog's shared
             file-mutation scope, which clears on its own, so the same
             decision is worth sending again. `storage-unwritable`: the
             library folder a file was going into refused the write (its
@@ -284,7 +287,9 @@ paths:
         Applies one decision to many pending entries in a single call,
         for keyboard-driven bulk triage. `approve` uses each entry's
         own ranked best candidate (a per-entry candidate choice needs
-        the single-entry endpoint). Entries are decided independently:
+        the single-entry endpoint), and each entry imports as its own
+        `mediaType` (choosing another needs the single-entry endpoint
+        too). Entries are decided independently:
         one failure does not stop the rest, and the response reports
         each outcome.
       tags: [review]
@@ -441,8 +446,8 @@ components:
         origin:
           type: string
           description: >
-            Where the unit came from: `scan`, `upload`, or `rematch`.
-            A string, not a closed enum.
+            Where the unit came from: `scan`, `upload`, `acquisition`,
+            or `rematch`. A string, not a closed enum.
           example: scan
         title:
           type: string
@@ -710,7 +715,12 @@ components:
           properties:
             tracks:
               type: array
-              description: The unit's files in disc and track order.
+              description: >
+                The unit's files in order: the disc number they carry,
+                then, for files uploaded in a batch, the folder each was
+                sent from (see `UploadGrouping`), then track number. An
+                audiobook acquired from a list holds its parts in the
+                list's order.
               items:
                 $ref: "#/components/schemas/ReviewTrack"
             candidates:
@@ -738,6 +748,14 @@ components:
                 imports the files without stopping. Finding one still
                 `pending` means the automatic import could not proceed
                 and it is waiting for a person.
+            mediumFixed:
+              type: boolean
+              default: false
+              description: >
+                True once any of the unit's files has entered the
+                library, or was already in it: a decide naming a
+                `mediaType` other than the entry's own is then refused
+                with `conflict`. Absent while every file is staged.
             identifyOverride:
               allOf:
                 - $ref: "#/components/schemas/ReviewIdentifyRequest"
@@ -801,6 +819,28 @@ components:
           description: >
             The candidate to approve; the ranked best when absent.
             Only meaningful with `approve`.
+        mediaType:
+          allOf:
+            - $ref: "#/components/schemas/UploadMediaType"
+          description: >
+            The medium the unit is imported as; the entry's own
+            `mediaType` when absent. The choice becomes the entry's own
+            medium, so a later decide or retry without the field imports
+            as it. Refused with `invalid-request` when `approve` would
+            import as `audiobook`, named here or the entry's own (a
+            MusicBrainz release is music), when the entry's target
+            library does not accept the medium, and when the entry
+            stages no files (a `scan` or `rematch` entry, whose items
+            are already in the library: changing their kind is the
+            kind-change call's job) and the value differs from the
+            entry's own. Once any of the entry's files has entered the
+            library or was already in it (`mediumFixed` on the entry), a
+            decide naming a different medium is refused with `conflict`;
+            naming the entry's own is not. Where two
+            refusals apply, an already decided entry answers `conflict`
+            as every decide does, and otherwise these `invalid-request`
+            refusals come before the `conflict` over imported files.
+            `skip` and `discard` import nothing and ignore it.
 
     ReviewDecideResult:
       type: object

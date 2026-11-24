@@ -82,7 +82,8 @@ enum SearchScope {
 
   /// The result groups this scope shows. Artists, albums, and tracks are
   /// all music; a scope that hid two of the three would be a filter on
-  /// the shape of a hit rather than on what it is.
+  /// the shape of a hit rather than on what it is. Authors are the
+  /// people credited on books, so they travel with the books.
   bool covers(SearchHitKind kind) => switch (this) {
     SearchScope.all => true,
     SearchScope.music =>
@@ -90,7 +91,8 @@ enum SearchScope {
           kind == SearchHitKind.albums ||
           kind == SearchHitKind.tracks,
     SearchScope.podcasts => kind == SearchHitKind.episodes,
-    SearchScope.books => kind == SearchHitKind.books,
+    SearchScope.books =>
+      kind == SearchHitKind.books || kind == SearchHitKind.authors,
     SearchScope.radio => false,
   };
 
@@ -101,6 +103,7 @@ enum SearchScope {
 /// One group of results, in the order the screen lists them.
 enum SearchHitKind {
   artists('artists'),
+  authors('authors'),
   albums('albums'),
   tracks('tracks'),
   books('books'),
@@ -114,6 +117,7 @@ enum SearchHitKind {
   /// The heading over this group's hits.
   String labelOf(AppLocalizations l10n) => switch (this) {
     SearchHitKind.artists => l10n.searchKindArtists,
+    SearchHitKind.authors => l10n.searchKindAuthors,
     SearchHitKind.albums => l10n.searchKindAlbums,
     SearchHitKind.tracks => l10n.searchKindTracks,
     SearchHitKind.books => l10n.searchKindBooks,
@@ -122,6 +126,7 @@ enum SearchHitKind {
 
   List<SearchHit> from(SearchResults results) => switch (this) {
     SearchHitKind.artists => results.artists,
+    SearchHitKind.authors => results.authors,
     SearchHitKind.albums => results.albums,
     SearchHitKind.tracks => results.tracks,
     SearchHitKind.books => results.books,
@@ -132,14 +137,18 @@ enum SearchHitKind {
 /// How many hits a group shows before "Show all" expands it in place.
 const searchGroupPreview = 5;
 
-/// The hit a search leads with: the artist whose own name is the query,
-/// else the album, as the server marks them, among the kinds [scope]
+/// The hit a search leads with: the artist or author whose own name is the
+/// query, else the album, as the server marks them, among the kinds [scope]
 /// shows. Null when the answer names none.
 SearchHit? topSearchHit(
   SearchResults results, [
   SearchScope scope = SearchScope.all,
 ]) {
-  for (final kind in const [SearchHitKind.artists, SearchHitKind.albums]) {
+  for (final kind in const [
+    SearchHitKind.artists,
+    SearchHitKind.authors,
+    SearchHitKind.albums,
+  ]) {
     if (!scope.covers(kind)) continue;
     for (final hit in kind.from(results)) {
       if (hit.exact) return hit;

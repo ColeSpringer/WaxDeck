@@ -364,6 +364,7 @@ models:
   SearchResults:
     fields:
       artists: {default: []}
+      authors: {default: []}
       albums: {default: []}
       tracks: {default: []}
       books: {default: []}

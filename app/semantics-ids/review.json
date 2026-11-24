@@ -26,6 +26,8 @@
     "reviewIdentifySkipped": "review-identify-skipped",
     "reviewIdentifySubmit": "review-identify-submit",
     "reviewIdentifyToggle": "review-identify-toggle",
+    "reviewMedium": "review-medium",
+    "reviewMediumOption": "review-medium-{wireName}",
     "reviewOpenUploads": "review-open-uploads",
     "reviewPane": "review-pane",
     "reviewPaneClose": "review-pane-close",

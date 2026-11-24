@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -166,9 +167,7 @@ func (l *Tools) tagToolBookFile(ctx context.Context, path string, bd *model.Book
 	if len(bd.Authors) > 0 {
 		author = bd.Authors[0]
 	}
-	if author != "" {
-		ed.Set(tag.Artist, author).Set(tag.AlbumArtist, author)
-	}
+	setBookIdentity(ed, "", author, trackNo, 0)
 	if len(bd.Narrators) > 0 {
 		ed.Set(tag.Narrator, strings.Join(bd.Narrators, "; "))
 	}
@@ -178,11 +177,72 @@ func (l *Tools) tagToolBookFile(ctx context.Context, path string, bd *model.Book
 	if bd.Item.Year > 0 {
 		ed.Set(tag.RecordingDate, strconv.Itoa(bd.Item.Year))
 	}
-	if trackNo > 0 {
-		ed.Set(tag.TrackNumber, strconv.Itoa(trackNo))
-	}
 	l.addToolCover(ctx, ed, bd.Item.PID)
 	return l.executeToolTagPlan(ctx, ed, path)
+}
+
+// setBookIdentity sets what makes a file a part of one book: the book's
+// title as its album, the author as artist and album artist, and its
+// place among the parts. An empty value or a zero leaves its tag alone.
+func setBookIdentity(ed *waxlabel.Editor, album, author string, position, total int) {
+	if album != "" {
+		ed.Set(tag.Album, album)
+	}
+	if author != "" {
+		ed.Set(tag.Artist, author).Set(tag.AlbumArtist, author)
+	}
+	if position > 0 {
+		ed.Set(tag.TrackNumber, strconv.Itoa(position))
+	}
+	if total > 0 {
+		ed.Set(tag.TrackTotal, strconv.Itoa(total))
+	}
+}
+
+// bookIdentityKeys are the tags setBookIdentity writes.
+var bookIdentityKeys = []tag.Key{tag.Album, tag.Artist, tag.AlbumArtist, tag.TrackNumber, tag.TrackTotal}
+
+// stampBookPart writes a book's identity into one of its part files, as
+// setBookIdentity reads its arguments with the artist and album artist
+// set apart (each only when given), answering what those tags held
+// before (a key absent where the file had none) for restoreBookPart.
+func stampBookPart(ctx context.Context, log *slog.Logger, path, title, artist, albumArtist string, position, total int) (map[tag.Key][]string, error) {
+	doc, err := waxlabel.ParseFile(ctx, path)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", filepath.Base(path), err)
+	}
+	prior := make(map[tag.Key][]string, len(bookIdentityKeys))
+	for _, k := range bookIdentityKeys {
+		if vals, ok := doc.Get(k); ok {
+			prior[k] = vals
+		}
+	}
+	ed := doc.Edit()
+	setBookIdentity(ed, title, "", position, total)
+	if artist != "" {
+		ed.Set(tag.Artist, artist)
+	}
+	if albumArtist != "" {
+		ed.Set(tag.AlbumArtist, albumArtist)
+	}
+	return prior, saveTagEdit(ctx, log, ed, path)
+}
+
+// restoreBookPart puts back what stampBookPart found in a part.
+func restoreBookPart(ctx context.Context, log *slog.Logger, path string, prior map[tag.Key][]string) error {
+	doc, err := waxlabel.ParseFile(ctx, path)
+	if err != nil {
+		return fmt.Errorf("parsing %s: %w", filepath.Base(path), err)
+	}
+	ed := doc.Edit()
+	for _, k := range bookIdentityKeys {
+		if vals, ok := prior[k]; ok {
+			ed.Set(k, vals...)
+		} else {
+			ed.Clear(k)
+		}
+	}
+	return saveTagEdit(ctx, log, ed, path)
 }
 
 // tagToolTrackFile stamps one cue split piece from its virtual track's
@@ -278,18 +338,26 @@ func writeLanded(res waxlabel.SaveResult, err error) bool {
 }
 
 func (l *Tools) executeToolTagPlan(ctx context.Context, ed *waxlabel.Editor, path string) error {
-	plan, err := ed.Prepare()
+	if err := saveTagEdit(ctx, l.log, ed, path); err != nil {
+		return fmt.Errorf("%w: %v", errToolPermanent, err)
+	}
+	return nil
+}
+
+// saveTagEdit writes an edit back over its file: a temp file beside it,
+// fsynced, its audio checked against the source's, then renamed over it.
+// A write that landed and failed only after the rename is a success
+// carrying a warning, since the plan is spent.
+func saveTagEdit(ctx context.Context, log *slog.Logger, ed *waxlabel.Editor, path string) error {
+	plan, err := ed.Prepare(waxlabel.WithVerifyEssence())
 	if err != nil {
-		return fmt.Errorf("%w: preparing tags for %s: %v", errToolPermanent, filepath.Base(path), err)
+		return fmt.Errorf("preparing tags for %s: %w", filepath.Base(path), err)
 	}
 	if _, res, err := plan.Execute(ctx, waxlabel.SaveBack()); err != nil {
 		if !writeLanded(res, err) {
-			return fmt.Errorf("%w: writing tags to %s: %v", errToolPermanent, filepath.Base(path), err)
+			return fmt.Errorf("writing tags to %s: %w", filepath.Base(path), err)
 		}
-		// The tags are on disk and the plan is spent, so wrapping this in
-		// errToolPermanent would report a durable success as a dead task.
-		l.log.Warn("tool tags written; post-commit step failed",
-			"file", filepath.Base(path), "err", err)
+		log.Warn("tags written; post-commit step failed", "file", filepath.Base(path), "err", err)
 	}
 	return nil
 }

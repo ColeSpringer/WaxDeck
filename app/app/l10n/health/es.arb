@@ -75,6 +75,7 @@
   "healthFixRule": "Corregir {rule}",
   "healthFixRunning": "Ya hay una corrección de {rule} en curso",
   "healthFixStarted": "Corrigiendo {rule}",
+  "healthFoldEntryReady": "Listo para abrir: {name}",
   "healthGenreWhitelist": "Género fuera del árbol canónico",
   "healthIssueFix": "Mover a su sitio",
   "healthIssueFixAction": "Mover",

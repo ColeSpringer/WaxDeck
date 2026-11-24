@@ -1,9 +1,14 @@
 package api
 
 import (
+	"fmt"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/colespringer/waxdeck/fixtures"
+	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
 // looseBook writes the two-part MP3 book outside the library.
@@ -154,4 +159,488 @@ func TestMultiPartAudiobookBatchImportsWhole(t *testing.T) {
 			t.Fatalf("parts = %+v, want chapter one (the shorter) first", detail.Parts)
 		}
 	})
+}
+
+// untitledBook writes the two-part MP3 book whose parts carry chapter
+// titles and no album.
+func untitledBook(t *testing.T) []string {
+	t.Helper()
+	parts, err := fixtures.GenerateUntitledMP3Book(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return parts
+}
+
+// splitAlbumBook writes a two-part MP3 book whose parts disagree on
+// their album.
+func splitAlbumBook(t *testing.T) []string {
+	t.Helper()
+	dir := t.TempDir()
+	var parts []string
+	for i, album := range []string{"The Split Hours", "The Split Hours, Part Two"} {
+		paths, err := fixtures.Generate(dir, fixtures.Spec{
+			Name: fmt.Sprintf("%02d - Hour %d", i+1, i+1), Codec: fixtures.CodecMP3,
+			Duration: time.Duration(3+i) * time.Second,
+			Tags: map[string]string{"TITLE": fmt.Sprintf("Hour %d", i+1), "ARTIST": "Juno Marsh",
+				"ALBUM": album, "TRACKNUMBER": fmt.Sprint(i + 1)},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		parts = append(parts, paths...)
+	}
+	return parts
+}
+
+// uploadBookUnit uploads parts as one batch of the given grouping and
+// medium from one folder, decides what it opened as it is, and rescans,
+// answering the entry's title.
+func uploadBookUnit(t *testing.T, h *harness, token, grouping, media, folder string, parts []string) string {
+	t.Helper()
+	titles := uploadBookUnits(t, h, token, grouping, media, folder, parts)
+	if len(titles) != 1 {
+		t.Fatalf("%s %s from one folder opened %d entries (%q), want one", grouping, media, len(titles), titles)
+	}
+	return titles[0]
+}
+
+// uploadBookUnits is uploadBookUnit for a batch that may open several
+// entries, answering their titles.
+func uploadBookUnits(t *testing.T, h *harness, token, grouping, media, folder string, parts []string) []string {
+	t.Helper()
+	sent := make([]sentFile, 0, len(parts))
+	for _, p := range parts {
+		sent = append(sent, sentFile{p, folder})
+	}
+	return uploadSentFiles(t, h, token, grouping, media, sent)
+}
+
+// sentFile is a file and the folder a batch sends it from.
+type sentFile struct{ path, folder string }
+
+// uploadSentFiles uploads files as one batch of the given grouping and
+// medium, each from its own folder, decides what it opened as it is,
+// and rescans, answering the entries' titles.
+func uploadSentFiles(t *testing.T, h *harness, token, grouping, media string, files []sentFile) []string {
+	t.Helper()
+	batch := createBatch(t, h, token, grouping, media)
+	for _, f := range files {
+		uploadBatchMember(t, h, token, f.path, media, batch.Id, f.folder)
+	}
+	entryIDs := finalizeBatch(t, h, token, batch.Id).ReviewEntryIds
+	drainMatches(t, h)
+	var titles []string
+	for _, id := range entryIDs {
+		var title string
+		if e := reviewAs(t, h, token, id); e.Title != nil {
+			title = *e.Title
+		}
+		titles = append(titles, title)
+		decideAs(t, h, token, id, map[string]any{"action": "as-is"})
+	}
+	h.rescanAndWait(t)
+	return titles
+}
+
+// wholeBooks writes three single-file MP3 books, none numbered: two
+// naming themselves as their album, one by its title alone.
+func wholeBooks(t *testing.T) []string {
+	t.Helper()
+	dir := t.TempDir()
+	var out []string
+	for _, b := range []struct{ title, album, author string }{
+		{"Emma", "Emma", "Jane Austen"},
+		{"Dracula", "Dracula", "Bram Stoker"},
+		{"Middlemarch", "", "George Eliot"},
+	} {
+		tags := map[string]string{"TITLE": b.title, "ARTIST": b.author}
+		if b.album != "" {
+			tags["ALBUM"] = b.album
+		}
+		paths, err := fixtures.Generate(dir, fixtures.Spec{
+			Name: b.title, Codec: fixtures.CodecMP3, Duration: 3 * time.Second, Tags: tags,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, paths...)
+	}
+	return out
+}
+
+// wantOneBook checks the library holds one book titled title, of two
+// parts, by author, and no item titled after either chapter.
+func wantOneBook(t *testing.T, h *harness, title, author string, chapters ...string) {
+	t.Helper()
+	pid, names := bookOfParts(t, h, title)
+	if !strings.HasPrefix(pid, "bk-") || len(names) != 2 || names[0] == names[1] {
+		t.Fatalf("book %q = %s parts %q, want one book of two parts", title, pid, names)
+	}
+	detail := decode[BookDetail](t, get(t, h.ts, "/api/v1/books/"+pid, h.token))
+	if len(detail.Authors) != 1 || detail.Authors[0] != author {
+		t.Errorf("book %q authors = %q, want %q", title, detail.Authors, author)
+	}
+	for _, it := range decode[ItemPage](t, get(t, h.ts, "/api/v1/library/items?limit=500", h.token)).Items {
+		if slices.Contains(chapters, it.Title) {
+			t.Errorf("item %s %q is a chapter listed on its own", it.Pid, it.Title)
+		}
+	}
+}
+
+// wantPartsInOrder checks the library holds one book titled title, by
+// author, whose parts are the chapters in reading order, and no item
+// titled after a chapter. Parts land under names numbered for the book,
+// so each chapter is told by its length: the i-th lasts 3+i seconds.
+func wantPartsInOrder(t *testing.T, h *harness, title, author string, chapters ...string) {
+	t.Helper()
+	pid := h.itemTitled(t, h.token, title).Pid
+	detail := decodeStatus[BookDetail](t, get(t, h.ts, "/api/v1/books/"+pid, h.token), 200, "book "+title)
+	var seconds []int64
+	for _, p := range detail.Parts {
+		seconds = append(seconds, (p.DurationMs+500)/1000)
+	}
+	if !strings.HasPrefix(pid, "bk-") || len(seconds) != len(chapters) {
+		t.Fatalf("book %q = %s parts of %v seconds, want one book of the parts %q", title, pid, seconds, chapters)
+	}
+	for i := range chapters {
+		if seconds[i] != int64(3+i) {
+			t.Errorf("book %q parts last %v seconds, want %q in reading order", title, seconds, chapters)
+			break
+		}
+	}
+	if len(detail.Authors) != 1 || detail.Authors[0] != author {
+		t.Errorf("book %q authors = %q, want %q", title, detail.Authors, author)
+	}
+	for _, it := range decode[ItemPage](t, get(t, h.ts, "/api/v1/library/items?limit=500", h.token)).Items {
+		if slices.Contains(chapters, it.Title) {
+			t.Errorf("item %s %q is a chapter listed on its own", it.Pid, it.Title)
+		}
+	}
+}
+
+// Audiobook parts that do not share an album still make one book, named
+// never after a chapter: from the folder, what the file names share, or
+// a fixed title. Parts sent as one book whose albums disagree are one
+// book named from their folder. Whole books picked together stay apart,
+// tags untouched, and music keeps its tags.
+func TestAudiobookPartsWithNoSharedAlbumMakeOneBook(t *testing.T) {
+	t.Parallel()
+
+	for _, grouping := range []string{"album", "auto"} {
+		t.Run("parts with no album as "+grouping, func(t *testing.T) {
+			t.Parallel()
+			h, bob := joinHarness(t)
+			if title := uploadBookUnit(t, h, bob, grouping, "audiobook", "Wren Hollis/The Untitled Hours", untitledBook(t)); title != "The Untitled Hours" {
+				t.Errorf("review entry titled %q, want the book's title", title)
+			}
+			wantOneBook(t, h, "The Untitled Hours", "Wren Hollis", "Chapter 1", "Chapter 2")
+		})
+	}
+
+	t.Run("parts numbered with no total and named for their chapters", func(t *testing.T) {
+		t.Parallel()
+		h, bob := joinHarness(t)
+		dir := t.TempDir()
+		chapters := []string{"The Lighthouse", "A Storm Breaks", "Harbour Lights"}
+		var parts []string
+		for i, chapter := range chapters {
+			paths, err := fixtures.Generate(dir, fixtures.Spec{
+				Name: chapter, Codec: fixtures.CodecMP3, Duration: time.Duration(3+i) * time.Second,
+				Tags: map[string]string{"TITLE": chapter, "ARTIST": "Wren Hollis", "TRACKNUMBER": fmt.Sprint(i + 1)},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			parts = append(parts, paths...)
+		}
+		if title := uploadBookUnit(t, h, bob, "auto", "audiobook", "Wren Hollis/The Long Harbour", parts); title != "The Long Harbour" {
+			t.Errorf("review entry titled %q, want the folder's name", title)
+		}
+		wantPartsInOrder(t, h, "The Long Harbour", "Wren Hollis", chapters...)
+	})
+
+	t.Run("parts in part folders", func(t *testing.T) {
+		t.Parallel()
+		h, bob := joinHarness(t)
+		dir := t.TempDir()
+		var sent []sentFile
+		for _, f := range []struct {
+			folder, name string
+			place        int
+		}{
+			{"Wren Hollis/The Parted Hours/Part 2", "01 - Chapter 3", 2},
+			{"Wren Hollis/The Parted Hours/Part 1", "02 - Chapter 2", 1},
+			{"Wren Hollis/The Parted Hours/Part 1", "01 - Chapter 1", 0},
+			{"Wren Hollis/The Parted Hours/Part 2", "02 - Chapter 4", 3},
+			{"Wren Hollis/The Other Hours", "01 - Opening", 0},
+			{"Wren Hollis/The Other Hours", "02 - Closing", 1},
+		} {
+			chapter := strings.SplitN(f.name, " - ", 2)[1]
+			paths, err := fixtures.Generate(dir, fixtures.Spec{
+				Name: f.name, Codec: fixtures.CodecMP3, Duration: time.Duration(3+f.place) * time.Second,
+				Tags: map[string]string{"TITLE": chapter, "ARTIST": "Wren Hollis", "TRACKNUMBER": f.name[:2]},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			sent = append(sent, sentFile{paths[0], f.folder})
+		}
+		titles := uploadSentFiles(t, h, bob, "auto", "audiobook", sent)
+		slices.Sort(titles)
+		if want := []string{"The Other Hours", "The Parted Hours"}; !slices.Equal(titles, want) {
+			t.Fatalf("entries = %q, want one per book folder %q", titles, want)
+		}
+		wantPartsInOrder(t, h, "The Parted Hours", "Wren Hollis", "Chapter 1", "Chapter 2", "Chapter 3", "Chapter 4")
+		wantPartsInOrder(t, h, "The Other Hours", "Wren Hollis", "Opening", "Closing")
+	})
+
+	t.Run("parts with conflicting albums", func(t *testing.T) {
+		t.Parallel()
+		h, bob := joinHarness(t)
+		title := uploadBookUnit(t, h, bob, "album", "audiobook", "Juno Marsh/The Divided Hours/CD1", splitAlbumBook(t))
+		if title != "The Divided Hours" {
+			t.Errorf("review entry titled %q, want the folder's name", title)
+		}
+		wantOneBook(t, h, "The Divided Hours", "Juno Marsh", "Hour 1", "Hour 2",
+			"The Split Hours", "The Split Hours, Part Two")
+	})
+
+	for name, folder := range map[string]string{"picked loosely": "", "from one folder": "Shelf"} {
+		t.Run("whole books "+name, func(t *testing.T) {
+			t.Parallel()
+			h, bob := joinHarness(t)
+			titles := uploadBookUnits(t, h, bob, "auto", "audiobook", folder, wholeBooks(t))
+			slices.Sort(titles)
+			if want := []string{"Dracula", "Emma", "Middlemarch"}; !slices.Equal(titles, want) {
+				t.Fatalf("entries = %q, want one per book %q", titles, want)
+			}
+			for title, author := range map[string]string{"Emma": "Jane Austen", "Dracula": "Bram Stoker", "Middlemarch": "George Eliot"} {
+				pid, names := bookOfParts(t, h, title)
+				detail := decode[BookDetail](t, get(t, h.ts, "/api/v1/books/"+pid, h.token))
+				if len(names) != 1 || len(detail.Authors) != 1 || detail.Authors[0] != author {
+					t.Errorf("book %q = %s parts %q by %q, want one part by %q", title, pid, names, detail.Authors, author)
+				}
+			}
+		})
+	}
+
+	t.Run("parts from no folder named alike", func(t *testing.T) {
+		t.Parallel()
+		h, bob := joinHarness(t)
+		dir := t.TempDir()
+		var parts []string
+		for i := range 2 {
+			paths, err := fixtures.Generate(dir, fixtures.Spec{
+				Name: fmt.Sprintf("The Quiet Year - Part %02d", i+1), Codec: fixtures.CodecMP3,
+				Duration: time.Duration(3+i) * time.Second,
+				Tags:     map[string]string{"TITLE": fmt.Sprintf("Chapter %d", i+1), "ARTIST": "Odile Fen"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			parts = append(parts, paths...)
+		}
+		uploadBookUnit(t, h, bob, "album", "audiobook", "", parts)
+		wantOneBook(t, h, "The Quiet Year", "Odile Fen", "Chapter 1", "Chapter 2")
+	})
+
+	t.Run("parts from no folder named only by number", func(t *testing.T) {
+		t.Parallel()
+		h, bob := joinHarness(t)
+		title := uploadBookUnit(t, h, bob, "auto", "audiobook", "", untitledBook(t))
+		if !strings.HasPrefix(title, "Untitled audiobook (") {
+			t.Errorf("review entry titled %q, want an untitled book's title", title)
+		}
+		wantOneBook(t, h, title, "Wren Hollis", "Chapter 1", "Chapter 2")
+	})
+
+	t.Run("several whole books from one folder", func(t *testing.T) {
+		t.Parallel()
+		h, bob := joinHarness(t)
+		dir := t.TempDir()
+		batch := createBatch(t, h, bob, "auto", "audiobook")
+		for i, title := range []string{"The First Whole Book", "The Second Whole Book"} {
+			m4b, err := fixtures.GenerateM4B(dir, fixtures.Spec{
+				Name: fmt.Sprintf("whole-%d", i+1), Duration: time.Duration(3+i) * time.Second,
+				Tags: map[string]string{"TITLE": title, "ARTIST": "Pia Sorel"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			uploadBatchMember(t, h, bob, m4b, "audiobook", batch.Id, "Pia Sorel")
+		}
+		if ids := finalizeBatch(t, h, bob, batch.Id).ReviewEntryIds; len(ids) != 2 {
+			t.Fatalf("two .m4b books from one folder opened %d entries, want one each", len(ids))
+		}
+	})
+
+	t.Run("a music batch", func(t *testing.T) {
+		t.Parallel()
+		h, bob := joinHarness(t)
+		uploadBookUnit(t, h, bob, "album", "music", "Wren Hollis/The Untitled Hours", untitledBook(t))
+		for _, chapter := range []string{"Chapter 1", "Chapter 2"} {
+			it := h.itemTitled(t, h.token, chapter)
+			if !strings.HasPrefix(it.Pid, "tr-") || (it.Album != nil && *it.Album != "") {
+				t.Errorf("music %q = %s album %v, want a track whose tags were left alone", chapter, it.Pid, it.Album)
+			}
+		}
+	})
+}
+
+// An audiobook acquired from a list is one book titled by the list, even
+// when the videos name only their chapters, and even when the list is
+// titled like one of them.
+func TestAnAudiobookListAcquiresAsOneBook(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ list, chapter string }{
+		{"Test Playlist", "Chapter 1"},
+		{"Chapter 1", ""},
+	} {
+		t.Run("titled "+tc.list, func(t *testing.T) {
+			t.Parallel()
+			parts := untitledBook(t)
+			src := &fakeAcquireSource{
+				playlistURL: "https://tube.example/playlist?list=PLbook",
+				listTitle:   tc.list,
+				entries: []struct{ title, url string }{
+					{"Chapter 1", "https://tube.example/watch?v=ch1"},
+					{"Chapter 2", "https://tube.example/watch?v=ch2"},
+				},
+				files: map[string]string{
+					"https://tube.example/watch?v=ch1": parts[0],
+					"https://tube.example/watch?v=ch2": parts[1],
+				},
+			}
+			h := newHarnessWith(t, func(cfg *service.Config) {
+				cfg.SourceProviders = append(cfg.SourceProviders, src)
+				for i := range cfg.Roots {
+					cfg.Roots[i].Managed = true
+				}
+				cfg.AllowPrivateFeedHosts = true
+			})
+			task := decodeStatus[ToolTask](t, h.postJSON(t, "/api/v1/acquisitions",
+				map[string]any{"url": src.playlistURL, "mediaType": "audiobook"}), 202, "acquisition")
+			drainTools(t, h)
+			got := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+task.Id, h.token))
+			if got.State != "done" || got.ResultPids == nil || len(*got.ResultPids) != 1 {
+				t.Fatalf("acquire task = %+v, want one entry for the list", got)
+			}
+			entryID := (*got.ResultPids)[0]
+			drainMatches(t, h)
+			if e := reviewAs(t, h, h.token, entryID); e.Title == nil || *e.Title != tc.list {
+				t.Errorf("review entry titled %v, want the list's title %q", e.Title, tc.list)
+			}
+			decideAs(t, h, h.token, entryID, map[string]any{"action": "as-is"})
+			h.rescanAndWait(t)
+			chapters := []string{"Chapter 2"}
+			if tc.chapter != "" {
+				chapters = append(chapters, tc.chapter)
+			}
+			wantOneBook(t, h, tc.list, "Wren Hollis", chapters...)
+		})
+	}
+}
+
+// A unit sent as music and decided as an audiobook lands as one book:
+// the decision's medium reaches the import, and becomes the entry's.
+// A medium the decision cannot import as is refused before anything
+// lands. The entry says its medium is fixed once its files are in.
+func TestAMusicUnitDecidedAsAnAudiobookLandsOneBook(t *testing.T) {
+	t.Parallel()
+	h, bob := joinHarness(t)
+	batch := createBatch(t, h, bob, "album", "music")
+	for _, p := range untitledBook(t) {
+		uploadBatchMember(t, h, bob, p, "music", batch.Id, "Wren Hollis/The Untitled Hours")
+	}
+	ids := finalizeBatch(t, h, bob, batch.Id).ReviewEntryIds
+	if len(ids) != 1 {
+		t.Fatalf("the batch opened %d entries, want one", len(ids))
+	}
+	drainMatches(t, h)
+	if e := reviewAs(t, h, bob, ids[0]); e.MediumFixed != nil {
+		t.Errorf("staged entry mediumFixed = %v, want absent", *e.MediumFixed)
+	}
+	path := "/api/v1/review/queue/" + ids[0] + "/decide"
+	if e := decodeStatus[Error](t, postJSONAs(t, h, bob, path, map[string]any{"action": "approve", "mediaType": "audiobook"}),
+		400, "approve as audiobook"); e.Code != "invalid-request" || !strings.Contains(e.Message, "audiobook") {
+		t.Errorf("approve as audiobook = %q %q, want invalid-request over the audiobook", e.Code, e.Message)
+	}
+	res := decideAs(t, h, bob, ids[0], map[string]any{"action": "as-is", "mediaType": "audiobook"})
+	if res.Entry.MediaType != "audiobook" {
+		t.Errorf("decided entry medium = %q, want audiobook", res.Entry.MediaType)
+	}
+	if e := reviewAs(t, h, bob, ids[0]); e.MediumFixed == nil || !*e.MediumFixed {
+		t.Errorf("decided entry mediumFixed = %v, want true", e.MediumFixed)
+	}
+	h.rescanAndWait(t)
+	wantOneBook(t, h, "The Untitled Hours", "Wren Hollis", "Chapter 1", "Chapter 2")
+}
+
+// An audiobook list whose middle fetch failed, acquired again, ends as
+// one book holding each chapter once, in the list's order.
+func TestAnAudiobookListRetriedAfterAFailedFetchIsOneBook(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	src := &fakeAcquireSource{
+		playlistURL: "https://tube.example/playlist?list=PLretry",
+		files:       map[string]string{},
+		failOnce:    map[string]bool{"https://tube.example/watch?v=ch3": true},
+	}
+	for i := range 4 {
+		paths, err := fixtures.Generate(dir, fixtures.Spec{
+			Name: fmt.Sprintf("%02d - Chapter %d", i+1, i+1), Codec: fixtures.CodecMP3,
+			Duration: time.Duration(3+i) * time.Second,
+			Tags:     map[string]string{"TITLE": fmt.Sprintf("Chapter %d", i+1), "ARTIST": "Wren Hollis"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		url := fmt.Sprintf("https://tube.example/watch?v=ch%d", i+1)
+		src.entries = append(src.entries, struct{ title, url string }{fmt.Sprintf("Chapter %d", i+1), url})
+		src.files[url] = paths[0]
+	}
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.SourceProviders = append(cfg.SourceProviders, src)
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+		cfg.AllowPrivateFeedHosts = true
+	})
+	acquire := func() ToolTask {
+		task := decodeStatus[ToolTask](t, h.postJSON(t, "/api/v1/acquisitions",
+			map[string]any{"url": src.playlistURL, "mediaType": "audiobook"}), 202, "acquisition")
+		drainTools(t, h)
+		return decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+task.Id, h.token))
+	}
+	if got := acquire(); got.State != "failed" {
+		t.Fatalf("first acquisition = %+v, want it failed at the third video", got)
+	}
+	if got := acquire(); got.State != "done" {
+		t.Fatalf("second acquisition = %+v, want it done", got)
+	}
+	drainMatches(t, h)
+	page := decode[ReviewEntryPage](t, get(t, h.ts, "/api/v1/review/queue?status=pending", h.token))
+	if len(page.Entries) != 2 {
+		t.Fatalf("pending entries = %d, want one per acquisition", len(page.Entries))
+	}
+	slices.SortFunc(page.Entries, func(a, b ReviewEntry) int { return a.CreatedAt.Compare(b.CreatedAt) })
+	// The second acquisition fetches the whole list again: its entry
+	// holds every chapter, numbered from the list's first.
+	if a, b := page.Entries[0].TrackCount, page.Entries[1].TrackCount; a != 2 || b != 4 {
+		t.Fatalf("entries hold %d and %d files, want the first two and then all four", a, b)
+	}
+	for _, e := range page.Entries {
+		decideAs(t, h, h.token, e.Id, map[string]any{"action": "as-is"})
+	}
+	h.rescanAndWait(t)
+	pid := h.itemTitled(t, h.token, "Test Playlist").Pid
+	detail := decodeStatus[BookDetail](t, get(t, h.ts, "/api/v1/books/"+pid, h.token), 200, "book")
+	var lengths []int64
+	for _, p := range detail.Parts {
+		lengths = append(lengths, (p.DurationMs+500)/1000)
+	}
+	if want := []int64{3, 4, 5, 6}; !slices.Equal(lengths, want) {
+		t.Errorf("book %s parts last %v seconds, want each chapter once in list order %v", pid, lengths, want)
+	}
 }

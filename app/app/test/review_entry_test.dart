@@ -15,12 +15,21 @@ import 'app_host.dart';
 import 'fakes.dart';
 import 'wax_finders.dart';
 
-ReviewEntryDetail _detail({String status = 'pending'}) => ReviewEntryDetail(
+ReviewEntryDetail _detail({
+  String status = 'pending',
+  String origin = 'upload',
+  MediaType mediaType = MediaType.music,
+  String? libraryPid,
+  bool landed = false,
+  bool? mediumFixed,
+}) => ReviewEntryDetail(
   id: 'rv-1',
   kind: 'match',
   status: status,
-  mediaType: MediaType.music,
-  origin: 'upload',
+  mediaType: mediaType,
+  origin: origin,
+  libraryPid: libraryPid,
+  mediumFixed: mediumFixed ?? landed,
   title: 'Neon Meridian',
   artist: 'The Cardinal Waves',
   trackCount: 2,
@@ -58,15 +67,19 @@ ReviewEntryDetail _detail({String status = 'pending'}) => ReviewEntryDetail(
       similarityPct: 71,
     ),
   ],
-  tracks: const [
+  tracks: [
     ReviewTrack(
-      pid: 'tr-1',
+      pid: landed ? 'tr-1' : null,
       path: '/music/a.flac',
       title: 'opening tide (untagged)',
       trackNo: 1,
       durationMs: 200000,
     ),
-    ReviewTrack(path: '/music/b.flac', title: 'bonus jam', durationMs: 100000),
+    const ReviewTrack(
+      path: '/music/b.flac',
+      title: 'bonus jam',
+      durationMs: 100000,
+    ),
   ],
 );
 
@@ -89,16 +102,26 @@ class _HeldDecisions extends FakeRepository {
     String entryId, {
     required String action,
     String? candidateMbid,
+    String? mediaType,
   }) async {
     final decided = await super.decideReviewEntry(
       entryId,
       action: action,
       candidateMbid: candidateMbid,
+      mediaType: mediaType,
     );
     await release.future;
     reviewEntryDetails.remove(entryId);
     return decided;
   }
+}
+
+/// Fails the targets read with something other than a refusal, which
+/// the provider holds as an error.
+class _BrokenTargets extends FakeRepository {
+  @override
+  Future<List<UploadTarget>> listUploadTargets() async =>
+      throw StateError('the targets read broke');
 }
 
 /// Tall enough for the diff to be laid out below the candidate list
@@ -251,11 +274,22 @@ void main() {
 
     final bar = tester.getRect(find.byType(WaxFootBar));
     expect((bar.left, bar.right, bar.bottom), (0.0, 1000.0, 900.0));
-    final approve = tester.getRect(
-      find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
+    final first = tester.getRect(
+      find.bySemanticsIdentifier(SemanticsIds.reviewMedium),
     );
-    expect(approve.left, 40 + 12.0, reason: 'its controls, the start');
-    expect(approve.bottom, 900 - 20 - 12.0, reason: 'its controls, the foot');
+    expect(first.left, 40 + 12.0, reason: 'its controls, the start');
+    expect(
+      tester
+          .getRect(
+            find.descendant(
+              of: find.byType(WaxFootBar),
+              matching: find.byType(Wrap),
+            ),
+          )
+          .bottom,
+      900 - 20 - 12.0,
+      reason: 'its controls, the foot',
+    );
     final entry = tester.getRect(
       find
           .descendant(
@@ -333,7 +367,7 @@ void main() {
   });
 
   testWidgets('renders candidates and the track diff', (tester) async {
-    final repo = _repoWith(_detail());
+    final repo = _repoWith(_detail(landed: true));
     await _pump(tester, repo);
 
     expect(
@@ -466,6 +500,378 @@ void main() {
     expect(repo.decideReviewCalls, hasLength(1));
     expect(repo.decideReviewCalls.single.action, 'approve');
     expect(repo.decideReviewCalls.single.candidateMbid, 'mb-2');
+  });
+
+  group('reviewMediaOffered', () {
+    const both = [MediaType.music, MediaType.audiobook];
+    const music = UploadTarget(
+      pid: 'lb-music',
+      name: 'Music',
+      mediaTypes: [MediaType.music],
+      managed: true,
+    );
+
+    test('an entry naming no library offers both', () {
+      expect(reviewMediaOffered(MediaType.music, null, null), both);
+      expect(reviewMediaOffered(MediaType.music, '', const [music]), both);
+    });
+
+    test('a named library not read yet offers only the entry\'s own', () {
+      expect(reviewMediaOffered(MediaType.music, 'lb-music', null), [
+        MediaType.music,
+      ]);
+      expect(reviewMediaOffered(MediaType.audiobook, 'lb-music', null), [
+        MediaType.audiobook,
+      ]);
+    });
+
+    test('a named library offers the entry\'s own and what it takes', () {
+      expect(reviewMediaOffered(MediaType.music, 'lb-music', const [music]), [
+        MediaType.music,
+      ]);
+      expect(
+        reviewMediaOffered(MediaType.audiobook, 'lb-music', const [music]),
+        both,
+      );
+    });
+
+    test('a named library the targets do not hold offers both', () {
+      expect(
+        reviewMediaOffered(MediaType.music, 'lb-gone', const [music]),
+        both,
+      );
+      expect(reviewMediaOffered(MediaType.music, 'lb-music', const []), both);
+    });
+  });
+
+  group('medium of a staged entry', () {
+    Finder option(MediaType type) => find.bySemanticsIdentifier(
+      SemanticsIds.reviewMediumOption(type.wireName),
+    );
+
+    for (final origin in ['upload', 'acquisition']) {
+      testWidgets('a $origin entry is decided as the medium chosen', (
+        tester,
+      ) async {
+        final repo = _repoWith(_detail(origin: origin));
+        await _pump(tester, repo);
+
+        expect(
+          find.bySemanticsIdentifier(SemanticsIds.reviewMedium),
+          findsOneWidget,
+        );
+        await tester.tap(option(MediaType.audiobook));
+        await tester.pumpAndSettle();
+        await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+        await tester.pumpAndSettle();
+
+        expect(repo.decideReviewCalls.single.action, 'as-is');
+        expect(repo.decideReviewCalls.single.mediaType, 'audiobook');
+      });
+    }
+
+    testWidgets('the release search follows the medium chosen', (tester) async {
+      final search = find.bySemanticsIdentifier(
+        SemanticsIds.reviewIdentifyGroup,
+      );
+      await _pump(tester, _repoWith(_detail()));
+      expect(search, findsOneWidget);
+
+      await tester.tap(option(MediaType.audiobook));
+      await tester.pumpAndSettle();
+      expect(search, findsNothing);
+
+      await tester.tap(option(MediaType.music));
+      await tester.pumpAndSettle();
+      expect(search, findsOneWidget);
+    });
+
+    testWidgets('an audiobook entry offers the release search once switched '
+        'to music', (tester) async {
+      final search = find.bySemanticsIdentifier(
+        SemanticsIds.reviewIdentifyGroup,
+      );
+      await _pump(tester, _repoWith(_detail(mediaType: MediaType.audiobook)));
+      expect(search, findsNothing);
+
+      await tester.tap(option(MediaType.music));
+      await tester.pumpAndSettle();
+      expect(search, findsOneWidget);
+    });
+
+    testWidgets('an untouched toggle sends the entry\'s own medium', (
+      tester,
+    ) async {
+      final repo = _repoWith(_detail());
+      await _pump(tester, repo);
+
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+      await tester.pumpAndSettle();
+
+      expect(repo.decideReviewCalls.single.mediaType, 'music');
+    });
+
+    testWidgets('the toggle starts at the entry\'s own medium', (tester) async {
+      final repo = _repoWith(_detail(mediaType: MediaType.audiobook));
+      await _pump(tester, repo);
+
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+      await tester.pumpAndSettle();
+
+      expect(repo.decideReviewCalls.single.mediaType, 'audiobook');
+    });
+
+    testWidgets('scan and rematch entries have no toggle and send no medium', (
+      tester,
+    ) async {
+      for (final origin in ['scan', 'rematch']) {
+        final repo = _repoWith(_detail(origin: origin));
+        await _pump(tester, repo);
+
+        expect(
+          find.bySemanticsIdentifier(SemanticsIds.reviewMedium),
+          findsNothing,
+          reason: origin,
+        );
+        await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+        await tester.pumpAndSettle();
+        expect(repo.decideReviewCalls.single.mediaType, isNull, reason: origin);
+      }
+    });
+
+    testWidgets('approve is offered only while music is chosen', (
+      tester,
+    ) async {
+      final repo = _repoWith(_detail());
+      await _pump(tester, repo);
+      final approve = find.bySemanticsIdentifier(SemanticsIds.reviewApprove);
+
+      expect(approve, findsOneWidget);
+      await tester.tap(option(MediaType.audiobook));
+      await tester.pumpAndSettle();
+      expect(approve, findsNothing);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.reviewAsIs),
+        findsOneWidget,
+      );
+      await tester.tap(option(MediaType.music));
+      await tester.pumpAndSettle();
+      expect(approve, findsOneWidget);
+    });
+
+    testWidgets(
+      'an audiobook entry offers no approve whatever its candidates',
+      (tester) async {
+        final repo = _repoWith(_detail(mediaType: MediaType.audiobook));
+        await _pump(tester, repo);
+
+        expect(
+          find.bySemanticsIdentifier(SemanticsIds.candidate('mb-1')),
+          findsOneWidget,
+        );
+        expect(
+          find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'a refusal reads as the server worded it and keeps the choice',
+      (tester) async {
+        final repo = _repoWith(_detail());
+        await _pump(tester, repo);
+        repo.reviewError = const WaxDeckApiException(
+          code: 'conflict',
+          message: 'a.flac was already imported as music',
+          statusCode: 409,
+        );
+        await tester.tap(option(MediaType.audiobook));
+        await tester.pumpAndSettle();
+        await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+        await tester.pumpAndSettle();
+
+        expect(
+          shellMessageText(raisedMessage(tester)!),
+          'a.flac was already imported as music',
+        );
+        repo.reviewError = null;
+        await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+        await tester.pumpAndSettle();
+        expect(repo.decideReviewCalls.last.mediaType, 'audiobook');
+      },
+    );
+
+    testWidgets('a fixed medium leaves the toggle out with no track landed', (
+      tester,
+    ) async {
+      final repo = _repoWith(_detail(mediumFixed: true));
+      await _pump(tester, repo);
+
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.reviewMedium),
+        findsNothing,
+      );
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+      await tester.pumpAndSettle();
+      expect(repo.decideReviewCalls.single.mediaType, 'music');
+    });
+
+    testWidgets('a medium not fixed keeps the toggle with no track landed', (
+      tester,
+    ) async {
+      final repo = _repoWith(_detail(mediumFixed: false));
+      await _pump(tester, repo);
+
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.reviewMedium),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an entry with a track landed has no toggle', (tester) async {
+      final repo = _repoWith(_detail(landed: true));
+      await _pump(tester, repo);
+
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.reviewMedium),
+        findsNothing,
+      );
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+      await tester.pumpAndSettle();
+      expect(repo.decideReviewCalls.single.mediaType, 'music');
+    });
+
+    testWidgets('a medium picked before a track landed is not sent', (
+      tester,
+    ) async {
+      final repo = _repoWith(_detail());
+      final container = appContainer(repo: repo);
+      tester.view.physicalSize = const Size(700, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await pumpApp(
+        tester,
+        const ReviewEntryScreen(entryId: 'rv-1'),
+        container: container,
+        at: WaxRoute.reviewEntry('rv-1'),
+      );
+      await tester.tap(option(MediaType.audiobook));
+      await tester.pumpAndSettle();
+
+      repo.reviewEntryDetails['rv-1'] = _detail(landed: true);
+      container.invalidate(reviewEntryProvider('rv-1'));
+      await tester.pumpAndSettle();
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.reviewMedium),
+        findsNothing,
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
+        findsOneWidget,
+      );
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+      await tester.pumpAndSettle();
+
+      expect(repo.decideReviewCalls.single.mediaType, 'music');
+    });
+
+    testWidgets('a landed track leaves the toggle out whatever the library '
+        'takes', (tester) async {
+      final repo = _repoWith(_detail(libraryPid: 'lb-mixed', landed: true))
+        ..uploadTargets.add(
+          const UploadTarget(
+            pid: 'lb-mixed',
+            name: 'lb-mixed',
+            mediaTypes: [MediaType.music, MediaType.audiobook],
+            managed: true,
+          ),
+        );
+      await _pump(tester, repo);
+
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.reviewMedium),
+        findsNothing,
+      );
+    });
+
+    UploadTarget target(String pid, List<MediaType> media) =>
+        UploadTarget(pid: pid, name: pid, mediaTypes: media, managed: true);
+
+    testWidgets('an entry whose library takes only its own medium has no '
+        'toggle', (tester) async {
+      final repo = _repoWith(_detail(libraryPid: 'lb-music'))
+        ..uploadTargets.addAll([
+          target('lb-music', const [MediaType.music]),
+          target('lb-mixed', const [MediaType.music, MediaType.audiobook]),
+        ]);
+      await _pump(tester, repo);
+
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.reviewMedium),
+        findsNothing,
+      );
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+      await tester.pumpAndSettle();
+      expect(repo.decideReviewCalls.single.mediaType, 'music');
+    });
+
+    testWidgets('an entry whose library takes both offers both', (
+      tester,
+    ) async {
+      final repo = _repoWith(_detail(libraryPid: 'lb-mixed'))
+        ..uploadTargets.addAll([
+          target('lb-music', const [MediaType.music]),
+          target('lb-mixed', const [MediaType.music, MediaType.audiobook]),
+        ]);
+      await _pump(tester, repo);
+
+      expect(option(MediaType.music), findsOneWidget);
+      expect(option(MediaType.audiobook), findsOneWidget);
+    });
+
+    testWidgets('an entry whose library the targets read cannot name offers '
+        'both', (tester) async {
+      final repo = _repoWith(_detail(libraryPid: 'lb-music'))
+        ..uploadTargetsError = const WaxDeckApiException(
+          code: 'forbidden',
+          message: 'no',
+          statusCode: 403,
+        );
+      await _pump(tester, repo);
+
+      expect(option(MediaType.music), findsOneWidget);
+      expect(option(MediaType.audiobook), findsOneWidget);
+    });
+
+    testWidgets('an entry whose targets read fails offers both', (
+      tester,
+    ) async {
+      final repo = _BrokenTargets();
+      final detail = _detail(libraryPid: 'lb-music');
+      repo.reviewEntries = [
+        testReviewEntry(
+          detail.id,
+          status: detail.status,
+          origin: detail.origin,
+        ),
+      ];
+      repo.reviewEntryDetails[detail.id] = detail;
+      await _pump(tester, repo);
+
+      expect(option(MediaType.music), findsOneWidget);
+      expect(option(MediaType.audiobook), findsOneWidget);
+    });
+
+    testWidgets('an entry naming no library offers both, as the server '
+        'takes either', (tester) async {
+      final repo = _repoWith(_detail())
+        ..uploadTargets.add(target('lb-music', const [MediaType.music]));
+      await _pump(tester, repo);
+
+      expect(option(MediaType.music), findsOneWidget);
+      expect(option(MediaType.audiobook), findsOneWidget);
+    });
   });
 
   testWidgets('a decision in flight draws busy and takes no second press', (

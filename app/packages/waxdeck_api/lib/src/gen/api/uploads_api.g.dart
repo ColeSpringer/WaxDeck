@@ -107,13 +107,16 @@ abstract interface class UploadsApi {
   /// Opens a batch that groups several upload sessions into review units by the
   /// declared grouping intent: `album` opens one multi-file review entry over
   /// every staged member, `tracks` opens one entry per file, and `auto`
-  /// clusters members into units (albums, or books for an audiobook batch) by
-  /// their tags and relative paths. Members join by passing `batchId` (and
-  /// optionally `batchPath`) at session creation and must declare the batch's
-  /// media type. The batch stays open for 24 hours or until the finalize call;
-  /// members keep the normal upload retention. Nothing about a single upload
-  /// changes: a session without a batch opens its own review entry at
-  /// completion exactly as before.
+  /// clusters members into units: a music batch into albums by their tags and
+  /// relative paths; an audiobook batch into books, where a file with an album
+  /// tag joins the files naming the same album, a file with none joins the book
+  /// of its folder when any such file there is a numbered part, and any other
+  /// file, an `.m4b` with no album tag always, is a book of its own. Members
+  /// join by passing `batchId` (and optionally `batchPath`) at session creation
+  /// and must declare the batch's media type. The batch stays open for 24 hours
+  /// or until the finalize call; members keep the normal upload retention.
+  /// Nothing about a single upload changes: a session without a batch opens its
+  /// own review entry at completion exactly as before.
   Future<UploadBatch> createUploadBatch({
     required UploadGrouping grouping,
     required String mediaType,

@@ -119,6 +119,7 @@ type SearchHit struct {
 type SearchResults struct {
 	Query     string
 	Artists   []SearchHit
+	Authors   []SearchHit
 	Albums    []SearchHit
 	Tracks    []SearchHit
 	Books     []SearchHit

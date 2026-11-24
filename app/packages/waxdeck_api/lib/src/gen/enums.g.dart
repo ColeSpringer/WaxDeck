@@ -2,22 +2,25 @@
 
 /// Discovery lists for browsing. `most-played`, `recently-played`, `starred`,
 /// `never-played`, `rediscover`, and `in-progress` reflect the calling user's
-/// own listening state. `never-played` is what the caller has never counted a
-/// play of, and `rediscover` is what they starred or rated at least 80 and have
-/// not played in six months (never counts as six months, so something starred
-/// and never reached belongs there). "Played" on both is the same threshold
-/// `playCount` counts, so an item abandoned early enough to have never crossed
-/// it is still sealed. Both come back A to Z, since neither is ordered by
-/// anything a listener would recognize: there is no play stamp to sort a
-/// never-played item by, and sorting the other by how stale it is would put the
-/// most forgotten thing first every time the shelf is drawn. The others keep
-/// the orders their names describe. `in-progress` is what the caller is part
-/// way through: a saved position on something not finished, most recently
-/// progressed first. An episode or an audiobook is on it from its first saved
-/// position, whether or not a play has counted. A track is on it only once a
-/// play of it has counted, the membership `recently-played` has: a position is
-/// saved for a track skipped a few seconds in as for any other, and that is not
-/// something to carry on with.
+/// own listening state. `newest` never holds podcast episodes, and without a
+/// `mediaType` `recently-added`, `never-played`, `rediscover` and `most-played`
+/// leave them out; `/library/browse` says how to list them. `never-played` is
+/// what the caller has never counted a play of, and `rediscover` is what they
+/// starred or rated at least 80 and have not played in six months (never counts
+/// as six months, so something starred and never reached belongs there).
+/// "Played" on both is the same threshold `playCount` counts, so an item
+/// abandoned early enough to have never crossed it is still sealed. Both come
+/// back A to Z, since neither is ordered by anything a listener would
+/// recognize: there is no play stamp to sort a never-played item by, and
+/// sorting the other by how stale it is would put the most forgotten thing
+/// first every time the shelf is drawn. The others keep the orders their names
+/// describe. `in-progress` is what the caller is part way through: a saved
+/// position on something not finished, most recently progressed first. An
+/// episode or an audiobook is on it from its first saved position, whether or
+/// not a play has counted. A track is on it only once a play of it has counted,
+/// the membership `recently-played` has: a position is saved for a track
+/// skipped a few seconds in as for any other, and that is not something to
+/// carry on with.
 enum DiscoveryList {
   newest('newest'),
   recentlyAdded('recently-added'),
@@ -311,10 +314,31 @@ enum ThemePref {
 
 /// How a batch's staged files reach the review queue: `album` opens one
 /// multi-file entry over all of them (one album for music, one book in parts
-/// for an audiobook, its parts in disc, track and path order), `tracks` opens
-/// one entry per file (each its own track or book), and `auto` clusters them
-/// into units by their tags and relative paths (disc subfolders fold into their
-/// parent).
+/// for an audiobook), `tracks` opens one entry per file (each its own track or
+/// book), and `auto` clusters them into units: a music batch into albums by
+/// their tags and relative paths (disc subfolders fold into their parent); an
+/// audiobook batch into books, files with an album tag by that album whatever
+/// folder each sits in and whatever artist it credits, split only where they
+/// name different album artists, a file with none into the book of its folder
+/// when any such file there is a numbered part (disc and part subfolders such
+/// as `CD1` and `Part 2` fold into their parent, and files from no folder share
+/// one), and any other file, an `.m4b` with no album tag always, into a book of
+/// its own. Under `album` and `auto`, for music and audiobooks alike, a unit's
+/// files are ordered by the disc number they carry, then by the folder each was
+/// sent from, then by track number, and a unit decided as the other medium
+/// keeps that order. Folders compare segment by segment, each name naturally: a
+/// run of digits by its number, the text between as text, so `Part 2` comes
+/// before `Part 10`, `Vol 1 Part 2` before `Vol 1 Part 10`, `Part 2/CD10`
+/// before `Part 10/CD1`, and `Side A` before `Side B`. A disc or track number
+/// written with its total (`3/12`) orders by the number before it. An audiobook
+/// unit's parts become one book, titled by the first of: the album title given
+/// at review (a re-identify's `album`), an album title every part already
+/// carries, the name of the folder the files were picked from (an acquisition's
+/// list title) unless it names a format or a container rather than a book (such
+/// as `Audiobooks`, `MP3` or `New Folder`), a title drawn from what the parts'
+/// file names share, and `Untitled audiobook` followed by a short code from the
+/// review entry's id, so no two such books are one. Never one part's own track
+/// title.
 enum UploadGrouping {
   auto('auto'),
   album('album'),

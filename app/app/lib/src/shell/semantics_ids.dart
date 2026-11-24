@@ -553,8 +553,8 @@ abstract final class SemanticsIds {
   // music: The music hub, its indexes, and the buckets they drill.
   static String albumTrackMore(Object index) => 'album-track-more-$index';
   static String entityAlbum(Object pid) => 'entity-album-$pid';
-  static const String entityAllBooks = 'entity-all-books';
   static const String entityAllTracks = 'entity-all-tracks';
+  static const String entityAuthorBooks = 'entity-author-books';
   static const String entityEditMetadata = 'entity-edit-metadata';
   static const String entityInstantMix = 'entity-instant-mix';
   static const String entityOverflow = 'entity-overflow';
@@ -918,6 +918,9 @@ abstract final class SemanticsIds {
   static const String reviewIdentifySkipped = 'review-identify-skipped';
   static const String reviewIdentifySubmit = 'review-identify-submit';
   static const String reviewIdentifyToggle = 'review-identify-toggle';
+  static const String reviewMedium = 'review-medium';
+  static String reviewMediumOption(Object wireName) =>
+      'review-medium-$wireName';
   static const String reviewOpenUploads = 'review-open-uploads';
   static const String reviewPane = 'review-pane';
   static const String reviewPaneClose = 'review-pane-close';

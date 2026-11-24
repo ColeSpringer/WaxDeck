@@ -7595,7 +7595,7 @@ void main() {
     });
 
     testWidgets('a link to its tracks, with a scope: back reaches the '
-        "survivor's tracks under the same scope, written over that entry", (
+        "survivor's location with the same query, written over that entry", (
       tester,
     ) async {
       const scope = '${WaxRoute.scopeParam}=${WaxRoute.wholeLibraryScope}';
@@ -7626,7 +7626,8 @@ void main() {
         find.byType(MusicListingScreen),
       );
       expect(listing.segment, kept);
-      expect(listing.domain, BrowseDomain.wholeLibrary);
+      // An artist's tracks list music whatever the scope in the link says.
+      expect(listing.domain, BrowseDomain.music);
       expect(built.where((location) => location.contains(gone)), isEmpty);
 
       await _browserForward(tester, browser!);

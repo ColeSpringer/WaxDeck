@@ -2,7 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/books/book_bucket_screen.dart';
+import 'package:waxdeck/src/books/book_dimension.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
+import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/output_volume.dart';
@@ -406,7 +409,7 @@ void main() {
 
     await _openPalette(tester);
     await _type(tester, 'night');
-    expect(_row('hit-$_albumPid'), findsOne);
+    expect(_row('hit-album-$_albumPid'), findsOne);
     // The cap is not silent: the last row hands the rest to the screen
     // that can show them all.
     expect(_row('search-all'), findsOne);
@@ -489,9 +492,9 @@ void main() {
     await _type(tester, 'heroes');
 
     double at(String id) => tester.getTopLeft(_row(id)).dy;
-    expect(_row('hit-$_albumPid'), findsOne);
-    expect(at('hit-$_albumPid'), lessThan(at('hit-$artistPid')));
-    expect(at('hit-$artistPid'), lessThan(at('hit-$_trackPid')));
+    expect(_row('hit-album-$_albumPid'), findsOne);
+    expect(at('hit-album-$_albumPid'), lessThan(at('hit-artist-$artistPid')));
+    expect(at('hit-artist-$artistPid'), lessThan(at('hit-track-$_trackPid')));
   });
 
   testWidgets('an exact album past the cut still leads the palette', (
@@ -535,14 +538,14 @@ void main() {
             if (entry.id.startsWith('hit-')) entry.id,
       ],
       [
-        'hit-al-02',
-        'hit-ar-00',
-        'hit-al-00',
-        'hit-tr-00',
-        'hit-bk-00',
-        'hit-ep-00',
-        'hit-ar-01',
-        'hit-al-01',
+        'hit-album-al-02',
+        'hit-artist-ar-00',
+        'hit-album-al-00',
+        'hit-track-tr-00',
+        'hit-book-bk-00',
+        'hit-episode-ep-00',
+        'hit-artist-ar-01',
+        'hit-album-al-01',
       ],
     );
   });
@@ -563,11 +566,71 @@ void main() {
     await _openPalette(tester);
     await _type(tester, 'heroes');
 
-    double at(String pid) => tester.getTopLeft(_row('hit-$pid')).dy;
-    expect(at('ar-02'), lessThan(at('ar-01')));
-    expect(at('ar-02'), lessThan(at('al-01')));
+    double at(String id) => tester.getTopLeft(_row('hit-$id')).dy;
+    expect(at('artist-ar-02'), lessThan(at('artist-ar-01')));
+    expect(at('artist-ar-02'), lessThan(at('album-al-01')));
     // Taken once: the exact artist is not listed again among the artists.
-    expect(_row('hit-ar-02'), findsOne);
+    expect(_row('hit-artist-ar-02'), findsOne);
+  });
+
+  testWidgets('a person in both Artists and Authors is two rows, each '
+      'opening its own page', (tester) async {
+    // One artist entity credited on music and on books is in both groups
+    // with one pid: the artist row opens the music page, the author row
+    // their books.
+    final shell = await _pumpShell(tester);
+    const pid = 'ar-01JZX5N8QW3F4V9T2B7KDBOTH01';
+    shell.repo.searchResults['ann'] = SearchResults(
+      query: 'ann',
+      artists: <SearchHit>[
+        SearchHit(pid: pid, kind: 'artist', title: 'Ann Both'),
+      ],
+      authors: <SearchHit>[
+        SearchHit(pid: pid, kind: 'author', title: 'Ann Both'),
+      ],
+    );
+
+    await _openPalette(tester);
+    await _type(tester, 'ann');
+    expect(_row('hit-artist-$pid'), findsOne);
+    expect(_row('hit-author-$pid'), findsOne);
+
+    await tester.tap(_row('hit-artist-$pid'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<ArtistScreen>(find.byType(ArtistScreen)).pid, pid);
+    expect(find.byType(BookBucketScreen), findsNothing);
+
+    await _openPalette(tester);
+    await _type(tester, 'ann');
+    await tester.tap(_row('hit-author-$pid'));
+    await tester.pumpAndSettle();
+    final bucket = tester.widget<BookBucketScreen>(
+      find.byType(BookBucketScreen),
+    );
+    expect(bucket.dimension, BookDimension.authors);
+    expect(bucket.segment, pid);
+  });
+
+  testWidgets('an exact author leads, and the same person stays among '
+      'the artists', (tester) async {
+    // Only the hit the lead is is not taken twice; the artist hit that
+    // shares its pid is another page.
+    final shell = await _pumpShell(tester);
+    const pid = 'ar-01JZX5N8QW3F4V9T2B7KDBOTH02';
+    shell.repo.searchResults['ann'] = SearchResults(
+      query: 'ann',
+      artists: <SearchHit>[
+        SearchHit(pid: pid, kind: 'artist', title: 'Ann Both'),
+      ],
+      authors: <SearchHit>[
+        SearchHit(pid: pid, kind: 'author', title: 'Ann Both', exact: true),
+      ],
+    );
+
+    await _openPalette(tester);
+    await _type(tester, 'ann');
+    double at(String id) => tester.getTopLeft(_row('hit-$id')).dy;
+    expect(at('author-$pid'), lessThan(at('artist-$pid')));
   });
 
   testWidgets('a hit opens over what the palette was opened from', (
@@ -602,7 +665,7 @@ void main() {
 
     await _openPalette(tester);
     await _type(tester, 'nightjar');
-    await tester.tap(_row('hit-$_episodePid'));
+    await tester.tap(_row('hit-episode-$_episodePid'));
     await tester.pumpAndSettle();
 
     // Pushed: there is something underneath to come back to, and the

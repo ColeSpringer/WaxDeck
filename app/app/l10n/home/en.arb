@@ -109,9 +109,9 @@
   "@homePinNotSaved": {
     "description": "Said when a pin failed for a reason the error table has no sentence for."
   },
-  "homePinSheetPin": "{what, select, album{Pin album to Home} artist{Pin artist to Home} book{Pin book to Home} podcast{Pin podcast to Home} playlist{Pin playlist to Home} other{Pin to Home}}",
+  "homePinSheetPin": "{what, select, album{Pin album to Home} artist{Pin artist to Home} author{Pin author to Home} book{Pin book to Home} podcast{Pin podcast to Home} playlist{Pin playlist to Home} other{Pin to Home}}",
   "@homePinSheetPin": {
-    "description": "Row in the pin sheet, which can offer more than one target at once, so each says what it is about. {what} is the kind of thing: album, artist, book, podcast or playlist.",
+    "description": "Row in the pin sheet, which can offer more than one target at once, so each says what it is about. {what} is the kind of thing: album, artist, author, book, podcast or playlist.",
     "placeholders": {
       "what": {
         "type": "String",
@@ -119,9 +119,9 @@
       }
     }
   },
-  "homePinSheetUnpin": "{what, select, album{Unpin album from Home} artist{Unpin artist from Home} book{Unpin book from Home} podcast{Unpin podcast from Home} playlist{Unpin playlist from Home} other{Unpin from Home}}",
+  "homePinSheetUnpin": "{what, select, album{Unpin album from Home} artist{Unpin artist from Home} author{Unpin author from Home} book{Unpin book from Home} podcast{Unpin podcast from Home} playlist{Unpin playlist from Home} other{Unpin from Home}}",
   "@homePinSheetUnpin": {
-    "description": "Row in the pin sheet for a target that is already pinned. {what} is the kind of thing: album, artist, book, podcast or playlist.",
+    "description": "Row in the pin sheet for a target that is already pinned. {what} is the kind of thing: album, artist, author, book, podcast or playlist.",
     "placeholders": {
       "what": {
         "type": "String",
@@ -160,6 +160,10 @@
   "homePinnedKindArtist": "Artist",
   "@homePinnedKindArtist": {
     "description": "What a pinned card is, on the line under its title."
+  },
+  "homePinnedKindAuthor": "Author",
+  "@homePinnedKindAuthor": {
+    "description": "What a pinned card is, on the line under its title: a person with audiobooks and no music, whose card opens their page under Books."
   },
   "homePinnedKindBook": "Book",
   "@homePinnedKindBook": {

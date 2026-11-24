@@ -1,4 +1,4 @@
-import 'package:waxdeck_api/waxdeck_api.dart' show MediaType;
+import 'package:waxdeck_api/waxdeck_api.dart' show ItemSummary, MediaType;
 import 'package:waxdeck_data/waxdeck_data.dart';
 
 /// The most items a local queue holds, mirroring the server's Connect
@@ -63,6 +63,22 @@ enum QueueSourceKind {
 
   final String wireName;
 
+  /// Whether a queue from this source is a listing the app cut, which
+  /// plays one kind ([continuesKind]), rather than a list somebody built
+  /// or one item.
+  bool get isListing => switch (this) {
+    library ||
+    artist ||
+    album ||
+    releaseGroup ||
+    genre ||
+    year ||
+    mix ||
+    search ||
+    shelf => true,
+    playlist || book || show || single || unknown => false,
+  };
+
   static QueueSourceKind fromWire(String value) {
     for (final k in QueueSourceKind.values) {
       if (k.wireName == value) return k;
@@ -83,6 +99,7 @@ class QueueSource {
     this.cursor = '',
     this.seed,
     this.mediaType,
+    this.listedThrough,
   });
 
   static const QueueSource none = QueueSource(
@@ -105,11 +122,13 @@ class QueueSource {
   /// draw resumes rather than restarts. Opaque: the server shapes its
   /// cursors and this only carries them.
   ///
-  /// Empty means the frontier is not known - an ordered window cut short
-  /// of what its caller had loaded, or a restored queue whose cursor was
-  /// never written. A draw against an empty cursor finds its place from
-  /// the queue's last entry instead, which costs a page per cap's worth
-  /// of scope passed and is exact where a stale cursor would not be.
+  /// Empty means the cursor was dropped - an ordered window cut short of
+  /// what its caller had loaded, a listing played under another scope
+  /// than it was paged in - or never written. A draw against an empty
+  /// cursor finds its place from [listedThrough] instead (the queue's last
+  /// entry for a source stored before that existed), which costs a page
+  /// per cap's worth of scope passed and is exact where a stale cursor
+  /// would not be.
   final String cursor;
 
   /// The seed a random draw pages under, so later pages walk the same
@@ -123,11 +142,19 @@ class QueueSource {
   /// what a queue stored before sources named their scope reads as.
   final MediaType? mediaType;
 
+  /// The last item of the source's listing the queue took, in the
+  /// listing's order: where a draw with no cursor places itself. Not the
+  /// queue's tail, which a hand add moves. Null for a source stored before
+  /// it was kept, which places itself by the queue's last entry.
+  final String? listedThrough;
+
   QueueSource copyWith({
     bool? rolling,
     String? cursor,
     int? seed,
     bool clearSeed = false,
+    MediaType? mediaType,
+    String? listedThrough,
   }) => QueueSource(
     kind: kind,
     label: label,
@@ -135,7 +162,8 @@ class QueueSource {
     rolling: rolling ?? this.rolling,
     cursor: cursor ?? this.cursor,
     seed: clearSeed ? null : (seed ?? this.seed),
-    mediaType: mediaType,
+    mediaType: mediaType ?? this.mediaType,
+    listedThrough: listedThrough ?? this.listedThrough,
   );
 
   @override
@@ -147,46 +175,67 @@ class QueueSource {
       other.rolling == rolling &&
       other.cursor == cursor &&
       other.seed == seed &&
-      other.mediaType == mediaType;
+      other.mediaType == mediaType &&
+      other.listedThrough == listedThrough;
 
   @override
-  int get hashCode =>
-      Object.hash(kind, label, pid, rolling, cursor, seed, mediaType);
+  int get hashCode => Object.hash(
+    kind,
+    label,
+    pid,
+    rolling,
+    cursor,
+    seed,
+    mediaType,
+    listedThrough,
+  );
 
   @override
   String toString() => 'QueueSource(${kind.wireName}, $label, $pid)';
 }
 
+/// Whether [item] may join a queue of [anchor]'s kind by anything other
+/// than the listener picking it: a listing played from a row, a shuffle,
+/// a draw, a bucket, a mix appended at the end. What the listener adds by
+/// hand is theirs and is not asked.
+bool continuesKind(MediaType anchor, ItemSummary item) =>
+    item.mediaType == anchor;
+
 /// The separators in the one stored string a source's continuation
-/// travels in: its scope, then its seed, then its cursor.
+/// travels in: its scope, then its seed, then its cursor, then the last
+/// listing item the queue took.
 ///
-/// All three are the same fact - where the source's listing stands - and
+/// All four are the same fact - where the source's listing stands - and
 /// a cursor issued under one seed or one scope is invalid under another,
 /// so they are stored together or not at all, and stored beside the
 /// cursor rather than in a column of their own. Safe as separators
-/// because a cursor is base64url, a seed is digits, and a scope is a
-/// media type's wire name, none of which contains either.
+/// because a cursor is base64url, a seed is digits, a scope is a media
+/// type's wire name and a pid a prefix and a ULID, none of which contains
+/// any of them.
 const String _seedSeparator = '|';
 const String _scopeSeparator = '@';
+const String _listedSeparator = '~';
 
 /// The stored form of a source's continuation: the cursor, with the seed
-/// in front of it when the draw has one, and the scope in front of both
-/// when the source names one.
+/// in front of it when the draw has one, the scope in front of both when
+/// the source names one, and the last listing item taken behind it when
+/// the source holds one.
 String encodeQueueCursor(QueueSource source) {
   final seed = source.seed;
   final scope = source.mediaType;
+  final listed = source.listedThrough;
   final seeded = seed == null
       ? source.cursor
       : '$seed$_seedSeparator${source.cursor}';
-  return scope == null ? seeded : '${scope.wireName}$_scopeSeparator$seeded';
+  final placed = listed == null ? seeded : '$seeded$_listedSeparator$listed';
+  return scope == null ? placed : '${scope.wireName}$_scopeSeparator$placed';
 }
 
-/// The reverse. A value with no scope reads back unscoped and one with no
-/// seed as a plain cursor, which is what everything written before each
-/// existed (and every unscoped or unseeded draw since) looks like.
-({String cursor, int? seed, MediaType? mediaType}) decodeQueueCursor(
-  String stored,
-) {
+/// The reverse. A value with no scope reads back unscoped, one with no
+/// seed as a plain cursor and one with no last item taken without one,
+/// which is what everything written before each existed looks like.
+({String cursor, int? seed, MediaType? mediaType, String? listedThrough})
+decodeQueueCursor(String stored) {
   MediaType? mediaType;
   var rest = stored;
   final scopeAt = stored.indexOf(_scopeSeparator);
@@ -195,10 +244,20 @@ String encodeQueueCursor(QueueSource source) {
     mediaType = MediaType.values.where((t) => t.wireName == wire).firstOrNull;
     if (mediaType != null) rest = stored.substring(scopeAt + 1);
   }
+  String? listedThrough;
+  final listedAt = rest.lastIndexOf(_listedSeparator);
+  if (listedAt >= 0) {
+    listedThrough = rest.substring(listedAt + 1);
+    rest = rest.substring(0, listedAt);
+  }
   final at = rest.indexOf(_seedSeparator);
   final seed = at < 0 ? null : int.tryParse(rest.substring(0, at));
-  if (seed == null) return (cursor: rest, seed: null, mediaType: mediaType);
-  return (cursor: rest.substring(at + 1), seed: seed, mediaType: mediaType);
+  return (
+    cursor: seed == null ? rest : rest.substring(at + 1),
+    seed: seed,
+    mediaType: mediaType,
+    listedThrough: listedThrough,
+  );
 }
 
 /// One place in the queue. [queueId] is stable for the entry's life, so
@@ -299,7 +358,9 @@ class QueueState {
   /// The entry standing at the source's frontier: the last one taken
   /// from the scope, in the order the scope handed them over rather
   /// than the order they play in. A draw with no cursor finds its place
-  /// in the source by this.
+  /// in the source by this only when the source keeps no
+  /// [QueueSource.listedThrough] (one stored before it was kept): a hand
+  /// add lands here too.
   String? get frontierPid {
     if (sourceOrder.isEmpty) return null;
     final id = sourceOrder.last;
@@ -433,6 +494,7 @@ class QueueState {
         cursor: continuation.cursor,
         seed: continuation.seed,
         mediaType: continuation.mediaType,
+        listedThrough: continuation.listedThrough,
       ),
       nextQueueId: next,
     );

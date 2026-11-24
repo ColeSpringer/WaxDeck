@@ -666,6 +666,12 @@ const Map<String, String> _unswept = {
       'the command palette\'s matches, alive while it is open over the '
       'app and asked again with each query',
 
+  // A read made once, on a tap, and used at once to choose where to go.
+  'lib/src/health/folds_section.dart: _FoldGroups._openArtist: '
+          'resolveEntities':
+      'the artist card a tapped fold row opens on, read to choose which '
+      'page to open and acted on as it answers; nothing holds it',
+
   // Playback reads an item to play it, and keeps what it queued current
   // itself.
   'lib/src/player/now_playing/now_playing_preload.dart: '

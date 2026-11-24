@@ -169,6 +169,9 @@ type reviewPayload struct {
 	// WaitingForCatalog records that a declined import met another job
 	// holding the catalog, so the next start takes the wait up again.
 	WaitingForCatalog bool `json:"waitingForCatalog,omitempty"`
+	// List is the title of the list an acquisition fetched the unit from,
+	// which names a book in parts where a folder would.
+	List string `json:"list,omitempty"`
 }
 
 // reviewSnapshot preserves pre-apply values for revert: per catalog
@@ -1092,11 +1095,19 @@ func (l *Ingest) autoApplyEntry(ctx context.Context, entry *wdb.ReviewEntry, pay
 		return
 	}
 	defer release()
-	if fresh, err := l.db.ReviewEntryByID(ctx, entry.ID); err != nil || fresh.Status != reviewPending || fresh.Payload != entry.Payload {
+	// The row as it stands, not the copy identification ran on: a failed
+	// decision may have saved another medium since, which this run's
+	// copy would import against and then write back.
+	fresh, err := l.db.ReviewEntryByID(ctx, entry.ID)
+	if err != nil || fresh.Status != reviewPending || fresh.Payload != entry.Payload {
 		l.log.Info("auto-apply withheld: the entry changed since it was identified", "entry", entry.ID)
 		return
 	}
-	if _, err := l.applyEntry(ctx, entry, payload, entry.BestMBID, nil, true); err != nil {
+	if fresh.MediaType != entry.MediaType || fresh.MediaType != "music" {
+		l.log.Info("auto-apply withheld: the entry is no longer music", "entry", entry.ID, "medium", fresh.MediaType)
+		return
+	}
+	if _, err := l.applyEntry(ctx, &fresh, payload, fresh.BestMBID, nil, true); err != nil {
 		// A failed apply leaves the entry pending for a person; the
 		// evidence is stored either way.
 		l.log.Warn("auto apply failed; leaving entry for review", "entry", entry.ID, "err", err)
@@ -1237,10 +1248,17 @@ func (l *Ingest) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload
 	}
 
 	var warnings []string
+	// Once the files landed, a stop records them with the medium they
+	// landed as, as a finished apply does, so a retry sees what is there.
+	stop := func(err error) ([]string, error) { return warnings, err }
 	if entry.Kind == reviewKindImport {
 		w, err := l.importEntryFiles(ctx, entry, payload)
 		warnings = append(warnings, w...)
 		if err != nil {
+			return warnings, err
+		}
+		stop = func(err error) ([]string, error) {
+			l.persistDecideProgress(ctx, entry, payload)
 			return warnings, err
 		}
 	}
@@ -1344,12 +1362,16 @@ func (l *Ingest) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload
 		// The files take what the catalog takes where their library
 		// allows; the catalog refuses the others file by file, which the
 		// warnings name and the health rule lists.
-		res, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{
+		edit := l.lib.EditItemsFields
+		if l.editFieldsHook != nil {
+			edit = l.editFieldsHook
+		}
+		res, err := edit(ctx, batch, waxbin.EditOptions{
 			Lock: model.LockOn, Force: true, WriteBack: l.unitWritable(ctx, order),
 			Source: model.SourceEnrichment, Provider: reviewMatchProvider,
 		})
 		if err != nil && (res == nil || len(res.Edited) == 0) {
-			return warnings, classify(err)
+			return stop(classify(err))
 		}
 		warnings = append(warnings, l.writeBackWarnings(ctx, decider, res, err)...)
 		// A total a new number past it cleared is the apply's doing too.
@@ -1370,11 +1392,11 @@ func (l *Ingest) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload
 
 	rawSnap, err := json.Marshal(snapshot)
 	if err != nil {
-		return warnings, &Error{Kind: KindInternal, Err: err}
+		return stop(&Error{Kind: KindInternal, Err: err})
 	}
 	rawPayload, err := json.Marshal(*payload)
 	if err != nil {
-		return warnings, &Error{Kind: KindInternal, Err: err}
+		return stop(&Error{Kind: KindInternal, Err: err})
 	}
 	entry.Payload = string(rawPayload)
 	entry.Snapshot = string(rawSnap)

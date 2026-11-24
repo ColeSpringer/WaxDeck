@@ -1,6 +1,6 @@
 import type { Request } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { App, T, clickUntilRequested, wheelIntoView } from './driver';
+import { App, T, clickThrough, clickUntilRequested, wheelIntoReach, wheelIntoView } from './driver';
 import { SemanticsIds } from './semantics-ids';
 import { MediaTraffic } from './support/media';
 
@@ -117,17 +117,24 @@ test('an artist bucket opens the artist, not a filtered list', async ({ app }) =
   // slot would turn it off.
   await expect(app.music.entityPlay()).toBeEnabled();
 
-  // The music index counts tracks only, so an audiobook author is not
-  // among its buckets; the artist page still reads the whole library,
-  // since search and the editor reach it with the medium unknown. An
-  // author's page holds their books, with the verbs off rather than
-  // queueing a twelve-hour file.
+  // The artist page is music, so an author with only books has nothing
+  // on it: no books shelf under a Music title, and the verbs off. Exact,
+  // because the empty state's door names their audiobooks.
   const book = await app.seed.book('The Fixture Book');
   const detail = await app.api.get('/books/{pid}', { path: { pid: book.pid } });
-  expect(detail.authorPid, 'the fixture book names its author').toBeTruthy();
-  await app.nav.open(`/music/artists/${detail.authorPid}`, app.music.entityPlay());
-  await expect(app.music.text('Audiobooks')).toBeVisible();
+  const author = detail.authorPid;
+  expect(author, 'the fixture book names its author').toBeTruthy();
+  await app.nav.open(`/music/artists/${author}`, app.music.entityPlay());
+  await expect(app.music.text('Nothing by this artist')).toBeVisible();
+  await expect(app.music.text('Audiobooks', { exact: true })).toHaveCount(0);
   await expect(app.music.entityPlay()).toBeDisabled();
+
+  // The empty state's door opens their books under Books.
+  const door = app.music.control(SemanticsIds.entityAuthorBooks);
+  await expect(door).toBeVisible();
+  await clickThrough(door, app.books.authorPage(author!));
+  await wheelIntoReach(app.page, app.books.card(book.pid));
+  await expect(app.books.card(book.pid)).toBeVisible();
 });
 
 test('the queue is a place, and it reorders and clears', async ({ app }) => {

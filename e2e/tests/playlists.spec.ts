@@ -19,9 +19,8 @@ test('the rule editor builds, previews, and saves a smart playlist', async ({ ap
 
   await app.playlists.create('smart', 'All The Music');
 
-  // The editor's default condition is mediaType is music, which matches
-  // the fixture library; the preview reports the live count.
-  await app.playlists.ruleAddCondition().click();
+  // A new rule set opens with mediaType is music, which matches the
+  // fixture library; the preview reports the live count.
   await expect(app.playlists.rulePreview()).toContainText(/Matches [1-9]\d* items/);
   await app.playlists.ruleSave().click();
 

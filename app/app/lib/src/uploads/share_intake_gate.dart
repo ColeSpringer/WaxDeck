@@ -81,7 +81,13 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
     // the person meant than sending none is on a server with several.
     // The kind is the one the files would be offered in a dialog: an
     // .m4b among them makes the share an audiobook.
-    final kind = detectUploadMediaType(files.map((f) => f.name));
+    // A share carries no folders, so detection only ever seeds music or
+    // audiobook; the fallback is for the type's sake.
+    final kind =
+        detectUploadMediaType([
+          for (final f in files) f.name,
+        ], foldered: false) ??
+        MediaType.music;
     final libraryPid = await _sharedTarget(ref, kind);
     String? batchId;
     if (files.length > 1) {

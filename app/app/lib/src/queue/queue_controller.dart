@@ -127,7 +127,7 @@ class QueueController extends Notifier<QueueState> {
       currentIndex: index,
       shuffled: shuffled,
       repeat: state.repeat,
-      source: _windowed(source, pids.length, order, shuffle),
+      source: _windowed(source, pids, order, shuffle),
       nextQueueId: nextId,
       undo: displaced,
     );
@@ -151,14 +151,22 @@ class QueueController extends Notifier<QueueState> {
   /// so it has no frontier inside the list at all: the caller's cursor
   /// is exactly the right place to draw from next, and whether the
   /// source can be drawn from is the pager's answer, not this layer's.
+  ///
+  /// A rolling window left with no cursor (cut short here, or dropped by
+  /// a caller that played it under another scope) records the last
+  /// listing item it took, which is where its first draw places itself:
+  /// the queue's tail is no answer once a hand add lands there.
   QueueSource _windowed(
     QueueSource source,
-    int available,
+    List<String> pids,
     List<int> order,
     bool shuffle,
   ) {
-    if (shuffle || order.length == available) return source;
-    return source.copyWith(rolling: true, cursor: '');
+    final windowed = shuffle || order.length == pids.length
+        ? source
+        : source.copyWith(rolling: true, cursor: '');
+    if (!windowed.rolling || windowed.cursor.isNotEmpty) return windowed;
+    return windowed.copyWith(listedThrough: pids[order.reduce(max)]);
   }
 
   /// Appends more of the scope this queue is a window over, and records
@@ -223,6 +231,9 @@ class QueueController extends Notifier<QueueState> {
         cursor: cursor,
         seed: seed,
         clearSeed: seed == null,
+        // The draw's last item, kept even under a cursor: a refused cursor
+        // places by it.
+        listedThrough: pids.lastOrNull,
       ),
     );
   }

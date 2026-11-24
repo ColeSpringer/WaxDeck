@@ -202,34 +202,23 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
 
   void _play(MusicItemsState state, int index) {
     final items = state.items;
-    // The artist's whole-library listing holds their books too; a music
-    // index bucket holds none. Books resume on their own screen -
-    // chapters, speed, position - so a row that is one opens it rather
-    // than dropping a twelve-hour file into the queue.
+    // A whole-library listing (a release group or genre opened with
+    // `?in=library`) holds books too; a music one holds none. Books resume
+    // on their own screen - chapters, speed, position - so a row that is
+    // one opens it rather than dropping a twelve-hour file into the queue.
     if (items[index].mediaType == MediaType.audiobook) {
       context.push(WaxRoute.book(items[index].pid));
       return;
     }
     // A listing is a list somebody asked for, so playing a row plays the
-    // list from there. What is loaded is a window over the rest and the
-    // cursor rides with it, which is how the tracks index plays on
-    // without queueing forty thousand tracks.
-    //
-    // Books are left out of the sequence: the artist's whole-library
-    // listing carries them, and a twelve-hour file arriving between two
-    // tracks is not what the tap asked for.
-    final playable = <ItemSummary>[];
-    var start = 0;
-    for (final item in items) {
-      if (item.mediaType == MediaType.audiobook) continue;
-      if (identical(item, items[index])) start = playable.length;
-      playable.add(item);
-    }
+    // list from there, of the row's kind. What is loaded is a window over
+    // the rest and the cursor rides with it, which is how the tracks
+    // index plays on without queueing forty thousand tracks.
     ref
         .read(nowPlayingProvider.notifier)
         .play(
-          playable,
-          startIndex: start,
+          items,
+          startIndex: index,
           source: _source(items, cursor: state.nextCursor),
         );
   }
@@ -283,26 +272,16 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen>
       report(explainError(l10n, error));
       return;
     }
-    final playable = <ItemSummary>[
-      for (final item in page.items)
-        if (dimension == null
-            ? item.mediaType == MediaType.music
-            : item.mediaType != MediaType.audiobook)
-          item,
-    ];
-    if (playable.isEmpty) {
-      report(l10n.musicShuffleNothingPlayable);
-      return;
-    }
     // The play itself is the listing's: it needs this screen's `ref`.
     if (!mounted) return;
-    ref
+    final queued = ref
         .read(nowPlayingProvider.notifier)
         .play(
-          playable,
+          page.items,
           shuffle: true,
-          source: _source(playable, cursor: page.nextCursor, seed: page.seed),
+          source: _source(page.items, cursor: page.nextCursor, seed: page.seed),
         );
+    if (!queued) report(l10n.musicShuffleNothingPlayable);
   }
 
   @override

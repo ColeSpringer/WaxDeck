@@ -72,6 +72,30 @@ func GenerateLooseMP3Book(dir string) ([]string, error) {
 	return out, nil
 }
 
+// GenerateUntitledMP3Book writes a two-part MP3 audiobook whose parts
+// name their chapters and nothing else, so only the folder names the
+// book: "Wren Hollis/The Untitled Hours" holding "01 - Chapter 1.mp3"
+// and "02 - Chapter 2.mp3", tagged with title, artist and genre
+// "Speech", with no album and no track number. Its audio is its own. It
+// returns the parts' paths in reading order.
+func GenerateUntitledMP3Book(dir string) ([]string, error) {
+	bookDir := filepath.Join(dir, "Wren Hollis", "The Untitled Hours")
+	var out []string
+	for i, title := range []string{"Chapter 1", "Chapter 2"} {
+		paths, err := Generate(bookDir, Spec{
+			Name:     fmt.Sprintf("%02d - %s", i+1, title),
+			Codec:    CodecMP3,
+			Duration: time.Duration(3+i) * time.Second,
+			Tags:     map[string]string{"TITLE": title, "ARTIST": "Wren Hollis", "GENRE": "Speech"},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("fixtures: untitled book part %d: %w", i+1, err)
+		}
+		out = append(out, paths...)
+	}
+	return out, nil
+}
+
 // GenerateFolderBook writes the book-folder upload's own two-part MP3
 // audiobook under dir: "Tamsin Reed/The Folded Letters" holding
 // "01 - First Letter.mp3" and "02 - Second Letter.mp3", tagged as

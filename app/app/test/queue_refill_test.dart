@@ -242,11 +242,14 @@ void main() {
       expect(repository.facetDrills.last, ('genre', 'ge-1'));
     });
 
-    test('a bucket draw leaves the audiobooks in it behind', () async {
+    test('an unscoped bucket draw keeps its music alone', () async {
+      // A source stored before sources named their scope pages under no
+      // scope, so its cursor does too; what it draws is music.
       final repository = FakeRepository();
       repository.facetItems['artist 1'] = [
         testItem('tr-1'),
         testItem('bk-1', mediaType: MediaType.audiobook),
+        testItem('ep-1', mediaType: MediaType.podcast),
         testItem('tr-2'),
       ];
       final draw = await pagerOver(repository).draw(
@@ -278,7 +281,9 @@ void main() {
     test('a books-scoped bucket keeps its books', () async {
       final repository = FakeRepository();
       repository.facetItems['genre ge-1'] = [
+        testItem('tr-1'),
         testItem('bk-1', mediaType: MediaType.audiobook),
+        testItem('ep-1', mediaType: MediaType.podcast),
       ];
       final draw = await pagerOver(
         repository,
@@ -319,6 +324,129 @@ void main() {
         repository.browseCalls.map((call) => call.mediaType).toList(),
         <MediaType?>[null, MediaType.music, MediaType.audiobook],
       );
+    });
+
+    test(
+      'a seeded window with no cursor places itself in its permutation',
+      () async {
+        // What a shuffle of an unscoped listing leaves: the play scoped it
+        // to the kind it plays and dropped the cursor the unscoped page
+        // minted, so the draw finds the frontier in the scoped permutation
+        // and goes on from there, rather than walking it from its head.
+        final repository = FakeRepository();
+        repository.facetItems['genre ge-1'] = [
+          for (var i = 0; i < 30; i++)
+            i.isOdd
+                ? testItem('bk-$i', mediaType: MediaType.audiobook)
+                : testItem('tr-$i'),
+        ];
+        final draw = await pagerOver(repository).draw(
+          const QueueSource(
+            kind: QueueSourceKind.genre,
+            label: 'Jazz',
+            pid: 'ge-1',
+            rolling: true,
+            seed: 7,
+            mediaType: MediaType.music,
+          ),
+          afterPid: 'tr-20',
+        );
+
+        expect(draw!.pids, ['tr-22', 'tr-24', 'tr-26', 'tr-28']);
+        expect(draw.seed, 7);
+        expect(
+          repository.listItemsCalls.map((call) => call.mediaType).toSet(),
+          {MediaType.music},
+        );
+      },
+    );
+
+    test('a restored window places itself where its listing stood', () async {
+      // The queue's tail is a hand add; the source remembers the last
+      // listing item the queue took, and a restore keeps it.
+      final repository = FakeRepository();
+      repository.facetItems['genre ge-1'] = [
+        for (var i = 0; i < 30; i++) testItem('tr-$i'),
+      ];
+      const source = QueueSource(
+        kind: QueueSourceKind.genre,
+        label: 'Jazz',
+        pid: 'ge-1',
+        rolling: true,
+        mediaType: MediaType.music,
+        listedThrough: 'tr-9',
+      );
+      final stored = QueueState(
+        entries: const [
+          QueueEntry(queueId: 'q0', pid: 'tr-9'),
+          QueueEntry(queueId: 'q1', pid: 'tr-20'),
+        ],
+        sourceOrder: const ['q0', 'q1'],
+        currentIndex: 0,
+        shuffled: false,
+        repeat: QueueRepeat.off,
+        source: source,
+        nextQueueId: 2,
+      ).toStored(updatedAt: DateTime.utc(2026, 11, 22));
+      final restored = QueueState.fromStored(stored);
+      expect(restored.source, source);
+
+      final draw = await pagerOver(
+        repository,
+      ).draw(restored.source, afterPid: restored.frontierPid);
+
+      expect(draw!.pids.first, 'tr-10');
+    });
+
+    test('a recorded listing item that has left the listing places the '
+        'draw after the queue\'s frontier', () async {
+      // tr-9 was deleted; the recheck dropped it, so the queue's frontier
+      // moved back to tr-8.
+      final repository = FakeRepository();
+      repository.facetItems['genre ge-1'] = [
+        for (var i = 0; i < 30; i++)
+          if (i != 9) testItem('tr-$i'),
+      ];
+      final draw = await pagerOver(repository).draw(
+        const QueueSource(
+          kind: QueueSourceKind.genre,
+          label: 'Jazz',
+          pid: 'ge-1',
+          rolling: true,
+          mediaType: MediaType.music,
+          listedThrough: 'tr-9',
+        ),
+        afterPid: 'tr-8',
+      );
+
+      expect(draw!.pids.first, 'tr-10');
+    });
+
+    test('a recorded listing item converted to another kind places the '
+        'draw after the queue\'s frontier', () async {
+      // tr-9 became an audiobook: it answers as bk-9, outside the music
+      // scope the draw asks under.
+      final repository = FakeRepository();
+      repository.facetItems['genre ge-1'] = [
+        for (var i = 0; i < 30; i++)
+          i == 9
+              ? testItem('bk-$i', mediaType: MediaType.audiobook)
+              : testItem('tr-$i'),
+      ];
+      final draw = await pagerOver(repository).draw(
+        const QueueSource(
+          kind: QueueSourceKind.genre,
+          label: 'Jazz',
+          pid: 'ge-1',
+          rolling: true,
+          mediaType: MediaType.music,
+          listedThrough: 'tr-9',
+        ),
+        afterPid: 'tr-8',
+      );
+
+      expect(draw!.pids.first, 'tr-10');
+      expect(draw.pids, isNot(contains('bk-9')));
     });
 
     test('an entity bucket drills by its key, not by its pid', () async {

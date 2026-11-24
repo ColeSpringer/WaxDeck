@@ -37,6 +37,13 @@ const _album = QueueSource(
   pid: 'al-1',
 );
 
+/// A queue of two kinds is one somebody built: a listing plays one.
+const _playlist = QueueSource(
+  kind: QueueSourceKind.playlist,
+  label: 'Mixed',
+  pid: 'pl-1',
+);
+
 /// Records which renderings were handed back while the engine was
 /// still on the stream they replaced, which is the one moment a release
 /// can take a listener's slot away from the stream about to use it.
@@ -265,7 +272,7 @@ void main() {
       h.container.playback.play([
         testItem(_a),
         testItem(_episode, mediaType: MediaType.podcast),
-      ], source: _album);
+      ], source: _playlist);
       await pumpEventQueue();
 
       expect(h.repo.timelineCalls.single.pids, [_a], reason: 'the run stops');
@@ -288,7 +295,7 @@ void main() {
     h.container.playback.play([
       testItem(_a),
       testItem(_episode, mediaType: MediaType.podcast),
-    ], source: _album);
+    ], source: _playlist);
     await pumpEventQueue();
     expect(h.repo.timelineCalls, hasLength(1));
 

@@ -844,6 +844,36 @@ void main() {
         _l10n.homePinnedKindPlaylist,
       );
     });
+
+    test('pinnedCardTile draws an author-only artist as an author', () {
+      MediaTileData pinned(List<MediaType>? media) => pinnedCardTile(
+        EntityCard(
+          pid: 'ar-1',
+          kind: EntityCardKind.artist,
+          title: 'Writer',
+          mediaTypes: media,
+        ),
+        l10n: _l10n,
+        store: store,
+        repository: repository,
+        semanticsId: 'pinned-ar-1',
+      );
+      final author = pinned(const [MediaType.audiobook]);
+      expect(author.subtitle, _l10n.homePinnedKindAuthor);
+      expect(author.domain, WaxDomain.audiobooks);
+      expect(author.shape, ArtworkShape.circle);
+      // Any music keeps the artist, as it keeps the music page.
+      for (final media in <List<MediaType>?>[
+        const [MediaType.audiobook, MediaType.music],
+        const [MediaType.music],
+        const [],
+        null,
+      ]) {
+        final artist = pinned(media);
+        expect(artist.subtitle, _l10n.homePinnedKindArtist, reason: '$media');
+        expect(artist.domain, WaxDomain.music, reason: '$media');
+      }
+    });
   });
 
   group('playlistTile', () {
@@ -1256,6 +1286,14 @@ void main() {
       expect(artist.subtitle, '3 albums');
       expect(artist.shape, ArtworkShape.circle);
       expect(artist.domain, WaxDomain.music);
+      final author = searchHitTile(
+        hit,
+        SearchHitKind.authors,
+        l10n: _l10n,
+        semanticsId: 'hit-4',
+      );
+      expect(author.shape, ArtworkShape.circle);
+      expect(author.domain, WaxDomain.audiobooks);
       expect(episode.domain, WaxDomain.podcasts);
       expect(episode.shape, ArtworkShape.square);
       expect(book.domain, WaxDomain.audiobooks);

@@ -149,8 +149,9 @@ class UploadCreate {
   /// The file's directory relative to the picked or dropped folder,
   /// forward-slash separated (empty or absent for a file at the top). The
   /// `auto` grouping clusters by it, so disc subfolders (`CD1`, `Disc 2`) fold
-  /// into one album. Must stay relative - absolute paths and `..` segments are
-  /// rejected, as is passing it without `batchId`. `fileName` stays a bare name
+  /// into one album, and an audiobook's part subfolders (`Part 1`) into one
+  /// book. Must stay relative - absolute paths and `..` segments are rejected,
+  /// as is passing it without `batchId`. `fileName` stays a bare name
   /// regardless.
   final String? batchPath;
 

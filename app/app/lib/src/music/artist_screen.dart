@@ -11,7 +11,6 @@ import '../books/book_dimension.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
-import '../library/item_play.dart';
 import '../player/entity_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
@@ -39,9 +38,8 @@ QueueSource artistSource(String pid, String name, MusicItemsState? state) =>
       // listing's own cursor is where the queue draws the rest as it drains.
       rolling: state?.hasMore ?? false,
       cursor: state?.nextCursor ?? '',
-      // Unscoped, as the page's own read is, which is what the cursor
-      // names.
-      mediaType: null,
+      // The scope the page's read, and so its cursor, was made in.
+      mediaType: MediaType.music,
     );
 
 /// How many tracks an artist screen shows before it hands the rest to
@@ -50,6 +48,7 @@ QueueSource artistSource(String pid, String name, MusicItemsState? state) =>
 const int _topTracks = 5;
 
 /// One artist: their releases and a way into everything they play on.
+/// Music only; an author's books are on their Books page.
 ///
 /// Addressed by the artist's own pid, which is the same handle the
 /// index and search hand over, so this screen is a link.
@@ -65,24 +64,21 @@ class ArtistScreen extends ConsumerWidget {
   MusicListing get _listing => (
     dimension: MusicDimension.artists,
     segment: pid,
-    domain: BrowseDomain.wholeLibrary,
+    domain: BrowseDomain.music,
   );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(musicItemsProvider(_listing));
     final l10n = context.l10n;
-    // Everything under the artist, books included: search, mixes and the
-    // editor reach this page with the medium unknown, and an author whose
-    // whole catalogue is audiobooks gets their books here rather than an
-    // empty page under their own name.
     final items = state.value?.items ?? const <ItemSummary>[];
     // Never from an item. A track's artist field is its *credit* - "Dom
     // Kennedy feat. Ty Dolla $ign" - and the first row of a catalogue
     // is no more this artist's name than any other row is. The entity's
     // own card, which a rename reaches; the caller's label until it
     // answers.
-    final artist = ref.watch(entityCardProvider(pid)).value?.title ?? label;
+    final card = ref.watch(entityCardProvider(pid)).value;
+    final artist = card?.title ?? label;
     final name = artist ?? l10n.musicArtistUnknownName;
     // The listing answers an empty page for any key, so an empty one says
     // nothing about whether the artist is there; their card does, and the
@@ -127,6 +123,18 @@ class ArtistScreen extends ConsumerWidget {
               child: EmptyState(
                 title: l10n.musicArtistEmptyTitle,
                 glyph: WaxIcons.artists,
+                // An author with no music has their books under Books.
+                actionLabel: isAuthorOnly(card)
+                    ? l10n.musicArtistEmptyBooks
+                    : null,
+                onAction: isAuthorOnly(card)
+                    ? () => unawaited(
+                        context.push(
+                          WaxRoute.bookBucket(BookDimension.authors, pid),
+                        ),
+                      )
+                    : null,
+                actionSemanticsId: SemanticsIds.entityAuthorBooks,
               ),
             ),
             builder: (context, _) => SliverToBoxAdapter(
@@ -166,35 +174,28 @@ class _Header extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final albums = albumsOf(items);
-    final tracks = playableOf(items);
     final loaded = state;
     void play({bool shuffle = false}) {
-      if (tracks.isEmpty) return;
+      if (items.isEmpty) return;
       ref
           .read(nowPlayingProvider.notifier)
           .play(
-            tracks,
+            items,
             shuffle: shuffle,
             source: artistSource(pid, sourceName, loaded),
           );
     }
 
     final l10n = context.l10n;
-    final books = booksOf(items);
-    // Each medium counted as itself, so "3 tracks" here is the music
-    // index's "3 tracks"; a floor while the read runs past its page.
+    // A floor while the read runs past its page.
     final more = loaded?.hasMore ?? false;
     return EntityHeader(
       title: name,
       metadata: [
-        if (tracks.isNotEmpty)
+        if (items.isNotEmpty)
           more
-              ? l10n.musicArtistTrackCountAtLeast(tracks.length)
-              : l10n.musicTrackCount(tracks.length),
-        if (books.isNotEmpty)
-          more
-              ? l10n.musicArtistBookCountAtLeast(books.length)
-              : l10n.bookCount(books.length),
+              ? l10n.musicArtistTrackCountAtLeast(items.length)
+              : l10n.musicTrackCount(items.length),
         if (albums.isNotEmpty) l10n.musicArtistReleaseCount(albums.length),
       ].join(' · '),
       shape: ArtworkShape.circle,
@@ -213,13 +214,13 @@ class _Header extends ConsumerWidget {
           label: l10n.musicPlay,
           glyph: WaxIcons.play,
           emphasis: WaxActionEmphasis.primary,
-          onPressed: tracks.isEmpty ? null : play,
+          onPressed: items.isEmpty ? null : play,
           semanticsId: SemanticsIds.entityPlay,
         ),
         WaxAction(
           label: l10n.musicShuffle,
           glyph: WaxIcons.shuffle,
-          onPressed: tracks.isEmpty ? null : () => play(shuffle: true),
+          onPressed: items.isEmpty ? null : () => play(shuffle: true),
           semanticsId: SemanticsIds.entityShuffle,
         ),
       ],
@@ -367,8 +368,6 @@ class _Body extends ConsumerWidget {
     final store = ref.watch(artworkStoreProvider);
     final repository = ref.watch(repositoryProvider);
     final l10n = context.l10n;
-    final tracks = playableOf(items);
-    final books = booksOf(items);
     final tiles = <MediaTileData>[
       for (final album in albums)
         releaseTile(
@@ -445,18 +444,14 @@ class _Body extends ConsumerWidget {
           ),
         ],
         _AppearsOn(pid: pid),
-        if (tracks.isNotEmpty) ...<Widget>[
+        if (items.isNotEmpty) ...<Widget>[
           const SizedBox(height: WaxSpace.s16),
           _TopTracks(
             pid: pid,
             sourceName: sourceName,
-            tracks: tracks,
+            tracks: items,
             state: state,
           ),
-        ],
-        if (books.isNotEmpty) ...<Widget>[
-          const SizedBox(height: WaxSpace.s16),
-          _Books(pid: pid, books: books),
         ],
         const SizedBox(height: WaxSpace.s32),
       ],
@@ -552,78 +547,6 @@ class _TopTracks extends ConsumerWidget {
   }
 }
 
-/// An artist's books, as the shelf an author's own page under Books is
-/// the whole of. Its covers open each book, and play or resume it in
-/// place as the Books hub's do; Show all goes there.
-class _Books extends ConsumerWidget {
-  const _Books({required this.pid, required this.books});
-
-  final String pid;
-  final List<ItemSummary> books;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final store = ref.watch(artworkStoreProvider);
-    final l10n = context.l10n;
-    final progress = watchPlayProgress(ref, books);
-    final tiles = <MediaTileData>[
-      for (final book in books)
-        bookShelfTile(
-          book,
-          store: store,
-          semanticsId: SemanticsIds.book(book.pid),
-        ),
-    ];
-    return ShelfRow(
-      title: l10n.musicArtistAudiobooksSection,
-      items: tiles,
-      actionLabel: l10n.musicArtistShowAll,
-      actionSemanticsId: SemanticsIds.entityAllBooks,
-      // Pushed, as a release is: the author's page is declared under the
-      // authors index, and `go` would throw this artist away.
-      onAction: () => unawaited(
-        context.push(WaxRoute.bookBucket(BookDimension.authors, pid)),
-      ),
-      onTapItem: (tile) {
-        final at = tiles.indexOf(tile);
-        if (at < 0) return;
-        unawaited(context.push(WaxRoute.book(books[at].pid)));
-      },
-      onPlayItem: (tile) {
-        final at = tiles.indexOf(tile);
-        if (at < 0) return;
-        playOrResumeItem(ref, books[at], progress[books[at].pid]);
-      },
-      playSemanticsIdAt: (at) => SemanticsIds.bookPlay(books[at].pid),
-      playLabelAt: (at) =>
-          resumeLabel(l10n, books[at], progress[books[at].pid]),
-      onMoreItem: (tile) {
-        final at = tiles.indexOf(tile);
-        if (at < 0) return;
-        final book = books[at];
-        unawaited(showItemCardMenu(context, ref, book, progress[book.pid]));
-      },
-    );
-  }
-}
-
-/// What in a bucket plays in sequence: its tracks.
-///
-/// A bucket counts whatever carried its artist, books included. The
-/// page lists each medium as itself, and the queue takes the tracks: a
-/// twelve-hour file dropped between two tracks, captioned with the
-/// artist's name, is not what Play was asked for.
-List<ItemSummary> playableOf(List<ItemSummary> items) => <ItemSummary>[
-  for (final item in items)
-    if (item.mediaType != MediaType.audiobook) item,
-];
-
-/// The books in a bucket, which the page shelves apart from the tracks.
-List<ItemSummary> booksOf(List<ItemSummary> items) => <ItemSummary>[
-  for (final item in items)
-    if (item.mediaType == MediaType.audiobook) item,
-];
-
 /// One release of an artist's, as the tracks on screen describe it.
 class ArtistAlbum {
   const ArtistAlbum({required this.title, required this.tracks, this.pid});
@@ -644,7 +567,7 @@ List<ArtistAlbum> albumsOf(List<ItemSummary> tracks) {
   final byKey = <String, List<ItemSummary>>{};
   final titles = <String, String>{};
   final pids = <String, String?>{};
-  for (final track in playableOf(tracks)) {
+  for (final track in tracks) {
     final title = track.album;
     if (title == null || title.isEmpty) continue;
     final key = track.albumPid ?? 'title:$title';

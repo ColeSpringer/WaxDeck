@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/oklog/ulid/v2"
+
+	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/scan"
 
 	"github.com/colespringer/waxdeck/server/internal/match"
 
@@ -311,10 +314,6 @@ func (l *Ingest) openBatchEntries(ctx context.Context, b wdb.UploadBatch, member
 	// or member linking halfway (the idempotent retry could then only
 	// cover the unlinked members with fresh entries).
 	ctx = l.procCtx
-	type memberDoc struct {
-		row wdb.Upload
-		doc reviewTrackDoc
-	}
 	docs := make([]memberDoc, 0, len(members))
 	for _, m := range members {
 		var doc reviewTrackDoc
@@ -403,15 +402,8 @@ func (l *Ingest) openBatchEntries(ctx context.Context, b wdb.UploadBatch, member
 	var units [][]memberDoc
 	switch b.Grouping {
 	case groupingAlbum:
-		sort.SliceStable(docs, func(i, j int) bool {
-			a, z := docs[i].doc, docs[j].doc
-			if a.DiscNo != z.DiscNo {
-				return a.DiscNo < z.DiscNo
-			}
-			if a.TrackNo != z.TrackNo {
-				return a.TrackNo < z.TrackNo
-			}
-			return a.Path < z.Path
+		slices.SortStableFunc(docs, func(a, z memberDoc) int {
+			return match.CompareTracks(a.track(), z.track())
 		})
 		units = [][]memberDoc{docs}
 	case groupingTracks:
@@ -423,22 +415,13 @@ func (l *Ingest) openBatchEntries(ctx context.Context, b wdb.UploadBatch, member
 		tracks := make([]match.Track, 0, len(docs))
 		for _, d := range docs {
 			byID[d.row.ID] = d
-			tags := d.doc.Tags
-			if tags == nil {
-				tags = map[string]string{}
-			}
-			// The cluster path is the client-declared batch-relative
-			// location, not the staging path: staged files each live in
-			// their own session directory, which would defeat the
-			// directory fallback and the disc-folder fold.
-			tracks = append(tracks, match.Track{
-				PID:         d.row.ID,
-				Path:        path.Join(d.row.BatchPath, d.row.FileName),
-				Tags:        tags,
-				DurationSec: float64(d.doc.DurationMS) / 1000,
-			})
+			tracks = append(tracks, d.track())
 		}
-		for _, unit := range match.Cluster(tracks) {
+		cluster := match.Cluster
+		if isBookMedia(b.MediaType) {
+			cluster = bookUnits
+		}
+		for _, unit := range cluster(tracks) {
 			unitDocs := make([]memberDoc, 0, len(unit.Tracks))
 			for _, tr := range unit.Tracks {
 				unitDocs = append(unitDocs, byID[tr.PID])
@@ -461,6 +444,14 @@ func (l *Ingest) openBatchEntries(ctx context.Context, b wdb.UploadBatch, member
 			UploadedBy: b.UserID,
 			Title:      firstNonEmpty(first.Tags["ALBUM"], first.Title),
 			Artist:     firstNonEmpty(first.Tags["ALBUMARTIST"], first.Artist),
+		}
+		if isBookMedia(b.MediaType) && len(unit) > 1 {
+			dirs := make([]string, 0, len(unit))
+			for _, d := range unit {
+				dirs = append(dirs, d.row.BatchPath)
+			}
+			entry.ID = newReviewID()
+			entry.Title = bookUnitTitle(nil, unitDocs, unitFolderName(dirs), entry.ID)
 		}
 		entryID, err := l.openReviewEntry(ctx, entry, reviewPayload{Tracks: unitDocs}, b.Identify)
 		if err != nil {
@@ -496,4 +487,90 @@ func (l *Ingest) openBatchEntries(ctx context.Context, b wdb.UploadBatch, member
 		return b, declined, &Error{Kind: KindInternal, Err: firstErr}
 	}
 	return b, declined, nil
+}
+
+// unitFolderName names the folder a unit's files were sent from: the
+// last segment of the folder they share, a disc or part subfolder read
+// as its parent. Empty when they share none.
+func unitFolderName(dirs []string) string {
+	var common []string
+	for i, d := range dirs {
+		segs := strings.Split(match.FoldBookDir(path.Clean("/" + d))[1:], "/")
+		if i == 0 {
+			common = segs
+			continue
+		}
+		n := 0
+		for n < len(common) && n < len(segs) && common[n] == segs[n] {
+			n++
+		}
+		common = common[:n]
+	}
+	if len(common) == 0 {
+		return ""
+	}
+	return common[len(common)-1]
+}
+
+// memberDoc is one staged batch member with what its file carries.
+type memberDoc struct {
+	row wdb.Upload
+	doc reviewTrackDoc
+}
+
+// track is the member as the matcher sees it. Its path is the
+// client-declared batch-relative location, not the staging path: staged
+// files each live in their own session directory, which would defeat the
+// directory fallback, the disc-folder fold and the folder order.
+func (d memberDoc) track() match.Track {
+	tags := d.doc.Tags
+	if tags == nil {
+		tags = map[string]string{}
+	}
+	return match.Track{
+		PID:         d.row.ID,
+		Path:        path.Join(d.row.BatchPath, d.row.FileName),
+		Sent:        true,
+		Tags:        tags,
+		DurationSec: float64(d.doc.DurationMS) / 1000,
+	}
+}
+
+// bookUnits groups an audiobook batch's files. Files naming an album
+// group by it, split only by different album artists (ClusterBooks): a
+// part's artist may name its narrator. Those naming none join their
+// folder's book (a disc or part subfolder read as its parent, files from
+// no folder sharing one) where any of them in that folder is shaped as a
+// numbered part (the catalog's own test), so a run's first file, which
+// alone reads as a whole book, stays with the rest. In a folder with no
+// such part, and for any .m4b, which is normally a whole book, each is a
+// book of its own.
+func bookUnits(tracks []match.Track) []match.Unit {
+	mayBePart := func(tr match.Track) bool {
+		return tr.Tags["ALBUM"] == "" && !strings.EqualFold(path.Ext(tr.Path), ".m4b")
+	}
+	numbered := make(map[string]bool)
+	for _, tr := range tracks {
+		if mayBePart(tr) && scan.PartShaped(&model.Tags{
+			Title:      tr.Tags["TITLE"],
+			TrackNo:    match.ParseOrdinal(tr.Tags["TRACKNUMBER"]),
+			TrackTotal: match.ParseOrdinal(tr.Tags["TRACKTOTAL"]),
+		}, tr.Path) {
+			numbered[match.BookFolder(tr)] = true
+		}
+	}
+	var units []match.Unit
+	var tagged, parts []match.Track
+	for _, tr := range tracks {
+		switch {
+		case tr.Tags["ALBUM"] != "":
+			tagged = append(tagged, tr)
+		case mayBePart(tr) && numbered[match.BookFolder(tr)]:
+			parts = append(parts, tr)
+		default:
+			units = append(units, match.Unit{Key: tr.Path, Tracks: []match.Track{tr}})
+		}
+	}
+	units = append(units, match.ClusterBooks(tagged)...)
+	return append(units, match.ClusterByFolder(parts)...)
 }

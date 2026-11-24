@@ -21,6 +21,7 @@ import '../media_view.dart';
 import '../player/play_progress.dart';
 import '../podcasts/episode_fetch.dart';
 import '../podcasts/podcast_shelves.dart';
+import '../music/music_controllers.dart' show isAuthorOnly;
 import '../search/search_controller.dart';
 
 /// The length on the right of a row, or none where there is none to say: a
@@ -472,6 +473,7 @@ MediaTileData mixCardTile(
 String pinnedCardCaption(AppLocalizations l10n, EntityCard card) {
   final kind = switch (card.kind) {
     EntityCardKind.album => l10n.homePinnedKindAlbum,
+    EntityCardKind.artist when isAuthorOnly(card) => l10n.homePinnedKindAuthor,
     EntityCardKind.artist => l10n.homePinnedKindArtist,
     EntityCardKind.releaseGroup => l10n.homePinnedKindReleaseGroup,
     EntityCardKind.playlist => l10n.homePinnedKindPlaylist,
@@ -484,9 +486,11 @@ String pinnedCardCaption(AppLocalizations l10n, EntityCard card) {
       : l10n.homePinnedCaption(kind, artist);
 }
 
-WaxDomain _pinnedDomain(EntityCardKind kind) => switch (kind) {
+/// An author's card opens their Books page, so it wears that hue.
+WaxDomain _pinnedDomain(EntityCard card) => switch (card.kind) {
   EntityCardKind.podcast => WaxDomain.podcasts,
   EntityCardKind.book => WaxDomain.audiobooks,
+  EntityCardKind.artist when isAuthorOnly(card) => WaxDomain.audiobooks,
   _ => WaxDomain.music,
 };
 
@@ -510,7 +514,7 @@ MediaTileData pinnedCardTile(
     artwork: card.kind == EntityCardKind.releaseGroup
         ? null
         : waxArtwork(store, repository.artUrlFor(card.pid)),
-    domain: _pinnedDomain(card.kind),
+    domain: _pinnedDomain(card),
     shape: card.kind == EntityCardKind.artist
         ? ArtworkShape.circle
         : ArtworkShape.square,
@@ -860,7 +864,7 @@ MediaTileData stationTile(
 MediaTileData recentSearchTile(String query, {required String semanticsId}) =>
     MediaTileData(title: query, semanticsId: semanticsId);
 
-/// A hit in the group [kind]; an artist reads as a disc, and a track
+/// A hit in the group [kind]; an artist or author reads as a disc, and a track
 /// carries its [playCount].
 MediaTileData searchHitTile(
   SearchHit hit,
@@ -875,12 +879,12 @@ MediaTileData searchHitTile(
   return MediaTileData(
     title: hit.title,
     subtitle: hit.subtitle,
-    shape: kind == SearchHitKind.artists
+    shape: kind == SearchHitKind.artists || kind == SearchHitKind.authors
         ? ArtworkShape.circle
         : ArtworkShape.square,
     domain: switch (kind) {
       SearchHitKind.episodes => WaxDomain.podcasts,
-      SearchHitKind.books => WaxDomain.audiobooks,
+      SearchHitKind.books || SearchHitKind.authors => WaxDomain.audiobooks,
       _ => WaxDomain.music,
     },
     playCount: plays?.count,

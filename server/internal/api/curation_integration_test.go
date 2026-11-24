@@ -963,8 +963,19 @@ func TestSingleFileAutoApplyGate(t *testing.T) {
 // carries bytes for.
 type fakeAcquireSource struct {
 	playlistURL string
-	entries     []struct{ title, url string }
-	files       map[string]string
+	// listTitle names the playlist; empty means "Test Playlist".
+	listTitle string
+	entries   []struct{ title, url string }
+	files     map[string]string
+	// failOnce names videos whose first fetch fails.
+	failOnce map[string]bool
+}
+
+func (f *fakeAcquireSource) title() string {
+	if f.listTitle != "" {
+		return f.listTitle
+	}
+	return "Test Playlist"
 }
 
 func (f *fakeAcquireSource) SourceType() model.SourceType { return model.SourceYouTube }
@@ -973,14 +984,14 @@ func (f *fakeAcquireSource) Resolve(_ context.Context, req source.Request) (*sou
 	if req.URL != f.playlistURL {
 		return nil, errors.New("not a playlist")
 	}
-	return &source.Resolved{IdentityKey: "youtube:test", SourceType: model.SourceYouTube, Title: "Test Playlist"}, nil
+	return &source.Resolved{IdentityKey: "youtube:test", SourceType: model.SourceYouTube, Title: f.title()}, nil
 }
 
 func (f *fakeAcquireSource) Enumerate(_ context.Context, req source.Request) (*source.Enumeration, error) {
 	if req.URL != f.playlistURL {
 		return nil, errors.New("not a playlist")
 	}
-	feed := &model.Feed{Title: "Test Playlist"}
+	feed := &model.Feed{Title: f.title()}
 	for _, e := range f.entries {
 		feed.Episodes = append(feed.Episodes, model.FeedEpisode{Title: e.title, EnclosureURL: e.url})
 	}
@@ -988,6 +999,10 @@ func (f *fakeAcquireSource) Enumerate(_ context.Context, req source.Request) (*s
 }
 
 func (f *fakeAcquireSource) Fetch(_ context.Context, req source.FetchRequest, w io.Writer) (*source.FetchResult, error) {
+	if f.failOnce[req.URL] {
+		delete(f.failOnce, req.URL)
+		return nil, errors.New("the video did not answer")
+	}
 	path, ok := f.files[req.URL]
 	if !ok {
 		return nil, errors.New("no such video")
@@ -1010,6 +1025,54 @@ func drainTools(t *testing.T, h *harness) {
 		if time.Now().After(deadline) {
 			t.Fatal("tool worker did not drain")
 		}
+	}
+}
+
+// A music album acquired from a list with no disc numbers reviews its
+// tracks by their numbers, not in the order they were fetched.
+func TestAnAcquiredAlbumListsItsTracksByNumber(t *testing.T) {
+	t.Parallel()
+	media := t.TempDir()
+	var paths []string
+	for _, n := range []string{"2", "1"} {
+		got, err := fixtures.Generate(media, fixtures.Spec{Name: "fetched-" + n, Codec: fixtures.CodecMP3, Duration: 3 * time.Second,
+			Tags: map[string]string{"TITLE": "Fetched " + n, "ARTIST": "DJ Harness", "ALBUM": "Fetched Album", "TRACKNUMBER": n}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, got...)
+	}
+	src := &fakeAcquireSource{
+		playlistURL: "https://tube.example/playlist?list=PLorder",
+		entries: []struct{ title, url string }{
+			{"Fetched 2", "https://tube.example/watch?v=two"},
+			{"Fetched 1", "https://tube.example/watch?v=one"},
+		},
+		files: map[string]string{
+			"https://tube.example/watch?v=two": paths[0],
+			"https://tube.example/watch?v=one": paths[1],
+		},
+	}
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.SourceProviders = append(cfg.SourceProviders, src)
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+		cfg.AllowPrivateFeedHosts = true
+	})
+	task := decodeStatus[ToolTask](t, h.postJSON(t, "/api/v1/acquisitions",
+		map[string]any{"url": src.playlistURL, "mediaType": "music"}), 202, "acquisition")
+	drainTools(t, h)
+	got := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+task.Id, h.token))
+	if got.State != "done" || got.ResultPids == nil || len(*got.ResultPids) != 1 {
+		t.Fatalf("acquire task = %+v, want one entry for the album", got)
+	}
+	var titles []string
+	for _, tr := range reviewAs(t, h, h.token, (*got.ResultPids)[0]).Tracks {
+		titles = append(titles, tr.Title)
+	}
+	if want := []string{"Fetched 1", "Fetched 2"}; !slices.Equal(titles, want) {
+		t.Errorf("entry tracks = %q, want %q", titles, want)
 	}
 }
 

@@ -58,6 +58,16 @@ against it. Decisions:
   entries feed the calibration statistic the queue shows, so trust in
   auto-apply is measured, not asserted.
 
+An uploaded or downloaded entry whose files are not yet in the library
+says what it imports as, Music or Audiobook, and the reviewer can switch
+it before deciding: it imports as the medium chosen, which becomes the
+entry's own, so a decision retried after it stopped partway finishes
+under it. The switch offers only the media the entry's library takes,
+and is left out when that is only the entry's own; once any of the
+unit's files has landed, the unit keeps the medium they landed as. An
+audiobook is not offered **Approve** (a MusicBrainz release is music):
+**Keep as is** or **Mark unofficial** imports it as a book.
+
 A match applied on its own writes the files the same way. A file in a
 read-only library keeps its tags, which the health rule for tags out of
 sync lists as owed, while the unit's other files are written; a unit
@@ -131,29 +141,56 @@ Uploading says what the files are before it asks anything else. Opened
 from the music or Books section, the dialog states the kind in its title
 ("Upload 12 files as an audiobook") and does not ask it; opened from
 anywhere else (home, Past uploads, a drop) it asks Music or Audiobook,
-preselected as Audiobook when any file is an `.m4b` and Music otherwise.
-The choice is the person's to change.
+preselected as Audiobook when any file is an `.m4b`, and as Music for
+one file or loose files. Several files from a folder with no `.m4b`
+could as well be an album as a book, so the dialog opens with neither
+chosen and uploads once one is. The choice is the person's to change.
 
 Uploading several files at once asks a grouping question so an album
 folder does not flood the review queue with per-file entries, worded
 for the kind. For music: **Auto-detect** (the default) clusters files
 into album units by their tags and relative folders - disc subfolders
-like `CD1` fold into one release - **One album** reviews everything as
-a single release, and **Separate tracks** opens one entry per file. For
-an audiobook: **One book in N parts** reviews everything as one book in
-folder and track order, **Auto-detect** makes one book per folder or
-title, and **Separate books** opens one entry per file. An audiobook
-opens on **One book** when its files sit in one folder (or in disc
-subfolders such as `CD1` and `Disc 2` of one folder) and are not
-several `.m4b` files, each of which is normally a whole book; loose
-files and a folder of book folders open on **Auto-detect**. Either
-holds until the person picks a grouping. The grouping rides an upload
-batch: members upload individually (per-file failures never sink the
-rest), and the batch finalizes into review entries when the transfer
-finishes - or within a day, with whatever arrived, if the client
-vanished. Files shared to the Android app group by auto-detection
-without asking, and a share that includes an `.m4b` uploads as an
-audiobook.
+like `CD1` fold into one release - **One album** reviews everything
+as a single release, and **Separate tracks** opens one entry per
+file. For an audiobook: **One book in N parts** reviews everything
+as one book, **Auto-detect** groups files that name their album by
+their tags; those naming none gather into one book per folder where
+any of them there is a numbered part (disc and part subfolders such as
+`CD1` and `Part 2` fold into their parent, and files from no folder
+share one), and any other file, an `.m4b` always, is a book of its
+own; **Separate books** opens one entry per file. Whichever the kind,
+a unit's files are ordered by the disc number they carry, then by the
+folder each was sent from, then by track number, and a unit decided as
+the other kind keeps that order. Folders compare level by level, each
+name naturally: a run of digits by its number, the text between as
+text, so `Part 2` comes before `Part 10`, `Vol 1 Part 2` before `Vol 1
+Part 10`, `Part 2/CD10` before `Part 10/CD1`, and `Side A` before
+`Side B`. A disc or track number written with its total (`3/12`)
+orders by the number before it. Files that came with no folder, such
+as a music acquisition's downloads, go by disc and track number; an
+audiobook acquired from a list keeps the list's order. A book's parts
+often name only their chapters, or albums of their own, so a book in
+parts is titled as a unit, never after a chapter: the album title
+typed for it, else an album every part shares, else the folder it was
+picked from, else what its file names share at their start (less
+numbering and words such as "Chapter" or "Part"), else "Untitled
+audiobook". Its review entry shows that title, and before it is
+imported its staged files get that title, its author and each part's
+place wherever a tag is missing or disagrees across them; a part that
+cannot take them stops the decision before anything lands, and a
+decision stopped there leaves the files as they were uploaded. An
+audiobook acquired from a playlist or channel is one book, the list's
+title standing in for the folder. An audiobook opens on **One book**
+when its files sit in one folder (or in disc or part subfolders such
+as `CD1` and `Part 2` of one folder) and are not several `.m4b` files,
+each of which is normally a whole book; loose files and a folder of
+book folders open on **Auto-detect**. Either holds until the person
+picks a grouping. The grouping rides an upload batch: members upload
+individually (per-file failures never sink the rest), and the batch
+finalizes into review entries when the transfer finishes - or within a
+day, with whatever arrived, if the client vanished. Files shared to
+the Android app group by auto-detection without asking, and a share
+that includes an `.m4b` uploads as an audiobook.
 
 Uploads accept the same extensions the scanner catalogs by default -
 mp3, mpga, flac, wav, wave, ogg, oga, opus, m4a, m4b, m4r, mp4, alac,

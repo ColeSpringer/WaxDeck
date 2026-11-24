@@ -1,12 +1,14 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -66,6 +68,9 @@ type ReviewDetailDTO struct {
 	// which is what tells an empty candidate list apart from a search
 	// that came back empty.
 	IdentifyDeclined bool
+	// MediumFixed says a file of the unit is in the library, so a
+	// decision naming another medium is refused.
+	MediumFixed bool
 	// Override is what the last re-identify searched for; nil when
 	// nothing was typed.
 	Override *ReviewOverrideDTO
@@ -185,6 +190,7 @@ func (l *Ingest) GetReviewEntry(ctx context.Context, uc *UserCtx, id string) (Re
 		Tracks:           payload.Tracks,
 		Candidates:       payload.Candidates,
 		IdentifyDeclined: payload.IdentifyDeclined,
+		MediumFixed:      anyLanded(payload.Tracks),
 	}
 	if o := payload.Override; o != nil {
 		detail.Override = &ReviewOverrideDTO{
@@ -277,7 +283,7 @@ func errEntryBusy() error {
 // starts it finishes, whether or not the client is still there for the
 // answer: stopping between moving the files and recording them would
 // leave them landed under an entry that says they never did.
-func (l *Ingest) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action, candidateMBID string) (ReviewEntryDTO, []string, error) {
+func (l *Ingest) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action, candidateMBID, mediaType string) (ReviewEntryDTO, []string, error) {
 	release, ok := l.claimEntry(id)
 	if !ok {
 		return ReviewEntryDTO{}, nil, errEntryBusy()
@@ -300,6 +306,9 @@ func (l *Ingest) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action,
 	// Skips and discards touch no files; every other decision can write
 	// into the entry's target library.
 	if action != "skip" && action != "discard" {
+		if err := l.chooseMedium(ctx, &e, &payload, action, mediaType); err != nil {
+			return ReviewEntryDTO{}, nil, err
+		}
 		bareLib := ""
 		if prefix, pid, ok := parseAPIPID(e.LibraryPID); ok && prefix == PrefixLibrary {
 			bareLib = string(pid)
@@ -399,6 +408,53 @@ func (l *Ingest) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action,
 	}
 	l.notifyReview(ctx, e.ID, e.UploadedBy)
 	return reviewDTO(e), warnings, nil
+}
+
+// chooseMedium checks the medium a decision imports the entry as, its
+// own when mediaType is empty, and makes a different one the entry's own
+// so a retry, and every later reader, sees one value. The decision's own
+// row write, partial or whole, persists it.
+func (l *Ingest) chooseMedium(ctx context.Context, e *wdb.ReviewEntry, payload *reviewPayload, action, mediaType string) error {
+	if mediaType != "" {
+		if _, err := requireUploadMediaType(mediaType); err != nil {
+			return err
+		}
+	}
+	medium := cmp.Or(mediaType, e.MediaType)
+	// An entry switched to audiobook by an earlier attempt still holds
+	// the music candidates it was identified with.
+	if action == "approve" && isBookMedia(medium) {
+		return errInvalid("an audiobook is kept as it is: a release to approve is music")
+	}
+	if medium == e.MediaType {
+		return nil
+	}
+	if e.Kind != reviewKindImport {
+		return errInvalid("the entry's items are already in the library; changing their kind is the kind change's job")
+	}
+	if e.LibraryPID != "" {
+		if prefix, pid, ok := parseAPIPID(e.LibraryPID); ok && prefix == PrefixLibrary {
+			lib, err := l.Roots.libraryByPID(ctx, pid)
+			if err != nil && KindOf(err) != KindNotFound {
+				return err
+			}
+			if lib != nil && !slices.Contains(acceptedMediaTypes(lib.MediaType()), medium) {
+				return errInvalid("the entry's library does not take " + medium)
+			}
+		}
+	}
+	if anyLanded(payload.Tracks) {
+		return &Error{Kind: KindConflict, Msg: "part of the entry is already in the library as " + e.MediaType}
+	}
+	e.MediaType = medium
+	// Titled as the entry's openers title a unit of this medium.
+	switch {
+	case len(payload.Tracks) > 1 && isBookMedia(medium):
+		e.Title = l.importBookTitle(ctx, e, payload)
+	case len(payload.Tracks) > 0:
+		e.Title = firstNonEmpty(payload.Tracks[0].Tags["ALBUM"], payload.Tracks[0].Title)
+	}
+	return nil
 }
 
 // markUnofficial sets the locked release-status tag, in the files too
@@ -598,7 +654,7 @@ type BulkOutcome struct {
 func (l *Ingest) DecideReviewBulk(ctx context.Context, uc *UserCtx, entryIDs []string, action string) []BulkOutcome {
 	out := make([]BulkOutcome, 0, len(entryIDs))
 	for _, id := range entryIDs {
-		_, warnings, err := l.DecideReviewEntry(ctx, uc, id, action, "")
+		_, warnings, err := l.DecideReviewEntry(ctx, uc, id, action, "", "")
 		o := BulkOutcome{EntryID: id, OK: err == nil}
 		if err == nil {
 			o.Warnings = warnings

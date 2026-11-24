@@ -570,9 +570,8 @@ class _BucketRow extends ConsumerWidget {
               .source(ref.watch(repositoryProvider).artUrlFor(entityPid))
         : null;
 
-    // A book queues as itself rather than as a bucket query, and an
-    // author's pin would open the music artist page, so a books row is
-    // neither dragged nor given a menu.
+    // A book queues as itself rather than as a bucket query, so a books
+    // row is not dragged; nor does it carry the music rows' menu.
     final books = domain == BrowseDomain.books;
     final copy = _IndexCopy(context, dimension, domain);
     final tile = bucketTile(

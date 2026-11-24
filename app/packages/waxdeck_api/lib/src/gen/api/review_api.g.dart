@@ -74,6 +74,7 @@ abstract interface class ReviewApi {
     String entryId, {
     required String action,
     String? candidateMbid,
+    String? mediaType,
   });
 
   /// `POST /review/queue/{entryId}/identify`: Search again for a review entry.
@@ -124,9 +125,10 @@ abstract interface class ReviewApi {
   ///
   /// Applies one decision to many pending entries in a single call, for
   /// keyboard-driven bulk triage. `approve` uses each entry's own ranked best
-  /// candidate (a per-entry candidate choice needs the single-entry endpoint).
-  /// Entries are decided independently: one failure does not stop the rest, and
-  /// the response reports each outcome.
+  /// candidate (a per-entry candidate choice needs the single-entry endpoint),
+  /// and each entry imports as its own `mediaType` (choosing another needs the
+  /// single-entry endpoint too). Entries are decided independently: one failure
+  /// does not stop the rest, and the response reports each outcome.
   Future<List<ReviewBulkOutcome>> decideReviewBulk(
     List<String> entryIds, {
     required String action,

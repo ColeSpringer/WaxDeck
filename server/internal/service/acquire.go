@@ -149,7 +149,7 @@ func (l *Ingest) runAcquire(ctx context.Context, t *wdb.ToolTask, p toolTaskPara
 		return nil, fmt.Errorf("%w: upload rights were revoked", errToolPermanent)
 	}
 
-	provider, items, err := l.acquireList(ctx, p.URL)
+	provider, items, listTitle, err := l.acquireList(ctx, p.URL)
 	if err != nil {
 		if kindIsPermanent(KindOf(classify(err))) {
 			return nil, fmt.Errorf("%w: %v", errToolPermanent, err)
@@ -164,7 +164,7 @@ func (l *Ingest) runAcquire(ctx context.Context, t *wdb.ToolTask, p toolTaskPara
 		items = items[:acquireMaxItems]
 	}
 
-	entryIDs, staged, _, fetchErr, entriesErr := l.fetchAcquireBatch(ctx, t, p, provider, items, uc, 90, false)
+	entryIDs, staged, _, fetchErr, entriesErr := l.fetchAcquireBatch(ctx, t, p, provider, items, listTitle, uc, 90, false)
 	if entriesErr != nil {
 		// The files staged; opening their review entries did not. Plain
 		// rather than wrapped permanent, matching the pre-extraction
@@ -204,7 +204,7 @@ func (l *Ingest) runAcquire(ctx context.Context, t *wdb.ToolTask, p toolTaskPara
 // over their own errors, the batch-stopping fetch error, and the
 // entry-opening error - separately, because the two mean different
 // things to the caller's retry policy.
-func (l *Ingest) fetchAcquireBatch(ctx context.Context, t *wdb.ToolTask, p toolTaskParams, provider source.Provider, items []acquireItem, uc *UserCtx, progressCap float64, skipItemErrors bool) (entryIDs []string, staged, skipped int, fetchErr, entriesErr error) {
+func (l *Ingest) fetchAcquireBatch(ctx context.Context, t *wdb.ToolTask, p toolTaskParams, provider source.Provider, items []acquireItem, listTitle string, uc *UserCtx, progressCap float64, skipItemErrors bool) (entryIDs []string, staged, skipped int, fetchErr, entriesErr error) {
 	var (
 		docs      []reviewTrackDoc
 		rowByPath = map[string]string{}
@@ -252,7 +252,7 @@ func (l *Ingest) fetchAcquireBatch(ctx context.Context, t *wdb.ToolTask, p toolT
 	if len(docs) == 0 {
 		return nil, 0, skipped, fetchErr, nil
 	}
-	entryIDs, entriesErr = l.openAcquireEntries(ctx, t, p, docs, rowByPath)
+	entryIDs, entriesErr = l.openAcquireEntries(ctx, t, p, docs, listTitle, rowByPath)
 	if entriesErr != nil && fetchErr != nil {
 		// Both halves failed; neither may vanish into the other.
 		l.log.Warn("acquisition batch failed twice over", "fetch", fetchErr, "entries", entriesErr)
@@ -337,10 +337,10 @@ func kindIsPermanent(k ErrorKind) bool {
 	}
 }
 
-// acquireList resolves the URL to its download list: a playlist or
-// channel enumerates, anything else is a single item for the first
-// provider that will fetch it.
-func (l *Ingest) acquireList(ctx context.Context, rawURL string) (source.Provider, []acquireItem, error) {
+// acquireList resolves the URL to its download list and the list's own
+// title: a playlist or channel enumerates, anything else is a single
+// item for the first provider that will fetch it, with no title.
+func (l *Ingest) acquireList(ctx context.Context, rawURL string) (source.Provider, []acquireItem, string, error) {
 	var firstErr error
 	for _, p := range l.sourceProviders {
 		enumerate := p.Enumerate
@@ -364,17 +364,17 @@ func (l *Ingest) acquireList(ctx context.Context, rawURL string) (source.Provide
 			}
 			items = append(items, acquireItem{Title: ep.Title, URL: ep.EnclosureURL, GUID: ep.GUID})
 		}
-		return p, items, nil
+		return p, items, strings.TrimSpace(en.Feed.Title), nil
 	}
 	// Not a playlist or channel any provider recognizes: treat it as a
 	// single item and let the first provider's fetch decide.
 	if len(l.sourceProviders) > 0 {
-		return l.sourceProviders[0], []acquireItem{{URL: rawURL}}, nil
+		return l.sourceProviders[0], []acquireItem{{URL: rawURL}}, "", nil
 	}
 	if firstErr != nil {
-		return nil, nil, firstErr
+		return nil, nil, "", firstErr
 	}
-	return nil, nil, errors.New("no acquisition source is running")
+	return nil, nil, "", errors.New("no acquisition source is running")
 }
 
 // fetchAcquireItem downloads one item into upload staging with the
@@ -437,7 +437,7 @@ func (l *Ingest) fetchAcquireItem(ctx context.Context, provider source.Provider,
 		doc.Tags = tags
 		doc.Title = firstNonEmpty(tags["TITLE"], doc.Title)
 		doc.Artist = tags["ARTIST"]
-		doc.TrackNo = parseIntTag(tags["TRACKNUMBER"])
+		doc.TrackNo = match.ParseOrdinal(tags["TRACKNUMBER"])
 		length = dur
 	}
 	fp, fpSecs := l.fingerprintFile(ctx, final, length)
@@ -506,8 +506,10 @@ func suggestedQueryFor(mediaType string, unit match.Unit) *reviewOverride {
 }
 
 // openAcquireEntries groups the staged files into album units and
-// opens one review entry per unit, linking the upload sessions.
-func (l *Ingest) openAcquireEntries(ctx context.Context, t *wdb.ToolTask, p toolTaskParams, docs []reviewTrackDoc, rowByPath map[string]string) ([]string, error) {
+// opens one review entry per unit, linking the upload sessions. An
+// audiobook listed as several items is one book, in list order, titled
+// by the list.
+func (l *Ingest) openAcquireEntries(ctx context.Context, t *wdb.ToolTask, p toolTaskParams, docs []reviewTrackDoc, listTitle string, rowByPath map[string]string) ([]string, error) {
 	tracks := make([]match.Track, 0, len(docs))
 	docByPath := make(map[string]reviewTrackDoc, len(docs))
 	for _, d := range docs {
@@ -520,8 +522,13 @@ func (l *Ingest) openAcquireEntries(ctx context.Context, t *wdb.ToolTask, p tool
 			Path: d.Path, Tags: tags, DurationSec: float64(d.DurationMS) / 1000,
 		})
 	}
+	book := isBookMedia(p.MediaType) && len(docs) > 1
+	units := []match.Unit{{Tracks: tracks}}
+	if !book {
+		units = match.Cluster(tracks)
+	}
 	var entryIDs []string
-	for _, unit := range match.Cluster(tracks) {
+	for _, unit := range units {
 		unitDocs := make([]reviewTrackDoc, 0, len(unit.Tracks))
 		for _, tr := range unit.Tracks {
 			unitDocs = append(unitDocs, docByPath[tr.Path])
@@ -536,8 +543,12 @@ func (l *Ingest) openAcquireEntries(ctx context.Context, t *wdb.ToolTask, p tool
 			Title:      firstNonEmpty(first.Tags["ALBUM"], first.Title),
 			Artist:     firstNonEmpty(first.Tags["ALBUMARTIST"], first.Artist),
 		}
+		if book {
+			entry.ID = newReviewID()
+			entry.Title = bookUnitTitle(nil, unitDocs, listTitle, entry.ID)
+		}
 		id, err := l.openReviewEntry(ctx, entry, reviewPayload{
-			Tracks: unitDocs, Suggested: suggestedQueryFor(p.MediaType, unit),
+			Tracks: unitDocs, Suggested: suggestedQueryFor(p.MediaType, unit), List: listTitle,
 		}, !p.IdentifyDeclined)
 		if err != nil {
 			return entryIDs, err

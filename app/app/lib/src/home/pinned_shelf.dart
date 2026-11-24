@@ -179,10 +179,7 @@ class PinnedShelf extends ConsumerWidget {
       MusicDimension.albums,
       card.pid,
     ),
-    EntityCardKind.artist => WaxRoute.musicBucket(
-      MusicDimension.artists,
-      card.pid,
-    ),
+    EntityCardKind.artist => artistLocation(card),
     EntityCardKind.releaseGroup => WaxRoute.musicBucket(
       MusicDimension.releaseGroups,
       card.pid,

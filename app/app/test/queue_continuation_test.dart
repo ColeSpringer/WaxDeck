@@ -21,6 +21,7 @@ const _a = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKA';
 const _b = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKB';
 const _mixed = 'tr-01JZX5N8QW3F4V9T2B7KDMIXED1';
 const _book = 'tr-01JZX5N8QW3F4V9T2B7KDBOOK01';
+const _episode = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
 
 const _album = QueueSource(
   kind: QueueSourceKind.album,
@@ -316,6 +317,54 @@ void main() {
 
     expect(h.repo.instantMixCalls, isEmpty);
     expect(h.container.queueState.pids, <String>[_book]);
+  });
+
+  test('an episode is left alone too', () async {
+    final h = _harness(
+      items: <ItemSummary>[
+        testItem(_a),
+        testItem(_episode, mediaType: MediaType.podcast),
+      ],
+    );
+    h.repo.instantMixResult = mix;
+
+    h.container.playback.play(
+      [testItem(_episode, mediaType: MediaType.podcast)],
+      source: const QueueSource(
+        kind: QueueSourceKind.single,
+        label: 'An Episode',
+      ),
+    );
+    await pumpEventQueue();
+
+    expect(h.repo.instantMixCalls, isEmpty);
+    expect(h.container.queueState.pids, <String>[_episode]);
+  });
+
+  test('a mix answer appends only its music', () async {
+    // The server builds mixes from tracks alone; what is appended behind
+    // music is held to that here as well.
+    final h = _harness(
+      items: <ItemSummary>[
+        testItem(_a),
+        testItem(_mixed),
+        testItem(_book, mediaType: MediaType.audiobook),
+        testItem(_episode, mediaType: MediaType.podcast),
+      ],
+    );
+    h.repo.instantMixResult = InstantMix(
+      basis: MixBasis.metadata,
+      items: <ItemSummary>[
+        testItem(_book, mediaType: MediaType.audiobook),
+        testItem(_mixed),
+        testItem(_episode, mediaType: MediaType.podcast),
+      ],
+    );
+
+    h.container.playback.play([testItem(_a)], source: _album);
+    await pumpEventQueue();
+
+    expect(h.container.queueState.pids, <String>[_a, _mixed]);
   });
 
   test('a restored queue continues without knowing what it played', () async {

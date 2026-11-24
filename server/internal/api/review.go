@@ -100,6 +100,9 @@ func reviewDetailJSON(d service.ReviewDetailDTO) ReviewEntryDetail {
 	if d.IdentifyDeclined {
 		out.IdentifyDeclined = ptr(true)
 	}
+	if d.MediumFixed {
+		out.MediumFixed = ptr(true)
+	}
 	out.IdentifyOverride = identifyRequestJSON(d.Override)
 	out.Suggested = identifyRequestJSON(d.Suggested)
 	for _, t := range d.Tracks {
@@ -212,8 +215,12 @@ func (s *Server) DecideReviewEntry(ctx context.Context, req DecideReviewEntryReq
 	if req.Body == nil {
 		return nil, errNoBody()
 	}
+	var mediaType string
+	if req.Body.MediaType != nil {
+		mediaType = string(*req.Body.MediaType)
+	}
 	entry, warnings, err := s.svc.Ingest.DecideReviewEntry(ctx, uc, string(req.EntryId),
-		string(req.Body.Action), deref(req.Body.CandidateMbid))
+		string(req.Body.Action), deref(req.Body.CandidateMbid), mediaType)
 	if err != nil {
 		return nil, err
 	}

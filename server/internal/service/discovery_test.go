@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -43,6 +44,8 @@ type catalogFixtureOptions struct {
 	sources []source.Provider
 	// enrichers is Config.EnrichmentProviders.
 	enrichers []enrich.Provider
+	// podcasts gives the library an episode root, so a test can subscribe.
+	podcasts bool
 }
 
 func newCatalogFixtureWith(t *testing.T, opts catalogFixtureOptions) (context.Context, *Library, *UserCtx) {
@@ -95,14 +98,19 @@ func newCatalogFixtureWith(t *testing.T, opts catalogFixtureOptions) (context.Co
 		t.Fatal(err)
 	}
 	group := supervise.NewGroup(log)
-	svc, err := Open(ctx, Config{
+	cfg := Config{
 		DataDir:             dataDir,
 		Roots:               []Root{{Name: "lib", Path: libDir}},
 		Logger:              log,
 		WorkerLocalPaths:    opts.workerLocalPaths,
 		SourceProviders:     opts.sources,
 		EnrichmentProviders: opts.enrichers,
-	}, store, group)
+	}
+	if opts.podcasts {
+		cfg.PodcastDir = t.TempDir()
+		cfg.PodcastRootName = "podcasts"
+	}
+	svc, err := Open(ctx, cfg, store, group)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -387,4 +395,126 @@ func TestInstantMixCountsExclusions(t *testing.T) {
 	if len(open.Items) == 0 || open.Excluded != 0 {
 		t.Fatalf("open mix = %d items, excluded %d; want items with a zero count", len(open.Items), open.Excluded)
 	}
+}
+
+// spokenWordBesideMusic is the catalog fixture with a book and a followed
+// show beside its tracks. The book shares the ensemble's artist and genre,
+// so the pools drawn by artist and by genre can reach it; an episode has
+// no artist credit or genre, so the random pool is the only one it can
+// enter.
+func spokenWordBesideMusic(t *testing.T) (context.Context, *Library, *UserCtx) {
+	t.Helper()
+	feed := &stubFeed{kind: model.SourceRSS, n: 3, prefix: "Ensemble Talk"}
+	ctx, svc, uc := newCatalogFixtureWith(t, catalogFixtureOptions{
+		podcasts: true,
+		sources:  []source.Provider{feed},
+		extra: func(t *testing.T, dir string) {
+			if _, err := fixtures.GenerateM4B(dir, fixtures.Spec{
+				Name: "ensemble-book", Duration: 2 * time.Second,
+				Tags: map[string]string{
+					"TITLE": "Ensemble Tales", "ALBUM": "Signal Garden",
+					"ARTIST": "Test Ensemble", "ALBUMARTIST": "Test Ensemble", "GENRE": "Ambient",
+				},
+			}); err != nil {
+				t.Fatal(err)
+			}
+		},
+	})
+	if _, _, err := svc.Podcasts.Subscribe(ctx, uc, SubscribeRequest{URL: "https://feeds.example/ensemble", SourceType: "rss"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"audiobook", "podcast"} {
+		page, err := svc.Reads.Items(ctx, uc, ItemFilter{MediaType: kind}, "", 10)
+		if err != nil || len(page.Items) == 0 {
+			t.Fatalf("fixture %s = (%+v, %v), want one beside the tracks", kind, page.Items, err)
+		}
+	}
+	return ctx, svc, uc
+}
+
+// onlyMusic fails the test for any item that is not a track.
+func onlyMusic(t *testing.T, what string, items []ItemSummary) {
+	t.Helper()
+	if len(items) == 0 {
+		t.Fatalf("%s: empty", what)
+	}
+	for _, it := range items {
+		if it.MediaType != "music" {
+			t.Fatalf("%s holds %s %q (%s)", what, it.MediaType, it.Title, it.PID)
+		}
+	}
+}
+
+// What follows music is music: a mix from a track, an artist, an album or
+// a genre leaves out the book sharing the seed's artist and genre, and the
+// episodes its random pool could draw, however far it wanders.
+func TestInstantMixIsMusicOnly(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := spokenWordBesideMusic(t)
+
+	res, err := svc.Reads.Search(ctx, uc, "Test Ensemble", 10)
+	if err != nil || len(res.Artists) == 0 {
+		t.Fatalf("fixture artist = (%+v, %v)", res.Artists, err)
+	}
+	artistPID := res.Artists[0].PID
+	tracks, err := svc.Reads.Items(ctx, uc, ItemFilter{MediaType: "music"}, "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var trackPID, albumPID string
+	for _, it := range tracks.Items {
+		if it.Title == "Amber Waves" {
+			trackPID, albumPID = it.PID, it.AlbumPID
+		}
+	}
+	if trackPID == "" || albumPID == "" {
+		t.Fatalf("fixture track = (%q, %q)", trackPID, albumPID)
+	}
+
+	for _, seed := range []InstantMixInput{
+		{SeedPID: trackPID},
+		{SeedPID: artistPID},
+		{SeedPID: albumPID},
+		{Genre: "Ambient"},
+	} {
+		for _, adv := range []float64{0, 1} {
+			seed.Adventurousness = adv
+			seed.Size = 200
+			mix, err := svc.Similarity.InstantMix(ctx, uc, seed)
+			if err != nil {
+				t.Fatalf("mix %+v: %v", seed, err)
+			}
+			onlyMusic(t, fmt.Sprintf("mix %+v", seed), mix.Items)
+		}
+	}
+}
+
+// The similar-tracks list is held to tracks the same way, on the metadata
+// path every fresh library answers from.
+func TestSimilarTracksMusicOnly(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := spokenWordBesideMusic(t)
+
+	tracks, err := svc.Reads.Items(ctx, uc, ItemFilter{MediaType: "music"}, "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := ""
+	for _, it := range tracks.Items {
+		if it.Title == "Amber Waves" {
+			seed = it.PID
+		}
+	}
+	if seed == "" {
+		t.Fatal("fixture track missing")
+	}
+
+	res, err := svc.Similarity.SimilarTracksFor(ctx, uc, seed, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Basis != BasisMetadata {
+		t.Fatalf("basis = %q, want %q", res.Basis, BasisMetadata)
+	}
+	onlyMusic(t, "similar tracks", res.Items)
 }

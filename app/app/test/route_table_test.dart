@@ -799,6 +799,12 @@ void main() {
     final router = await _pumpApp(tester);
     for (final (location, domain) in <(String, BrowseDomain)>[
       (WaxRoute.artistTracks('ar-1'), BrowseDomain.music),
+      // The artist's own list is music, as the artist page above it is.
+      (
+        '${WaxRoute.artistTracks('ar-1')}'
+            '?${WaxRoute.scopeParam}=${WaxRoute.wholeLibraryScope}',
+        BrowseDomain.music,
+      ),
       (WaxRoute.artistTracks(musicUnknownSegment), BrowseDomain.music),
       (
         WaxRoute.musicBucket(MusicDimension.artists, 'plain-key'),
@@ -862,6 +868,52 @@ void main() {
         dimension,
         reason: bucket,
       );
+    }
+  });
+
+  testWidgets('an artist card opens the page its media has', (tester) async {
+    // A person with only books has no music page: their card opens the
+    // Books author bucket; anyone with music, or a card that names no
+    // media, the music artist page.
+    final router = await _pumpApp(tester);
+    EntityCard card(List<MediaType>? media) => EntityCard(
+      pid: 'ar-1',
+      kind: EntityCardKind.artist,
+      title: 'Ann Writer',
+      mediaTypes: media,
+    );
+    for (final (media, location, screen) in <(List<MediaType>?, String, Type)>[
+      (
+        <MediaType>[MediaType.audiobook],
+        WaxRoute.bookBucket(BookDimension.authors, 'ar-1'),
+        BookBucketScreen,
+      ),
+      (
+        <MediaType>[MediaType.music],
+        WaxRoute.musicBucket(MusicDimension.artists, 'ar-1'),
+        ArtistScreen,
+      ),
+      (
+        <MediaType>[MediaType.audiobook, MediaType.music],
+        WaxRoute.musicBucket(MusicDimension.artists, 'ar-1'),
+        ArtistScreen,
+      ),
+      (
+        <MediaType>[],
+        WaxRoute.musicBucket(MusicDimension.artists, 'ar-1'),
+        ArtistScreen,
+      ),
+      (
+        null,
+        WaxRoute.musicBucket(MusicDimension.artists, 'ar-1'),
+        ArtistScreen,
+      ),
+    ]) {
+      final at = artistLocation(card(media));
+      expect(at, location, reason: '$media');
+      router.go(at);
+      await tester.pumpAndSettle();
+      expect(find.byType(screen), findsOneWidget, reason: '$media');
     }
   });
 

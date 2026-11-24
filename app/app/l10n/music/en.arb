@@ -140,22 +140,13 @@
   "@musicArtistAppearsOn": {
     "description": "Shelf on an artist's screen holding the releases they are credited on without heading."
   },
-  "musicArtistAudiobooksSection": "Audiobooks",
-  "@musicArtistAudiobooksSection": {
-    "description": "Heading over the shelf of an artist's audiobooks on their page, drawn only when they have any; its Show all opens the author's page under Books."
-  },
-  "musicArtistBookCountAtLeast": "{count, plural, =1{1+ book} other{{count}+ books}}",
-  "@musicArtistBookCountAtLeast": {
-    "description": "How many audiobooks an artist's page holds, beside the track count in the line under their name, where the read runs past the page it read, so the number is a floor rather than a total. The whole count reads bookCount.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "musicArtistEditMetadata": "Edit artist",
   "@musicArtistEditMetadata": {
     "description": "Entry in the artist screen's overflow opening the artist editor. Administrators only."
+  },
+  "musicArtistEmptyBooks": "Their audiobooks",
+  "@musicArtistEmptyBooks": {
+    "description": "Button on the empty music page of an artist who only authors audiobooks, opening their page under Books."
   },
   "musicArtistEmptyTitle": "Nothing by this artist",
   "@musicArtistEmptyTitle": {
@@ -180,7 +171,7 @@
   },
   "musicArtistShowAll": "Show all",
   "@musicArtistShowAll": {
-    "description": "Action on an artist's page: beside the tracks heading, opening the full track listing where the page shows only the first few; on the audiobooks shelf, opening the author's page under Books."
+    "description": "Action on an artist's page: beside the tracks heading, opening the full track listing where the page shows only the first few."
   },
   "musicArtistTrackCountAtLeast": "{count, plural, =1{1+ track} other{{count}+ tracks}}",
   "@musicArtistTrackCountAtLeast": {

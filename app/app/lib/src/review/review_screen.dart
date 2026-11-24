@@ -255,10 +255,19 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
       }
       return;
     }
+    // The pane offers no approve for an audiobook, and the server refuses it.
+    if (action == 'approve' &&
+        reviewEntryMedium(ref, entry.id, entry.origin, entry.mediaType) ==
+            MediaType.audiobook) {
+      ref
+          .read(shellMessengerProvider)
+          .show(context.l10n.reviewApproveNotForAudiobook);
+      return;
+    }
     // `a` on the row the pane is showing approves what the pane has
     // selected, or the two controls decide different releases.
     await _decide(
-      entry.id,
+      entry,
       action,
       candidateMbid: action == 'approve'
           ? ref.read(selectedCandidateProvider(entry.id))
@@ -266,16 +275,26 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
     );
   }
 
+  /// Decides [entry]; its medium is read again at every send, a retry
+  /// included, so it is never one the entry's switch no longer offers.
   Future<void> _decide(
-    String entryId,
+    ReviewEntry entry,
     String action, {
     String? candidateMbid,
   }) => ref.read(pendingActionsProvider.notifier).runAll(
     [
-      PendingAction.reviewEntry(entryId),
-      PendingAction.reviewAction(entryId, action),
+      PendingAction.reviewEntry(entry.id),
+      PendingAction.reviewAction(entry.id, action),
     ],
     () async {
+      final entryId = entry.id;
+      final mediaType = reviewDecisionMedium(
+        ref,
+        entryId,
+        entry.origin,
+        entry.mediaType,
+        action,
+      );
       final l10n = context.l10n;
       final messenger = ref.read(shellMessengerProvider);
       final container = ProviderScope.containerOf(context, listen: false);
@@ -283,7 +302,12 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
       try {
         final decided = await ref
             .read(reviewQueueProvider.notifier)
-            .decide(entryId, action, candidateMbid: candidateMbid);
+            .decide(
+              entryId,
+              action,
+              candidateMbid: candidateMbid,
+              mediaType: mediaType,
+            );
         // A key on the row the pane shows moves the pane as its buttons
         // do, the pane having come to that row meanwhile included.
         if (open || widget.openEntryId == entryId) {
@@ -306,7 +330,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
           explainRefusal(l10n, e),
           refused: {entryId: e.code},
           mounted: () => mounted,
-          retry: (_) => _decide(entryId, action, candidateMbid: candidateMbid),
+          retry: (_) => _decide(entry, action, candidateMbid: candidateMbid),
         );
       }
     },
@@ -319,6 +343,23 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
       entry.status == 'pending' &&
       entry.duplicateCount > 0 &&
       const {'approve', 'unofficial'}.contains(action);
+
+  /// Whether a bulk [action] leaves [entry] to its pane for its medium: a
+  /// bulk call carries none, so an entry the pane switched away from its
+  /// own is decided there, and the pane offers no approve for an audiobook.
+  bool _bulkMediumHeld(ReviewEntry entry, String action) {
+    if (entry.status != 'pending') return false;
+    final medium = reviewDecisionMedium(
+      ref,
+      entry.id,
+      entry.origin,
+      entry.mediaType,
+      action,
+    );
+    if (medium == null) return false;
+    return medium != entry.mediaType ||
+        (action == 'approve' && medium == MediaType.audiobook);
+  }
 
   /// How many of the server's warnings one bulk snackbar spells out.
   static const _bulkWarningLines = 3;
@@ -339,27 +380,36 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
   ) {
     // What the a and u keys open rather than decide stays undecided
     // here, and is counted: each is for its own pane.
-    final held = {
+    final duplicates = {
       for (final entry in _entries)
         if (_heldBack(entry, action)) entry.id,
     };
+    final medium = {
+      for (final entry in _entries)
+        if (!duplicates.contains(entry.id) && _bulkMediumHeld(entry, action))
+          entry.id,
+    };
     final ids = [
       for (final id in chosen)
-        if (!held.contains(id)) id,
+        if (!duplicates.contains(id) && !medium.contains(id)) id,
     ];
+    final held = (
+      duplicates: chosen.where(duplicates.contains).length,
+      medium: chosen.where(medium.contains).length,
+    );
     // Every entry it sends, or none: one whose own decision is out holds
     // the whole bulk back rather than going twice.
     return ref.read(pendingActionsProvider.notifier).runAll([
       for (final id in ids) PendingAction.reviewEntry(id),
-    ], () => _sendClaimed(action, ids, chosen.length - ids.length, only));
+    ], () => _sendClaimed(action, ids, held, only));
   }
 
-  /// Sends [ids] and says how it went, [left] being the entries held back
-  /// for their panes.
+  /// Sends [ids] and says how it went, [held] counting the entries held
+  /// back for their panes, by the reason each is.
   Future<void> _sendClaimed(
     String action,
     List<String> ids,
-    int left,
+    ({int duplicates, int medium}) held,
     List<String>? only,
   ) async {
     final l10n = context.l10n;
@@ -398,7 +448,9 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
                     failed.length,
                   ),
           if (reasons.length == 1) reasons.single,
-          if (left > 0) l10n.reviewBulkHeldDuplicates(left),
+          if (held.duplicates > 0)
+            l10n.reviewBulkHeldDuplicates(held.duplicates),
+          if (held.medium > 0) l10n.reviewBulkHeldMedium(held.medium),
           ...warnings.take(_bulkWarningLines),
           if (warnings.length > _bulkWarningLines)
             l10n.reviewBulkMoreWarnings(warnings.length - _bulkWarningLines),

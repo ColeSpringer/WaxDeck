@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -117,5 +119,38 @@ func TestEpisodeDetailCarriesAddedAtBeforeAnyFetch(t *testing.T) {
 	drainFetches(t, h)
 	if got := added(); got == nil || !got.Equal(*before) {
 		t.Errorf("addedAt after the fetch = %v, want it unmoved at %s", got, before)
+	}
+}
+
+// A book uploaded in parts whose tags name only their chapters is one
+// row on the lists Home reads, not one per chapter.
+func TestHomeListsAMultiPartBookOnce(t *testing.T) {
+	t.Parallel()
+	h, bob := joinHarness(t)
+	uploadBookUnit(t, h, bob, "album", "audiobook", "Wren Hollis/The Untitled Hours", untitledBook(t))
+
+	for _, list := range []string{"recently-added", "never-played"} {
+		var rows []ItemSummary
+		query := "?list=" + list + "&limit=100"
+		for {
+			page := browsePage(t, h, query)
+			for _, it := range page.Items {
+				switch it.Title {
+				case "The Untitled Hours", "Chapter 1", "Chapter 2":
+					rows = append(rows, it)
+				}
+			}
+			if page.NextCursor == nil {
+				break
+			}
+			query = "?list=" + list + "&limit=100&cursor=" + url.QueryEscape(*page.NextCursor)
+		}
+		if len(rows) != 1 || rows[0].Title != "The Untitled Hours" || !strings.HasPrefix(rows[0].Pid, "bk-") {
+			got := make([]string, 0, len(rows))
+			for _, it := range rows {
+				got = append(got, it.Pid+" "+it.Title)
+			}
+			t.Errorf("%s lists %q, want the book once", list, got)
+		}
 	}
 }

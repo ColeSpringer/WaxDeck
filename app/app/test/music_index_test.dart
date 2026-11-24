@@ -1847,11 +1847,9 @@ void main() {
       expect(drill.mediaType, MediaType.music);
     });
 
-    testWidgets('the artist page still reads the whole library', (
-      tester,
-    ) async {
-      // Reached from search, mixes and the editor, where the medium is
-      // unknown: an author-only artist must not open to an empty page.
+    testWidgets('the artist page reads music', (tester) async {
+      // An author's books are on their Books page, never under a Music
+      // title.
       final repository = FakeRepository()
         ..facetItems['artist 1'] = <ItemSummary>[_track('Gullwing')];
       await _pump(tester, const ArtistScreen(pid: 'ar-1'), repository);
@@ -1860,7 +1858,10 @@ void main() {
         (call) => call.facet == 'artist',
       );
       expect(drills, isNotEmpty);
-      expect(drills.map((call) => call.mediaType), everyElement(isNull));
+      expect(
+        drills.map((call) => call.mediaType),
+        everyElement(MediaType.music),
+      );
       expect(
         repository.facetScopes.where((scope) => scope.$2 == 'kind'),
         isEmpty,

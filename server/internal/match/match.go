@@ -21,8 +21,11 @@ type Track struct {
 	// upload id). The engine treats it as opaque.
 	PID string
 	// Path is the file's location, used only for directory clustering
-	// when tags are missing.
+	// when tags are missing, and for order.
 	Path string
+	// Sent says Path is where the file was sent from in an upload batch,
+	// so its folders order the unit (CompareTracks).
+	Sent bool
 	// Tags holds the file's current metadata.
 	Tags map[string]string
 	// DurationSec is the decoded audio length in seconds (0 = unknown).

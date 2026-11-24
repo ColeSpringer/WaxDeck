@@ -229,7 +229,7 @@ class _RecordingNowPlaying extends NowPlayingController {
   Future<void> playEntryAt(int index) async => takenBack.add(index);
 
   @override
-  void play(
+  bool play(
     List<ItemSummary> items, {
     required QueueSource source,
     int startIndex = 0,
@@ -239,6 +239,7 @@ class _RecordingNowPlaying extends NowPlayingController {
     for (final item in items) {
       queue.add((pid: item.pid, positionMs: positionMs));
     }
+    return items.isNotEmpty;
   }
 }
 

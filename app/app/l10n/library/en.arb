@@ -420,7 +420,7 @@
   },
   "libraryKindToBook": "Treat as audiobook",
   "@libraryKindToBook": {
-    "description": "Menu row on a music track (item menu, player More menu, metadata actions) that turns it into an audiobook."
+    "description": "Button in the metadata editor of a music track that turns it into an audiobook."
   },
   "libraryKindToBookBody": "{count, plural, =1{This track becomes an audiobook in Books.} other{{count} tracks become one audiobook in Books, in order.}} Plays, stars and playlists come with it.",
   "@libraryKindToBookBody": {

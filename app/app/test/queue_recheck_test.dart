@@ -188,20 +188,57 @@ void main() {
 
     await _settle(tester);
     // One lookup for the queue: the converted item reads as what it is at
-    // once, and the folded one, departed, leaves while what was playing
-    // plays on.
+    // once and, being another kind than the queue now, leaves it, as the
+    // folded one, departed, does; what was playing plays on.
     expect(s.repo.resolvedItemPids.last, unorderedEquals([_c, _a, _b]));
     expect(row.read().value?.mediaType, MediaType.audiobook);
-    expect(_queued(s), [_c, _a]);
+    expect(_queued(s), [_c]);
     expect(s.container.read(nowPlayingProvider).entry?.pid, _c);
     expect(s.engine.playing, isTrue);
-
-    await playback.next();
-    await tester.pump();
-    final now = s.container.read(nowPlayingProvider);
-    expect(now.entry?.pid, _a);
-    expect(now.session?.item.mediaType, MediaType.audiobook);
     row.close();
+    await _end(tester, s);
+  });
+
+  testWidgets('a playing entry that changed kind plays on as what it is', (
+    tester,
+  ) async {
+    final s = _session();
+    final playback = s.container.read(nowPlayingProvider.notifier);
+    playback.play([testItem(_a), testItem(_c)], source: _album);
+    await tester.pump();
+
+    _changedElsewhere(s.repo, folded: _b);
+    await s.sync.pullCatalog();
+    await _settle(tester);
+
+    expect(_queued(s), [_a, _c]);
+    expect(s.container.read(nowPlayingProvider).entry?.pid, _a);
+    expect(playback.summaryFor(_a)?.mediaType, MediaType.audiobook);
+    await _end(tester, s);
+  });
+
+  testWidgets('a playlist lets an entry that changed kind go too', (
+    tester,
+  ) async {
+    // The conversion was somebody's act, as a watched one is: the list
+    // it sat in does not keep it.
+    final s = _session();
+    final playback = s.container.read(nowPlayingProvider.notifier);
+    playback.play(
+      [testItem(_c), testItem(_a)],
+      source: const QueueSource(
+        kind: QueueSourceKind.playlist,
+        label: 'Mine',
+        pid: 'pl-1',
+      ),
+    );
+    await tester.pump();
+
+    _changedElsewhere(s.repo, folded: _b);
+    await s.sync.pullCatalog();
+    await _settle(tester);
+
+    expect(_queued(s), [_c]);
     await _end(tester, s);
   });
 
@@ -642,8 +679,7 @@ void main() {
     expect(playback.summaryFor(_a)?.mediaType, MediaType.music);
 
     await _anotherPass(tester, s);
-    expect(_queued(s), [_c, _a]);
-    expect(playback.summaryFor(_a)?.mediaType, MediaType.audiobook);
+    expect(_queued(s), [_c]);
     await _end(tester, s);
   });
 

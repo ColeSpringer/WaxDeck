@@ -29,9 +29,22 @@
   "@reviewActionUnofficial": {
     "description": "Files the entry as a release no catalogue lists: a bootleg, a rip, a demo."
   },
+  "reviewApproveNotForAudiobook": "Approve is not offered for an audiobook; keep it as is.",
+  "@reviewApproveNotForAudiobook": {
+    "description": "Snackbar when the a key is pressed on a queue row whose entry is to be imported as an audiobook: a MusicBrainz release is music, so only the entry's other decisions apply."
+  },
   "reviewBulkHeldDuplicates": "{count, plural, =1{1 entry holds duplicates; open it to decide} other{{count} entries hold duplicates; open each to decide}}",
   "@reviewBulkHeldDuplicates": {
     "description": "Line of a bulk Approve's snackbar for the selected entries it left undecided because they hold files the library already has: the entry's own pane says which decisions those leave open. {count} is how many were left.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewBulkHeldMedium": "{count, plural, =1{1 entry is set to a medium a bulk decision does not cover; open it to decide} other{{count} entries are set to a medium a bulk decision does not cover; open each to decide}}",
+  "@reviewBulkHeldMedium": {
+    "description": "Line of a bulk decision's snackbar for the selected entries it left undecided because their medium, as the entry's own pane has it set, is not one a bulk decision sends (it carries none, and Approve is not offered for an audiobook). {count} is how many were left.",
     "placeholders": {
       "count": {
         "type": "int"
@@ -409,6 +422,18 @@
   "reviewMatchingSinglesHelp": "Only applies while matching is automatic",
   "@reviewMatchingSinglesHelp": {
     "description": "Second line under the singles toggle: the switch is inert under the review and off modes."
+  },
+  "reviewMedium": "Import as",
+  "@reviewMedium": {
+    "description": "Accessible name of the music or audiobook switch on the decision bar of an uploaded or acquired entry: the medium its files are imported as."
+  },
+  "reviewMediumAudiobook": "Audiobook",
+  "@reviewMediumAudiobook": {
+    "description": "Segment of the entry's medium switch: import the unit as one audiobook."
+  },
+  "reviewMediumMusic": "Music",
+  "@reviewMediumMusic": {
+    "description": "Segment of the entry's medium switch: import the unit as music."
   },
   "reviewNoCandidatesEmptyMessage": "Keep them as they are, or skip.",
   "@reviewNoCandidatesEmptyMessage": {

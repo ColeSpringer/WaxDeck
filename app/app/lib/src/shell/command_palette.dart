@@ -207,9 +207,11 @@ class _CommandPaletteDialog extends ConsumerWidget {
           ),
       // Beneath the destinations: a destination match is exact and a hit
       // is a guess.
+      // By kind and pid: a person credited on music and on books is in
+      // both people groups under one pid, and each row opens its own page.
       for (final hit in _hits(results))
         entry(
-          id: 'hit-${hit.pid}',
+          id: 'hit-${hit.kind}-${hit.pid}',
           label: hit.title,
           detail: hit.subtitle,
           glyph: searchHitGlyph(hit.kind),
@@ -326,8 +328,8 @@ class _CommandPaletteDialog extends ConsumerWidget {
 
   /// The hits, round-robin by kind: a flat cut over the concatenation
   /// keeps the head, so several matching artists would leave no room for
-  /// the album anybody was after. The artist or album named as the query
-  /// leads, as it does the search screen, and is not taken twice.
+  /// the album anybody was after. The artist, author or album named as the
+  /// query leads, as it does the search screen, and is not taken twice.
   List<SearchHit> _hits(SearchResults? results) {
     if (results == null) return const <SearchHit>[];
     final byKind = <List<SearchHit>>[
@@ -337,7 +339,7 @@ class _CommandPaletteDialog extends ConsumerWidget {
     final taken = <SearchHit>[?top];
     for (var depth = 0; depth < kPaletteHitsPerKind; depth++) {
       for (final hits in byKind) {
-        if (depth >= hits.length || hits[depth].pid == top?.pid) continue;
+        if (depth >= hits.length || identical(hits[depth], top)) continue;
         taken.add(hits[depth]);
         if (taken.length == kPaletteHitLimit) return taken;
       }

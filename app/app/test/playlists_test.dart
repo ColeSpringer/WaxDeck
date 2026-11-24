@@ -1404,6 +1404,7 @@ void main() {
     final repo = FakeRepository(items: const [_track]);
     repo.previewResult = const PlaylistPreview(items: [_track], total: 42);
     await _pump(tester, repo, const RuleEditorScreen(createName: 'Best of'));
+    await _dropMusicStart(tester);
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
     await tester.pumpAndSettle();
@@ -1433,6 +1434,70 @@ void main() {
     expect(condition.field, 'rating');
     expect(condition.op, 'gte');
     expect(condition.value, '80');
+  });
+
+  testWidgets('a new rule set is saved as music', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Fresh'));
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleSave));
+    await tester.pumpAndSettle();
+    final condition = repo.playlistsByPid.values
+        .singleWhere((p) => p.name == 'Fresh')
+        .rule!
+        .root
+        .nodes
+        .single;
+    expect(
+      [condition.field, condition.op, condition.value],
+      ['mediaType', 'is', 'music'],
+    );
+  });
+
+  testWidgets('a new rule set\'s music condition is removable', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
+    await _pump(tester, repo, const RuleEditorScreen(createName: 'Bare'));
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.ruleConditionRemove(0)),
+      findsOneWidget,
+    );
+    await _dropMusicStart(tester);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.ruleConditionRemove(0)),
+      findsNothing,
+    );
+  });
+
+  testWidgets('editing a rule without the music condition does not add it', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    final created = await repo.createPlaylist(
+      name: 'Rated',
+      kind: 'smart',
+      rule: const SmartRule(
+        root: RuleNode.all([
+          RuleNode.condition(field: 'rating', op: 'gte', value: '60'),
+        ]),
+      ),
+    );
+    await _pump(tester, repo, RuleEditorScreen(editing: created));
+
+    // Saved untouched, the rule set is the one it opened with.
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleSave));
+    await tester.pumpAndSettle();
+    final root = repo.playlistsByPid[created.pid]!.rule!.root;
+    expect(root.type, 'all');
+    expect(
+      [
+        for (final node in root.nodes)
+          (node.type, node.field, node.op, node.value),
+      ],
+      [('condition', 'rating', 'gte', '60')],
+    );
   });
 
   testWidgets('editing a rule pops with the updated playlist in place', (
@@ -1678,6 +1743,7 @@ void main() {
     final repo = FakeRepository(items: const [_track]);
     repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
     await _pump(tester, repo, const RuleEditorScreen(createName: 'Fresh'));
+    await _dropMusicStart(tester);
 
     // Title and Rating both open on "is", so the operator cannot tell the
     // box it is a new one; the draft's value goes with the field, and the
@@ -1944,6 +2010,7 @@ void main() {
       ),
     );
     await _pump(tester, repo, const RuleEditorScreen(createName: 'The rest'));
+    await _dropMusicStart(tester);
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
     await tester.pumpAndSettle();
@@ -2009,6 +2076,7 @@ void main() {
     final repo = FakeRepository(items: const [_track]);
     repo.previewResult = const PlaylistPreview(items: [_track], total: 7);
     await _pump(tester, repo, const RuleEditorScreen(createName: 'Recent'));
+    await _dropMusicStart(tester);
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
     await tester.pumpAndSettle();
@@ -3290,6 +3358,14 @@ Future<void> _pick(
   await tester.tap(find.bySemanticsIdentifier(semanticsId));
   await tester.pumpAndSettle();
   await tester.tap(find.text(label).last);
+  await tester.pumpAndSettle();
+}
+
+/// Removes the music condition a new rule set opens with.
+Future<void> _dropMusicStart(WidgetTester tester) async {
+  await tester.tap(
+    find.bySemanticsIdentifier(SemanticsIds.ruleConditionRemove(0)),
+  );
   await tester.pumpAndSettle();
 }
 

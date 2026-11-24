@@ -557,6 +557,7 @@ func (s *Server) Search(ctx context.Context, req SearchRequestObject) (SearchRes
 	return Search200JSONResponse{
 		Query:     res.Query,
 		Artists:   searchHitsJSON(res.Artists),
+		Authors:   searchHitsJSON(res.Authors),
 		Albums:    searchHitsJSON(res.Albums),
 		Tracks:    searchHitsJSON(res.Tracks),
 		Books:     searchHitsJSON(res.Books),
@@ -591,6 +592,13 @@ func (s *Server) ResolveEntities(ctx context.Context, req ResolveEntitiesRequest
 			card.Year = ptr(c.Year)
 		}
 		card.ItemCount = c.ItemCount
+		if c.MediaTypes != nil {
+			media := make([]MediaType, 0, len(c.MediaTypes))
+			for _, m := range c.MediaTypes {
+				media = append(media, MediaType(m))
+			}
+			card.MediaTypes = &media
+		}
 		out.Entities = append(out.Entities, card)
 	}
 	return ResolveEntities200JSONResponse(out), nil

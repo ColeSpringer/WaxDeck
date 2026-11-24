@@ -4763,10 +4763,15 @@ mixin _ReviewCalls on _WaxDeckTransport implements ReviewApi {
     String entryId, {
     required String action,
     String? candidateMbid,
+    String? mediaType,
   }) => _guard(() async {
     final response = await _decideReviewEntry(
       entryId,
-      body: ReviewDecision(action: action, candidateMbid: candidateMbid),
+      body: ReviewDecision(
+        action: action,
+        candidateMbid: candidateMbid,
+        mediaType: mediaType,
+      ),
     );
     return _decode(
       response,

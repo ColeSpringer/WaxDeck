@@ -542,8 +542,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     List<Widget> stations,
     List<Widget> directory,
   ) {
-    // The artist or album named as the query leads, above everything. It
-    // stays in its group too, so the rows below keep their places and ids.
+    // The artist, author or album named as the query leads, above
+    // everything. It stays in its group too, so the rows below keep their
+    // places and ids.
     final top = topSearchHit(results, scope);
     // Over every track hit rather than the ones a capped group shows, so
     // opening the group reads nothing a drawn row has not.
@@ -644,9 +645,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// The top result: its heading and its row, or nothing without one.
   List<Widget>? _topResult(SearchHit? hit) {
     if (hit == null) return null;
-    final kind = hit.kind == 'artist'
-        ? SearchHitKind.artists
-        : SearchHitKind.albums;
+    final kind = switch (hit.kind) {
+      'artist' => SearchHitKind.artists,
+      'author' => SearchHitKind.authors,
+      _ => SearchHitKind.albums,
+    };
     return <Widget>[
       SliverPadding(
         padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s8),
@@ -674,8 +677,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     int? playCount,
   }) {
     // What the row's overflow holds follows the kind. An album gets the
-    // release menu (pin, mix, share); an artist or a book pins, which is
-    // all their pid supports from here; a track and an episode get the
+    // release menu (pin, mix, share); an artist, an author or a book pins,
+    // which is all their pid supports from here; a track and an episode get the
     // item menu, which always has something for a bare pid - a hit
     // carries no handle to its container, so there is nowhere else for
     // its row to go.
@@ -686,7 +689,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         pid: hit.pid,
         title: hit.title,
       ),
-      'artist' || 'book' => () => showPinSheet(
+      'artist' || 'author' || 'book' => () => showPinSheet(
         context,
         ref,
         targets: <PinTarget>[(pid: hit.pid, what: hit.kind, name: hit.title)],

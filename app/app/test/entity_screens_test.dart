@@ -758,59 +758,6 @@ void main() {
       expect(repository.detachCalls.single.writeBack, isTrue);
     });
 
-    testWidgets(
-      'an uploader is offered the change only on what they may edit',
-      (tester) async {
-        final repository =
-            FakeRepository(
-                sessionState: const SessionState(
-                  authenticated: true,
-                  user: WaxDeckUser(
-                    id: 'us-2',
-                    username: 'sam',
-                    roles: <String>['user'],
-                    uploadEnabled: true,
-                  ),
-                ),
-              )
-              ..mayCurateItems = false
-              ..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)];
-        await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
-
-        await tester.tap(_byId(SemanticsIds.albumTrackMore(0)));
-        await tester.pumpAndSettle();
-        expect(_byId(SemanticsIds.itemMenuSheet('tr-One')), findsOneWidget);
-        expect(_byId(SemanticsIds.itemMenuKindBook), findsNothing);
-      },
-    );
-
-    testWidgets('a track row becomes an audiobook, and the book opens', (
-      tester,
-    ) async {
-      final repository = FakeRepository(sessionState: _adminSession)
-        ..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)];
-      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
-
-      await tester.tap(_byId(SemanticsIds.albumTrackMore(0)));
-      await tester.pumpAndSettle();
-      await tester.tap(_byId(SemanticsIds.itemMenuKindBook));
-      await tester.pumpAndSettle();
-      expect(find.text('Make this an audiobook?'), findsOneWidget);
-      expect(repository.setKindCalls, isEmpty);
-
-      await tester.tap(_byId(SemanticsIds.kindConfirm));
-      await tester.pump();
-      await tester.pump(kindChangePoll);
-      await tester.pumpAndSettle();
-      expect(repository.setKindCalls.single.pids, ['tr-One']);
-      expect(repository.setKindCalls.single.mediaType, 'audiobook');
-      expect(repository.setKindCalls.single.writeBack, isFalse);
-      expect(
-        find.byWidgetPredicate((w) => w is BookScreen && w.pid == 'bk-One'),
-        findsOneWidget,
-      );
-    });
-
     testWidgets('an album becomes one audiobook from its overflow', (
       tester,
     ) async {
@@ -1160,7 +1107,6 @@ void main() {
             'the row menu must actually open for the assertion below to mean anything',
       );
       expect(_byId(SemanticsIds.itemMenuDetach), findsNothing);
-      expect(_byId(SemanticsIds.itemMenuKindBook), findsNothing);
     });
   });
 
@@ -1653,7 +1599,7 @@ void main() {
       await _expectRefreshKeepsRows(tester, container, repository, (
         dimension: MusicDimension.artists,
         segment: 'ar-1',
-        domain: BrowseDomain.wholeLibrary,
+        domain: BrowseDomain.music,
       ));
     });
 
@@ -2228,16 +2174,22 @@ void main() {
       mediaType: MediaType.audiobook,
       title: 'A long book $n',
       artist: 'Nightjar',
+      artistPid: 'ar-1',
       durationMs: 43200000,
     );
 
-    testWidgets('an artist\'s page splits its tracks from its books', (
+    /// The media types the artist's own reads asked for.
+    List<MediaType?> artistReads(FakeRepository repository) => <MediaType?>[
+      for (final call in repository.listItemsCalls)
+        if (call.facet == 'artist' && call.facetKey == '1') call.mediaType,
+    ];
+
+    testWidgets('an artist with tracks and books lists only music', (
       tester,
     ) async {
-      // A bucket counts whatever carried the artist, and a book carries
-      // one. The page reads it all, so an author still gets their books,
-      // but each medium is counted and listed as itself: the music index
-      // says "3 tracks" and so does this page.
+      // A bucket holds whatever carried the artist, and a book carries
+      // one; the page asks for music, so an author's books stay on
+      // their Books page.
       final repository = FakeRepository()
         ..facetItems['artist 1'] = <ItemSummary>[
           _track('One'),
@@ -2252,12 +2204,17 @@ void main() {
         repository,
       );
 
-      expect(find.textContaining('3 tracks · 2 books'), findsOneWidget);
+      expect(artistReads(repository), isNotEmpty);
+      expect(artistReads(repository), everyElement(MediaType.music));
+      expect(find.textContaining('3 tracks · '), findsOneWidget);
+      expect(find.textContaining('book'), findsNothing);
+      expect(find.text('Audiobooks'), findsNothing);
       expect(_rowTitles(tester), ['One', 'Two', 'Three']);
-      expect(find.text('Tracks'), findsOneWidget);
-      expect(find.text('Audiobooks'), findsOneWidget);
       for (final pid in <String>['bk-1', 'bk-2']) {
-        expect(find.bySemanticsIdentifier(SemanticsIds.book(pid)), findsOne);
+        expect(
+          find.bySemanticsIdentifier(SemanticsIds.book(pid)),
+          findsNothing,
+        );
       }
 
       await tester.tap(find.bySemanticsIdentifier(SemanticsIds.entityPlay));
@@ -2271,12 +2228,102 @@ void main() {
       await _stop(tester, container);
     });
 
-    testWidgets('the books shelf goes to the author\'s books', (tester) async {
+    testWidgets('an artist\'s plays queue music alone', (tester) async {
+      // Play, Shuffle and a top track queue the page's read, which is
+      // music, under the scope the read was made in.
+      const episode = ItemSummary(
+        pid: 'ep-1',
+        mediaType: MediaType.podcast,
+        title: 'An episode',
+        artist: 'Nightjar',
+        durationMs: 3600000,
+      );
       final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[
+          book('1'),
+          _track('One'),
+          episode,
+          _track('Two'),
+        ];
+      final container = await _pump(
+        tester,
+        const ArtistScreen(pid: 'ar-1'),
+        repository,
+      );
+      QueueState queue() => container.read(queueControllerProvider);
+
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.entityPlay));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(queue().pids, ['tr-One', 'tr-Two']);
+      expect(queue().currentPid, 'tr-One');
+      expect(queue().source.mediaType, MediaType.music);
+      await _stop(tester, container);
+
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.entityShuffle));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(queue().pids.toSet(), {'tr-One', 'tr-Two'});
+      await _stop(tester, container);
+
+      await tester.tap(find.text('Two'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(queue().pids, ['tr-One', 'tr-Two']);
+      expect(queue().currentPid, 'tr-Two');
+      await _stop(tester, container);
+    });
+
+    testWidgets('an artist location that names the whole library still '
+        'lists music', (tester) async {
+      // The editor and the health folds link with the medium unknown;
+      // the artist page is music whatever the location says.
+      tester.view.physicalSize = const Size(900, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      tester.platformDispatcher.defaultRouteNameTestValue =
+          WaxRoute.musicBucket(
+            MusicDimension.artists,
+            'ar-1',
+            wholeLibrary: true,
+          );
+      addTearDown(tester.platformDispatcher.clearDefaultRouteNameTestValue);
+      final repository = FakeRepository(sessionState: _adminSession)
         ..facetItems['artist 1'] = <ItemSummary>[_track('One'), book('1')];
+      await pumpWholeApp(tester, container: appContainer(repo: repository));
+
+      expect(find.byType(ArtistScreen), findsOneWidget);
+      expect(artistReads(repository), isNotEmpty);
+      expect(artistReads(repository), everyElement(MediaType.music));
+      expect(find.text('Audiobooks'), findsNothing);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.book('bk-1')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('an author with only books is a music page with nothing on '
+        'it but a door to their books', (tester) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[book('1'), book('2')]
+        ..entityCards['ar-1'] = const EntityCard(
+          pid: 'ar-1',
+          kind: EntityCardKind.artist,
+          title: 'Nightjar',
+          mediaTypes: <MediaType>[MediaType.audiobook],
+        );
       await _pump(tester, const ArtistScreen(pid: 'ar-1'), repository);
 
-      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.entityAllBooks));
+      expect(find.text('Nothing by this artist'), findsOneWidget);
+      expect(find.text('Audiobooks'), findsNothing);
+      expect(_byId(SemanticsIds.book('bk-1')), findsNothing);
+      expect(_rowTitles(tester), isEmpty);
+      expect(
+        tester.getSemantics(_byId(SemanticsIds.entityPlay)),
+        isSemantics(hasEnabledState: true, isEnabled: false),
+      );
+
+      await tester.tap(_byId(SemanticsIds.entityAuthorBooks));
       await tester.pumpAndSettle();
       final page = tester.widget<BookBucketScreen>(
         find.byType(BookBucketScreen),
@@ -2284,65 +2331,23 @@ void main() {
       expect((page.dimension, page.segment), (BookDimension.authors, 'ar-1'));
     });
 
-    testWidgets('a cover on the books shelf resumes its book in place, and '
-        'its menu carries the book\'s verbs', (tester) async {
-      const authored = ItemSummary(
-        pid: 'bk-1',
-        mediaType: MediaType.audiobook,
-        title: 'A long book 1',
-        artist: 'Nightjar',
-        artistPid: 'ar-1',
-        durationMs: 43200000,
-      );
-      final repository = FakeRepository()
-        ..facetItems['artist 1'] = <ItemSummary>[_track('One'), authored]
-        ..playPositions['bk-1'] = 600000;
-      final container = await _pump(
-        tester,
-        const ArtistScreen(pid: 'ar-1'),
-        repository,
-      );
-
-      await semanticsPlay(
-        tester,
-        _byId(SemanticsIds.book('bk-1')),
-        playId: SemanticsIds.bookPlay('bk-1'),
-        label: 'Resume A long book 1',
-      );
-      expect(container.read(queueControllerProvider).pids, ['bk-1']);
-      expect(find.byType(ArtistScreen), findsOneWidget);
-      await _stop(tester, container);
-
-      await rightClick(tester, _byId(SemanticsIds.book('bk-1')));
-      expect(_byId(SemanticsIds.itemMenuPlay), findsOneWidget);
-      expect(_byId(SemanticsIds.itemMenuGoAuthor), findsOneWidget);
-    });
-
-    testWidgets('an author with no tracks draws the books shelf alone', (
+    testWidgets('a music artist with nothing listed offers no books door', (
       tester,
     ) async {
       final repository = FakeRepository()
-        ..facetItems['artist 1'] = <ItemSummary>[book('1'), book('2')];
+        ..entityCards['ar-1'] = const EntityCard(
+          pid: 'ar-1',
+          kind: EntityCardKind.artist,
+          title: 'Nightjar',
+          mediaTypes: <MediaType>[MediaType.music],
+        );
       await _pump(tester, const ArtistScreen(pid: 'ar-1'), repository);
 
-      expect(find.textContaining('2 books'), findsOneWidget);
-      expect(find.textContaining('tracks'), findsNothing);
-      expect(find.text('Tracks'), findsNothing);
-      expect(_rowTitles(tester), isEmpty);
-      expect(find.text('Audiobooks'), findsOneWidget);
+      expect(find.text('Nothing by this artist'), findsOneWidget);
+      expect(_byId(SemanticsIds.entityAuthorBooks), findsNothing);
     });
 
-    testWidgets('a music artist draws no books shelf', (tester) async {
-      final repository = FakeRepository()
-        ..facetItems['artist 1'] = <ItemSummary>[_track('One')];
-      await _pump(tester, const ArtistScreen(pid: 'ar-1'), repository);
-
-      expect(find.textContaining('1 track · '), findsOneWidget);
-      expect(find.textContaining('book'), findsNothing);
-      expect(find.text('Audiobooks'), findsNothing);
-    });
-
-    testWidgets('an artist bigger than a page hands the queue its cursor', (
+    testWidgets('an artist bigger than a page is a window over it', (
       tester,
     ) async {
       final repository = FakeRepository()
@@ -2362,6 +2367,10 @@ void main() {
       final source = container.read(queueControllerProvider).source;
       expect(source.rolling, isTrue, reason: 'the queue is a window over it');
       expect(source.pid, 'ar-1');
+      // The page's read is music, so its cursor is the draw's: the window
+      // goes on from where the page stopped, under the same scope.
+      expect(source.mediaType, MediaType.music);
+      expect(source.cursor, '${MusicItemsController.pageSize}');
       await _stop(tester, container);
     });
   });

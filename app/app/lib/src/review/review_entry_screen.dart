@@ -14,6 +14,7 @@ import '../shell/router.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import '../uploads/uploads_controller.dart' show uploadTargetsProvider;
 import '../uploads/uploads_screen.dart';
 import 'review_controller.dart';
 
@@ -258,10 +259,23 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
         final container = ProviderScope.containerOf(context, listen: false);
         final history = ref.read(waxHistoryProvider);
         final ReviewDecideResult decided;
+        final detail = ref.read(reviewEntryProvider(widget.entryId)).value;
         try {
           decided = await ref
               .read(reviewEntryProvider(widget.entryId).notifier)
-              .decide(action, candidateMbid: candidateMbid);
+              .decide(
+                action,
+                candidateMbid: candidateMbid,
+                mediaType: detail == null
+                    ? null
+                    : reviewDecisionMedium(
+                        ref,
+                        widget.entryId,
+                        detail.origin,
+                        detail.mediaType,
+                        action,
+                      ),
+              );
         } on WaxDeckApiException catch (e) {
           // A `conflict` names the file the library cannot take, which the
           // table's "something changed first" would hide.
@@ -324,6 +338,20 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
         PendingAction.reviewAction(widget.entryId, action),
       ], work);
 
+  /// The targets are read only for an entry that names a library: no
+  /// other entry's media depend on them. A failed read knows no library,
+  /// so the server's answer decides.
+  List<MediaType> _mediaOffered(ReviewEntryDetail detail) =>
+      reviewDetailMedia(detail, () => ref.watch(uploadTargetsProvider));
+
+  /// The reviewer's pick while the switch still offers it, else the entry's own.
+  MediaType _chosenMedium(ReviewEntryDetail detail) {
+    final chosen = ref.watch(selectedMediumProvider(widget.entryId));
+    return chosen != null && _mediaOffered(detail).contains(chosen)
+        ? chosen
+        : detail.mediaType;
+  }
+
   @override
   Widget build(BuildContext context) {
     final pending = ref.watch(pendingActionsProvider);
@@ -351,6 +379,11 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
             child: _ActionBar(
               detail: value,
               candidate: _selectedCandidate(value),
+              medium: _chosenMedium(value),
+              media: _mediaOffered(value),
+              onMedium: ref
+                  .read(selectedMediumProvider(widget.entryId).notifier)
+                  .select,
               busy: pending.contains(PendingAction.reviewEntry(widget.entryId)),
               busyBy: (action) => pending.contains(
                 PendingAction.reviewAction(widget.entryId, action),
@@ -399,9 +432,10 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
         ],
         // Ungated on poor results: a right-looking guess can still be
         // the wrong release. Music only, because the identify worker
-        // returns immediately for anything else.
+        // returns immediately for anything else, so the medium the switch
+        // shows decides it.
         if (detail.status == 'pending' &&
-            detail.mediaType == MediaType.music) ...<Widget>[
+            _chosenMedium(detail) == MediaType.music) ...<Widget>[
           const SizedBox(height: WaxSpace.s16),
           _IdentifySearch(
             key: ValueKey<String>(widget.entryId),
@@ -536,6 +570,9 @@ class _ActionBar extends StatelessWidget {
   const _ActionBar({
     required this.detail,
     required this.candidate,
+    required this.medium,
+    required this.media,
+    required this.onMedium,
     required this.busy,
     required this.busyBy,
     required this.onDecide,
@@ -544,6 +581,13 @@ class _ActionBar extends StatelessWidget {
 
   final ReviewEntryDetail detail;
   final ReviewCandidate? candidate;
+
+  /// The medium the entry will be imported as, and the switch's setter.
+  final MediaType medium;
+  final ValueChanged<MediaType> onMedium;
+
+  /// What the switch offers; with one, the switch is left out.
+  final List<MediaType> media;
 
   /// Whether a decision is in flight, and which action's: that one draws
   /// busy and no other takes a press.
@@ -568,7 +612,10 @@ class _ActionBar extends StatelessWidget {
     final allCopies =
         detail.tracks.isNotEmpty &&
         detail.tracks.every((t) => t.duplicate?.kind == 'content');
-    final staged = detail.origin == 'upload' || detail.origin == 'acquisition';
+    final staged = reviewMediumChangeable(detail.origin);
+    // A MusicBrainz release is music: the server refuses approving a unit
+    // as an audiobook, so the entry does not offer it.
+    final audiobook = medium == MediaType.audiobook;
     final discard = WaxButton(
       label: l10n.reviewActionDiscard,
       kind: WaxButtonKind.destructive,
@@ -608,21 +655,49 @@ class _ActionBar extends StatelessWidget {
             : Wrap(
                 spacing: WaxSpace.s8,
                 runSpacing: WaxSpace.s8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: <Widget>[
+                  if (staged && media.length > 1)
+                    WaxSegmented(
+                      label: l10n.reviewMedium,
+                      semanticsId: SemanticsIds.reviewMedium,
+                      selected: medium.wireName,
+                      onSelect: busy
+                          ? null
+                          : (name) => onMedium(
+                              MediaType.values.firstWhere(
+                                (t) => t.wireName == name,
+                              ),
+                            ),
+                      segments: <WaxSegment>[
+                        for (final type in media)
+                          WaxSegment(
+                            name: type.wireName,
+                            label: switch (type) {
+                              MediaType.audiobook => l10n.reviewMediumAudiobook,
+                              _ => l10n.reviewMediumMusic,
+                            },
+                            semanticsId: SemanticsIds.reviewMediumOption(
+                              type.wireName,
+                            ),
+                          ),
+                      ],
+                    ),
                   // Throwing the staged files away comes first when the
                   // library already holds them.
                   if (staged && held) discard,
-                  WaxButton(
-                    label: l10n.reviewActionApprove,
-                    semanticsId: SemanticsIds.reviewApprove,
-                    busy: busyBy('approve'),
-                    onPressed: busy || candidate == null || allCopies
-                        ? null
-                        : () => onDecide(
-                            'approve',
-                            candidateMbid: candidate!.mbid,
-                          ),
-                  ),
+                  if (!audiobook)
+                    WaxButton(
+                      label: l10n.reviewActionApprove,
+                      semanticsId: SemanticsIds.reviewApprove,
+                      busy: busyBy('approve'),
+                      onPressed: busy || candidate == null || allCopies
+                          ? null
+                          : () => onDecide(
+                              'approve',
+                              candidateMbid: candidate!.mbid,
+                            ),
+                    ),
                   if (allCopies)
                     WaxButton(
                       label: l10n.reviewActionAddCopy,

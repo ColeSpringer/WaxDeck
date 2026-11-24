@@ -7,6 +7,8 @@ import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../sync/catalog_writes.dart';
 import '../sync/refresh_in_place.dart';
+import '../uploads/add_to_library.dart' show uploadableMediaTypes;
+import '../uploads/uploads_controller.dart' show uploadTargetsProvider;
 
 /// Lifecycle filter above the review list. Each value is a server-side
 /// status, `decided` included, so pages come back full rather than
@@ -179,6 +181,7 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState>
     String entryId,
     String action, {
     String? candidateMbid,
+    MediaType? mediaType,
   }) async {
     final writes = ref.read(catalogWritesProvider);
     final result = await ref
@@ -187,6 +190,7 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState>
           entryId,
           action: action,
           candidateMbid: candidateMbid,
+          mediaType: mediaType?.wireName,
         );
     // A decision applied rewrites the items it was about.
     writes.landed();
@@ -278,6 +282,111 @@ final selectedCandidateProvider =
       SelectedCandidate.new,
     );
 
+/// The medium a staged entry is to be imported as, when the reviewer
+/// changed it from the entry's own. Shared state for the same reason as
+/// [selectedCandidateProvider]: the pane's buttons and the queue's keys
+/// both decide the entry.
+class SelectedMedium extends Notifier<MediaType?> {
+  SelectedMedium(this.entryId);
+
+  final String entryId;
+
+  @override
+  MediaType? build() => null;
+
+  void select(MediaType type) => state = type;
+}
+
+final selectedMediumProvider =
+    NotifierProvider.family<SelectedMedium, MediaType?, String>(
+      SelectedMedium.new,
+    );
+
+/// Whether an entry stages new files, which is what lets its medium
+/// change before they are imported. A scanned or rematched entry's items
+/// are already in the library, so their kind is not the review's to set.
+bool reviewMediumChangeable(String origin) =>
+    origin == 'upload' || origin == 'acquisition';
+
+/// The media a staged entry's switch offers: its [own], plus what its
+/// named library takes among [targets]. An entry naming no library, or
+/// one [targets] does not hold, can be imported as either, as the server
+/// takes it; null [targets] (not read yet) offers only its own.
+List<MediaType> reviewMediaOffered(
+  MediaType own,
+  String? libraryPid,
+  List<UploadTarget>? targets,
+) {
+  if (libraryPid == null || libraryPid.isEmpty) return uploadableMediaTypes;
+  if (targets == null) return <MediaType>[own];
+  final library = targets.where((t) => t.pid == libraryPid).firstOrNull;
+  if (library == null) return uploadableMediaTypes;
+  return <MediaType>[
+    for (final type in uploadableMediaTypes)
+      if (type == own || library.mediaTypes.contains(type)) type,
+  ];
+}
+
+/// The media a loaded entry's switch offers: only its own once the server
+/// reports the medium fixed (any file landed or was already in the
+/// library), since it refuses another medium then; else
+/// by its library. [targets] is asked for only when the library matters.
+List<MediaType> reviewDetailMedia(
+  ReviewEntryDetail detail,
+  AsyncValue<List<UploadTarget>> Function() targets,
+) {
+  if (detail.mediumFixed) {
+    return <MediaType>[detail.mediaType];
+  }
+  final library = detail.libraryPid;
+  if (library == null || library.isEmpty) {
+    return reviewMediaOffered(detail.mediaType, library, null);
+  }
+  final read = targets();
+  return reviewMediaOffered(
+    detail.mediaType,
+    library,
+    read.hasError ? const <UploadTarget>[] : read.value,
+  );
+}
+
+/// The medium a decision on [entry] goes out with: what the reviewer
+/// chose, else the entry's own. Null for an entry whose medium is not
+/// changeable, and for skip and discard, which import nothing: those send
+/// none.
+MediaType? reviewDecisionMedium(
+  WidgetRef ref,
+  String entryId,
+  String origin,
+  MediaType own,
+  String action,
+) => reviewMediumChangeable(origin) && action != 'skip' && action != 'discard'
+    ? reviewEntryMedium(ref, entryId, origin, own)
+    : null;
+
+/// The medium an entry reads as: the reviewer's choice for a staged one
+/// while its switch still offers it, else its own. A choice made before a
+/// file landed, or before its library's media changed, is dropped here, so
+/// every path that decides an entry agrees; one the loaded detail cannot
+/// vouch for is dropped too.
+MediaType reviewEntryMedium(
+  WidgetRef ref,
+  String entryId,
+  String origin,
+  MediaType own,
+) {
+  if (!reviewMediumChangeable(origin)) return own;
+  final chosen = ref.read(selectedMediumProvider(entryId));
+  if (chosen == null || chosen == own) return own;
+  final detail = ref.read(reviewEntryProvider(entryId)).value;
+  if (detail == null) return own;
+  final offered = reviewDetailMedia(
+    detail,
+    () => ref.read(uploadTargetsProvider),
+  );
+  return offered.contains(chosen) ? chosen : own;
+}
+
 /// One entry's full detail (tracks and candidates), with the decisions
 /// that act on it.
 class ReviewEntryController extends AsyncNotifier<ReviewEntryDetail> {
@@ -294,6 +403,7 @@ class ReviewEntryController extends AsyncNotifier<ReviewEntryDetail> {
   Future<ReviewDecideResult> decide(
     String action, {
     String? candidateMbid,
+    MediaType? mediaType,
   }) async {
     final writes = ref.read(catalogWritesProvider);
     final result = await ref
@@ -302,6 +412,7 @@ class ReviewEntryController extends AsyncNotifier<ReviewEntryDetail> {
           entryId,
           action: action,
           candidateMbid: candidateMbid,
+          mediaType: mediaType?.wireName,
         );
     writes.landed();
     _refresh();

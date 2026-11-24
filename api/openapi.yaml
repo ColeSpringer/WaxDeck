@@ -3720,17 +3720,18 @@ paths:
         alphabetical, never played, rediscover, and in progress.
         Play-derived lists reflect the calling user's own listening state.
 
-        Most lists span every media type; `newest` and `recently-added`
-        do not. `newest` orders by release year, which a podcast episode
-        has not got, so it covers music and audiobooks only. Pairing it
-        with `mediaType=podcast`, or drilling its `kind` dimension to
+        `recently-played`, `random`, `starred`, `alphabetical` and
+        `in-progress` span every media type; the others do not. `newest`
+        orders by release year, which a podcast episode has not got, so
+        it covers music and audiobooks only. Pairing it with
+        `mediaType=podcast`, or drilling its `kind` dimension to
         `episode`, is `invalid-request` rather than an empty page that
-        would read as "your library holds none". `recently-added`
-        without a `mediaType` covers music and audiobooks only, so a
-        show's feed landing its backlog does not take the first page;
-        naming `mediaType=podcast`, or drilling its `kind` dimension to
-        `episode`, lists the episodes. Episodes ordered by publication
-        date live on `/podcasts/episodes`.
+        would read as "your library holds none". `recently-added`,
+        `never-played`, `rediscover` and `most-played` without a
+        `mediaType` cover music and audiobooks only, since episodes have
+        their own lists; naming `mediaType=podcast`, or drilling the
+        `kind` dimension to `episode`, lists the episodes. Episodes
+        ordered by publication date live on `/podcasts/episodes`.
       tags: [library]
       parameters:
         - name: list
@@ -3977,11 +3978,12 @@ paths:
       operationId: search
       summary: Search the library
       description: >
-        Full-text search across artists, albums, tracks, books, and episodes.
-        Results are grouped by kind and ranked within each group; each group
-        is capped at `limit` hits. An artist or album is a hit only while
-        at least one of its tracks is one the caller can see, by library
-        grant and content settings.
+        Full-text search across artists, authors, albums, tracks, books,
+        and episodes. Results are grouped by kind and ranked within each
+        group; each group is capped at `limit` hits. An artist or album is
+        a hit only while at least one of its tracks is one the caller can
+        see, and an author only while at least one of their books is, by
+        library grant and content settings.
       tags: [library]
       parameters:
         - name: q
@@ -11039,10 +11041,13 @@ paths:
         "409":
           description: >
             The decision was refused. `conflict`: the entry is already
-            decided, or part of its unit cannot enter the library (the
-            message says why). `read-only`: the server is in read-only
-            mode, or the library an upload or acquisition was staged for
-            is read-only. `catalog-busy`: another job holds the catalog's shared
+            decided, part of its unit cannot enter the library (the
+            message says why), or the decision names a `mediaType` other
+            than the entry's own once part of the unit is in the library
+            (`mediumFixed`).
+            `read-only`: the server is in read-only mode, or the library
+            an upload or acquisition was staged for is read-only.
+            `catalog-busy`: another job holds the catalog's shared
             file-mutation scope, which clears on its own, so the same
             decision is worth sending again. `storage-unwritable`: the
             library folder a file was going into refused the write (its
@@ -11162,7 +11167,9 @@ paths:
         Applies one decision to many pending entries in a single call,
         for keyboard-driven bulk triage. `approve` uses each entry's
         own ranked best candidate (a per-entry candidate choice needs
-        the single-entry endpoint). Entries are decided independently:
+        the single-entry endpoint), and each entry imports as its own
+        `mediaType` (choosing another needs the single-entry endpoint
+        too). Entries are decided independently:
         one failure does not stop the rest, and the response reports
         each outcome.
       tags: [review]
@@ -12760,14 +12767,18 @@ paths:
         units by the declared grouping intent: `album` opens one
         multi-file review entry over every staged member, `tracks`
         opens one entry per file, and `auto` clusters members into
-        units (albums, or books for an audiobook batch) by their tags
-        and relative paths. Members join by passing `batchId` (and
-        optionally `batchPath`) at session creation and must declare
-        the batch's media type. The batch stays open for 24 hours or
-        until the finalize call; members keep the normal upload
-        retention. Nothing about a single upload changes: a session
-        without a batch opens its own review entry at completion
-        exactly as before.
+        units: a music batch into albums by their tags and relative
+        paths; an audiobook batch into books, where a file with an
+        album tag joins the files naming the same album, a file with
+        none joins the book of its folder when any such file there is
+        a numbered part, and any other file, an `.m4b` with no album
+        tag always, is a book of its own. Members join by passing
+        `batchId` (and optionally `batchPath`) at session creation and
+        must declare the batch's media type. The batch stays open for
+        24 hours or until the finalize call; members keep the normal
+        upload retention. Nothing about a single upload changes: a
+        session without a batch opens its own review entry at
+        completion exactly as before.
       tags: [uploads]
       requestBody:
         required: true
@@ -18066,6 +18077,10 @@ components:
         `starred`, `never-played`, `rediscover`, and `in-progress` reflect
         the calling user's own listening state.
 
+        `newest` never holds podcast episodes, and without a `mediaType`
+        `recently-added`, `never-played`, `rediscover` and `most-played`
+        leave them out; `/library/browse` says how to list them.
+
         `never-played` is what the caller has never counted a play of, and
         `rediscover` is what they starred or rated at least 80 and have not
         played in six months (never counts as six months, so something
@@ -18218,7 +18233,10 @@ components:
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         kind:
           type: string
-          description: What the hit is (`artist`, `album`, `track`, `book`, `episode`).
+          description: >
+            What the hit is (`artist`, `author`, `album`, `track`,
+            `book`, `episode`). An `author` hit is a person credited on
+            a book; its pid is the artist's `ar-` pid.
           example: track
         title:
           type: string
@@ -18230,25 +18248,39 @@ components:
           type: boolean
           default: false
           description: >
-            True on an artist or album whose own name is the query,
-            ignoring case, accents, punctuation and spacing (`jayz`
-            finds `Jay-Z`), so a client can lead with it. Absent on every
-            other hit.
+            True on an artist, author or album whose own name is the
+            query, ignoring case, accents, punctuation and spacing
+            (`jayz` finds `Jay-Z`), so a client can lead with it. Absent
+            on every other hit.
 
     SearchResults:
       type: object
       description: Search results grouped by kind, ranked within each group.
-      required: [query, artists, albums, tracks, books, episodes]
+      required: [query, artists, authors, albums, tracks, books, episodes]
       properties:
         query:
           type: string
           description: The query these results answer.
         artists:
           type: array
+          description: >
+            People credited on music: an artist of a track the caller
+            can see. Artists whose own name matches the query rank
+            first, then those found through a matching track.
+          items:
+            $ref: "#/components/schemas/SearchHit"
+        authors:
+          type: array
+          description: >
+            People credited on books: an author of a book the caller can
+            see. Authors whose own name matches the query rank first,
+            then those found through a matching book. A person credited
+            on both music and books is in both groups.
           items:
             $ref: "#/components/schemas/SearchHit"
         albums:
           type: array
+          description: Music albums.
           items:
             $ref: "#/components/schemas/SearchHit"
         tracks:
@@ -18366,18 +18398,31 @@ components:
           type: integer
           description: >
             Member items: an album's tracks, a playlist's entries, a
-            show's episodes, an artist's tracks.
+            show's episodes; for an artist, their tracks when they have
+            any music, else the books they author (what the card opens),
+            counted among what the caller's listings offer and present
+            for every caller.
 
 
             Absent in two cases, and both are deliberate. A smart
             playlist's count is not taken, because evaluating every
             stored rule to draw a card is work a listing row skips too.
-            And a catalog entity's count is catalog-wide rather than
-            scoped to what the caller may see, so it is answered only to
-            a caller every library is open to and no tag rule narrows
-            (the explicit setting hides only podcasts) - a card advertising
-            nine tracks that opens onto three would be worse than a card
-            with no count on it.
+            And an album's or release group's count is catalog-wide
+            rather than scoped to what the caller may see, so it is
+            answered only to a caller every library is open to and no
+            tag rule narrows (the explicit setting hides only podcasts) -
+            a card advertising nine tracks that opens onto three would be
+            worse than a card with no count on it.
+        mediaTypes:
+          type: array
+          description: >
+            Present on `artist` cards only: the media the artist's items
+            span among what the caller's listings offer, `music` for a
+            track they are the artist of and `audiobook` for a book they
+            author, so a client routes an artist with no music to their
+            books.
+          items:
+            $ref: "#/components/schemas/MediaType"
 
     EntityCardList:
       type: object
@@ -24738,8 +24783,8 @@ components:
         origin:
           type: string
           description: >
-            Where the unit came from: `scan`, `upload`, or `rematch`.
-            A string, not a closed enum.
+            Where the unit came from: `scan`, `upload`, `acquisition`,
+            or `rematch`. A string, not a closed enum.
           example: scan
         title:
           type: string
@@ -25007,7 +25052,12 @@ components:
           properties:
             tracks:
               type: array
-              description: The unit's files in disc and track order.
+              description: >
+                The unit's files in order: the disc number they carry,
+                then, for files uploaded in a batch, the folder each was
+                sent from (see `UploadGrouping`), then track number. An
+                audiobook acquired from a list holds its parts in the
+                list's order.
               items:
                 $ref: "#/components/schemas/ReviewTrack"
             candidates:
@@ -25035,6 +25085,14 @@ components:
                 imports the files without stopping. Finding one still
                 `pending` means the automatic import could not proceed
                 and it is waiting for a person.
+            mediumFixed:
+              type: boolean
+              default: false
+              description: >
+                True once any of the unit's files has entered the
+                library, or was already in it: a decide naming a
+                `mediaType` other than the entry's own is then refused
+                with `conflict`. Absent while every file is staged.
             identifyOverride:
               allOf:
                 - $ref: "#/components/schemas/ReviewIdentifyRequest"
@@ -25098,6 +25156,28 @@ components:
           description: >
             The candidate to approve; the ranked best when absent.
             Only meaningful with `approve`.
+        mediaType:
+          allOf:
+            - $ref: "#/components/schemas/UploadMediaType"
+          description: >
+            The medium the unit is imported as; the entry's own
+            `mediaType` when absent. The choice becomes the entry's own
+            medium, so a later decide or retry without the field imports
+            as it. Refused with `invalid-request` when `approve` would
+            import as `audiobook`, named here or the entry's own (a
+            MusicBrainz release is music), when the entry's target
+            library does not accept the medium, and when the entry
+            stages no files (a `scan` or `rematch` entry, whose items
+            are already in the library: changing their kind is the
+            kind-change call's job) and the value differs from the
+            entry's own. Once any of the entry's files has entered the
+            library or was already in it (`mediumFixed` on the entry), a
+            decide naming a different medium is refused with `conflict`;
+            naming the entry's own is not. Where two
+            refusals apply, an already decided entry answers `conflict`
+            as every decide does, and otherwise these `invalid-request`
+            refusals come before the `conflict` over imported files.
+            `skip` and `discard` import nothing and ignore it.
 
     ReviewDecideResult:
       type: object
@@ -26663,7 +26743,8 @@ components:
             The file's directory relative to the picked or dropped
             folder, forward-slash separated (empty or absent for a
             file at the top). The `auto` grouping clusters by it, so
-            disc subfolders (`CD1`, `Disc 2`) fold into one album.
+            disc subfolders (`CD1`, `Disc 2`) fold into one album, and
+            an audiobook's part subfolders (`Part 1`) into one book.
             Must stay relative - absolute paths and `..` segments
             are rejected, as is passing it without `batchId`.
             `fileName` stays a bare name regardless.
@@ -26773,11 +26854,37 @@ components:
       description: >
         How a batch's staged files reach the review queue: `album`
         opens one multi-file entry over all of them (one album for
-        music, one book in parts for an audiobook, its parts in disc,
-        track and path order), `tracks` opens one entry per file (each
-        its own track or book), and `auto` clusters them into units by
-        their tags and relative paths (disc subfolders fold into
-        their parent).
+        music, one book in parts for an audiobook), `tracks` opens one
+        entry per file (each its own track or book), and `auto`
+        clusters them into units: a music batch into albums by their
+        tags and relative paths (disc subfolders fold into their
+        parent); an audiobook batch into books, files with an album
+        tag by that album whatever folder each sits in and whatever
+        artist it credits, split only where they name different album
+        artists, a file with none into the book of its folder
+        when any such file there is a numbered part (disc and part
+        subfolders such as `CD1` and `Part 2` fold into their parent,
+        and files from no folder share one), and any other file, an
+        `.m4b` with no album tag always, into a book of its own. Under
+        `album` and `auto`, for music and audiobooks alike, a unit's
+        files are ordered by the disc number they carry, then by the
+        folder each was sent from, then by track number, and a unit
+        decided as the other medium keeps that order. Folders
+        compare segment by segment, each name naturally: a run of
+        digits by its number, the text between as text, so `Part 2`
+        comes before `Part 10`, `Vol 1 Part 2` before `Vol 1 Part 10`,
+        `Part 2/CD10` before `Part 10/CD1`, and `Side A` before
+        `Side B`. A disc or track number written with its total
+        (`3/12`) orders by the number before it. An audiobook unit's
+        parts become one book, titled by the first of: the album
+        title given at review (a re-identify's `album`), an album
+        title every part already carries, the name of the folder the
+        files were picked from (an acquisition's list title) unless it
+        names a format or a container rather than a book (such as
+        `Audiobooks`, `MP3` or `New Folder`), a title drawn from what
+        the parts' file names share, and `Untitled audiobook` followed
+        by a short code from the review entry's id, so no two such
+        books are one. Never one part's own track title.
 
     UploadBatchCreate:
       type: object

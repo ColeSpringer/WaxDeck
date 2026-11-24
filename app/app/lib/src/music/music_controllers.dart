@@ -133,9 +133,10 @@ enum BrowseDomain {
     drillMediaType: MediaType.audiobook,
   ),
 
-  /// No scope and no media type: the entity pages and the editor, reached
-  /// from search, mixes and the health folds, where the medium is unknown
-  /// and an author-only artist must not open to an empty page.
+  /// No scope and no media type: the album page, its editor pane and the
+  /// release workbench, where an album holds what it holds, and the
+  /// release-group and genre listings opened with `?in=library`, where
+  /// the medium is unknown.
   wholeLibrary();
 
   const BrowseDomain({this.scopeFacet, this.scopeKey, this.drillMediaType});
@@ -609,3 +610,11 @@ final entityCardProvider = FutureProvider.autoDispose
       }
       return null;
     }, retry: (_, _) => null);
+
+/// Whether an artist's card is an author's: audiobooks and no music. A
+/// card that names no media is not.
+bool isAuthorOnly(EntityCard? card) {
+  final media = card?.mediaTypes ?? const <MediaType>[];
+  return media.contains(MediaType.audiobook) &&
+      !media.contains(MediaType.music);
+}

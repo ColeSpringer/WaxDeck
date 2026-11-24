@@ -246,7 +246,7 @@ List<String?> _credits(WidgetTester tester, String pid) {
   final listing = (
     dimension: MusicDimension.artists,
     segment: pid,
-    domain: BrowseDomain.wholeLibrary,
+    domain: BrowseDomain.music,
   );
   return [
     for (final item in container.read(musicItemsProvider(listing)).value!.items)

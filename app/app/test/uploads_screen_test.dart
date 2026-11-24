@@ -63,6 +63,19 @@ PickedAudioFile readerFile(String name, Uint8List bytes, {String dir = ''}) =>
       ),
     );
 
+/// Answers the medium question a folder of several files opens with
+/// nothing chosen.
+Future<void> chooseMedium(WidgetTester tester, MediaType type) async {
+  await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadMediaType));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.bySemanticsIdentifier(
+      SemanticsIds.uploadMediaTypeOption(type.wireName),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
 /// Lists every session still receiving as the server saw it before its
 /// first chunk.
 class _StaleList extends FakeRepository {
@@ -600,6 +613,7 @@ void main() {
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
+    await chooseMedium(tester, MediaType.music);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.uploadGroupingOption('album')),
     );
@@ -1162,6 +1176,7 @@ void main() {
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
+    await chooseMedium(tester, MediaType.music);
     expect(
       find.bySemanticsIdentifier(SemanticsIds.uploadGrouping),
       findsOneWidget,
@@ -1194,6 +1209,7 @@ void main() {
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
+    await chooseMedium(tester, MediaType.music);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
     );
@@ -1215,6 +1231,7 @@ void main() {
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
+    await chooseMedium(tester, MediaType.music);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
     );
@@ -1251,6 +1268,7 @@ void main() {
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
+    await chooseMedium(tester, MediaType.music);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
     );

@@ -81,11 +81,13 @@ class _HeldDecisions extends FakeRepository {
     String entryId, {
     required String action,
     String? candidateMbid,
+    String? mediaType,
   }) async {
     final decided = await super.decideReviewEntry(
       entryId,
       action: action,
       candidateMbid: candidateMbid,
+      mediaType: mediaType,
     );
     await release.future;
     return decided;

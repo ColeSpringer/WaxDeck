@@ -4,7 +4,7 @@ import { expect, Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { clickThrough } from '../gestures';
+import { clickThrough, rectAtRest } from '../gestures';
 
 export class Uploads extends Surface {
   /// The shell's add control, which an account with no upload right is
@@ -40,6 +40,27 @@ export class Uploads extends Surface {
     const chooser = this.ctx.page.locator(sem(SemanticsIds.uploadMediaType));
     await chooser.waitFor({ timeout: T.nav });
     await clickThrough(chooser, this.mediaTypeOption('music'));
+  }
+
+  /// Answer the medium question a folder of several files opens with
+  /// nothing chosen: open the chooser and take [type]'s row.
+  async chooseMedia(type: string): Promise<void> {
+    await this.openMediaType();
+    // The menu has opened, but may still be growing into place.
+    await rectAtRest(this.mediaTypeOption(type));
+    await this.mediaTypeOption(type).click({ force: true });
+    await this.settled();
+  }
+
+  /// The dialog after a choice that reshapes it: a medium brings the
+  /// target, grouping and identify rows in, and a forced click at
+  /// coordinates read while it grows lands on the barrier or Cancel. At
+  /// rest once the confirm takes a press and holds one rect.
+  private async settled(): Promise<void> {
+    await expect(this.mediaConfirm(), 'the dialog confirms once a medium is chosen').toBeEnabled({
+      timeout: T.nav,
+    });
+    await rectAtRest(this.mediaConfirm());
   }
 
   /// One row of the medium chooser, once it is open.
@@ -241,7 +262,18 @@ export class Uploads extends Surface {
   async groupAs(kind: string): Promise<void> {
     const page = this.ctx.page;
     await page.locator(sem(SemanticsIds.uploadGrouping)).waitFor({ timeout: T.nav });
-    await page.locator(sem(SemanticsIds.uploadGroupingOption(kind))).click({ force: true });
+    await this.settled();
+    const option = page.locator(sem(SemanticsIds.uploadGroupingOption(kind)));
+    // The current option is left alone, and a press is retried until the
+    // option reads current, as a click that landed on nothing leaves no
+    // trace to wait for.
+    await expect(async () => {
+      if ((await option.getAttribute('aria-current', { timeout: T.step })) !== 'true') {
+        await rectAtRest(option);
+        await option.click({ force: true, timeout: T.step });
+      }
+      await expect(option).toHaveAttribute('aria-current', 'true', { timeout: T.step });
+    }).toPass({ timeout: T.nav });
     await this.mediaConfirm().click({ force: true });
   }
 

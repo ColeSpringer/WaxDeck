@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -7,6 +9,7 @@ import '../l10n/l10n.dart';
 import '../music/music_controllers.dart';
 import '../providers.dart';
 import '../shell/async_box_face.dart';
+import '../shell/navigation_history.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -58,6 +61,10 @@ class FoldsSection extends ConsumerWidget {
   }
 }
 
+/// The fold rows whose artist card is being read, by fold key, so a
+/// second tap waits on the first rather than opening the page twice.
+final _artistReadsProvider = Provider<Set<String>>((ref) => <String>{});
+
 class _FoldGroups extends ConsumerWidget {
   const _FoldGroups({required this.state});
 
@@ -74,10 +81,10 @@ class _FoldGroups extends ConsumerWidget {
 
   /// Where an entry of a type opens, from the pid form the server lists:
   /// a release group and a genre open their listings, over the whole
-  /// library, since a fold names an entity every medium shares. Null for
-  /// a type this build does not know.
+  /// library, since a fold names an entity every medium shares. An artist
+  /// is not here: where they open depends on their card ([_openArtist]).
+  /// Null for a type this build does not know.
   static String Function(String pid)? _entryOf(String type) => switch (type) {
-    'artist' => (pid) => WaxRoute.musicBucket(MusicDimension.artists, pid),
     'album' => (pid) => WaxRoute.musicBucket(MusicDimension.albums, pid),
     'release-group' => (pid) => WaxRoute.musicBucket(
       MusicDimension.releaseGroups,
@@ -169,6 +176,53 @@ class _FoldGroups extends ConsumerWidget {
   ) async {
     await context.push(location, extra: fold.entityName);
     if (context.mounted) ref.invalidate(foldsProvider);
+  }
+
+  /// Opens an artist entry where their card says: the music page for
+  /// someone with music or whose card cannot be read, the Books author
+  /// page for someone with only books. A visitor who walked on while the
+  /// card was read is offered the page where they are. A tap on a row
+  /// already being read does nothing.
+  Future<void> _openArtist(
+    BuildContext context,
+    WidgetRef ref,
+    EntityFold fold,
+  ) async {
+    final reading = ref.read(_artistReadsProvider);
+    if (!reading.add(fold.key)) return;
+    final router = GoRouter.of(context);
+    final from = pageOnTop(router);
+    final messenger = ref.read(shellMessengerProvider);
+    final l10n = context.l10n;
+    final pid = fold.entityPid;
+    final bool here;
+    EntityCard? card;
+    try {
+      try {
+        final resolution = await ref.read(repositoryProvider).resolveEntities(
+          <String>[pid],
+        );
+        card = resolution.cards.where((c) => c.pid == pid).firstOrNull;
+      } on WaxDeckApiException {
+        // Unread, the music page is where an artist opens.
+      }
+      here = await stillShowing(router, from);
+    } finally {
+      reading.remove(fold.key);
+    }
+    final location = card == null
+        ? WaxRoute.musicBucket(MusicDimension.artists, pid)
+        : artistLocation(card);
+    if (here && context.mounted) {
+      await _open(context, ref, location, fold);
+      return;
+    }
+    messenger.show(
+      l10n.healthFoldEntryReady(fold.entityName),
+      actionLabel: l10n.commonOpen,
+      onAction: () =>
+          unawaited(router.pushInShell<void>(location, extra: fold.entityName)),
+    );
   }
 
   Future<void> _unfold(
@@ -300,15 +354,17 @@ class _FoldGroups extends ConsumerWidget {
                     rowSemanticsId: (key) => SemanticsIds.foldRow(type, key),
                     rowDetailSemanticsId: (key) =>
                         SemanticsIds.foldDetail(type, key),
-                    onRowTap: switch (_entryOf(type)) {
-                      final entry? => (fold) => _open(
-                        context,
-                        ref,
-                        entry(fold.entityPid),
-                        fold,
-                      ),
-                      null => null,
-                    },
+                    onRowTap: type == 'artist'
+                        ? (fold) => _openArtist(context, ref, fold)
+                        : switch (_entryOf(type)) {
+                            final entry? => (fold) => _open(
+                              context,
+                              ref,
+                              entry(fold.entityPid),
+                              fold,
+                            ),
+                            null => null,
+                          },
                     // A row reads out as its spelling, what tells it
                     // apart, and the entry it files under.
                     rowLabel: (fold) => [

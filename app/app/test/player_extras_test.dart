@@ -1,10 +1,8 @@
 import 'package:go_router/go_router.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/metadata/metadata_controller.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
 import 'package:waxdeck/src/player/car_mode_screen.dart';
-import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/player/visualizer_screen.dart';
 import 'package:waxdeck/src/player/wake_port.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
@@ -446,54 +444,22 @@ void main() {
   });
 
   group('the kind change', () {
-    testWidgets('a track playing turns into an audiobook from More', (
-      tester,
-    ) async {
+    testWidgets('the player\'s menu does not offer the change', (tester) async {
       _phone(tester);
-      final repo = FakeRepository();
       await pumpPlayer(
         tester,
-        repo: repo,
+        repo: FakeRepository(),
         engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
         item: testItem(_pid),
         host: (player) => routedHost(player),
       );
-
       await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerMore));
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.bySemanticsIdentifier(SemanticsIds.itemMenuKindBook),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.kindConfirm));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.pumpAndSettle();
-
-      expect(repo.setKindCalls.single.pids, [_pid]);
-      expect(repo.setKindCalls.single.mediaType, 'audiobook');
-      // `go` from the overlay: the player closes and the book is on top.
-      expect(find.byType(PlayerScreen), findsNothing);
+      // The menu is open and the editor, behind the same permission, is in it.
       expect(
-        tester.widget<BookScreen>(find.byType(BookScreen)).pid,
-        'bk-${_pid.substring(3)}',
+        find.bySemanticsIdentifier(SemanticsIds.editMetadata(_pid)),
+        findsOneWidget,
       );
-    });
-
-    testWidgets('a listener who may not edit the track is not offered it', (
-      tester,
-    ) async {
-      _phone(tester);
-      await pumpPlayer(
-        tester,
-        repo: FakeRepository(sessionState: testListenerSession())
-          ..mayCurateItems = false,
-        engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
-        item: testItem(_pid),
-        host: (player) => routedHost(player),
-      );
-      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerMore));
-      await tester.pumpAndSettle();
       expect(
         find.bySemanticsIdentifier(SemanticsIds.itemMenuKindBook),
         findsNothing,

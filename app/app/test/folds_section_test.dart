@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/books/book_bucket_screen.dart';
+import 'package:waxdeck/src/books/book_dimension.dart';
 import 'package:waxdeck/src/books/series_screen.dart';
 import 'package:waxdeck/src/health/folds_section.dart';
 import 'package:waxdeck/src/health/health_controller.dart';
@@ -13,6 +15,7 @@ import 'package:waxdeck/src/music/album_screen.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -738,6 +741,128 @@ void main() {
         ),
       );
       expect(shown.single, opens);
+    });
+  }
+
+  testWidgets('an artist fold for a person with only books opens their '
+      'books', (tester) async {
+    final repo = _repo()
+      ..entityFolds = [_fold('artist', 'ann writer', 'ar-1', 'Ann Writer')]
+      ..entityCards['ar-1'] = const EntityCard(
+        pid: 'ar-1',
+        kind: EntityCardKind.artist,
+        title: 'Ann Writer',
+        mediaTypes: <MediaType>[MediaType.audiobook],
+      );
+    await _pump(tester, repo);
+    await _tap(
+      tester,
+      find.bySemanticsIdentifier(SemanticsIds.foldRow('artist', 'ann writer')),
+    );
+
+    final bucket = tester.widget<BookBucketScreen>(
+      find.byType(BookBucketScreen),
+    );
+    expect(bucket.dimension, BookDimension.authors);
+    expect(bucket.segment, 'ar-1');
+    expect(find.byType(ArtistScreen), findsNothing);
+  });
+
+  testWidgets('an artist fold whose card cannot be read opens the artist '
+      'page', (tester) async {
+    final gate = Completer<void>();
+    final repo = _repo()
+      ..entityFolds = [_fold('artist', 'beatles', 'ar-1', 'The Beatles')]
+      ..resolveEntitiesGate = gate;
+    await _pump(tester, repo);
+    await _tap(
+      tester,
+      find.bySemanticsIdentifier(SemanticsIds.foldRow('artist', 'beatles')),
+    );
+    gate.completeError(
+      const WaxDeckApiException(code: 'internal', message: 'boom'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<ArtistScreen>(find.byType(ArtistScreen)).pid, 'ar-1');
+  });
+
+  testWidgets('an artist card that answers after the visitor left is '
+      'offered where they are', (tester) async {
+    final gate = Completer<void>();
+    final repo = _repo()
+      ..entityFolds = [_fold('artist', 'ann writer', 'ar-1', 'Ann Writer')]
+      ..entityCards['ar-1'] = const EntityCard(
+        pid: 'ar-1',
+        kind: EntityCardKind.artist,
+        title: 'Ann Writer',
+        mediaTypes: <MediaType>[MediaType.audiobook],
+      )
+      ..resolveEntitiesGate = gate;
+    await _pump(tester, repo);
+    await _tap(
+      tester,
+      find.bySemanticsIdentifier(SemanticsIds.foldRow('artist', 'ann writer')),
+    );
+    final router = GoRouter.of(tester.element(find.byType(HealthScreen)));
+    unawaited(router.push(WaxRoute.musicIndex(MusicDimension.genres)));
+    await tester.pumpAndSettle();
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BookBucketScreen), findsNothing);
+    expect(find.byType(ArtistScreen), findsNothing);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'Ready to open: Ann Writer',
+    );
+
+    await pressRaisedAction(tester);
+    final bucket = tester.widget<BookBucketScreen>(
+      find.byType(BookBucketScreen),
+    );
+    expect(bucket.dimension, BookDimension.authors);
+    expect(bucket.segment, 'ar-1');
+  });
+
+  for (final sameTurn in <bool>[true, false]) {
+    testWidgets('a second tap on an artist fold being read does nothing '
+        '(answers in ${sameTurn ? 'one turn' : 'two turns'})', (tester) async {
+      final first = Completer<void>();
+      final second = Completer<void>();
+      final repo = _repo()
+        ..entityFolds = [_fold('artist', 'ann writer', 'ar-1', 'Ann Writer')]
+        ..entityCards['ar-1'] = const EntityCard(
+          pid: 'ar-1',
+          kind: EntityCardKind.artist,
+          title: 'Ann Writer',
+          mediaTypes: <MediaType>[MediaType.audiobook],
+        );
+      await _pump(tester, repo);
+      repo.resolveEntitiesGates.addAll([first, second]);
+      final row = find.bySemanticsIdentifier(
+        SemanticsIds.foldRow('artist', 'ann writer'),
+      );
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+      final asked = repo.resolvedEntityPids.length;
+      await tester.tap(row);
+      await tester.pump();
+      await tester.tap(row);
+      await tester.pump();
+      // One read for both taps; the page that opens reads its own card.
+      expect(repo.resolvedEntityPids.length - asked, 1);
+      if (sameTurn) {
+        first.complete();
+        second.complete();
+      } else {
+        first.complete();
+        await tester.pump();
+        second.complete();
+      }
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BookBucketScreen), findsOneWidget);
     });
   }
 

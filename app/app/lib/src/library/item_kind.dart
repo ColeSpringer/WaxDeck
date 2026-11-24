@@ -244,17 +244,21 @@ Future<bool> _letGoOfFolded(
 
 /// Forgets what playback held of the items [result] says changed kind in
 /// place, under either prefix, so each starts as what it is now, and has
-/// the queue rows naming them read them again.
+/// the queue rows naming them read them again. A converted entry that is
+/// not the one playing leaves the queue: a queue holds one kind of item,
+/// and the entry playing keeps its place until it ends.
 void _forgetConverted(
   ProviderContainer container,
   Map<String, Object?>? result,
 ) {
   final converted = result?['converted'];
   if (converted is! List || converted.isEmpty) return;
-  container.read(nowPlayingProvider.notifier).forgetItems({
+  final ulids = {
     for (final pid in converted)
       if (pid is String) ulidOf(pid),
-  });
+  };
+  container.read(queueControllerProvider.notifier).dropItems(ulids);
+  container.read(nowPlayingProvider.notifier).forgetItems(ulids);
   container.invalidate(queueItemProvider);
 }
 

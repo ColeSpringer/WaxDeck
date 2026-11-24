@@ -204,6 +204,33 @@ void main() {
     expect(container.read(queueControllerProvider).isEmpty, isTrue);
   });
 
+  test('a bucket resolves the kind its scope plays, and only that', () async {
+    // An album card plays through here and a bucket drop lands through
+    // here: an unscoped bucket is music, a books bucket its books.
+    final repo = FakeRepository()
+      ..facetItems['artist ada'] = <ItemSummary>[
+        testItem('tr-1'),
+        testItem('bk-1', mediaType: MediaType.audiobook),
+        testItem('ep-1', mediaType: MediaType.podcast),
+        testItem('tr-2'),
+      ];
+
+    Future<List<String>> resolved([MediaType? mediaType]) async => [
+      for (final item in await bucketItems(
+        repo,
+        facet: 'artist',
+        facetKey: 'ada',
+        mediaType: mediaType,
+      ))
+        item.pid,
+    ];
+
+    expect(await resolved(), <String>['tr-1', 'tr-2']);
+    // Asked for in the request, so a drop of 500 is 500 of the kind.
+    expect(repo.listItemsCalls.last.mediaType, MediaType.music);
+    expect(await resolved(MediaType.audiobook), <String>['bk-1']);
+  });
+
   // An index bucket has a name and a count and no items, so the tracks
   // are fetched when the drop lands rather than carried by the drag.
   testWidgets('a bucket resolves its tracks on the drop', (tester) async {

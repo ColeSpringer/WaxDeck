@@ -349,6 +349,7 @@ class EntityCard {
     this.artist,
     this.year,
     this.itemCount,
+    this.mediaTypes,
   });
 
   /// The type-prefixed PID this card answers for.
@@ -368,17 +369,26 @@ class EntityCard {
   /// Release year, where the entity carries one.
   final int? year;
 
-  /// Member items: an album's tracks, a playlist's entries, a show's episodes,
-  /// an artist's tracks.
+  /// Member items: an album's tracks, a playlist's entries, a show's episodes;
+  /// for an artist, their tracks when they have any music, else the books they
+  /// author (what the card opens), counted among what the caller's listings
+  /// offer and present for every caller.
   ///
   /// Absent in two cases, and both are deliberate. A smart playlist's count is
   /// not taken, because evaluating every stored rule to draw a card is work a
-  /// listing row skips too. And a catalog entity's count is catalog-wide rather
-  /// than scoped to what the caller may see, so it is answered only to a caller
-  /// every library is open to and no tag rule narrows (the explicit setting
-  /// hides only podcasts) - a card advertising nine tracks that opens onto
-  /// three would be worse than a card with no count on it.
+  /// listing row skips too. And an album's or release group's count is
+  /// catalog-wide rather than scoped to what the caller may see, so it is
+  /// answered only to a caller every library is open to and no tag rule narrows
+  /// (the explicit setting hides only podcasts) - a card advertising nine
+  /// tracks that opens onto three would be worse than a card with no count on
+  /// it.
   final int? itemCount;
+
+  /// Present on `artist` cards only: the media the artist's items span among
+  /// what the caller's listings offer, `music` for a track they are the artist
+  /// of and `audiobook` for a book they author, so a client routes an artist
+  /// with no music to their books.
+  final List<MediaType>? mediaTypes;
 }
 
 /// The entity PIDs to resolve.
@@ -730,7 +740,9 @@ class SearchHit {
   /// Type-prefixed ULID of the hit.
   final String pid;
 
-  /// What the hit is (`artist`, `album`, `track`, `book`, `episode`).
+  /// What the hit is (`artist`, `author`, `album`, `track`, `book`, `episode`).
+  /// An `author` hit is a person credited on a book; its pid is the artist's
+  /// `ar-` pid.
   final String kind;
 
   /// Display title.
@@ -739,9 +751,9 @@ class SearchHit {
   /// Context line (artist for a track, author for a book).
   final String? subtitle;
 
-  /// True on an artist or album whose own name is the query, ignoring case,
-  /// accents, punctuation and spacing (`jayz` finds `Jay-Z`), so a client can
-  /// lead with it. Absent on every other hit.
+  /// True on an artist, author or album whose own name is the query, ignoring
+  /// case, accents, punctuation and spacing (`jayz` finds `Jay-Z`), so a client
+  /// can lead with it. Absent on every other hit.
   final bool exact;
 }
 
@@ -750,6 +762,7 @@ class SearchResults {
   const SearchResults({
     required this.query,
     this.artists = const [],
+    this.authors = const [],
     this.albums = const [],
     this.tracks = const [],
     this.books = const [],
@@ -760,8 +773,18 @@ class SearchResults {
   /// The query these results answer.
   final String query;
 
+  /// People credited on music: an artist of a track the caller can see. Artists
+  /// whose own name matches the query rank first, then those found through a
+  /// matching track.
   final List<SearchHit> artists;
 
+  /// People credited on books: an author of a book the caller can see. Authors
+  /// whose own name matches the query rank first, then those found through a
+  /// matching book. A person credited on both music and books is in both
+  /// groups.
+  final List<SearchHit> authors;
+
+  /// Music albums.
   final List<SearchHit> albums;
 
   final List<SearchHit> tracks;

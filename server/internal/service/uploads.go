@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	waxlabel "github.com/colespringer/waxlabel"
 	"github.com/colespringer/waxlabel/tag"
@@ -25,10 +27,12 @@ import (
 
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/fingerprint"
+	"github.com/colespringer/waxbin/identity"
 	"github.com/colespringer/waxbin/inbox"
 	"github.com/colespringer/waxbin/model"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
+	"github.com/colespringer/waxdeck/server/internal/match"
 )
 
 // Upload session states.
@@ -1055,8 +1059,8 @@ func (l *Ingest) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (Up
 		Path:        final,
 		Title:       firstNonEmpty(tags["TITLE"], strings.TrimSuffix(u.FileName, filepath.Ext(u.FileName))),
 		Artist:      tags["ARTIST"],
-		TrackNo:     parseIntTag(tags["TRACKNUMBER"]),
-		DiscNo:      parseIntTag(tags["DISCNUMBER"]),
+		TrackNo:     match.ParseOrdinal(tags["TRACKNUMBER"]),
+		DiscNo:      match.ParseOrdinal(tags["DISCNUMBER"]),
 		DurationMS:  durMS,
 		Tags:        tags,
 		Fingerprint: fp,
@@ -1212,29 +1216,12 @@ func (l *Ingest) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, p
 	// is the only place that knows it, and the playlist-sync map keeps
 	// it for its self-heal.
 	imported := map[string]importedFile{}
+	var unstamp func()
 	fail := func(err error) ([]string, error) {
-		// Persist against the freshest row: everything the identify side
-		// owns, since a stale full-row write would revert candidates on
-		// an entry that stays pending and lose a typed search silently.
-		// Only Tracks are this function's to write.
-		row := *entry
-		if fresh, ferr := l.db.ReviewEntryByID(ctx, entry.ID); ferr == nil {
-			var fp reviewPayload
-			if json.Unmarshal([]byte(fresh.Payload), &fp) == nil {
-				if len(fp.Candidates) > 0 {
-					payload.Candidates = fp.Candidates
-				}
-				payload.Override = fp.Override
-				payload.Suggested = fp.Suggested
-				payload.IdentifyDeclined = fp.IdentifyDeclined
-			}
-			row = fresh
+		if unstamp != nil && !anyLanded(payload.Tracks) {
+			unstamp()
 		}
-		row.Payload = marshalJSON(*payload)
-		if uerr := l.db.UpdateReviewEntry(ctx, row); uerr != nil {
-			l.log.Warn("persisting partial import", "entry", entry.ID, "err", uerr)
-		}
-		*entry = row
+		l.persistDecideProgress(ctx, entry, payload)
 		l.settleImportedUploads(ctx, entry, imported)
 		return warnings, err
 	}
@@ -1247,6 +1234,12 @@ func (l *Ingest) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, p
 		}
 	}
 	kind, _ := kindForMediaType(entry.MediaType)
+	if kind == model.KindBook {
+		var err error
+		if unstamp, err = l.stampBookUnit(ctx, entry, payload); err != nil {
+			return fail(err)
+		}
+	}
 	failures, planned, err := l.preflightImport(ctx, payload, kind)
 	if err != nil {
 		return fail(err)
@@ -1340,6 +1333,355 @@ func (l *Ingest) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, p
 	}
 	l.settleImportedUploads(ctx, entry, imported)
 	return warnings, nil
+}
+
+// persistDecideProgress records how far a stopped decision got: the
+// files that landed and the medium and title the decision chose, written
+// against the freshest row so the identify side's fields stand, since a
+// stale full-row write would revert candidates on an entry that stays
+// pending and lose a typed search silently.
+func (l *Ingest) persistDecideProgress(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload) {
+	row := *entry
+	if fresh, ferr := l.db.ReviewEntryByID(ctx, entry.ID); ferr == nil {
+		var fp reviewPayload
+		if json.Unmarshal([]byte(fresh.Payload), &fp) == nil {
+			if len(fp.Candidates) > 0 {
+				payload.Candidates = fp.Candidates
+			}
+			payload.Override = fp.Override
+			payload.Suggested = fp.Suggested
+			payload.IdentifyDeclined = fp.IdentifyDeclined
+		}
+		row = fresh
+	}
+	row.MediaType, row.Title = entry.MediaType, entry.Title
+	row.Payload = marshalJSON(*payload)
+	if uerr := l.db.UpdateReviewEntry(ctx, row); uerr != nil {
+		l.log.Warn("persisting partial import", "entry", entry.ID, "err", uerr)
+	}
+	*entry = row
+}
+
+// isBookMedia reports whether an API media type selects books.
+func isBookMedia(mt string) bool {
+	kind, _ := kindForMediaType(mt)
+	return kind == model.KindBook
+}
+
+// stampBookUnit gives the staged parts of a book one identity before any
+// is planned. Each part reaches the catalog alone, and the catalog keys a
+// book by its album else its title, so parts that name only their
+// chapters, or disagree on their album, would land as a book each. A tag
+// is written only where it is missing or differs from the unit's; a part
+// that cannot take it refuses the unit, undoing what was written. It
+// answers how to undo the stamp, for a unit refused before any part lands.
+func (l *Ingest) stampBookUnit(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload) (func(), error) {
+	docs := payload.Tracks
+	if len(docs) < 2 {
+		return nil, nil
+	}
+	title := l.importBookTitle(ctx, entry, payload)
+	// The catalog files a book under its parts' album artist, else their
+	// artist. Parts crediting different artists (a narrator beside the
+	// author on some) keep them, and only the album artist is stamped.
+	artist, albumArtist := "", ""
+	switch {
+	case !sameTag(docs, "ARTIST"):
+		albumArtist = bookKeyAuthor(payload)
+	case !partsAgree(docs, "ALBUMARTIST") || !partsAgree(docs, "ARTIST"):
+		artist = bookUnitAuthor(entry, payload)
+		albumArtist = artist
+	}
+	numbered := partsNumbered(docs)
+	type stamped struct {
+		i     int
+		doc   reviewTrackDoc
+		prior map[tag.Key][]string
+	}
+	var done []stamped
+	undo := func() {
+		// Undone even when the decision was stopped: the staged copies
+		// must read as uploaded for the next one.
+		bg := context.WithoutCancel(ctx)
+		for _, s := range done {
+			if err := restoreBookPart(bg, l.log, docs[s.i].Path, s.prior); err != nil {
+				l.log.Warn("restoring a book part's uploaded tags", "file", filepath.Base(docs[s.i].Path), "err", err)
+				continue
+			}
+			docs[s.i] = s.doc
+		}
+	}
+	for i := range docs {
+		doc := &docs[i]
+		if doc.PID != "" || doc.Imported || doc.Held {
+			continue
+		}
+		album := title
+		if doc.Tags["ALBUM"] == title {
+			album = ""
+		}
+		setArtist, setAlbumArtist := artist, albumArtist
+		if doc.Tags["ARTIST"] == artist {
+			setArtist = ""
+		}
+		if doc.Tags["ALBUMARTIST"] == albumArtist {
+			setAlbumArtist = ""
+		}
+		position, total := 0, 0
+		if !numbered && doc.TrackNo != i+1 {
+			position, total = i+1, len(docs)
+		}
+		if album == "" && setArtist == "" && setAlbumArtist == "" && position == 0 {
+			continue
+		}
+		before := *doc
+		prior, err := stampBookPart(ctx, l.log, doc.Path, album, setArtist, setAlbumArtist, position, total)
+		if err != nil {
+			undo()
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, &Error{Kind: KindConflict, Msg: fmt.Sprintf("%s: the book's details could not be written to it: %v",
+				filepath.Base(doc.Path), cmp.Or(errors.Unwrap(err), err))}
+		}
+		done = append(done, stamped{i: i, doc: before, prior: prior})
+		tags := make(map[string]string, len(doc.Tags)+4)
+		for k, v := range doc.Tags {
+			tags[k] = v
+		}
+		if album != "" {
+			tags["ALBUM"] = album
+		}
+		if setArtist != "" {
+			tags["ARTIST"] = setArtist
+			doc.Artist = setArtist
+		}
+		if setAlbumArtist != "" {
+			tags["ALBUMARTIST"] = setAlbumArtist
+		}
+		if position > 0 {
+			tags["TRACKNUMBER"], tags["TRACKTOTAL"] = strconv.Itoa(position), strconv.Itoa(total)
+			doc.TrackNo = position
+		}
+		doc.Tags = tags
+	}
+	if len(done) == 0 {
+		return nil, nil
+	}
+	return undo, nil
+}
+
+// anyLanded reports whether any of a unit's files entered the library
+// or was already in it.
+func anyLanded(docs []reviewTrackDoc) bool {
+	return slices.ContainsFunc(docs, func(d reviewTrackDoc) bool { return d.PID != "" || d.Imported || d.Held })
+}
+
+// importBookTitle is the title a book's parts land under, worked out from
+// what the unit recorded (the list it was acquired from, the folders its
+// uploads were sent from) rather than from the entry's title, which an
+// entry opened as music took from its first part.
+func (l *Ingest) importBookTitle(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload) string {
+	if payload.List != "" {
+		return bookUnitTitle(payload.Override, payload.Tracks, payload.List, entry.ID)
+	}
+	folder := ""
+	if rows, err := l.db.ListUploadsByReviewEntry(ctx, entry.ID); err == nil {
+		parts := make(map[string]bool, len(payload.Tracks))
+		for _, doc := range payload.Tracks {
+			parts[doc.Path] = true
+		}
+		var dirs []string
+		for _, r := range rows {
+			if parts[r.StagingPath] {
+				dirs = append(dirs, r.BatchPath)
+			}
+		}
+		folder = unitFolderName(dirs)
+	}
+	return bookUnitTitle(payload.Override, payload.Tracks, folder, entry.ID)
+}
+
+// untitledAudiobook begins the title of a book in parts nothing else
+// names.
+const untitledAudiobook = "Untitled audiobook"
+
+// untitledBookTitle is untitledAudiobook told apart by the end of the
+// entry's id: the catalog keys a book by its author and title, so two
+// such books by one author, or by none, would otherwise be one.
+func untitledBookTitle(entryID string) string {
+	if r := []rune(entryID); len(r) > 6 {
+		return untitledAudiobook + " (" + string(r[len(r)-6:]) + ")"
+	}
+	return untitledAudiobook
+}
+
+// genericFolders name a format or a container, not a book: audiobook(s),
+// audio book(s), audio, book(s), mp3, m4a, m4b, aac, flac, ogg, opus,
+// wav, download(s), new folder, untitled, untitled folder.
+var genericFolders = map[string]bool{
+	"audiobook": true, "audiobooks": true, "audio book": true, "audio books": true, "audio": true,
+	"book": true, "books": true, "mp3": true, "m4a": true, "m4b": true, "aac": true, "flac": true,
+	"ogg": true, "opus": true, "wav": true, "download": true, "downloads": true,
+	"new folder": true, "untitled": true, "untitled folder": true,
+}
+
+// bookUnitTitle is a book in parts' title: the album typed for it, an
+// album every part shares, the folder or list it came from unless that
+// is a generic name, what its file names share, else untitledBookTitle
+// for its entry. Never one part's own title, typed or tagged.
+func bookUnitTitle(o *reviewOverride, docs []reviewTrackDoc, folder, entryID string) string {
+	if o != nil && o.Album != "" {
+		return o.Album
+	}
+	if partsAgree(docs, "ALBUM") {
+		return docs[0].Tags["ALBUM"]
+	}
+	if folder != "" && !genericFolders[strings.ToLower(strings.TrimSpace(folder))] {
+		return folder
+	}
+	names := make([]string, 0, len(docs))
+	for _, d := range docs {
+		names = append(names, filepath.Base(d.Path))
+	}
+	return firstNonEmpty(sharedNameTitle(names), untitledBookTitle(entryID))
+}
+
+// partWords number a book's files rather than name it.
+var partWords = map[string]bool{"chapter": true, "part": true, "track": true, "disc": true, "cd": true, "side": true}
+
+// sharedNameTitle is the text file names share at their start, cut at a
+// word boundary and trimmed of numbering, separators and part words; empty
+// unless a real word is left.
+func sharedNameTitle(names []string) string {
+	if len(names) == 0 {
+		return ""
+	}
+	stems := make([][]rune, len(names))
+	for i, n := range names {
+		stems[i] = []rune(strings.TrimSuffix(n, filepath.Ext(n)))
+	}
+	common := stems[0]
+	for _, st := range stems[1:] {
+		n := 0
+		for n < len(common) && n < len(st) && common[n] == st[n] {
+			n++
+		}
+		common = common[:n]
+	}
+	wordy := func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }
+	// A word the prefix ends inside is not shared.
+	for _, st := range stems {
+		if n := len(common); n > 0 && n < len(st) && wordy(common[n-1]) && wordy(st[n]) {
+			for len(common) > 0 && wordy(common[len(common)-1]) {
+				common = common[:len(common)-1]
+			}
+			break
+		}
+	}
+	numbering := func(r rune) bool {
+		return unicode.IsDigit(r) || unicode.IsSpace(r) || strings.ContainsRune("-_.,:;#~|/\\\u2013\u2014", r)
+	}
+	title := strings.TrimLeftFunc(string(common), numbering)
+	for {
+		title = strings.TrimRightFunc(title, numbering)
+		word := title
+		if cut := strings.LastIndexFunc(title, func(r rune) bool { return !wordy(r) }); cut >= 0 {
+			_, size := utf8.DecodeRuneInString(title[cut:])
+			word = title[cut+size:]
+		}
+		if title == "" || !partWords[strings.ToLower(word)] {
+			break
+		}
+		title = title[:len(title)-len(word)]
+	}
+	for _, w := range strings.FieldsFunc(title, func(r rune) bool { return !wordy(r) }) {
+		if strings.IndexFunc(w, unicode.IsLetter) >= 0 && !partWords[strings.ToLower(w)] {
+			return title
+		}
+	}
+	return ""
+}
+
+// bookUnitAuthor is who a book's parts are credited to: the artist typed
+// for it, else the entry's, else one every part already names.
+func bookUnitAuthor(entry *wdb.ReviewEntry, payload *reviewPayload) string {
+	typed := ""
+	if payload.Override != nil {
+		typed = payload.Override.Artist
+	}
+	agreed := func(key string) string {
+		if partsAgree(payload.Tracks, key) {
+			return payload.Tracks[0].Tags[key]
+		}
+		return ""
+	}
+	return firstNonEmpty(typed, strings.TrimSpace(entry.Artist), agreed("ALBUMARTIST"), agreed("ARTIST"))
+}
+
+// bookKeyAuthor is who a book whose parts credit different artists is
+// filed under: the artist typed for it, an album artist every part
+// carries, the first name every part credits (split as the catalog
+// splits credits), else the first name a part credits.
+func bookKeyAuthor(payload *reviewPayload) string {
+	docs := payload.Tracks
+	if payload.Override != nil && payload.Override.Artist != "" {
+		return payload.Override.Artist
+	}
+	if partsAgree(docs, "ALBUMARTIST") {
+		return docs[0].Tags["ALBUMARTIST"]
+	}
+	credits := func(d reviewTrackDoc) []string {
+		return identity.SplitCredits(firstNonEmpty(d.Tags["ALBUMARTIST"], d.Tags["ARTIST"]))
+	}
+	for _, name := range credits(docs[0]) {
+		key := identity.MatchKey(name)
+		if !slices.ContainsFunc(docs[1:], func(d reviewTrackDoc) bool {
+			return !slices.ContainsFunc(credits(d), func(c string) bool { return identity.MatchKey(c) == key })
+		}) {
+			return name
+		}
+	}
+	for _, d := range docs {
+		if c := credits(d); len(c) > 0 {
+			return c[0]
+		}
+	}
+	return ""
+}
+
+// sameTag reports whether every part carries the same value for the
+// tag, none counting as a value.
+func sameTag(docs []reviewTrackDoc, key string) bool {
+	return !slices.ContainsFunc(docs[1:], func(d reviewTrackDoc) bool { return d.Tags[key] != docs[0].Tags[key] })
+}
+
+// partsAgree reports whether every part carries one non-empty value
+// for the tag.
+func partsAgree(docs []reviewTrackDoc, key string) bool {
+	v := docs[0].Tags[key]
+	if v == "" {
+		return false
+	}
+	for _, d := range docs[1:] {
+		if d.Tags[key] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// partsNumbered reports whether every part has a place of its own.
+func partsNumbered(docs []reviewTrackDoc) bool {
+	seen := make(map[[2]int]bool, len(docs))
+	for _, d := range docs {
+		at := [2]int{d.DiscNo, d.TrackNo}
+		if d.TrackNo <= 0 || seen[at] {
+			return false
+		}
+		seen[at] = true
+	}
+	return true
 }
 
 // plannedFile is a staged file's import plan, made ahead of its move.
@@ -1757,6 +2099,9 @@ func flatTags(doc *waxlabel.Document) map[string]string {
 	if t.TrackNumber > 0 {
 		out["TRACKNUMBER"] = strconv.Itoa(t.TrackNumber)
 	}
+	if t.TrackTotal > 0 {
+		out["TRACKTOTAL"] = strconv.Itoa(t.TrackTotal)
+	}
 	if t.DiscNumber > 0 {
 		out["DISCNUMBER"] = strconv.Itoa(t.DiscNumber)
 	}
@@ -1776,20 +2121,6 @@ func flatTags(doc *waxlabel.Document) map[string]string {
 // release.
 func matchDate(t tag.Tags) string {
 	return firstNonEmpty(t.RecordingDate, t.ReleaseDate, t.OriginalDate)
-}
-
-func parseIntTag(s string) int {
-	n := 0
-	for _, r := range strings.TrimSpace(s) {
-		if r < '0' || r > '9' {
-			break
-		}
-		n = n*10 + int(r-'0')
-		if n > 9999 {
-			return 0
-		}
-	}
-	return n
 }
 
 func fileSHA256(path string) (string, error) {

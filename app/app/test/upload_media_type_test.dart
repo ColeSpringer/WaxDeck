@@ -106,7 +106,173 @@ Future<void> _openDialog(
   await tester.pumpAndSettle();
 }
 
+bool _confirmEnabled(WidgetTester tester) =>
+    tester
+        .widget<WaxButton>(
+          find.byWidgetPredicate(
+            (w) =>
+                w is WaxButton &&
+                w.semanticsId == SemanticsIds.uploadMediaConfirm,
+          ),
+        )
+        .onPressed !=
+    null;
+
 void main() {
+  group('detectUploadMediaType', () {
+    MediaType? detect(List<String> names, {bool foldered = false}) =>
+        detectUploadMediaType(names, foldered: foldered);
+
+    test('any .m4b seeds an audiobook, whatever its case or folder', () {
+      expect(detect(['book.m4b']), MediaType.audiobook);
+      expect(detect(['BOOK.M4B']), MediaType.audiobook);
+      expect(
+        detect(['one.flac', 'two.M4b'], foldered: true),
+        MediaType.audiobook,
+      );
+    });
+
+    test('a single file or loose picks seed music', () {
+      expect(detect(['a.flac']), MediaType.music);
+      expect(detect(['a.flac'], foldered: true), MediaType.music);
+      expect(detect(['a.flac', 'b.mp3']), MediaType.music);
+      expect(detect(['book.m4a']), MediaType.music);
+      expect(detect(const []), MediaType.music);
+    });
+
+    test('several files from a folder with no .m4b seed nothing', () {
+      expect(detect(['a.flac', 'b.flac'], foldered: true), isNull);
+      expect(detect(['m4b.mp3', 'b.mp3'], foldered: true), isNull);
+    });
+  });
+
+  testWidgets('a folder of one real file and empty ones is not asked about', (
+    tester,
+  ) async {
+    final repo = _repo();
+    final empty = PickedAudioFile(name: 'empty.mp3', size: 0, relativeDir: 'B');
+    await _openDialog(
+      tester,
+      repo,
+      (context, ref) => showAddToLibrarySheet(context, ref),
+      picker: _Picker([_file('01.mp3', 'B'), empty, empty]),
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.addUploadFolder));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Music'), findsOneWidget);
+    expect(find.text('Choose'), findsNothing);
+    expect(_confirmEnabled(tester), isTrue);
+  });
+
+  testWidgets('with no medium chosen the rows that word themselves for one '
+      'are hidden', (tester) async {
+    const music = UploadTarget(
+      pid: 'lb-music',
+      name: 'Music',
+      mediaTypes: [MediaType.music],
+      managed: true,
+    );
+    const other = UploadTarget(
+      pid: 'lb-other',
+      name: 'Other',
+      mediaTypes: [MediaType.music],
+      managed: true,
+    );
+    await _openDialog(
+      tester,
+      _repo(),
+      (context, ref) => showDialog<void>(
+        context: context,
+        builder: (_) => const MediaTypeDialog(
+          initial: null,
+          fileCount: 3,
+          initialIdentify: false,
+          targets: [music, other],
+        ),
+      ),
+    );
+
+    expect(find.text('Choose'), findsOneWidget);
+    expect(find.text('Music'), findsNothing);
+    expect(find.text('Audiobook'), findsNothing);
+    expect(_confirmEnabled(tester), isFalse);
+    for (final id in [
+      SemanticsIds.uploadLibrary,
+      SemanticsIds.uploadGrouping,
+      SemanticsIds.uploadIdentify,
+    ]) {
+      expect(find.bySemanticsIdentifier(id), findsNothing, reason: id);
+    }
+
+    await _expectTwoMedia(tester, MediaType.music);
+    for (final id in [
+      SemanticsIds.uploadLibrary,
+      SemanticsIds.uploadGrouping,
+      SemanticsIds.uploadIdentify,
+    ]) {
+      expect(find.bySemanticsIdentifier(id), findsOneWidget, reason: id);
+    }
+  });
+
+  testWidgets('a folder of several files asks the medium with nothing chosen', (
+    tester,
+  ) async {
+    final repo = _repo();
+    await _openDialog(
+      tester,
+      repo,
+      (context, ref) => showAddToLibrarySheet(context, ref),
+      picker: _Picker([_file('01.mp3', 'Book'), _file('02.mp3', 'Book')]),
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.addUploadFolder));
+    await tester.pumpAndSettle();
+
+    expect(find.text('What are these 2 files?'), findsOneWidget);
+    expect(find.text('Choose'), findsOneWidget);
+    expect(find.text('Music'), findsNothing);
+    expect(find.text('Audiobook'), findsNothing);
+    expect(_confirmEnabled(tester), isFalse);
+
+    // A choice enables the confirm and brings the grouping for it.
+    await _expectTwoMedia(tester, MediaType.audiobook);
+    expect(_confirmEnabled(tester), isTrue);
+    expect(find.text('One book in 2 parts'), findsOneWidget);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    final batch = repo.batchesById.values.single;
+    expect(batch.mediaType, MediaType.audiobook);
+    expect(batch.grouping, UploadGrouping.album);
+  });
+
+  testWidgets('choosing music for a folder groups by auto-detection', (
+    tester,
+  ) async {
+    final repo = _repo();
+    await _openDialog(
+      tester,
+      repo,
+      (context, ref) => showAddToLibrarySheet(context, ref),
+      picker: _Picker([_file('01.flac', 'Album'), _file('02.flac', 'Album')]),
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.addUploadFolder));
+    await tester.pumpAndSettle();
+
+    await _expectTwoMedia(tester, MediaType.music);
+    expect(_confirmEnabled(tester), isTrue);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    final batch = repo.batchesById.values.single;
+    expect(batch.mediaType, MediaType.music);
+    expect(batch.grouping, UploadGrouping.auto);
+  });
+
   test(
     'the selector words the media it offers and survives one it does not',
     () {

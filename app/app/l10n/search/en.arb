@@ -55,6 +55,10 @@
   "@searchKindArtists": {
     "description": "Heading over the artists a search matched."
   },
+  "searchKindAuthors": "Authors",
+  "@searchKindAuthors": {
+    "description": "Heading over the people credited on audiobooks that a search matched."
+  },
   "searchKindBooks": "Audiobooks",
   "@searchKindBooks": {
     "description": "Heading over the audiobooks a search matched."

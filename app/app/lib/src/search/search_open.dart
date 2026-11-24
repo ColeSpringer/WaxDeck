@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart'
     show BuildContext, WaxGlyph, WaxIcons;
 
+import '../books/book_dimension.dart';
 import '../music/music_controllers.dart';
 import '../player/now_playing_controller.dart';
 import '../queue/queue_state.dart';
@@ -25,6 +26,13 @@ void openSearchHit(BuildContext context, WidgetRef ref, SearchHit hit) {
     case 'artist':
       context.push(
         WaxRoute.musicBucket(MusicDimension.artists, hit.pid),
+        extra: hit.title,
+      );
+    // An author is a person credited on books: their page is the books
+    // index's bucket, not the music artist page.
+    case 'author':
+      context.push(
+        WaxRoute.bookBucket(BookDimension.authors, hit.pid),
         extra: hit.title,
       );
     case 'album':
@@ -51,7 +59,7 @@ void openSearchHit(BuildContext context, WidgetRef ref, SearchHit hit) {
 }
 
 WaxGlyph searchHitGlyph(String kind) => switch (kind) {
-  'artist' => WaxIcons.artists,
+  'artist' || 'author' => WaxIcons.artists,
   'album' => WaxIcons.albums,
   'book' => WaxIcons.audiobooks,
   'episode' => WaxIcons.podcasts,
