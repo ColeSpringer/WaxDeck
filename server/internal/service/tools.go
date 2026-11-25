@@ -197,6 +197,9 @@ type toolTaskParams struct {
 	// the review entries the download opens. Stored as the decline so a
 	// task queued before the field existed decodes as "identify".
 	IdentifyDeclined bool `json:"identifyDeclined,omitempty"`
+	// AcceptBest carries whether those entries take their best match
+	// without review.
+	AcceptBest bool `json:"acceptBest,omitempty"`
 	// Playlist-sync field: the API pid of the bound playlist to sync.
 	PlaylistPID string `json:"playlistPid,omitempty"`
 	// Health-fix fields: the rule, and the bare item pids to fix (none

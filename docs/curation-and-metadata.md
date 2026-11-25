@@ -42,8 +42,20 @@ against it. Decisions:
 
 - **Approve** applies the chosen candidate (the ranked best by
   default), writes it into the files' tags, and locks the applied
-  fields so a rescan cannot undo the acceptance.
-- **Keep as is** accepts the current metadata unchanged.
+  fields so a rescan cannot undo the acceptance. The recording id is
+  the exception: the catalog keeps it, and a file's own is left as it
+  is. An approval also fetches the release's cover (its front, else
+  its release group's, else a cover provider's) where an item has
+  none, a download's thumbnail, or an earlier approval's cover, and
+  writes it into the files, locked. The release's own front also
+  replaces a provider's cover found by name or by release group, a
+  looser match; a cover someone set or locked and a file's own art
+  stay. An item left without a better cover is named
+  in the decision's warnings.
+- **Keep as is** accepts the current metadata. A downloaded music
+  track still without an album gets the "<Title> - Single" album
+  described under acquiring from a URL, and the reviewer can ask for
+  the suggested artist and title to be written as well.
 - **Mark unofficial** is keep-as-is plus a locked `RELEASESTATUS`
   custom tag, written into the files too: YouTube rips, remixes, live
   sets, and personal recordings have no canonical release, and
@@ -54,9 +66,15 @@ against it. Decisions:
   status are treated the same way.
 - **Skip** dismisses the entry without touching anything.
 - **Revert** (on applied entries) restores the pre-apply snapshot, in
-  the files as well, and unlocks the fields. Reverts of auto-applied
-  entries feed the calibration statistic the queue shows, so trust in
-  auto-apply is measured, not asserted.
+  the files as well, and unlocks the fields; a restored recording id
+  the file does not carry stays locked, since a rescan would otherwise
+  clear it. It puts back the cover the approval replaced, or removes
+  one it added. A reverted download is unmatched again, so one left
+  without an album gets the "<Title> - Single" album. Reverts of
+  entries the matcher applied at its own threshold feed the
+  calibration statistic the queue shows, so trust in auto-apply is
+  measured, not asserted; an accept-the-best-match apply, which also
+  reads auto-applied, does not count.
 
 An uploaded or downloaded entry whose files are not yet in the library
 says what it imports as, Music or Audiobook, and the reviewer can switch
@@ -84,10 +102,48 @@ compilation carrying the recording) is the kind of wrong-release risk
 a person should accept deliberately. A per-library "auto-apply
 confident singles" switch - beside the matching mode in the review
 queue's menu - opts in, and even then singles apply themselves only at
-a stricter confidence than albums. An upload or URL acquisition names
-no library until import places it; the switch reaches those through
-the one library that could hold the music, so on a server with several
-music libraries they always queue.
+a stricter confidence than albums, and never to a recording titled as
+another cut than the file (a live take, a remix, a demo, an edit, a
+clean or 8D cut that only one of them names; a bonus track, album
+version, explicit or original mix note, or a title that only continues
+the other, is no cut there). An upload or URL acquisition names no
+library until import places it; the mode and the switch reach those
+through the one library that could hold the music, so on a server with
+several music libraries they follow `auto` (or `off`, when every one of
+them is) and singles always queue.
+
+An upload or acquisition can also ask to **accept the best match** (a
+second switch under Identify in both sheets, seeded from an account
+preference that is off by default). Its entry then takes its top
+candidate without waiting when that candidate is close enough and
+clearly ahead of any candidate naming a different recording; a closer
+candidate on the same recording is only another edition of it. A
+download titled "Artist - Title" under a channel's name is judged on
+the artist and title it splits into, upload and remaster notes dropped
+but anything marking another cut kept (a clean edit, 8D audio, a live
+take). The search itself, derived or typed, asks for the song alone (a
+live take is catalogued under the song's own title, and a remix is
+listed with it) and, in the same request, for the title as named,
+which ranks a remix or a live take named so ahead of the song's other
+recordings, however many those are; what the title names then picks
+among the recordings found. A guest credit is set aside when titles
+are compared, and nothing after it is: a best titled as another cut
+than the download (a live take, a demo, a clean edit, a bonus track,
+album version, explicit or original mix note that only one of them
+names, or a title one of them only continues, such as "Part II" or
+"(Take 2)") waits however alike the two titles read. Every recording
+the search listed counts against the best, not only the releases it
+fetched; a search that counted more recordings than it lists, the last
+listed matching as well as the best, leaves it waiting, since one past
+the list could be closer. This reaches past the singles switch and a
+library in `review`, never past `off`, a typed search, or a possible
+duplicate. The distance it must be within is the same for every unit
+size, so an album the library's own `auto` mode would apply can still
+wait under accept-best in a `review` library. Otherwise the entry
+waits as usual and says why: the best was too far, another recording
+was too close or could not be ruled out, or nothing was found. Such an
+apply reads auto-applied but stays out of the calibration statistic,
+which measures only the matcher's own threshold.
 
 Matching needs the network. MusicBrainz lookups are paced to their
 etiquette (one request per second) and cached; AcoustID fingerprint
@@ -240,18 +296,32 @@ root for the files to land in (`WAXDECK_MANAGED_ROOTS`), and
 The download runs as a background task through the acquisition
 bridge, with SponsorBlock cuts and embedded source metadata (title,
 channel, thumbnail) plus provenance tags recording where the audio
-came from. The files then stage exactly like uploads and flow through
-the same identify and review pipeline, grouped into album units.
+came from. A YouTube "<Artist> - Topic" channel loses its suffix, and
+a music download also loses upload notes such as "(Official Video)"
+from its title and takes its artists, album and release date from an
+auto-generated Art Track description; the "Artist - Title" a video
+title may spell is only offered in review, never written unasked. The
+files then stage exactly like uploads and flow through the same
+identify and review pipeline, grouped into album units.
 
 This is where the honest-metadata story matters most: a ripped album
 playlist with clean titles will often match its release and arrive
 fully tagged, while an unofficial remix or live set may match nothing
 that exists outside that video. Both are first-class outcomes. The
 review queue offers keep-as-is and mark-unofficial beside any
-candidates, the source-derived metadata is preserved either way, and
-the person who acquired the content keeps item-scoped editing rights
-over it afterward, so hand-naming a remix does not require an
-administrator.
+candidates, the source-derived metadata is preserved either way (or,
+when asked, replaced by the suggested artist and title once the files
+land, as a metadata edit would; the suggestion drops upload and
+remaster notes but keeps what marks another cut, so a clean edit or a
+live take is not filed as the plain song, and an artist the track
+already credits, alone or beside others, stays as it is), and the person who acquired
+the content keeps item-scoped editing rights over it afterward, so
+hand-naming a remix does not require an administrator. A downloaded
+track still without an album once it is kept, or once its
+identification was declined, is given the album "<Title> - Single" by
+its artist: a placeholder the matcher ignores, which any later match,
+enrichment or edit replaces. As after an approval, the file keeps the
+place its delivered tags gave it until it is organized.
 
 ## The metadata editor
 
@@ -321,7 +391,11 @@ everyone rather than only to whoever opens the editor.
 Covers and lyrics carry the same attribution the scalar fields do:
 whether they were read out of the file's own tags, out of an image or
 `.lrc` sitting beside the audio, out of a podcast feed, fetched from a
-metadata provider (which is named), or set by hand.
+metadata provider (which is named), or set by hand. A download's
+picture, such as a video thumbnail, is named as the source it came
+from ("Art from YouTube") rather than as the file's, on the track and
+on an album showing it, for as long as the file carries the picture
+it arrived with; any better cover may replace it.
 
 Wherever a cover is drawn large enough to carry a caption - the
 artwork manager, the album, artist, book and show headers, the radio

@@ -211,7 +211,7 @@ Future<void> acquireFromUrl(
   final container = ProviderScope.containerOf(context, listen: false);
   // Joined, not awaited in turn: both are pre-dialog seeds and paying
   // their round trips end to end doubles the wait before the sheet.
-  final (identifyDefault, targets, remembered) = await _dialogSeeds(ref);
+  final (seed, targets, remembered) = await _dialogSeeds(ref);
   if (!context.mounted) return;
   final request =
       await showDialog<
@@ -220,6 +220,7 @@ Future<void> acquireFromUrl(
           MediaType mediaType,
           String format,
           bool? identify,
+          bool? acceptBestMatch,
           String libraryPid,
         })
       >(
@@ -228,7 +229,8 @@ Future<void> acquireFromUrl(
           initial: initial,
           kindFixed: kindFixed,
           initialUrl: initialUrl,
-          initialIdentify: identifyDefault,
+          initialIdentify: seed.identify,
+          initialAcceptBest: seed.acceptBest,
           targets: targets,
           rememberedTarget: remembered,
         ),
@@ -243,6 +245,7 @@ Future<void> acquireFromUrl(
           mediaType: request.mediaType,
           format: request.format,
           identify: request.identify,
+          acceptBestMatch: request.acceptBestMatch,
           libraryPid: request.libraryPid.isEmpty ? null : request.libraryPid,
         );
     container
@@ -436,7 +439,7 @@ Future<void> uploadPickedFiles(
     }
     return;
   }
-  final (identifyDefault, targets, remembered) = await _dialogSeeds(ref);
+  final (seed, targets, remembered) = await _dialogSeeds(ref);
   if (!context.mounted) return;
   final fixedKind = fixed != null && uploadableMediaTypes.contains(fixed)
       ? fixed
@@ -453,6 +456,7 @@ Future<void> uploadPickedFiles(
           MediaType mediaType,
           UploadGrouping grouping,
           bool? identify,
+          bool? acceptBestMatch,
           String libraryPid,
         })
       >(
@@ -464,7 +468,8 @@ Future<void> uploadPickedFiles(
           audiobookGrouping: fixedKind == MediaType.music
               ? null
               : defaultUploadGrouping(MediaType.audiobook, files),
-          initialIdentify: identifyDefault,
+          initialIdentify: seed.identify,
+          initialAcceptBest: seed.acceptBest,
           targets: targets,
           rememberedTarget: remembered,
         ),
@@ -481,6 +486,7 @@ Future<void> uploadPickedFiles(
         mediaType: choice.mediaType.wireName,
         libraryPid: libraryPid,
         identify: choice.identify,
+        acceptBestMatch: choice.acceptBestMatch,
       );
       batchId = batch.id;
     } on WaxDeckApiException catch (e) {
@@ -505,6 +511,7 @@ Future<void> uploadPickedFiles(
             libraryPid: libraryPid,
             batchId: batchId,
             identify: choice.identify,
+            acceptBestMatch: choice.acceptBestMatch,
           );
       if (accepted) uploaded++;
     } on WaxDeckApiException catch (e) {
@@ -625,34 +632,42 @@ Future<(String, List<UploadTarget>)> sharedUploadTarget(WidgetRef ref) async {
   return (await remembered, await targets);
 }
 
-/// The three values a dialog opens on, gathered together so their
-/// waits overlap rather than stack.
-Future<(bool?, List<UploadTarget>, String)> _dialogSeeds(WidgetRef ref) async {
-  final identify = _identifyDefault(ref);
+/// The values a dialog opens on, gathered together so their waits
+/// overlap rather than stack.
+Future<(_PrefsSeed, List<UploadTarget>, String)> _dialogSeeds(
+  WidgetRef ref,
+) async {
+  final seed = _prefsSeed(ref);
   final targets = _uploadTargets(ref);
   final remembered = _rememberedTarget(ref);
-  return (await identify, await targets, await remembered);
+  return (await seed, await targets, await remembered);
 }
 
-/// What the identification switch opens on. Awaited, not sampled: the
-/// provider is lazy, so a synchronous read answers the default for
-/// anybody who has not opened Settings. Null where it cannot be read,
-/// which is sent absent rather than overriding an opt-out with a guess.
+/// What the two switches open on; see [_prefsSeed].
+typedef _PrefsSeed = ({bool? identify, bool? acceptBest});
+
+/// What the identification and accept-best switches open on. Awaited,
+/// not sampled: the provider is lazy, so a synchronous read answers the
+/// default for anybody who has not opened Settings. Null where it cannot
+/// be read: Identify then goes absent rather than overriding an opt-out
+/// with a guess, while accept-best draws and sends off.
 ///
 /// Bounded, because the app's Dio carries no timeouts: a server that
 /// takes the socket and never answers would otherwise hold the sheet
 /// shut for good, dropping picked files and eating a shared URL the
 /// gate has already dequeued.
-Future<bool?> _identifyDefault(WidgetRef ref) async {
+Future<_PrefsSeed> _prefsSeed(WidgetRef ref) async {
+  const unread = (identify: null, acceptBest: null);
+  _PrefsSeed read(Prefs? prefs) => (
+    identify: !(prefs?.identifyOptOut ?? false),
+    acceptBest: prefs?.acceptBestMatch ?? false,
+  );
   final loaded = ref.read(prefsControllerProvider);
-  if (loaded.hasValue) return !(loaded.value?.identifyOptOut ?? false);
+  if (loaded.hasValue) return read(loaded.value);
   return ref
       .read(prefsControllerProvider.future)
-      .then<bool?>(
-        (prefs) => !(prefs.identifyOptOut ?? false),
-        onError: (Object _, StackTrace _) => null,
-      )
-      .timeout(_prefsSeedWait, onTimeout: () => null);
+      .then<_PrefsSeed>(read, onError: (Object _, StackTrace _) => unread)
+      .timeout(_prefsSeedWait, onTimeout: () => unread);
 }
 
 /// How long a sheet waits on the account preference before opening
@@ -668,6 +683,7 @@ class AcquireDialog extends StatefulWidget {
     this.kindFixed = false,
     this.initialUrl,
     required this.initialIdentify,
+    required this.initialAcceptBest,
     this.targets = const [],
     this.rememberedTarget = '',
   });
@@ -684,6 +700,9 @@ class AcquireDialog extends StatefulWidget {
   /// What the switch opens on; null is sent absent. Required, not
   /// defaulted: a caller that forgot it would ignore the preference.
   final bool? initialIdentify;
+
+  /// What the accept-best switch opens on, under the same rule.
+  final bool? initialAcceptBest;
 
   /// Every library this account may file under, unfiltered: the medium
   /// is chosen inside the dialog, so the narrowing is too.
@@ -704,6 +723,7 @@ class _AcquireDialogState extends State<AcquireDialog> {
   late var _mediaType = uploadableMediaType(widget.initial);
   // Null is "nobody has said": drawn as on, sent absent.
   late bool? _identify = widget.initialIdentify;
+  late bool? _acceptBest = widget.initialAcceptBest;
   var _format = 'best';
 
   /// The pid last chosen here, or the remembered one until somebody
@@ -786,6 +806,13 @@ class _AcquireDialogState extends State<AcquireDialog> {
               semanticsId: SemanticsIds.acquireIdentify,
               onChanged: (value) => setState(() => _identify = value),
             ),
+            if (_mediaType == MediaType.music)
+              AcceptBestSwitch(
+                value: _acceptBest,
+                identify: _identify ?? true,
+                semanticsId: SemanticsIds.acquireAcceptBest,
+                onChanged: (value) => setState(() => _acceptBest = value),
+              ),
           ],
         ),
       ),
@@ -807,6 +834,11 @@ class _AcquireDialogState extends State<AcquireDialog> {
                   mediaType: _mediaType,
                   format: _format,
                   identify: _identify,
+                  acceptBestMatch: _sendsAcceptBest(
+                    _mediaType,
+                    _identify,
+                    _acceptBest,
+                  ),
                   // Only where the picker was a real choice: one
                   // candidate is the routing the server would have done
                   // anyway, and naming it would pin a policy nobody
@@ -840,6 +872,7 @@ class MediaTypeDialog extends StatefulWidget {
     this.fileCount = 1,
     this.audiobookGrouping,
     required this.initialIdentify,
+    required this.initialAcceptBest,
     this.targets = const [],
     this.rememberedTarget = '',
   });
@@ -866,6 +899,9 @@ class MediaTypeDialog extends StatefulWidget {
   /// [AcquireDialog.initialIdentify].
   final bool? initialIdentify;
 
+  /// See [AcquireDialog.initialAcceptBest].
+  final bool? initialAcceptBest;
+
   /// See [AcquireDialog.targets].
   final List<UploadTarget> targets;
 
@@ -881,6 +917,7 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
       ? null
       : uploadableMediaType(widget.initial);
   late bool? _identify = widget.initialIdentify;
+  late bool? _acceptBest = widget.initialAcceptBest;
   late var _grouping = _defaultGrouping(_mediaType);
   var _groupingTouched = false;
 
@@ -963,6 +1000,13 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
                 semanticsId: SemanticsIds.uploadIdentify,
                 onChanged: (value) => setState(() => _identify = value),
               ),
+              if (chosen == MediaType.music)
+                AcceptBestSwitch(
+                  value: _acceptBest,
+                  identify: _identify ?? true,
+                  semanticsId: SemanticsIds.uploadAcceptBest,
+                  onChanged: (value) => setState(() => _acceptBest = value),
+                ),
             ],
           ],
         ),
@@ -982,6 +1026,11 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
                   mediaType: chosen,
                   grouping: _grouping,
                   identify: _identify,
+                  acceptBestMatch: _sendsAcceptBest(
+                    chosen,
+                    _identify,
+                    _acceptBest,
+                  ),
                   libraryPid: candidates.length > 1 ? target : '',
                 )),
         ),
@@ -1200,6 +1249,54 @@ class IdentifySwitch extends StatelessWidget {
         label: _title(l10n),
         semanticsId: semanticsId,
         onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+/// The accept-best choice a submission carries: only for music with
+/// identification on, where it can act, and always what the switch shows
+/// (unread preferences draw off, so off is sent). Left out otherwise, so the
+/// account preference (inert there) decides.
+bool? _sendsAcceptBest(
+  MediaType? mediaType,
+  bool? identify,
+  bool? acceptBest,
+) => mediaType == MediaType.music && (identify ?? true)
+    ? acceptBest ?? false
+    : null;
+
+/// Whether a clear best match is taken without waiting for review. Drawn
+/// under [IdentifySwitch] for music, and disabled while [identify] is off.
+class AcceptBestSwitch extends StatelessWidget {
+  const AcceptBestSwitch({
+    super.key,
+    required this.value,
+    required this.identify,
+    required this.semanticsId,
+    required this.onChanged,
+  });
+
+  /// Null is "nobody has said", drawn as off.
+  final bool? value;
+
+  /// Whether Identify is on; the switch cannot act without it.
+  final bool identify;
+
+  final String semanticsId;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return WaxSettingRow(
+      title: l10n.uploadsAcceptBestTitle,
+      info: l10n.uploadsAcceptBestHelp,
+      control: WaxSwitch(
+        value: value ?? false,
+        label: l10n.uploadsAcceptBestTitle,
+        semanticsId: semanticsId,
+        onChanged: identify ? onChanged : null,
       ),
     );
   }

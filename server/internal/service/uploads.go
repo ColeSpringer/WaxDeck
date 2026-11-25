@@ -184,6 +184,9 @@ type UploadCreateParams struct {
 	// account default. Joining a batch overwrites it with the batch's,
 	// so every file in a batch is treated alike.
 	Identify *bool
+	// AcceptBest is the submission's accept-best choice, resolved and
+	// overwritten by a batch the same way.
+	AcceptBest *bool
 }
 
 func uploadDTO(u wdb.Upload) UploadDTO {
@@ -437,6 +440,7 @@ func (l *Ingest) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreatePa
 		SHA256:       strings.ToLower(p.SHA256),
 		State:        uploadReceiving,
 		Identify:     l.resolveIdentify(ctx, uc.ID, p.Identify),
+		AcceptBest:   l.resolveAcceptBest(ctx, uc.ID, p.AcceptBest),
 		CreatedAtNS:  now.UnixNano(),
 		ReceivedAtNS: now.UnixNano(),
 		ExpiresAtNS:  now.Add(l.uploadRetention).UnixNano(),
@@ -1091,7 +1095,7 @@ func (l *Ingest) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (Up
 		Title:      firstNonEmpty(tags["ALBUM"], track.Title),
 		Artist:     firstNonEmpty(tags["ALBUMARTIST"], tags["ARTIST"]),
 	}
-	entryID, err := l.openReviewEntry(ctx, entry, reviewPayload{Tracks: []reviewTrackDoc{track}}, u.Identify)
+	entryID, err := l.openReviewEntry(ctx, entry, reviewPayload{Tracks: []reviewTrackDoc{track}, AcceptBest: u.AcceptBest}, u.Identify)
 	if err != nil {
 		return UploadDTO{}, err
 	}
@@ -1258,9 +1262,7 @@ func (l *Ingest) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, p
 		var res *waxbin.AcquiredResult
 		if planned != nil && planned.path == doc.Path {
 			res, planned = planned.res, nil
-		} else if res, err = l.planImport(ctx, waxbin.AcquiredFile{Path: doc.Path}, kind, waxbin.AcquiredMeta{
-			Copy: false, DupPolicy: model.DupAllow,
-		}); err != nil {
+		} else if res, err = l.planImport(ctx, waxbin.AcquiredFile{Path: doc.Path}, kind, doc.importMeta()); err != nil {
 			return fail(classifyMutation(err))
 		}
 		switch {
@@ -1314,6 +1316,7 @@ func (l *Ingest) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, p
 				warnings = append(warnings, name+": already in the library; added to the item that holds it, which keeps its details")
 			} else {
 				owned[landed.pid] = true
+				l.recordAcquiredArt(ctx, model.PID(landed.pid), doc.SourceType)
 			}
 		default:
 			failures = append(failures, fmt.Sprintf("%s: the import produced nothing", name))
@@ -1707,9 +1710,7 @@ func (l *Ingest) preflightImport(ctx context.Context, payload *reviewPayload, ki
 			continue
 		}
 		name := filepath.Base(doc.Path)
-		res, err := l.planImport(ctx, waxbin.AcquiredFile{Path: doc.Path}, kind, waxbin.AcquiredMeta{
-			Copy: false, DupPolicy: model.DupAllow,
-		})
+		res, err := l.planImport(ctx, waxbin.AcquiredFile{Path: doc.Path}, kind, doc.importMeta())
 		if first == nil && err == nil {
 			first = &plannedFile{path: doc.Path, res: res}
 		}

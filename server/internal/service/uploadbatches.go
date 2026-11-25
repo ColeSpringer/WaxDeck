@@ -59,6 +59,8 @@ type UploadBatchCreateParams struct {
 	// Identify is the batch's identification choice for every entry it
 	// opens; nil means the account default.
 	Identify *bool
+	// AcceptBest is the batch's accept-best choice, the same way.
+	AcceptBest *bool
 }
 
 func uploadBatchDTO(b wdb.UploadBatch) UploadBatchDTO {
@@ -110,6 +112,7 @@ func (l *Ingest) CreateUploadBatch(ctx context.Context, uc *UserCtx, p UploadBat
 		State:          batchOpen,
 		ReviewEntryIDs: "[]",
 		Identify:       l.resolveIdentify(ctx, uc.ID, p.Identify),
+		AcceptBest:     l.resolveAcceptBest(ctx, uc.ID, p.AcceptBest),
 		CreatedAtNS:    time.Now().UnixNano(),
 		ExpiresAtNS:    time.Now().Add(uploadBatchTTL).UnixNano(),
 	}
@@ -184,6 +187,7 @@ func (l *Ingest) batchForMember(ctx context.Context, uc *UserCtx, p *UploadCreat
 	// This also covers the fall-through below, where a batch that closed
 	// mid-transfer leaves the member to open its own entry.
 	p.Identify = &b.Identify
+	p.AcceptBest = &b.AcceptBest
 	cleaned, err := cleanBatchPath(p.BatchPath)
 	if err != nil {
 		return err
@@ -453,7 +457,7 @@ func (l *Ingest) openBatchEntries(ctx context.Context, b wdb.UploadBatch, member
 			entry.ID = newReviewID()
 			entry.Title = bookUnitTitle(nil, unitDocs, unitFolderName(dirs), entry.ID)
 		}
-		entryID, err := l.openReviewEntry(ctx, entry, reviewPayload{Tracks: unitDocs}, b.Identify)
+		entryID, err := l.openReviewEntry(ctx, entry, reviewPayload{Tracks: unitDocs, AcceptBest: b.AcceptBest}, b.Identify)
 		if err != nil {
 			return b, declined, err
 		}

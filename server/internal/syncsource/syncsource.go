@@ -1,13 +1,22 @@
-// Package syncsource defines the full-order playlist listing a synced
-// playlist reconciles against. It is a WaxDeck-owned capability beside
-// WaxBin's source.Provider port: a provider that can list a playlist in
-// true order - no newest-first stop cursor, unavailable entries flagged
-// rather than dropped - advertises it by implementing Snapshotter, and
-// the playlist-sync reconciler finds it by type assertion, the same way
-// the acquisition format preference rides its own optional interface.
+// Package syncsource holds the acquisition capabilities WaxDeck adds
+// beside WaxBin's source.Provider port, each found by type assertion: a
+// provider that can list a playlist in true order - no newest-first stop
+// cursor, unavailable entries flagged rather than dropped - implements
+// Snapshotter for the playlist-sync reconciler, and one that can honour
+// an acquisition's options implements FetchWith (FetchOptions).
 package syncsource
 
 import "context"
+
+// FetchOptions are what an acquisition asks of one fetch beyond WaxBin's
+// source.FetchRequest. Format is the preferred output format ("" or
+// "best" is the provider's default copy; "opus", "mp3", "m4a", "flac"
+// transcode). Music says the download lands in a music library, so the
+// provider may clean the title and read release facts the source states.
+type FetchOptions struct {
+	Format string
+	Music  bool
+}
 
 // PlaylistSnapshotEntry is one entry of a playlist snapshot, carrying
 // the source's own entry identity and its true playlist position.

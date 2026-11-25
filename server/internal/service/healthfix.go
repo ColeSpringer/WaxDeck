@@ -513,7 +513,7 @@ func (l *Health) fixHealthItem(ctx context.Context, rule string, pid model.PID, 
 		return
 	}
 	want := healthFixWants[rule]
-	_, skipped, err := l.Enrichment.enrichItemFully(ctx, it, []string{want})
+	_, skipped, err := l.Enrichment.enrichItemFully(ctx, nil, it, []string{want})
 	if err != nil {
 		sum.Failed++
 		return

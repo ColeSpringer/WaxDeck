@@ -211,11 +211,13 @@ info:
       `reason: unreadable` marks a completed upload whose bytes do not
       read as audio at all, a damaged file rather than a format the
       server refuses. Under `invalid-request`, `reason` names
-      two refusals a client words itself: `incompatible-schema` (a backup
-      whose schema this server cannot open) and `cue-rip` (a delete
+      three refusals a client words itself: `incompatible-schema` (a backup
+      whose schema this server cannot open), `cue-rip` (a delete
       naming some tracks of a cue rip but not all, which also carries
       `tracks`: every track of the rips it named some of, comma-separated
-      in the order they play, for the client to offer them together); a
+      in the order they play, for the client to offer them together) and
+      `recording-id-held` (an unlock of a track's recording id whose
+      file carries none); a
       subscribe also
       names the feed address it will not take, in a message that is
       already a sentence for a person (an import names it per entry, in
@@ -3171,7 +3173,8 @@ paths:
         refused or failed write-back, a value the format could not
         store, and a value an edit changed in the catalog without
         writing it (a value a clean-up pass normalized in the catalog
-        alone does not count). Its fix writes those values and counts
+        alone does not count, nor does a track's recording id, which
+        the catalog keeps alone). Its fix writes those values and counts
         an item filled only when none remains.
         `genre-whitelist` flags an
         item carrying a genre the server's genre tree does not know; it
@@ -4318,23 +4321,25 @@ paths:
             X-Art-Source:
               description: >
                 Where the answering image came from: `tag`, `sidecar`,
-                `user`, `enrichment`, `feed`, or `generated` for a picture
+                `user`, `enrichment`, `acquisition`, `feed`, or
+                `generated` for a picture
                 this server built (a playlist mosaic). Omitted when the
                 store holds no attribution for it.
               schema:
                 type: string
             X-Art-Provider:
               description: >
-                The provider that supplied an `enrichment` cover.
-                Omitted for every other source.
+                The provider that supplied an `enrichment` cover, or the
+                acquisition source of an `acquisition` one. Omitted for
+                every other source.
               schema:
                 type: string
             X-Art-Source-Url:
               description: >
                 Where a fetched cover's bytes came from, redacted as
                 `ArtSource.sourceUrl` is. Omitted for a cover that never
-                crossed the network, and for one whose feed is
-                credentialed.
+                crossed the network, for an `acquisition` cover, and for
+                one whose feed is credentialed.
               schema:
                 type: string
             X-Art-Level:
@@ -4860,10 +4865,11 @@ paths:
       description: >
         Applies one or more scalar field edits atomically to the
         catalog. `writeBack` additionally writes the new values into
-        the backing file's tags (refused by upstream design for
-        episodes, virtual tracks, and files shared by several items;
-        the edit still lands in the catalog and the response carries
-        the per-file failures). `lock` (default true) locks each
+        the backing file's tags, all but a track's recording id
+        (`mbid`), which stays in the catalog. Write-back is refused by
+        upstream design for episodes, virtual tracks, and files shared
+        by several items; the edit still lands in the catalog and the
+        response carries the per-file failures. `lock` (default true) locks each
         edited field against scans and enrichment; editing a field
         someone locked earlier requires `force` or answers
         `field-locked`. Unknown fields for the item's kind answer
@@ -5057,7 +5063,9 @@ paths:
         fields and reports them instead of failing the batch;
         without it a locked item fails the whole batch with
         `field-locked`. Write-back failures are reported per item and
-        never undo the catalog batch. Every edited field is locked on
+        never undo the catalog batch. A track's recording id (`mbid`)
+        is never written back; it stays in the catalog. Every edited
+        field is locked on
         every edited item, so a repeat edit of the same field needs
         `force` or `skipLocked`. Editing a release-keying field
         (`album`, `album_artist`) moves the edited tracks to a new
@@ -5734,6 +5742,14 @@ paths:
         `kind`.
 
 
+        A track's recording id (`mbid`) cannot be unlocked while its
+        file carries no recording id: the catalog alone holds it, so
+        the next scan would clear it. Naming it to unlock answers
+        `invalid-request` with `params.reason` `recording-id-held`
+        and changes no lock. A file carrying another recording id
+        allows the unlock, and the next scan takes the file's.
+
+
         `kind` pins whether the item is a track or a book: an upload
         imported under a media type its file would not get on its own
         takes the pin, and while it holds a scan keeps the item's kind
@@ -6069,6 +6085,14 @@ paths:
         respecting locks and never overwriting a non-empty curated
         value. This is the editor's "fetch for me" button; the
         whole-library pass lives under `/library/enrichment`.
+
+
+        A cover lands in the catalog. One that replaces a download's
+        thumbnail (an `acquisition` cover) is written into the item's
+        file too, as a review approval's cover is, so a later re-read
+        of the file keeps it; where the file cannot be written the
+        cover stands in the catalog alone and `skipped` carries
+        `cover: not written to the file: ` and why.
 
 
         With a `proposal` in the body, nothing is fetched: the call
@@ -10970,21 +10994,63 @@ paths:
       description: >
         Applies one decision to a pending entry. `approve` applies the
         chosen candidate's metadata to the whole unit (the ranked best
-        when `candidateMbid` is absent), locking the applied fields so
-        a rescan cannot undo the acceptance, and writes them into each
-        file's tags; for entries staging new files (uploads and
-        imports) the files enter the library first. `as-is` accepts the
-        unit's current metadata unchanged (staged files enter the
-        library as they are). `unofficial` is `as-is` plus a locked
+        when `candidateMbid` is absent), locking the applied fields so a
+        rescan cannot undo the acceptance, and writes them into each
+        file's tags, all but a track's recording id, which the catalog
+        keeps alone (a file's own recording id is left as it is); for
+        entries staging new files (uploads and imports)
+        the files enter the library first. The approval records the
+        release and its release group on the album, over what an
+        earlier approval recorded; a release another album already
+        holds is not recorded and is named in `warnings`. It fetches a
+        cover: the release's front cover, else its release group's,
+        else a cover provider's answer for the release. That cover
+        replaces a cover that came with a download (`ArtSource.source`
+        `acquisition`) and fills a missing one; the release's own front
+        also replaces a provider's cover found by name or by release
+        group, a looser match. It is written into the files and locked.
+        A cover an earlier approval wrote gives way to a later
+        approval's; a cover a person set or locked, and a file's own
+        art (embedded in an uploaded or scanned file, or an image beside
+        it), are kept. An item left with no cover or a download's
+        thumbnail, because no source has a cover or it could not be
+        fetched (in time), is named in `warnings` and keeps what it had,
+        which a later enrichment may still replace. The time spent
+        fetching covers is bounded per decision (one bound for a whole
+        bulk decision).
+
+
+        `as-is` accepts the unit's current metadata (staged files enter
+        the library as they are). `unofficial` is `as-is` plus a locked
         `RELEASESTATUS` custom tag of `unofficial`, written into the
         files too, which excludes the items from future match retries
         and from health penalties (content with no canonical release is
-        a terminal state, not an error). A file in a read-only library
+        a terminal state, not an error). With `useSuggested`, once the
+        files are in the library, both first write the artist and title
+        the entry offers as `suggested` onto its tracks, in the catalog
+        and the files, as the deciding person's own edit, the way a
+        metadata edit is; an artist a track already credits stays as it
+        is. After either, an acquired music track that has
+        a title and no album once it lands is given the album
+        `<Title> - Single` (its title, then ` - Single`), with that
+        track's artist as the album artist, unlocked and attributed to
+        normalization (provenance `normalize`), so a later match or edit
+        replaces it. An acquisition whose identification was declined
+        gets the same; an uploaded file is not given one. Both writes
+        happen only on an import as music: a decide importing the unit
+        as `audiobook` makes neither. As after an approval, a file
+        keeps the place its delivered tags gave it until it is
+        organized (the `path-mismatch` health rule offers the move).
+
+
+        A file in a read-only library
         keeps its tags: `warnings` names it and the health rule for
         tags out of sync lists what it is owed, while the unit's other
         files are written; a unit none of whose files may be written is
         applied to the catalog alone. A matching library applying a
-        confident match on its own writes the files the same way.
+        confident match on its own, or an entry taking its best match
+        because its submission asked to (`acceptBestMatch`), writes
+        the files and the cover the same way.
         `skip` dismisses the entry
         without touching anything (staged files stay staged).
         `discard` deletes staged files and exists only for entries
@@ -10999,9 +11065,10 @@ paths:
         detail in `warnings` and the entry still counts as decided.
         Files that join an item the library already holds - the same
         audio, or a further part of a book it has - enter as that
-        item's copies or parts: the item keeps its metadata, `approve`
-        and `unofficial` leave it alone, and the uploader gains no
-        right to edit it. `warnings` names such files, and the
+        item's copies or parts: the item keeps its metadata and its
+        cover, `approve`, `unofficial`, `useSuggested` and the album
+        default leave it alone, and the uploader gains no right to
+        edit it. `warnings` names such files, and the
         entry's tracks mark them `joined`. A file whose audio the
         library holds at the very place its tags would put it adds
         nothing; its staged copy is removed and `warnings` says so.
@@ -11031,7 +11098,18 @@ paths:
               schema:
                 $ref: "#/components/schemas/ReviewDecideResult"
         "400":
-          $ref: "#/components/responses/InvalidRequest"
+          description: >
+            The request is malformed (code `invalid-request`). Besides a
+            body that does not parse, this answers a `mediaType` the
+            decision cannot take (see `ReviewDecision.mediaType`), and
+            `useSuggested` with `as-is` or `unofficial`, on an import as
+            music, on an entry that offers no `suggested` artist and
+            title. An already decided entry answers `conflict` before
+            any of these.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -11085,14 +11163,20 @@ paths:
         searches for the same thing.
 
 
-        Typed values are searched for verbatim. The cleanup that reads
-        "Artist - Track" out of a video title, peels "(Official
-        Video)", and drops a " - Topic" channel suffix exists to
-        rescue titles a machine wrote, and it does not run over these:
-        a title that genuinely contains " - " is searched for whole,
-        and a typed artist is not replaced by one a descriptive title
-        happens to name. A field left blank is not an instruction, so
-        it falls back to what the files imply.
+        Typed values are kept as typed and reported back as
+        `identifyOverride`. The search cleans a typed `title` as it
+        cleans one read off the files, asking for the song alone:
+        upload notes ("(Official Video)"), cut marks ("(Clean)"),
+        remaster notes, and what names a particular recording (a
+        " - Live at ..." or " - Radio Edit" tail, a "(Live)", "(Demo)"
+        or "(... Remix)" group) are left out of what is looked up,
+        since recordings are titled by the song, and are used to pick
+        among the recordings found. The rest of what rescues a
+        machine-written title does not run over typed values: a title
+        is never split on " - " into an artist and a track, and a
+        typed artist is searched as it stands, never replaced by one a
+        descriptive title happens to name. A field left blank is not
+        an instruction, so it falls back to what the files imply.
 
 
         Pending entries only; a decided one answers `conflict`. The
@@ -11135,11 +11219,22 @@ paths:
       description: >
         Restores the metadata snapshot taken before an `applied` or
         `auto-applied` entry was applied, in the catalog and the files'
-        tags (catalog alone for a file in a read-only library), unlocks
-        the fields the apply locked, and marks the entry `reverted`. Reverts of auto
-        applied entries feed the calibration statistics. Only
-        administrators and the deciding user may revert. Reverting
-        anything but an applied entry answers `conflict`.
+        tags (catalog alone for a file in a read-only library, and for
+        the recording id, which the apply kept there), unlocks
+        the fields the apply locked (all but a restored recording id
+        the file does not carry, which a rescan would otherwise
+        clear), puts back the front cover the item
+        had where the apply replaced it and removes one the apply added
+        to an item that had none, puts back the album's and release
+        group's ids where the album or group holds no other items, and
+        marks the entry `reverted`. A music acquisition's track left
+        with a title and no album is then given the `<Title> - Single`
+        album a download kept as it is gets: a reverted download is
+        unmatched again.
+        Reverts of entries the matcher applied at its own threshold feed
+        the calibration statistics. Only administrators and the deciding
+        user may revert. Reverting anything but an applied entry answers
+        `conflict`.
       tags: [review]
       responses:
         "200":
@@ -11169,7 +11264,10 @@ paths:
         own ranked best candidate (a per-entry candidate choice needs
         the single-entry endpoint), and each entry imports as its own
         `mediaType` (choosing another needs the single-entry endpoint
-        too). Entries are decided independently:
+        too; so does `useSuggested`). The time bound on an approval's
+        cover fetches is shared across the whole call, so an entry the
+        bound did not reach keeps its cover and, left with none or a
+        download's thumbnail, carries the cover warning. Entries are decided independently:
         one failure does not stop the rest, and the response reports
         each outcome.
       tags: [review]
@@ -11201,12 +11299,16 @@ paths:
         Queue depth and auto-apply calibration: how many entries auto
         applied and how many of those were later reverted. The revert
         rate is the trust signal the review surface shows next to the
-        auto-apply behavior; it is deliberately not the accuracy
-        metric that tunes thresholds (reverts are sparse and lagging).
-        The counts cover the entries the caller can see, the scope of
-        `GET /review/queue`: administrators count every entry, other
-        callers only the entries their own uploads, acquisitions and
-        rematches produced.
+        auto-apply behavior; it is deliberately not the accuracy metric
+        that tunes thresholds (reverts are sparse and lagging). The
+        calibration counts take only what the matcher applied at its own
+        threshold: an entry applied because its submission asked to take
+        its best match (`UploadCreate.acceptBestMatch`) reads
+        `auto-applied` but counts in neither `autoApplied` nor
+        `revertedAutoApplied`. The counts cover the entries the caller
+        can see, the scope of `GET /review/queue`: administrators count
+        every entry, other callers only the entries their own uploads,
+        acquisitions and rematches produced.
       tags: [review]
       responses:
         "200":
@@ -11254,10 +11356,12 @@ paths:
         auto-apply), and `off` never matches the library's content
         (as-is libraries: already-curated collections the engine must
         not touch). Under `auto`, one-file units still queue unless
-        `singlesAutoApply` is on. The body replaces the whole object.
-        A podcast library takes no matching behavior, its episodes coming
-        from their feeds, and is refused with `invalid-request`.
-        Administrators only.
+        `singlesAutoApply` is on. A submission that asked to take its
+        best match (`UploadCreate.acceptBestMatch`) may apply under
+        `review` and as a one-file unit too, never under `off`. The body
+        replaces the whole object. A podcast library takes no matching
+        behavior, its episodes coming from their feeds, and is refused
+        with `invalid-request`. Administrators only.
       tags: [review]
       requestBody:
         required: true
@@ -12901,12 +13005,36 @@ paths:
         entries; the response task reports progress per item).
         Downloaded files stage exactly like uploads, appear as
         upload sessions, and flow through the same identify and
-        review pipeline, grouped into album units; the source's own
-        metadata (title, channel, thumbnail) arrives embedded, and
-        provenance tags record the origin, so content with no
-        canonical release reaches the review queue ready for
-        keep-as-is or mark-unofficial and stays hand-editable by
-        the acquiring user afterward. Needs upload rights and a
+        review pipeline, grouped into album units. Each file carries
+        the source's own metadata in its tags, and provenance tags
+        record the origin, so content with no canonical release
+        reaches the review queue ready for keep-as-is or
+        mark-unofficial and stays hand-editable by the acquiring user
+        afterward.
+
+
+        What the fetch writes into a downloaded file's tags: the
+        source's title; its channel as the artist, with a ` - Topic`
+        channel suffix dropped; and its thumbnail as the cover,
+        attributed to the source (`ArtSource.source` `acquisition`), so
+        any better cover may replace it. For music, the title loses its
+        trailing upload-note groups, such as `(Official Video)` or
+        `[Lyrics]`, and only those: groups naming a recording or a cut,
+        such as `(Live)`, `(Remix)`, `(Clean)`, `(Teaser)` or
+        `(8D Audio)`, stay. Where a music source carries an
+        auto-generated Art Track description, and that description names
+        the same title as the video, it supplies the title, the artist
+        (the artists it names, in place of the channel), the album and
+        the release date; one that gives no release date leaves the date
+        unwritten, and the upload date is never written in its place. A
+        description naming another title is not used. A music track with
+        a title that still has no album once it lands, whether kept
+        `as-is`, marked `unofficial`, or imported because its
+        identification was declined, is given the album
+        `<Title> - Single` (see `as-is` on `decideReviewEntry`).
+
+
+        Needs upload rights and a
         running acquisition bridge (`source-unavailable` without
         one). Acquired bytes count against the caller's upload
         quota; a quota hit stops the task and keeps what already
@@ -14073,8 +14201,11 @@ components:
             The producer: `tag` (the file's own embedded cover),
             `sidecar` (a cover image beside the audio), `user` (set
             through the curation surface), `enrichment` (fetched from a
-            metadata provider, named in `provider`), `feed` (a podcast
-            feed's image, or a radio station's own announcement), or
+            metadata provider, named in `provider`), `acquisition` (the
+            picture that arrived with a download, such as a video
+            thumbnail, the acquisition source named in `provider`; any
+            better source may replace it), `feed` (a podcast feed's
+            image, or a radio station's own announcement), or
             `generated` (composed by the server from what the catalog
             already holds, which is what a playlist mosaic is - nobody
             chose it). A string, not a closed enum: treat an unknown
@@ -14084,14 +14215,17 @@ components:
           type: string
           description: >
             The provider that supplied an `enrichment` cover, as an id
-            (`deezer`, `coverartarchive`, `fanarttv`). Empty for every
-            other source.
+            (`deezer`, `coverartarchive`, `fanarttv`), or the
+            acquisition source an `acquisition` cover came from
+            (`youtube`). Empty for every other source.
           example: coverartarchive
         sourceUrl:
           type: string
           description: >
             Where the bytes were fetched from, for a cover that came off
-            the network (`enrichment`, `feed`). Empty otherwise.
+            the network (`enrichment`, `feed`). Empty otherwise, an
+            `acquisition` cover included: where a download came from is
+            the item's acquisition record.
 
 
             Redacted the way `ItemAcquisition.sourceUrl` is, and for the
@@ -18971,12 +19105,15 @@ components:
           type: string
           description: >
             Where this slot's image came from, in `ArtSource`'s
-            vocabulary (`tag`, `sidecar`, `user`, `enrichment`, `feed`,
-            `generated`). A string, not a closed enum.
+            vocabulary (`tag`, `sidecar`, `user`, `enrichment`,
+            `acquisition`, `feed`, `generated`). A string, not a closed
+            enum.
           example: tag
         provider:
           type: string
-          description: The provider that supplied an `enrichment` cover.
+          description: >
+            The provider that supplied an `enrichment` cover, or the
+            acquisition source of an `acquisition` one.
         sourceUrl:
           type: string
           description: >
@@ -19132,7 +19269,9 @@ components:
           type: boolean
           description: >
             Whether the value can write into file tags; false means
-            database-only by upstream design.
+            it stays in the catalog, by upstream design or, for a
+            track's recording id (`mbid`), because the catalog keys a
+            track by the recording id its file carries.
 
     EntityTypeFields:
       type: object
@@ -19459,9 +19598,10 @@ components:
             `user` (set through the curation surface), `enrichment`
             (supplied by a metadata provider, named in `provider`),
             `organize` (written by an organize tag write-back),
-            `normalize` (rewritten by a clean-up pass, such as the genre
-            normalizer, in the catalog alone), or `feed` (a podcast
-            feed). A string, not a closed enum. `sidecar` and
+            `normalize` (written by a clean-up pass: the genre
+            normalizer, in the catalog alone, or the `<Title> - Single`
+            album a download with none is given), or `feed` (a
+            podcast feed). A string, not a closed enum. `sidecar` and
             `feed` reach only artifact rows; a scalar field is never
             produced from a cover image or a feed.
         provider:
@@ -19648,7 +19788,12 @@ components:
         lock:
           type: boolean
           default: true
-          description: Lock the edited fields.
+          description: >
+            Lock the edited fields. A track's recording id (`mbid`)
+            that is not empty and that its file does not carry is
+            locked either way, since no file holds it for a scan to fall
+            back on; a cleared one, or the one its file carries, follows
+            this.
         force:
           type: boolean
           default: false
@@ -20573,7 +20718,9 @@ components:
           type: array
           description: >
             Artifacts not stored, each naming why (locked, already
-            present, no provider hit, provider unconfigured).
+            present, no provider hit, provider unconfigured), and a
+            cover stored in the catalog but not written into the file
+            it was meant to reach.
           items:
             type: string
 
@@ -25085,6 +25232,38 @@ components:
                 imports the files without stopping. Finding one still
                 `pending` means the automatic import could not proceed
                 and it is waiting for a person.
+            acceptBestWithheld:
+              type: string
+              enum: [below-floor, ambiguous, no-candidates]
+              description: >
+                Why an entry whose submission asked to accept its best
+                match (`acceptBestMatch`) is waiting for review instead:
+                `below-floor`, the top candidate is too far from the
+                files, or its recording is titled as another cut of the
+                song than they name (a live take, a demo, a clean edit,
+                a bonus track, album version, explicit or original mix
+                note only one of them carries, or a title one of them
+                only continues, such as "Part II" or "(Take 2)");
+                `ambiguous`, another recording the search found
+                (a candidate, or a recording it listed without fetching
+                its releases) is within the margin of it, or the
+                candidates cannot rule one out (the files or the top
+                name no artist to compare, another track of the top's
+                release carries the same title at about the same
+                length, the top names no recording beside other
+                candidates, a recording search
+                listed more releases than it fetched, all of one
+                recording, or it counted more recordings than it listed
+                and either the last it listed matched as well as the
+                top's recording or the top's recording was not among
+                those listed);
+                `no-candidates`, nothing was found. Present only on a
+                pending entry whose last identification did not apply a
+                match for one of those reasons. Absent
+                otherwise: for a submission that did not ask, while
+                identifying, for an entry held back by a typed search, a
+                possible duplicate or the library's matching mode, and
+                once the entry is decided.
             mediumFixed:
               type: boolean
               default: false
@@ -25105,14 +25284,20 @@ components:
               allOf:
                 - $ref: "#/components/schemas/ReviewIdentifyRequest"
               description: >
-                What the matching parse read out of the source's own
-                title, offered as a starting point for a search rather
-                than as a claim about the files. Present only on
-                acquisitions of a single loose file, where the title is
-                a video title and the artist tag is a channel; an
+                What the matching parse read out of the file's own
+                title and artist, offered as a starting point for a
+                search rather than as a claim about the files, and what
+                `useSuggested` files the tracks under: upload and
+                remaster notes dropped, a mark of another cut (a clean
+                edit, 8D audio, a live take) kept. Present only on
+                music acquisitions of a single file, whose title is
+                usually a video title and whose artist a channel (as
+                `createAcquisition` says the fetch writes them); an
                 album-shaped unit carries real tags and needs no guess.
-                Never an album, since a loose track has none. A stored
-                `identifyOverride` supersedes it.
+                An artist and a title, never an album: a download that
+                has one (an Art Track's, from its description) already
+                carries it in its tags. A stored `identifyOverride`
+                supersedes it as a search's starting point.
       description: One review entry with its full evidence.
 
     ReviewIdentifyRequest:
@@ -25136,11 +25321,17 @@ components:
           type: string
           maxLength: 300
           description: >
-            The track title to search for. Ignored on a unit of
-            several files: a track title belongs to one track, and
-            naming them all the same thing would wreck the pairing
-            that scores a release. Correct a multi-file unit with
-            `artist` and `album`, which are properties of the unit.
+            The track title to search for. The search asks for the
+            song alone, as for a title read off the files: upload
+            notes, cut marks and what names a particular recording
+            ("(Official Video)", "(Clean)", "(Live)", " - Radio
+            Edit") are left out of what is looked up and used to pick
+            among the recordings found; the stored override keeps it
+            as typed. Ignored on a unit of several files: a track
+            title belongs to one track, and naming them all the same
+            thing would wreck the pairing that scores a release.
+            Correct a multi-file unit with `artist` and `album`,
+            which are properties of the unit.
 
     ReviewDecision:
       type: object
@@ -25178,6 +25369,32 @@ components:
             as every decide does, and otherwise these `invalid-request`
             refusals come before the `conflict` over imported files.
             `skip` and `discard` import nothing and ignore it.
+        useSuggested:
+          type: boolean
+          description: >
+            With `as-is` or `unofficial`, on an import as music: once
+            the files are in the library, write the artist and title the
+            entry offers as `suggested` onto its tracks, in the catalog
+            and the files, exactly the values `suggested` shows and only
+            those it holds (an empty suggested artist leaves each
+            track's artist as it is), as the deciding person's own edit,
+            the way a metadata edit is: a locked field keeps its value
+            and `warnings` names the file. Only what differs is written:
+            a track's artist stays as it is when it already credits the
+            suggested one (as its whole artist, one of the names it
+            joins with commas, or one of its artist credits, compared
+            ignoring case, accents and punctuation), so a suggestion
+            never drops a co-artist, and a title already reading the
+            suggested one is left alone. A file keeps the place its
+            delivered tags gave it until it is organized.
+            Refused with `invalid-request` on an entry that offers no
+            suggestion; an already decided entry answers `conflict`
+            first, as every decide does, and the `invalid-request`
+            refusals come after it. A track whose file joined an item
+            the library already holds keeps that item's metadata. Every
+            other action, and a decide importing the unit as
+            `audiobook`, ignores it (and so does not refuse it); absent
+            or false files the tracks under the tags they carry.
 
     ReviewDecideResult:
       type: object
@@ -25212,7 +25429,11 @@ components:
           enum: [approve, as-is, unofficial, skip, discard]
           description: >
             The decision. `approve` uses each entry's ranked best
-            candidate.
+            candidate, and fetches covers as the single-entry
+            `approve` does, within one time bound on cover fetches
+            shared by every entry in the call: an entry it did not reach
+            keeps its cover and, left with none or a download's
+            thumbnail, carries the warning.
 
     ReviewBulkResult:
       type: object
@@ -25278,7 +25499,10 @@ components:
           description: Entries a person approved.
         autoApplied:
           type: integer
-          description: Entries the engine applied on its own.
+          description: >
+            Entries the engine applied on its own at its own threshold.
+            An entry applied because its submission asked to take its
+            best match reads `auto-applied` but is not counted here.
         asIs:
           type: integer
           default: 0
@@ -25297,9 +25521,10 @@ components:
         revertedAutoApplied:
           type: integer
           description: >
-            Auto-applied entries later reverted; with `autoApplied`
-            this is the observed auto-apply revert rate, the trust
-            signal the queue surfaces.
+            Auto-applied entries later reverted; with `autoApplied` this
+            is the observed auto-apply revert rate, the trust signal the
+            queue surfaces. An entry applied because its submission
+            asked to take its best match counts in neither.
 
     LibraryMatching:
       type: object
@@ -25321,8 +25546,10 @@ components:
             Whether a confident match for a one-file unit may apply
             itself under mode `auto`. Off by default: a lone track
             picking among near-tied releases is a wrong-release risk,
-            so singles always queue for review. When on, singles
-            auto-apply only at a stricter confidence than albums.
+            so singles queue for review, unless their submission asked
+            to take its best match (`UploadCreate.acceptBestMatch`).
+            When on, singles auto-apply only at a stricter confidence
+            than albums.
 
     Scrobbler:
       type: object
@@ -26777,6 +27004,40 @@ components:
 
             Ignored on a batch member: the batch's own value decides
             for every file in it.
+        acceptBestMatch:
+          type: boolean
+          description: >
+            Whether an identified entry takes its best MusicBrainz
+            match without waiting for review. Absent means the
+            account's own default (`acceptBestMatch` in preferences),
+            with no schema default for the reason `identify` has none.
+            Decided when the submission is accepted and carried with
+            it, as `identify` is.
+
+
+            With identification on, an entry whose best candidate clears
+            the confidence floor, and leads every candidate naming a
+            different recording by a margin, is applied without waiting,
+            as an `approve` of that candidate would apply it, and reads
+            `auto-applied`. Such an apply counts in neither of the
+            review statistics' calibration counters
+            (`ReviewStats.autoApplied`,
+            `ReviewStats.revertedAutoApplied`), which measure only what
+            the matcher applied at its own threshold. This holds in a
+            library whose matching mode is `review`, and for a one-file
+            unit whatever the library's `singlesAutoApply` says. It
+            never acts in a library set to `off`, never on a search for
+            typed values (an entry carrying `identifyOverride`), and
+            never for an entry flagged as a possible duplicate.
+            Otherwise the entry waits for review as usual, and its
+            `acceptBestWithheld` says why when the candidates themselves
+            held it back.
+
+
+            Inert, not refused, when identification is off; audiobooks
+            are never identified, so it never acts on one. Ignored on a
+            batch member: the batch's own value decides for every file
+            in it.
 
     Upload:
       type: object
@@ -26912,6 +27173,15 @@ components:
             why there is no schema default, and for what declining
             does. Decided once here and applied to every entry the
             batch opens, so a member's own value is ignored.
+        acceptBestMatch:
+          type: boolean
+          description: >
+            Whether the batch's identified entries take their best
+            MusicBrainz match without waiting for review. Absent means
+            the account's own default (`acceptBestMatch` in
+            preferences); see `UploadCreate` for when it acts and when
+            it does not. Decided once here and applied to every entry
+            the batch opens, so a member's own value is ignored.
 
     UploadBatch:
       type: object
@@ -27082,10 +27352,22 @@ components:
             Whether what this acquisition downloads is identified
             against MusicBrainz. Absent means the account's own default
             (`identifyOptOut` in preferences); see `UploadCreate` for
-            why there is no schema default, and for what declining
-            does. Decided when the acquisition is accepted and carried
-            by the task, so a preference changed while it downloads
-            does not move it.
+            why there is no schema default, and for what declining does.
+            Decided when the acquisition is accepted and carried by the
+            task, so a preference changed while it downloads does not
+            move it. A declined acquisition enters the library without a
+            stop as a declined upload does, except that a music track
+            with a title and no album is given the album
+            `<Title> - Single` (see `createAcquisition`).
+        acceptBestMatch:
+          type: boolean
+          description: >
+            Whether what this acquisition downloads takes its best
+            MusicBrainz match without waiting for review. Absent means
+            the account's own default (`acceptBestMatch` in
+            preferences); see `UploadCreate` for when it acts and when
+            it does not. Decided when the acquisition is accepted and
+            carried by the task, as `identify` is.
 
     User:
       type: object
@@ -27581,7 +27863,7 @@ components:
           type: boolean
           description: >
             Stop identifying this account's own submissions by
-            default, and let them into the library as delivered.
+            default, and let them into the library without a match.
             Uploads and acquisitions are matched against MusicBrainz
             unless the submission says otherwise, which is right for a
             rip with whatever tags the ripper wrote and wrong for a
@@ -27592,6 +27874,17 @@ components:
             for what declining does. Administrator matching modes are
             a separate, wider switch: a library set to `off`
             identifies nothing regardless.
+        acceptBestMatch:
+          type: boolean
+          description: >
+            Let this account's identified submissions take their best
+            MusicBrainz match without waiting for review, by default.
+            Turning it on flips the default the upload and
+            Add-from-URL sheets open with; either sheet can still say
+            so per submission, and a submission that says so wins.
+            Absent means off. See `UploadCreate.acceptBestMatch` for when
+            it acts: never with identification off, and never in a
+            library whose matching mode is `off`.
 
     AppPassword:
       type: object

@@ -188,6 +188,7 @@ void main() {
           initial: null,
           fileCount: 3,
           initialIdentify: false,
+          initialAcceptBest: false,
           targets: [music, other],
         ),
       ),
@@ -404,6 +405,7 @@ void main() {
           initial: MediaType.audiobook,
           fileCount: 3,
           initialIdentify: false,
+          initialAcceptBest: false,
         ),
       ),
     );

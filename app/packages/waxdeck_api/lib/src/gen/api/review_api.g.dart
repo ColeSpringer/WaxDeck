@@ -34,33 +34,68 @@ abstract interface class ReviewApi {
   /// Applies one decision to a pending entry. `approve` applies the chosen
   /// candidate's metadata to the whole unit (the ranked best when
   /// `candidateMbid` is absent), locking the applied fields so a rescan cannot
-  /// undo the acceptance, and writes them into each file's tags; for entries
-  /// staging new files (uploads and imports) the files enter the library first.
-  /// `as-is` accepts the unit's current metadata unchanged (staged files enter
-  /// the library as they are). `unofficial` is `as-is` plus a locked
+  /// undo the acceptance, and writes them into each file's tags, all but a
+  /// track's recording id, which the catalog keeps alone (a file's own
+  /// recording id is left as it is); for entries staging new files (uploads and
+  /// imports) the files enter the library first. The approval records the
+  /// release and its release group on the album, over what an earlier approval
+  /// recorded; a release another album already holds is not recorded and is
+  /// named in `warnings`. It fetches a cover: the release's front cover, else
+  /// its release group's, else a cover provider's answer for the release. That
+  /// cover replaces a cover that came with a download (`ArtSource.source`
+  /// `acquisition`) and fills a missing one; the release's own front also
+  /// replaces a provider's cover found by name or by release group, a looser
+  /// match. It is written into the files and locked. A cover an earlier
+  /// approval wrote gives way to a later approval's; a cover a person set or
+  /// locked, and a file's own art (embedded in an uploaded or scanned file, or
+  /// an image beside it), are kept. An item left with no cover or a download's
+  /// thumbnail, because no source has a cover or it could not be fetched (in
+  /// time), is named in `warnings` and keeps what it had, which a later
+  /// enrichment may still replace. The time spent fetching covers is bounded
+  /// per decision (one bound for a whole bulk decision).
+  ///
+  /// `as-is` accepts the unit's current metadata (staged files enter the
+  /// library as they are). `unofficial` is `as-is` plus a locked
   /// `RELEASESTATUS` custom tag of `unofficial`, written into the files too,
   /// which excludes the items from future match retries and from health
   /// penalties (content with no canonical release is a terminal state, not an
-  /// error). A file in a read-only library keeps its tags: `warnings` names it
-  /// and the health rule for tags out of sync lists what it is owed, while the
-  /// unit's other files are written; a unit none of whose files may be written
-  /// is applied to the catalog alone. A matching library applying a confident
-  /// match on its own writes the files the same way. `skip` dismisses the entry
-  /// without touching anything (staged files stay staged). `discard` deletes
-  /// staged files and exists only for entries that carry them. Deciding an
-  /// already-decided entry answers `conflict`, as does any decision, revert or
-  /// new search of an entry while another runs. A decision runs to its end once
-  /// it starts, whether or not the client waits for the answer. Administrators
-  /// may decide anything; other callers only entries from their own uploads,
-  /// acquisitions and rematches. A metadata write that partially fails after
-  /// the catalog committed reports per-file detail in `warnings` and the entry
-  /// still counts as decided. Files that join an item the library already holds
-  /// - the same audio, or a further part of a book it has - enter as that
-  /// item's copies or parts: the item keeps its metadata, `approve` and
-  /// `unofficial` leave it alone, and the uploader gains no right to edit it.
-  /// `warnings` names such files, and the entry's tracks mark them `joined`. A
-  /// file whose audio the library holds at the very place its tags would put it
-  /// adds nothing; its staged copy is removed and `warnings` says so.
+  /// error). With `useSuggested`, once the files are in the library, both first
+  /// write the artist and title the entry offers as `suggested` onto its
+  /// tracks, in the catalog and the files, as the deciding person's own edit,
+  /// the way a metadata edit is; an artist a track already credits stays as it
+  /// is. After either, an acquired music track that has a title and no album
+  /// once it lands is given the album `<Title> - Single` (its title, then
+  /// ` - Single`), with that track's artist as the album artist, unlocked and
+  /// attributed to normalization (provenance `normalize`), so a later match or
+  /// edit replaces it. An acquisition whose identification was declined gets
+  /// the same; an uploaded file is not given one. Both writes happen only on an
+  /// import as music: a decide importing the unit as `audiobook` makes neither.
+  /// As after an approval, a file keeps the place its delivered tags gave it
+  /// until it is organized (the `path-mismatch` health rule offers the move).
+  ///
+  /// A file in a read-only library keeps its tags: `warnings` names it and the
+  /// health rule for tags out of sync lists what it is owed, while the unit's
+  /// other files are written; a unit none of whose files may be written is
+  /// applied to the catalog alone. A matching library applying a confident
+  /// match on its own, or an entry taking its best match because its submission
+  /// asked to (`acceptBestMatch`), writes the files and the cover the same way.
+  /// `skip` dismisses the entry without touching anything (staged files stay
+  /// staged). `discard` deletes staged files and exists only for entries that
+  /// carry them. Deciding an already-decided entry answers `conflict`, as does
+  /// any decision, revert or new search of an entry while another runs. A
+  /// decision runs to its end once it starts, whether or not the client waits
+  /// for the answer. Administrators may decide anything; other callers only
+  /// entries from their own uploads, acquisitions and rematches. A metadata
+  /// write that partially fails after the catalog committed reports per-file
+  /// detail in `warnings` and the entry still counts as decided. Files that
+  /// join an item the library already holds - the same audio, or a further part
+  /// of a book it has - enter as that item's copies or parts: the item keeps
+  /// its metadata and its cover, `approve`, `unofficial`, `useSuggested` and
+  /// the album default leave it alone, and the uploader gains no right to edit
+  /// it. `warnings` names such files, and the entry's tracks mark them
+  /// `joined`. A file whose audio the library holds at the very place its tags
+  /// would put it adds nothing; its staged copy is removed and `warnings` says
+  /// so.
   ///
   /// Staged files enter the library together or not at all where the library
   /// can say in advance: every file is planned before any moves, so a place
@@ -75,6 +110,7 @@ abstract interface class ReviewApi {
     required String action,
     String? candidateMbid,
     String? mediaType,
+    bool? useSuggested,
   });
 
   /// `POST /review/queue/{entryId}/identify`: Search again for a review entry.
@@ -93,13 +129,18 @@ abstract interface class ReviewApi {
   /// the entry, so a retry after a provider failure searches for the same
   /// thing.
   ///
-  /// Typed values are searched for verbatim. The cleanup that reads "Artist -
-  /// Track" out of a video title, peels "(Official Video)", and drops a " -
-  /// Topic" channel suffix exists to rescue titles a machine wrote, and it does
-  /// not run over these: a title that genuinely contains " - " is searched for
-  /// whole, and a typed artist is not replaced by one a descriptive title
-  /// happens to name. A field left blank is not an instruction, so it falls
-  /// back to what the files imply.
+  /// Typed values are kept as typed and reported back as `identifyOverride`.
+  /// The search cleans a typed `title` as it cleans one read off the files,
+  /// asking for the song alone: upload notes ("(Official Video)"), cut marks
+  /// ("(Clean)"), remaster notes, and what names a particular recording (a " -
+  /// Live at ..." or " - Radio Edit" tail, a "(Live)", "(Demo)" or "(...
+  /// Remix)" group) are left out of what is looked up, since recordings are
+  /// titled by the song, and are used to pick among the recordings found. The
+  /// rest of what rescues a machine-written title does not run over typed
+  /// values: a title is never split on " - " into an artist and a track, and a
+  /// typed artist is searched as it stands, never replaced by one a descriptive
+  /// title happens to name. A field left blank is not an instruction, so it
+  /// falls back to what the files imply.
   ///
   /// Pending entries only; a decided one answers `conflict`. The permission is
   /// the deciding permission: administrators may re-identify anything, other
@@ -115,8 +156,16 @@ abstract interface class ReviewApi {
   ///
   /// Restores the metadata snapshot taken before an `applied` or `auto-applied`
   /// entry was applied, in the catalog and the files' tags (catalog alone for a
-  /// file in a read-only library), unlocks the fields the apply locked, and
-  /// marks the entry `reverted`. Reverts of auto applied entries feed the
+  /// file in a read-only library, and for the recording id, which the apply
+  /// kept there), unlocks the fields the apply locked (all but a restored
+  /// recording id the file does not carry, which a rescan would otherwise
+  /// clear), puts back the front cover the item had where the apply replaced it
+  /// and removes one the apply added to an item that had none, puts back the
+  /// album's and release group's ids where the album or group holds no other
+  /// items, and marks the entry `reverted`. A music acquisition's track left
+  /// with a title and no album is then given the `<Title> - Single` album a
+  /// download kept as it is gets: a reverted download is unmatched again.
+  /// Reverts of entries the matcher applied at its own threshold feed the
   /// calibration statistics. Only administrators and the deciding user may
   /// revert. Reverting anything but an applied entry answers `conflict`.
   Future<ReviewEntry> revertReviewEntry(String entryId);
@@ -127,8 +176,11 @@ abstract interface class ReviewApi {
   /// keyboard-driven bulk triage. `approve` uses each entry's own ranked best
   /// candidate (a per-entry candidate choice needs the single-entry endpoint),
   /// and each entry imports as its own `mediaType` (choosing another needs the
-  /// single-entry endpoint too). Entries are decided independently: one failure
-  /// does not stop the rest, and the response reports each outcome.
+  /// single-entry endpoint too; so does `useSuggested`). The time bound on an
+  /// approval's cover fetches is shared across the whole call, so an entry the
+  /// bound did not reach keeps its cover and, left with none or a download's
+  /// thumbnail, carries the cover warning. Entries are decided independently:
+  /// one failure does not stop the rest, and the response reports each outcome.
   Future<List<ReviewBulkOutcome>> decideReviewBulk(
     List<String> entryIds, {
     required String action,
@@ -140,8 +192,12 @@ abstract interface class ReviewApi {
   /// how many of those were later reverted. The revert rate is the trust signal
   /// the review surface shows next to the auto-apply behavior; it is
   /// deliberately not the accuracy metric that tunes thresholds (reverts are
-  /// sparse and lagging). The counts cover the entries the caller can see, the
-  /// scope of `GET /review/queue`: administrators count every entry, other
+  /// sparse and lagging). The calibration counts take only what the matcher
+  /// applied at its own threshold: an entry applied because its submission
+  /// asked to take its best match (`UploadCreate.acceptBestMatch`) reads
+  /// `auto-applied` but counts in neither `autoApplied` nor
+  /// `revertedAutoApplied`. The counts cover the entries the caller can see,
+  /// the scope of `GET /review/queue`: administrators count every entry, other
   /// callers only the entries their own uploads, acquisitions and rematches
   /// produced.
   Future<ReviewStats> getReviewStats();
@@ -158,9 +214,11 @@ abstract interface class ReviewApi {
   /// review (the default), `review` queues everything (no auto-apply), and
   /// `off` never matches the library's content (as-is libraries:
   /// already-curated collections the engine must not touch). Under `auto`,
-  /// one-file units still queue unless `singlesAutoApply` is on. The body
-  /// replaces the whole object. A podcast library takes no matching behavior,
-  /// its episodes coming from their feeds, and is refused with
+  /// one-file units still queue unless `singlesAutoApply` is on. A submission
+  /// that asked to take its best match (`UploadCreate.acceptBestMatch`) may
+  /// apply under `review` and as a one-file unit too, never under `off`. The
+  /// body replaces the whole object. A podcast library takes no matching
+  /// behavior, its episodes coming from their feeds, and is refused with
   /// `invalid-request`. Administrators only.
   Future<LibraryMatching> setLibraryMatching(
     String libraryPid,

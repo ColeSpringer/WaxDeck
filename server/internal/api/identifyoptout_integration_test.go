@@ -515,3 +515,135 @@ func TestStalledAsIsUploadRingsTheReviewBell(t *testing.T) {
 		t.Errorf("review markers = %d, want the one the stalled entry raised", kinds["review"])
 	}
 }
+
+// namedReleases answers each title with its own one-track release by the
+// artist quietTrack tags, so every upload in a test lands somewhere new.
+func namedReleases(titles ...string) []*match.Release {
+	var out []*match.Release
+	for i, title := range titles {
+		out = append(out, &match.Release{
+			MBID: "rel-" + title, ReleaseGroupMBID: "rg-" + title,
+			Title: title, Artist: "Hold Steady State", Year: 2021, Media: 1,
+			Tracks: []match.ReleaseTrack{{
+				RecordingMBID: "00000000-0000-4000-8000-0000000001" + itoaTest(10+i),
+				Title:         title, Position: 1, DurationSec: 3,
+			}},
+		})
+	}
+	return out
+}
+
+func putPrefs(t *testing.T, h *harness, body map[string]any) {
+	t.Helper()
+	wantStatus(t, h.putJSON(t, "/api/v1/users/me/prefs", body), 200, "prefs")
+}
+
+// The accept-best resolution order: the submission over the preference
+// over off, and inert when identification is off.
+func TestAcceptBestDefaultsToTheAccountPreference(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.MatchSource = &cannedSource{releases: namedReleases("Amber", "Cobalt", "Viridian", "Scarlet")}
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+	})
+
+	if e := entryOf(t, h, h.token, uploadAndMatch(t, h, "Amber", nil)); e.Status != "pending" || withheld(e) != "" {
+		t.Fatalf("silent upload with the preference off = %s withheld %q, want pending", e.Status, withheld(e))
+	}
+
+	putPrefs(t, h, map[string]any{"acceptBestMatch": true})
+	if e := entryOf(t, h, h.token, uploadAndMatch(t, h, "Cobalt", nil)); e.Status != "auto-applied" {
+		t.Fatalf("silent upload with the preference on = %s, want auto-applied", e.Status)
+	}
+	if e := entryOf(t, h, h.token, uploadAndMatch(t, h, "Viridian", map[string]any{"acceptBestMatch": false})); e.Status != "pending" {
+		t.Fatalf("upload saying no under the preference = %s, want pending", e.Status)
+	}
+	declined := entryOf(t, h, h.token, uploadAndMatch(t, h, "Scarlet",
+		map[string]any{"identify": false, "acceptBestMatch": true}))
+	if declined.Status != "as-is" || withheld(declined) != "" {
+		t.Fatalf("unidentified upload asking for its best = %s withheld %q, want as-is with no reason",
+			declined.Status, withheld(declined))
+	}
+}
+
+// uploadAndMatch uploads quietTrack(name) with the extra create fields and
+// runs identification.
+func uploadAndMatch(t *testing.T, h *harness, name string, extra map[string]any) Upload {
+	t.Helper()
+	up := uploadDeclaring(t, h, h.token, quietTrack(t, name), extra)
+	drainMatches(t, h)
+	return up
+}
+
+func TestBatchDecidesAcceptBestForItsMembers(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.MatchSource = &cannedSource{releases: namedReleases("Amber")}
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+	})
+	batch := decodeStatus[UploadBatch](t, postJSONAs(t, h, h.token, "/api/v1/uploads/batches",
+		map[string]any{"grouping": "tracks", "mediaType": "music", "acceptBestMatch": true}), 201, "create batch")
+	path := quietTrack(t, "Amber")
+	member := createBatchMemberWith(t, h, h.token, path, "music", batch.Id, "",
+		map[string]any{"acceptBestMatch": false})
+	sendUploadBytes(t, h, h.token, member.Id, path)
+	completeUploadSession(t, h, h.token, member.Id)
+	final := finalizeBatch(t, h, h.token, batch.Id)
+	drainMatches(t, h)
+	if len(final.ReviewEntryIds) != 1 {
+		t.Fatalf("finalize opened %v", final.ReviewEntryIds)
+	}
+	if e := getReview(t, h, final.ReviewEntryIds[0]); e.Status != "auto-applied" {
+		t.Fatalf("batch entry = %s, want auto-applied: the batch decided", e.Status)
+	}
+}
+
+// Decided when the acquisition is accepted: a preference changed while it
+// downloads does not move it, and a request saying so wins.
+func TestAcquisitionCarriesTheAcceptBestChoice(t *testing.T) {
+	t.Parallel()
+	h, src := acceptBestHarness(t, namedReleases("Amber", "Cobalt")...)
+	acquire := func(name string, extra map[string]any) string {
+		t.Helper()
+		paths, err := fixtures.Generate(t.TempDir(), fixtures.Spec{
+			Name: name, Codec: fixtures.CodecMP3, Duration: 3 * time.Second,
+			Tags: map[string]string{"TITLE": name, "ARTIST": "Hold Steady State"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		url := "https://tube.example/watch?v=" + name
+		src.files[url] = paths[0]
+		body := map[string]any{"url": url, "mediaType": "music"}
+		for k, v := range extra {
+			body[k] = v
+		}
+		return decodeStatus[ToolTask](t, postJSONAs(t, h, h.token, "/api/v1/acquisitions", body), 202, "acquisition").Id
+	}
+	entryFor := func(taskID string) ReviewEntryDetail {
+		t.Helper()
+		drainTools(t, h)
+		drainMatches(t, h)
+		got := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+taskID, h.token))
+		if got.State != "done" || got.ResultPids == nil || len(*got.ResultPids) != 1 {
+			t.Fatalf("acquire task = %+v", got)
+		}
+		return getReview(t, h, (*got.ResultPids)[0])
+	}
+
+	putPrefs(t, h, map[string]any{"acceptBestMatch": true})
+	task := acquire("Amber", nil)
+	putPrefs(t, h, map[string]any{})
+	if e := entryFor(task); e.Status != "auto-applied" {
+		t.Fatalf("acquisition accepted under the preference = %s, want auto-applied", e.Status)
+	}
+
+	putPrefs(t, h, map[string]any{"acceptBestMatch": true})
+	if e := entryFor(acquire("Cobalt", map[string]any{"acceptBestMatch": false})); e.Status != "pending" || withheld(e) != "" {
+		t.Fatalf("acquisition saying no = %s withheld %q, want pending with no reason", e.Status, withheld(e))
+	}
+}

@@ -28,18 +28,23 @@ class ArtSource {
   /// The producer: `tag` (the file's own embedded cover), `sidecar` (a cover
   /// image beside the audio), `user` (set through the curation surface),
   /// `enrichment` (fetched from a metadata provider, named in `provider`),
-  /// `feed` (a podcast feed's image, or a radio station's own announcement), or
-  /// `generated` (composed by the server from what the catalog already holds,
-  /// which is what a playlist mosaic is - nobody chose it). A string, not a
-  /// closed enum: treat an unknown value as unattributed and draw nothing.
+  /// `acquisition` (the picture that arrived with a download, such as a video
+  /// thumbnail, the acquisition source named in `provider`; any better source
+  /// may replace it), `feed` (a podcast feed's image, or a radio station's own
+  /// announcement), or `generated` (composed by the server from what the
+  /// catalog already holds, which is what a playlist mosaic is - nobody chose
+  /// it). A string, not a closed enum: treat an unknown value as unattributed
+  /// and draw nothing.
   final String source;
 
   /// The provider that supplied an `enrichment` cover, as an id (`deezer`,
-  /// `coverartarchive`, `fanarttv`). Empty for every other source.
+  /// `coverartarchive`, `fanarttv`), or the acquisition source an `acquisition`
+  /// cover came from (`youtube`). Empty for every other source.
   final String? provider;
 
   /// Where the bytes were fetched from, for a cover that came off the network
-  /// (`enrichment`, `feed`). Empty otherwise.
+  /// (`enrichment`, `feed`). Empty otherwise, an `acquisition` cover included:
+  /// where a download came from is the item's acquisition record.
   ///
   /// Redacted the way `ItemAcquisition.sourceUrl` is, and for the same reason -
   /// these reads answer everyone who can see the item while the stored value is

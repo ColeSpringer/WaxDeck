@@ -1,6 +1,14 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
+  "uploadsAcceptBestHelp": "Skips review when one match clearly leads",
+  "@uploadsAcceptBestHelp": {
+    "description": "Info on the accept-best-match switch under Identify: what it does when it is on, and that a close call still waits."
+  },
+  "uploadsAcceptBestTitle": "Accept the best match",
+  "@uploadsAcceptBestTitle": {
+    "description": "The switch under Identify that files music under its best MusicBrainz match without review, when that match is clear."
+  },
   "uploadsAcquireQueued": "Downloading; appears in review when ready",
   "@uploadsAcquireQueued": {
     "description": "Snackbar after asking the server to download from a URL."

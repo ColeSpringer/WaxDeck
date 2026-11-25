@@ -5,7 +5,13 @@ import (
 )
 
 // Editor is the metadata editor.
-type Editor struct{ *core }
+type Editor struct {
+	*core
+	// recordingIDsHook runs once a split edit's other fields have
+	// committed and before its recording ids are recorded, in a test; an
+	// error stands in for theirs. Nothing in the server sets it.
+	recordingIDsHook func() error
+}
 
 func newEditor(c *core, _ Config) *Editor { return &Editor{core: c} }
 

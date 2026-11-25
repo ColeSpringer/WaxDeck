@@ -48,6 +48,7 @@ abstract interface class UploadsApi {
     String? batchId,
     String? batchPath,
     bool? identify,
+    bool? acceptBestMatch,
   });
 
   /// `GET /uploads/{uploadId}`: Inspect an upload.
@@ -122,6 +123,7 @@ abstract interface class UploadsApi {
     required String mediaType,
     String? libraryPid,
     bool? identify,
+    bool? acceptBestMatch,
   });
 
   /// `POST /uploads/batches/{batchId}/complete`: Finalize an upload batch.
@@ -171,19 +173,38 @@ abstract interface class UploadsApi {
   /// (bounded to the first two hundred entries; the response task reports
   /// progress per item). Downloaded files stage exactly like uploads, appear as
   /// upload sessions, and flow through the same identify and review pipeline,
-  /// grouped into album units; the source's own metadata (title, channel,
-  /// thumbnail) arrives embedded, and provenance tags record the origin, so
-  /// content with no canonical release reaches the review queue ready for
-  /// keep-as-is or mark-unofficial and stays hand-editable by the acquiring
-  /// user afterward. Needs upload rights and a running acquisition bridge
-  /// (`source-unavailable` without one). Acquired bytes count against the
-  /// caller's upload quota; a quota hit stops the task and keeps what already
-  /// staged. Returns the tool task to follow (type `acquire`).
+  /// grouped into album units. Each file carries the source's own metadata in
+  /// its tags, and provenance tags record the origin, so content with no
+  /// canonical release reaches the review queue ready for keep-as-is or
+  /// mark-unofficial and stays hand-editable by the acquiring user afterward.
+  ///
+  /// What the fetch writes into a downloaded file's tags: the source's title;
+  /// its channel as the artist, with a ` - Topic` channel suffix dropped; and
+  /// its thumbnail as the cover, attributed to the source (`ArtSource.source`
+  /// `acquisition`), so any better cover may replace it. For music, the title
+  /// loses its trailing upload-note groups, such as `(Official Video)` or
+  /// `[Lyrics]`, and only those: groups naming a recording or a cut, such as
+  /// `(Live)`, `(Remix)`, `(Clean)`, `(Teaser)` or `(8D Audio)`, stay. Where a
+  /// music source carries an auto-generated Art Track description, and that
+  /// description names the same title as the video, it supplies the title, the
+  /// artist (the artists it names, in place of the channel), the album and the
+  /// release date; one that gives no release date leaves the date unwritten,
+  /// and the upload date is never written in its place. A description naming
+  /// another title is not used. A music track with a title that still has no
+  /// album once it lands, whether kept `as-is`, marked `unofficial`, or
+  /// imported because its identification was declined, is given the album
+  /// `<Title> - Single` (see `as-is` on `decideReviewEntry`).
+  ///
+  /// Needs upload rights and a running acquisition bridge (`source-unavailable`
+  /// without one). Acquired bytes count against the caller's upload quota; a
+  /// quota hit stops the task and keeps what already staged. Returns the tool
+  /// task to follow (type `acquire`).
   Future<ToolTask> createAcquisition({
     required String url,
     required MediaType mediaType,
     String? libraryPid,
     String? format,
     bool? identify,
+    bool? acceptBestMatch,
   });
 }

@@ -327,7 +327,8 @@ deployment whose only way out is a proxy loses those.
   mirror) for matching, the ISRC upgrade and radio artwork. The
   catalog's enrichment pass always asks the public service.
 - `WAXDECK_COVERART_BASE`: Cover Art Archive base override (a mirror)
-  for radio artwork; the archive rung only exists when matching is on.
+  for radio artwork and the cover a review approval fetches; both only
+  ask the archive when matching is on.
   The enrichment pass's Cover Art Archive source always uses the public
   host.
 - `WAXDECK_ENRICHMENT_CONTACT`: MusicBrainz contact (an email or a

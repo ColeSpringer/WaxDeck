@@ -22,6 +22,7 @@ const _providerNames = <String, String>{
   'hardcover': 'Hardcover',
   'googlebooks': 'Google Books',
   'openlibrary': 'Open Library',
+  'youtube': 'YouTube',
 };
 
 /// How a picture's provenance reads under it.
@@ -56,6 +57,12 @@ String? artSourceLabel(AppLocalizations l10n, ArtSource? source) {
         return l10n.artSourceProviderUnnamed;
       }
       return l10n.artSourceProvider(_providerNames[provider] ?? provider);
+    case 'acquisition':
+      final provider = source!.provider;
+      if (provider == null || provider.isEmpty) {
+        return l10n.artSourceAcquisitionUnnamed;
+      }
+      return l10n.artSourceAcquisition(_providerNames[provider] ?? provider);
     default:
       return null;
   }
@@ -84,6 +91,14 @@ String? artSourceLabelWithBorrow(AppLocalizations l10n, ArtSource? source) {
         return l10n.artSourceBorrowedProviderUnnamed;
       }
       return l10n.artSourceBorrowedProvider(
+        _providerNames[provider] ?? provider,
+      );
+    case 'acquisition':
+      final provider = source.provider;
+      if (provider == null || provider.isEmpty) {
+        return l10n.artSourceBorrowedAcquisitionUnnamed;
+      }
+      return l10n.artSourceBorrowedAcquisition(
         _providerNames[provider] ?? provider,
       );
     default:

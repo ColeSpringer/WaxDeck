@@ -117,6 +117,7 @@ class Prefs {
     this.autoplay,
     this.radioScrobbleOptOut,
     this.identifyOptOut,
+    this.acceptBestMatch,
   });
 
   /// IANA timezone name (for example `Europe/Amsterdam`). Drives streaks,
@@ -264,7 +265,7 @@ class Prefs {
   final bool? radioScrobbleOptOut;
 
   /// Stop identifying this account's own submissions by default, and let them
-  /// into the library as delivered. Uploads and acquisitions are matched
+  /// into the library without a match. Uploads and acquisitions are matched
   /// against MusicBrainz unless the submission says otherwise, which is right
   /// for a rip with whatever tags the ripper wrote and wrong for a library
   /// somebody has already curated. Opting out flips the default the upload and
@@ -274,6 +275,14 @@ class Prefs {
   /// modes are a separate, wider switch: a library set to `off` identifies
   /// nothing regardless.
   final bool? identifyOptOut;
+
+  /// Let this account's identified submissions take their best MusicBrainz
+  /// match without waiting for review, by default. Turning it on flips the
+  /// default the upload and Add-from-URL sheets open with; either sheet can
+  /// still say so per submission, and a submission that says so wins. Absent
+  /// means off. See `UploadCreate.acceptBestMatch` for when it acts: never with
+  /// identification off, and never in a library whose matching mode is `off`.
+  final bool? acceptBestMatch;
 }
 
 /// The asked-about items that are gone for good.

@@ -17,8 +17,9 @@ import (
 )
 
 // The acquired-import sites (the merge tool's result, an upload's
-// duplicate probe, and the review settle) know that a file arrived, not
-// how. They pass no SourceType for that reason: upstream reads an empty
+// duplicate probe, and the review settle of an upload) know that a file
+// arrived, not how. They pass no SourceType for that reason (a download's
+// settle names the source it came through): upstream reads an empty
 // one as "no claim about the mechanism", writing manual only when it
 // first records a row and leaving a standing origin alone on a
 // re-record. Passing manual is a claim, and a claim overwrites the rss

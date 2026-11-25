@@ -49,6 +49,7 @@
   "errorQuotaExceeded": "Eso supera un límite de este servidor.",
   "errorRateLimited": "Demasiados intentos. Espera un momento e inténtalo de nuevo.",
   "errorReadOnly": "El servidor o esta biblioteca está en modo de solo lectura, así que no se puede cambiar nada.",
+  "errorRecordingIdHeld": "El ID de grabación de esta pista sigue bloqueado porque su archivo no contiene ninguno. Desbloqueado, el próximo escaneo del archivo lo borraría.",
   "errorServiceUnreachable": "Un servicio externo necesario no ha respondido. Inténtalo más tarde.",
   "errorSourceUnavailable": "Este servidor no tiene activa la fuente que hace falta.",
   "errorStationDirectoryUnavailable": "El directorio de emisoras no ha respondido; añade una emisora por la URL de su stream en Radio.",

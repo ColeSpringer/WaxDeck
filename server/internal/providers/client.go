@@ -40,8 +40,11 @@ const (
 	defaultUserAgent = "WaxDeck/1.0 (+https://github.com/colespringer/waxdeck)"
 	defaultTimeout   = 15 * time.Second
 
-	// maxCacheEntries bounds the in-memory response cache per client.
+	// maxCacheEntries bounds the in-memory response cache per client, and
+	// maxCacheBytes what its keys and bodies add up to: a body can be
+	// megabytes, and a provider keeps one for days.
 	maxCacheEntries = 4096
+	maxCacheBytes   = 32 << 20
 	// maxResponseBytes bounds an API response body read.
 	maxResponseBytes = 16 << 20
 	// maxImageBytes bounds an image download.
@@ -50,8 +53,8 @@ const (
 
 // core is the shared HTTP helper behind every client in the package. It
 // paces requests per host with a minimum interval, caches 200 responses
-// by URL (plus body hash for POSTs), and stamps the client's User-Agent
-// on every request. Safe for concurrent use.
+// by URL (plus body hash for POSTs) up to a count and a size, and stamps
+// the client's User-Agent on every request. Safe for concurrent use.
 type core struct {
 	httpClient  *http.Client
 	userAgent   string
@@ -73,6 +76,10 @@ type core struct {
 	// search's keys are whatever a caller typed and the set is bounded
 	// by nothing but this.
 	maxEntries int
+	// maxBytes bounds what the cached keys and bodies add up to, and
+	// cacheBytes is that sum.
+	maxBytes   int
+	cacheBytes int
 }
 
 type cacheEntry struct {
@@ -102,6 +109,7 @@ func newBoundedCore(client *http.Client, userAgent string, minInterval time.Dura
 		next:        make(map[string]time.Time),
 		cache:       make(map[string]cacheEntry),
 		maxEntries:  maxEntries,
+		maxBytes:    maxCacheBytes,
 	}
 }
 
@@ -109,26 +117,38 @@ func newBoundedCore(client *http.Client, userAgent string, minInterval time.Dura
 // the caller decides how to treat non-200 statuses (except 429/503, which
 // surface as ErrThrottled).
 func (c *core) get(ctx context.Context, rawURL string, ttl time.Duration) ([]byte, int, error) {
-	return c.do(ctx, http.MethodGet, rawURL, "", nil, ttl)
+	return c.do(ctx, http.MethodGet, rawURL, "", nil, ttl, nil, "")
+}
+
+// getReduced is get for a body far larger than what is read from it: reduce
+// runs on a fresh 200 body, and what it returns is what is cached and
+// answered, so a hit answers the reduced form as well. variant names what
+// that reduction keeps beyond the URL's own ("" for nothing) and keys the
+// cache with it.
+func (c *core) getReduced(ctx context.Context, rawURL, variant string, ttl time.Duration, reduce func([]byte) ([]byte, error)) ([]byte, int, error) {
+	return c.do(ctx, http.MethodGet, rawURL, "", nil, ttl, reduce, variant)
 }
 
 // postForm performs a paced, cached form-encoded POST. The cache key
 // includes a hash of the encoded body.
 func (c *core) postForm(ctx context.Context, rawURL string, form url.Values, ttl time.Duration) ([]byte, int, error) {
-	return c.do(ctx, http.MethodPost, rawURL, "application/x-www-form-urlencoded", []byte(form.Encode()), ttl)
+	return c.do(ctx, http.MethodPost, rawURL, "application/x-www-form-urlencoded", []byte(form.Encode()), ttl, nil, "")
 }
 
 // postJSON performs a paced, cached JSON POST (a GraphQL query). The
 // cache key includes a hash of the body.
 func (c *core) postJSON(ctx context.Context, rawURL string, body []byte, ttl time.Duration) ([]byte, int, error) {
-	return c.do(ctx, http.MethodPost, rawURL, "application/json", body, ttl)
+	return c.do(ctx, http.MethodPost, rawURL, "application/json", body, ttl, nil, "")
 }
 
-func (c *core) do(ctx context.Context, method, rawURL, contentType string, reqBody []byte, ttl time.Duration) ([]byte, int, error) {
+func (c *core) do(ctx context.Context, method, rawURL, contentType string, reqBody []byte, ttl time.Duration, reduce func([]byte) ([]byte, error), variant string) ([]byte, int, error) {
 	key := rawURL
 	if len(reqBody) > 0 {
 		sum := sha256.Sum256(reqBody)
 		key = rawURL + "#" + hex.EncodeToString(sum[:])
+	}
+	if variant != "" {
+		key += "#variant=" + variant
 	}
 	if body, ok := c.cached(key, ttl); ok {
 		return body, http.StatusOK, nil
@@ -178,6 +198,11 @@ func (c *core) do(ctx context.Context, method, rawURL, contentType string, reqBo
 	if err != nil {
 		return nil, resp.StatusCode, fmt.Errorf("providers: read response from %s: %w", u.Host, err)
 	}
+	if resp.StatusCode == http.StatusOK && reduce != nil {
+		if body, err = reduce(body); err != nil {
+			return nil, resp.StatusCode, err
+		}
+	}
 	if resp.StatusCode == http.StatusOK && ttl > 0 {
 		c.store(key, body)
 	}
@@ -221,12 +246,18 @@ func (c *core) cached(key string, ttl time.Duration) ([]byte, bool) {
 	return e.body, true
 }
 
-// store inserts a 200 response body, evicting the oldest entry when the
-// cache is full (a linear scan is fine at this size).
+// store inserts a 200 response body, evicting the oldest entries while the
+// cache is over its count or its bytes (a linear scan is fine at this size).
+// A body larger than the whole bound is not kept.
 func (c *core) store(key string, body []byte) {
 	c.cacheMu.Lock()
 	defer c.cacheMu.Unlock()
-	if _, exists := c.cache[key]; !exists && len(c.cache) >= c.maxEntries {
+	c.drop(key)
+	size := len(key) + len(body)
+	if size > c.maxBytes {
+		return
+	}
+	for len(c.cache) > 0 && (len(c.cache) >= c.maxEntries || c.cacheBytes+size > c.maxBytes) {
 		var oldestKey string
 		var oldestAt time.Time
 		for k, e := range c.cache {
@@ -234,9 +265,18 @@ func (c *core) store(key string, body []byte) {
 				oldestKey, oldestAt = k, e.fetchedAt
 			}
 		}
-		delete(c.cache, oldestKey)
+		c.drop(oldestKey)
 	}
 	c.cache[key] = cacheEntry{body: body, fetchedAt: time.Now()}
+	c.cacheBytes += size
+}
+
+// drop removes one entry and gives its bytes back. cacheMu is held.
+func (c *core) drop(key string) {
+	if e, ok := c.cache[key]; ok {
+		c.cacheBytes -= len(key) + len(e.body)
+		delete(c.cache, key)
+	}
 }
 
 // forgetPrefix drops every cached response whose url starts with prefix,
@@ -247,7 +287,7 @@ func (c *core) forgetPrefix(prefix string) {
 	defer c.cacheMu.Unlock()
 	for k := range c.cache {
 		if strings.HasPrefix(k, prefix) {
-			delete(c.cache, k)
+			c.drop(k)
 		}
 	}
 }
@@ -364,5 +404,5 @@ func readCapped(r io.Reader, limit int64) ([]byte, error) {
 func (c *core) forget(key string) {
 	c.cacheMu.Lock()
 	defer c.cacheMu.Unlock()
-	delete(c.cache, key)
+	c.drop(key)
 }

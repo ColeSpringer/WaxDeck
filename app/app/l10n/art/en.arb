@@ -41,6 +41,34 @@
   "@artSlotFrontInline": {
     "description": "The front cover named inside a sentence. English lower-cases it; a language needing an article or a different case writes that here, because the sentences around it cannot know the gender of the words in this list."
   },
+  "artSourceAcquisition": "Art from {provider}",
+  "@artSourceAcquisition": {
+    "description": "Source mark under a cover that came with a download, such as a video's thumbnail. {provider} is the service's own name, a proper noun.",
+    "placeholders": {
+      "provider": {
+        "type": "String",
+        "example": "YouTube"
+      }
+    }
+  },
+  "artSourceAcquisitionUnnamed": "Art that came with a download",
+  "@artSourceAcquisitionUnnamed": {
+    "description": "Source mark under a cover that came with a download whose source the server did not name."
+  },
+  "artSourceBorrowedAcquisition": "Art from {provider}, for a track",
+  "@artSourceBorrowedAcquisition": {
+    "description": "Source mark under a cover a release borrowed from a member track whose picture came with a download. One sentence, like the other borrowed marks.",
+    "placeholders": {
+      "provider": {
+        "type": "String",
+        "example": "YouTube"
+      }
+    }
+  },
+  "artSourceBorrowedAcquisitionUnnamed": "Art that came with a download, for a track",
+  "@artSourceBorrowedAcquisitionUnnamed": {
+    "description": "The borrowed mark for a download's picture whose source went unnamed."
+  },
   "artSourceBorrowedProvider": "From {provider}, for a track",
   "@artSourceBorrowedProvider": {
     "description": "Source mark under a cover a release borrowed from a member track whose picture a named metadata provider fetched. One sentence: the borrowed marks replaced a two-sentence join that read as two captions glued together.",

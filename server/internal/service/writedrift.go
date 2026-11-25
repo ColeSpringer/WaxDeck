@@ -20,8 +20,8 @@ type writeDrift struct {
 func (d writeDrift) any() bool { return d.unsynced || len(d.owed) > 0 }
 
 // itemWriteDrift reads an item's write drift from the diagnostics of the
-// files the sweep grades it by, leaving out what a clean-up pass rewrote
-// in the catalog alone.
+// files the sweep grades it by, leaving out what no file is owed
+// (owedToFiles).
 func (l *Ingest) itemWriteDrift(ctx context.Context, it *model.ItemView) (writeDrift, error) {
 	rows, err := l.lib.FileDiagnostics(ctx, model.DiagnosticFilter{ItemPID: it.PID})
 	if err != nil {
@@ -46,7 +46,7 @@ func (l *Ingest) itemWriteDrift(ctx context.Context, it *model.ItemView) (writeD
 			}
 		}
 	}
-	d.owed, err = l.Health.owedBesideNormalized(ctx, it.PID, owed)
+	d.owed, err = l.Health.owedToFiles(ctx, it, owed)
 	return d, err
 }
 

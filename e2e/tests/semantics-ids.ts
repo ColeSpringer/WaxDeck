@@ -858,6 +858,7 @@ export const SemanticsIds = {
   matchingMenu: 'matching-menu',
   matchingOption: (libraryPid: string | number, mode: string | number) => `matching-${libraryPid}-${mode}`,
   matchingSingles: (libraryPid: string | number) => `matching-singles-${libraryPid}`,
+  reviewAcceptBestWithheld: 'review-accept-best-withheld',
   reviewAddCopy: 'review-add-copy',
   reviewApprove: 'review-approve',
   reviewAsIs: 'review-as-is',
@@ -884,6 +885,7 @@ export const SemanticsIds = {
   reviewSkip: 'review-skip',
   reviewSplitter: 'review-splitter',
   reviewUnofficial: 'review-unofficial',
+  reviewUseSuggested: 'review-use-suggested',
   trackMenu: (pid: string | number) => `track-menu-${pid}`,
 
   // search: The search screen, its filters, and the chrome that opens it.
@@ -989,6 +991,7 @@ export const SemanticsIds = {
   tasksScreen: 'tasks-screen',
 
   // uploads: Uploads: batches, rows, duplicates, and the add-to-library flow.
+  acquireAcceptBest: 'acquire-accept-best',
   acquireFormat: 'acquire-format',
   acquireIdentify: 'acquire-identify',
   acquireSubmit: 'acquire-submit',
@@ -998,6 +1001,7 @@ export const SemanticsIds = {
   addUploadFile: 'add-upload-file',
   addUploadFolder: 'add-upload-folder',
   addUploadSessions: 'add-upload-sessions',
+  uploadAcceptBest: 'upload-accept-best',
   uploadBatch: (batchId: string | number) => `upload-batch-${batchId}`,
   uploadDelete: (id: string | number) => `upload-delete-${id}`,
   uploadDropTarget: 'upload-drop-target',

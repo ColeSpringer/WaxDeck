@@ -903,6 +903,7 @@ abstract final class SemanticsIds {
       'matching-$libraryPid-$mode';
   static String matchingSingles(Object libraryPid) =>
       'matching-singles-$libraryPid';
+  static const String reviewAcceptBestWithheld = 'review-accept-best-withheld';
   static const String reviewAddCopy = 'review-add-copy';
   static const String reviewApprove = 'review-approve';
   static const String reviewAsIs = 'review-as-is';
@@ -930,6 +931,7 @@ abstract final class SemanticsIds {
   static const String reviewSkip = 'review-skip';
   static const String reviewSplitter = 'review-splitter';
   static const String reviewUnofficial = 'review-unofficial';
+  static const String reviewUseSuggested = 'review-use-suggested';
   static String trackMenu(Object pid) => 'track-menu-$pid';
 
   // search: The search screen, its filters, and the chrome that opens it.
@@ -1043,6 +1045,7 @@ abstract final class SemanticsIds {
   static const String tasksScreen = 'tasks-screen';
 
   // uploads: Uploads: batches, rows, duplicates, and the add-to-library flow.
+  static const String acquireAcceptBest = 'acquire-accept-best';
   static const String acquireFormat = 'acquire-format';
   static const String acquireIdentify = 'acquire-identify';
   static const String acquireSubmit = 'acquire-submit';
@@ -1052,6 +1055,7 @@ abstract final class SemanticsIds {
   static const String addUploadFile = 'add-upload-file';
   static const String addUploadFolder = 'add-upload-folder';
   static const String addUploadSessions = 'add-upload-sessions';
+  static const String uploadAcceptBest = 'upload-accept-best';
   static String uploadBatch(Object batchId) => 'upload-batch-$batchId';
   static String uploadDelete(Object id) => 'upload-delete-$id';
   static const String uploadDropTarget = 'upload-drop-target';

@@ -9,6 +9,18 @@
   "@settingsAboutTitle": {
     "description": "Name of the \"About WaxDeck\" setting, drawn on its own row and in settings search."
   },
+  "settingsAcceptBestMatchHelp": "Skips review when one match clearly leads",
+  "@settingsAcceptBestMatchHelp": {
+    "description": "Info tip on the accept-best-match switch: what on does, and that a close call still waits for review. No full stop."
+  },
+  "settingsAcceptBestMatchKeywords": "musicbrainz, match, identify, automatic, review, upload, acquire",
+  "@settingsAcceptBestMatchKeywords": {
+    "description": "Comma-separated search keywords for the \"Accept the best match\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsAcceptBestMatchTitle": "Accept the best match",
+  "@settingsAcceptBestMatchTitle": {
+    "description": "Name of the \"Accept the best match\" setting: the default the upload and Add-from-URL sheets open on, drawn on its own row and in settings search."
+  },
   "settingsAccountSignedIn": "Signed in",
   "@settingsAccountSignedIn": {
     "description": "What the account row reads for an account with no display name of its own."

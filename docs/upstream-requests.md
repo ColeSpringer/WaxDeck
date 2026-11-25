@@ -786,6 +786,75 @@ note.
   workaround: WaxDeck reads the members' releases before and after the
   write (one query each side, at most 5000 members) and answers the
   pairs as `folded`; the two reads are not the write's transaction.
+- **A same-hash re-read rewrites a cover's attribution to `tag`.** When
+  a rescan re-reads a file whose embedded picture has the hash of the
+  standing front, `refreshArtProvenanceTx` (reached from the same-hash
+  branch of `attachEntityArtTxChanged`, `store/sqlite/art.go`) stamps
+  the row `tag`, so an unlocked `enrichment` or `user` cover that was
+  written back into the file reads as the file's own after any forced
+  rescan or external edit. Wanted: a scan's same-hash refresh leaves an
+  attribution other than `tag` or `sidecar` alone. Shipped workaround:
+  the cover a review approval writes is locked, and a download's
+  thumbnail is known by the hash of the picture it landed with, which
+  WaxDeck records, so a person's cover read back as `tag` is still the
+  file's own rather than the download's. It still reads "from the
+  file" rather than as theirs.
+- **The album and group front fills cannot be told a front is a
+  placeholder.** `albumArtHalves` (`store/sqlite/enrich.go`) and
+  `albumFrontOpenTx`/`fillAlbumArtTx` (`store/sqlite/art.go`) count a
+  member track's embedded front as resolving the album's, so a
+  download's video thumbnail keeps the album and release-group fronts
+  from being filled, and the track's row answers ahead of any album
+  cover anyway. Wanted: a placeholder mark on an attachment that those
+  fills may replace and the resolve chain ranks below an album's own.
+  Shipped workaround: WaxDeck's cover want treats a download's
+  thumbnail as vacant and writes the provider's cover on the track, and
+  a review approval replaces it with the release's. The catalog's own
+  enrichment pass cannot replace a thumbnail until this mark lands: it
+  writes no track art, and its album fills count the thumbnail as the
+  album's front.
+- **A derived cover's provenance does not name the member that
+  answered.** `ArtProvenance` and `ArtBlob` for an album with no front
+  of its own carry `Derived` and the member track's attribution, not
+  which track (`artInChain` takes the first member row by `rowid`), so a
+  consumer that wants the member has to infer it. Wanted: the answering
+  member's pid on both. Shipped workaround: the derived provenance
+  carries the picture's `SourceHash`, and WaxDeck records the hash each
+  download arrived with, so a derived album front whose hash is one of
+  its members' arrival hashes is labelled as that acquisition source's;
+  a read that needs the member itself still cannot name it.
+- **A set album or release-group mbid cannot reach the files.**
+  `EditEntity` with `WriteBack` fans no set entity mbid ("stay DB-only",
+  `entityedit.go`), `SetItemTag` refuses `MUSICBRAINZ_ALBUMID` and
+  `MUSICBRAINZ_RELEASEGROUPID` as reserved, and no item field carries
+  them. A review approval records the release and its group on the
+  album, and a re-read of a member whose file then carries both ids
+  keeps the album's pid, so writing them is safe; there is no call to
+  do it. Wanted: a set album or release-group mbid fanned into the
+  member files with write-back, as a clear's strip already is. Shipped
+  workaround: the approval's ids stay in the catalog, so another player
+  reading the files sees none.
+- **A recording id written into a track's file re-mints the item.**
+  `scan.go` keys a track `identity.TrackKey(tags.MBID, essence)`, so a
+  file whose MUSICBRAINZ_TRACKID is new or changed resolves no item on
+  its next read (a forced rescan, an external edit, the watcher): the
+  scan mints a fresh pid and folds the old item into it, and every
+  client and WaxDeck table holding the old pid loses it. An `mbid` edit
+  with `WriteBack` does exactly that, as does a hand-written id.
+  `RekeyBook` and `reanchorBookIdentity` re-anchor a book after its
+  identity fields are written; nothing does it for a track. Wanted: a
+  track's `mbid` edit that lands in the file re-keys the item to
+  `mbid:<id>` (the book re-anchor's twin), or a scan that adopts the
+  item already holding that recording id in `mbid` for the file it
+  backs. Shipped workaround: every WaxDeck writer (review approval and
+  revert, the metadata editor's single and bulk edits) keeps a track's
+  recording id in the catalog alone, locked so a read of the silent
+  file cannot clear it, and the write-drift rule and fix
+  never count or write a track's owed `mbid`, so another player reading
+  the files sees none. WaxBin also offers no way to clear an owed tag a
+  caller must not write: each such edit leaves an info-level
+  `tag_write_owed` row for `mbid` on the file, which the diagnostics
+  dashboard lists for good.
 
 ## WaxTap
 
@@ -799,6 +868,15 @@ note.
   a chunk that has stopped receiving bytes, so a slow link finishes and
   a hung connection fails fast. Shipped workaround: the 10-minute
   chunk deadline.
+- **`EmbedMetadata` writes the channel as ARTIST verbatim.** For an Art
+  Track upload that channel is YouTube's auto-generated "<Artist> -
+  Topic", and the video's description states the real artists, album
+  and release date, which the embed leaves out (no ALBUM, and the
+  upload date as the date). Wanted: an embed option that drops the
+  " - Topic" suffix and reads an Art Track description into ARTIST,
+  ALBUM and the date. Shipped workaround: WaxDeck's own tag pass after
+  every download (`server/internal/sourcetags`) rewrites them in the
+  same WaxLabel write as its provenance tags.
 
 ## WaxSeal
 

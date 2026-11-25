@@ -166,6 +166,7 @@ AcquisitionRequest decodeAcquisitionRequest(
     libraryPid: readOptional(json, 'libraryPid', type, wireString),
     format: readOptional(json, 'format', type, wireString),
     identify: readOptional(json, 'identify', type, wireBool),
+    acceptBestMatch: readOptional(json, 'acceptBestMatch', type, wireBool),
   );
 }
 
@@ -175,6 +176,7 @@ Map<String, Object?> encodeAcquisitionRequest(AcquisitionRequest value) => {
   'libraryPid': ?value.libraryPid,
   'format': ?value.format,
   'identify': ?value.identify,
+  'acceptBestMatch': ?value.acceptBestMatch,
 };
 
 AdminSettings decodeAdminSettings(Map<String, Object?> json, WireContext ctx) {
@@ -7197,6 +7199,7 @@ Prefs decodePrefs(Map<String, Object?> json, WireContext ctx) {
       wireBool,
     ),
     identifyOptOut: readOptional(json, 'identifyOptOut', type, wireBool),
+    acceptBestMatch: readOptional(json, 'acceptBestMatch', type, wireBool),
   );
 }
 
@@ -7215,6 +7218,7 @@ Map<String, Object?> encodePrefs(Prefs value) => {
   'autoplay': ?value.autoplay,
   'radioScrobbleOptOut': ?value.radioScrobbleOptOut,
   'identifyOptOut': ?value.identifyOptOut,
+  'acceptBestMatch': ?value.acceptBestMatch,
 };
 
 PushRegistration decodePushRegistration(
@@ -7951,6 +7955,7 @@ ReviewDecision decodeReviewDecision(
     action: readRequired(json, 'action', type, wireString),
     candidateMbid: readOptional(json, 'candidateMbid', type, wireString),
     mediaType: readOptional(json, 'mediaType', type, wireString),
+    useSuggested: readOptional(json, 'useSuggested', type, wireBool),
   );
 }
 
@@ -7958,6 +7963,7 @@ Map<String, Object?> encodeReviewDecision(ReviewDecision value) => {
   'action': value.action,
   'candidateMbid': ?value.candidateMbid,
   'mediaType': ?value.mediaType,
+  'useSuggested': ?value.useSuggested,
 };
 
 ReviewEntry decodeReviewEntry(Map<String, Object?> json, WireContext ctx) {
@@ -8065,6 +8071,12 @@ ReviewEntryDetail decodeReviewEntryDetail(
     ),
     identifyDeclined:
         readOptional(json, 'identifyDeclined', type, wireBool) ?? false,
+    acceptBestWithheld: readOptional(
+      json,
+      'acceptBestWithheld',
+      type,
+      wireString,
+    ),
     mediumFixed: readOptional(json, 'mediumFixed', type, wireBool) ?? false,
     identifyOverride: readOptional(
       json,
@@ -8102,6 +8114,7 @@ Map<String, Object?> encodeReviewEntryDetail(ReviewEntryDetail value) => {
   'tracks': [for (final e in value.tracks) encodeReviewTrack(e)],
   'candidates': [for (final e in value.candidates) encodeReviewCandidate(e)],
   'identifyDeclined': value.identifyDeclined,
+  'acceptBestWithheld': ?value.acceptBestWithheld,
   'mediumFixed': value.mediumFixed,
   if (value.identifyOverride case final v?)
     'identifyOverride': encodeReviewOverride(v),
@@ -10006,6 +10019,7 @@ UploadBatchCreate decodeUploadBatchCreate(
     mediaType: readRequired(json, 'mediaType', type, wireString),
     libraryPid: readOptional(json, 'libraryPid', type, wireString),
     identify: readOptional(json, 'identify', type, wireBool),
+    acceptBestMatch: readOptional(json, 'acceptBestMatch', type, wireBool),
   );
 }
 
@@ -10014,6 +10028,7 @@ Map<String, Object?> encodeUploadBatchCreate(UploadBatchCreate value) => {
   'mediaType': value.mediaType,
   'libraryPid': ?value.libraryPid,
   'identify': ?value.identify,
+  'acceptBestMatch': ?value.acceptBestMatch,
 };
 
 UploadCreate decodeUploadCreate(Map<String, Object?> json, WireContext ctx) {
@@ -10027,6 +10042,7 @@ UploadCreate decodeUploadCreate(Map<String, Object?> json, WireContext ctx) {
     batchId: readOptional(json, 'batchId', type, wireString),
     batchPath: readOptional(json, 'batchPath', type, wireString),
     identify: readOptional(json, 'identify', type, wireBool),
+    acceptBestMatch: readOptional(json, 'acceptBestMatch', type, wireBool),
   );
 }
 
@@ -10039,6 +10055,7 @@ Map<String, Object?> encodeUploadCreate(UploadCreate value) => {
   'batchId': ?value.batchId,
   'batchPath': ?value.batchPath,
   'identify': ?value.identify,
+  'acceptBestMatch': ?value.acceptBestMatch,
 };
 
 UploadPage decodeUploadPage(Map<String, Object?> json, WireContext ctx) {

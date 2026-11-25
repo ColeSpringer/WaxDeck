@@ -4764,6 +4764,7 @@ mixin _ReviewCalls on _WaxDeckTransport implements ReviewApi {
     required String action,
     String? candidateMbid,
     String? mediaType,
+    bool? useSuggested,
   }) => _guard(() async {
     final response = await _decideReviewEntry(
       entryId,
@@ -4771,6 +4772,7 @@ mixin _ReviewCalls on _WaxDeckTransport implements ReviewApi {
         action: action,
         candidateMbid: candidateMbid,
         mediaType: mediaType,
+        useSuggested: useSuggested,
       ),
     );
     return _decode(

@@ -126,8 +126,9 @@ class LibraryMatching {
 
   /// Whether a confident match for a one-file unit may apply itself under mode
   /// `auto`. Off by default: a lone track picking among near-tied releases is a
-  /// wrong-release risk, so singles always queue for review. When on, singles
-  /// auto-apply only at a stricter confidence than albums.
+  /// wrong-release risk, so singles queue for review, unless their submission
+  /// asked to take its best match (`UploadCreate.acceptBestMatch`). When on,
+  /// singles auto-apply only at a stricter confidence than albums.
   final bool singlesAutoApply;
 }
 
@@ -138,7 +139,11 @@ class ReviewBulkDecision {
   /// The entries to decide.
   final List<String> entryIds;
 
-  /// The decision. `approve` uses each entry's ranked best candidate.
+  /// The decision. `approve` uses each entry's ranked best candidate, and
+  /// fetches covers as the single-entry `approve` does, within one time bound
+  /// on cover fetches shared by every entry in the call: an entry it did not
+  /// reach keeps its cover and, left with none or a download's thumbnail,
+  /// carries the warning.
   final String action;
 }
 
@@ -267,6 +272,7 @@ class ReviewDecision {
     required this.action,
     this.candidateMbid,
     this.mediaType,
+    this.useSuggested,
   });
 
   /// The decision to apply.
@@ -291,6 +297,27 @@ class ReviewDecision {
   /// and otherwise these `invalid-request` refusals come before the `conflict`
   /// over imported files. `skip` and `discard` import nothing and ignore it.
   final String? mediaType;
+
+  /// With `as-is` or `unofficial`, on an import as music: once the files are in
+  /// the library, write the artist and title the entry offers as `suggested`
+  /// onto its tracks, in the catalog and the files, exactly the values
+  /// `suggested` shows and only those it holds (an empty suggested artist
+  /// leaves each track's artist as it is), as the deciding person's own edit,
+  /// the way a metadata edit is: a locked field keeps its value and `warnings`
+  /// names the file. Only what differs is written: a track's artist stays as it
+  /// is when it already credits the suggested one (as its whole artist, one of
+  /// the names it joins with commas, or one of its artist credits, compared
+  /// ignoring case, accents and punctuation), so a suggestion never drops a
+  /// co-artist, and a title already reading the suggested one is left alone. A
+  /// file keeps the place its delivered tags gave it until it is organized.
+  /// Refused with `invalid-request` on an entry that offers no suggestion; an
+  /// already decided entry answers `conflict` first, as every decide does, and
+  /// the `invalid-request` refusals come after it. A track whose file joined an
+  /// item the library already holds keeps that item's metadata. Every other
+  /// action, and a decide importing the unit as `audiobook`, ignores it (and so
+  /// does not refuse it); absent or false files the tracks under the tags they
+  /// carry.
+  final bool? useSuggested;
 }
 
 /// One review queue entry: an album-sized unit of files awaiting or past a
@@ -398,6 +425,7 @@ class ReviewEntryDetail extends ReviewEntry {
     this.tracks = const [],
     this.candidates = const [],
     this.identifyDeclined = false,
+    this.acceptBestWithheld,
     this.mediumFixed = false,
     this.identifyOverride,
     this.suggested,
@@ -425,6 +453,28 @@ class ReviewEntryDetail extends ReviewEntry {
   /// could not proceed and it is waiting for a person.
   final bool identifyDeclined;
 
+  /// Why an entry whose submission asked to accept its best match
+  /// (`acceptBestMatch`) is waiting for review instead: `below-floor`, the top
+  /// candidate is too far from the files, or its recording is titled as another
+  /// cut of the song than they name (a live take, a demo, a clean edit, a bonus
+  /// track, album version, explicit or original mix note only one of them
+  /// carries, or a title one of them only continues, such as "Part II" or
+  /// "(Take 2)"); `ambiguous`, another recording the search found (a candidate,
+  /// or a recording it listed without fetching its releases) is within the
+  /// margin of it, or the candidates cannot rule one out (the files or the top
+  /// name no artist to compare, another track of the top's release carries the
+  /// same title at about the same length, the top names no recording beside
+  /// other candidates, a recording search listed more releases than it fetched,
+  /// all of one recording, or it counted more recordings than it listed and
+  /// either the last it listed matched as well as the top's recording or the
+  /// top's recording was not among those listed); `no-candidates`, nothing was
+  /// found. Present only on a pending entry whose last identification did not
+  /// apply a match for one of those reasons. Absent otherwise: for a submission
+  /// that did not ask, while identifying, for an entry held back by a typed
+  /// search, a possible duplicate or the library's matching mode, and once the
+  /// entry is decided.
+  final String? acceptBestWithheld;
+
   /// True once any of the unit's files has entered the library, or was already
   /// in it: a decide naming a `mediaType` other than the entry's own is then
   /// refused with `conflict`. Absent while every file is staged.
@@ -435,12 +485,16 @@ class ReviewEntryDetail extends ReviewEntry {
   /// the files carry, never this.
   final ReviewOverride? identifyOverride;
 
-  /// What the matching parse read out of the source's own title, offered as a
-  /// starting point for a search rather than as a claim about the files.
-  /// Present only on acquisitions of a single loose file, where the title is a
-  /// video title and the artist tag is a channel; an album-shaped unit carries
-  /// real tags and needs no guess. Never an album, since a loose track has
-  /// none. A stored `identifyOverride` supersedes it.
+  /// What the matching parse read out of the file's own title and artist,
+  /// offered as a starting point for a search rather than as a claim about the
+  /// files, and what `useSuggested` files the tracks under: upload and remaster
+  /// notes dropped, a mark of another cut (a clean edit, 8D audio, a live take)
+  /// kept. Present only on music acquisitions of a single file, whose title is
+  /// usually a video title and whose artist a channel (as `createAcquisition`
+  /// says the fetch writes them); an album-shaped unit carries real tags and
+  /// needs no guess. An artist and a title, never an album: a download that has
+  /// one (an Art Track's, from its description) already carries it in its tags.
+  /// A stored `identifyOverride` supersedes it as a search's starting point.
   final ReviewOverride? suggested;
 }
 
@@ -473,10 +527,15 @@ class ReviewOverride {
   /// The album title to search for.
   final String? album;
 
-  /// The track title to search for. Ignored on a unit of several files: a track
-  /// title belongs to one track, and naming them all the same thing would wreck
-  /// the pairing that scores a release. Correct a multi-file unit with `artist`
-  /// and `album`, which are properties of the unit.
+  /// The track title to search for. The search asks for the song alone, as for
+  /// a title read off the files: upload notes, cut marks and what names a
+  /// particular recording ("(Official Video)", "(Clean)", "(Live)", " - Radio
+  /// Edit") are left out of what is looked up and used to pick among the
+  /// recordings found; the stored override keeps it as typed. Ignored on a unit
+  /// of several files: a track title belongs to one track, and naming them all
+  /// the same thing would wreck the pairing that scores a release. Correct a
+  /// multi-file unit with `artist` and `album`, which are properties of the
+  /// unit.
   final String? title;
 }
 
@@ -508,7 +567,9 @@ class ReviewStats {
   /// Entries a person approved.
   final int applied;
 
-  /// Entries the engine applied on its own.
+  /// Entries the engine applied on its own at its own threshold. An entry
+  /// applied because its submission asked to take its best match reads
+  /// `auto-applied` but is not counted here.
   final int autoApplied;
 
   /// Entries accepted as they were.
@@ -524,7 +585,9 @@ class ReviewStats {
   final int reverted;
 
   /// Auto-applied entries later reverted; with `autoApplied` this is the
-  /// observed auto-apply revert rate, the trust signal the queue surfaces.
+  /// observed auto-apply revert rate, the trust signal the queue surfaces. An
+  /// entry applied because its submission asked to take its best match counts
+  /// in neither.
   final int revertedAutoApplied;
 }
 

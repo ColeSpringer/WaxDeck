@@ -112,16 +112,22 @@ mixin FakeUploads on FakeRepositoryState implements UploadsApi {
   final List<bool?> batchIdentifyCalls = [];
   final List<bool?> uploadIdentifyCalls = [];
 
+  /// The accept-best choice each create carried, same shape.
+  final List<bool?> batchAcceptBestCalls = [];
+  final List<bool?> uploadAcceptBestCalls = [];
+
   @override
   Future<UploadBatch> createUploadBatch({
     required UploadGrouping grouping,
     required String mediaType,
     String? libraryPid,
     bool? identify,
+    bool? acceptBestMatch,
   }) async {
     final error = uploadError;
     if (error != null) throw error;
     batchIdentifyCalls.add(identify);
+    batchAcceptBestCalls.add(acceptBestMatch);
     final batch = UploadBatch(
       id: 'ub-FAKE${_batchSeq++}',
       grouping: grouping,
@@ -186,12 +192,14 @@ mixin FakeUploads on FakeRepositoryState implements UploadsApi {
     String? batchId,
     String? batchPath,
     bool? identify,
+    bool? acceptBestMatch,
   }) async {
     await createUploadGate?.future;
     onCreateUpload?.call(fileName);
     final error = uploadError ?? createUploadRefusal;
     if (error != null) throw error;
     uploadIdentifyCalls.add(identify);
+    uploadAcceptBestCalls.add(acceptBestMatch);
     final upload = UploadSession(
       id: 'up-FAKE${_uploadSeq++}',
       fileName: fileName,
@@ -274,7 +282,13 @@ mixin FakeUploads on FakeRepositoryState implements UploadsApi {
   }
 
   final List<
-    ({String url, MediaType mediaType, String? format, bool? identify})
+    ({
+      String url,
+      MediaType mediaType,
+      String? format,
+      bool? identify,
+      bool? acceptBestMatch,
+    })
   >
   acquisitionCalls = [];
 
@@ -288,6 +302,7 @@ mixin FakeUploads on FakeRepositoryState implements UploadsApi {
     String? libraryPid,
     String? format,
     bool? identify,
+    bool? acceptBestMatch,
   }) async {
     await createAcquisitionGate?.future;
     final error = uploadError;
@@ -297,6 +312,7 @@ mixin FakeUploads on FakeRepositoryState implements UploadsApi {
       mediaType: mediaType,
       format: format,
       identify: identify,
+      acceptBestMatch: acceptBestMatch,
     ));
     final task = ToolTask(
       id: 'tt-FAKE${toolTaskSeq++}',

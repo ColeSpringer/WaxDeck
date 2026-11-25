@@ -337,9 +337,10 @@ Every entry carries a gate tag saying what actually blocks it:
 
 - `[in-repo]` **The MusicBrainz and Cover Art Archive base overrides
   stop short of enrichment.** `WAXDECK_MUSICBRAINZ_BASE` and
-  `WAXDECK_COVERART_BASE` reach matching and radio artwork (the Cover
-  Art Archive one radio artwork only), while the catalog's enrichment
-  pass always asks the public services:
+  `WAXDECK_COVERART_BASE` reach matching, radio artwork and the cover
+  a review approval fetches (the Cover Art Archive one those two
+  only), while the catalog's enrichment pass always asks the public
+  services:
   `library.go` never hands WaxBin `MusicBrainzBaseURL` or
   `CoverArtBaseURL`. The wiring is a few lines, but the pass's
   private-address guard refuses a mirror on a private address unless
@@ -374,6 +375,17 @@ Every entry carries a gate tag saying what actually blocks it:
   star - is answered not-found and dropped, where a kept fold map could
   carry a listen or a star to the item that took it in (a position
   inside a folded chapter means nothing on the book).
+
+- `[in-repo]` **A recording search keeps a title's guest credit.** A
+  download titled "Song (feat. Guest)" is searched for under that whole
+  title, which finds nothing where MusicBrainz titles the recording
+  "Song" and carries the guest in its artist credit, its usual style.
+  Dropping the clause from the search would reach those plain titles,
+  and with them the solo cut of a song that also has a featured one:
+  the title comparison sets a guest clause aside, so the two read
+  alike. It needs that comparison to keep the guest comparable and
+  accept-best to require the guest in the accepted recording's credit;
+  built when the owner says.
 
 - `[decision]` **Books' Authors index lists a book under its first
   author only.** The index, search's Authors group and an artist card's

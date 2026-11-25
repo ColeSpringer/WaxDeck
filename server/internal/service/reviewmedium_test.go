@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -82,7 +83,7 @@ func TestAMusicEntryDecidedAsAnAudiobookLandsOneBook(t *testing.T) {
 	dir := t.TempDir()
 	id := pendingUnitIn(t, ctx, svc, uc, "music", "Ann Author/Unit Book",
 		chapterPart(t, dir, "medium-1", "Chapter One"), chapterPart(t, dir, "medium-2", "Chapter Two"))
-	dto, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook")
+	dto, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +108,7 @@ func TestAnAudiobookDecisionRetriedWithNoMediumFinishesOneBook(t *testing.T) {
 	id := pendingUnitIn(t, ctx, svc, uc, "music", "Ann Author/Unit Book",
 		chapterPart(t, dir, "again-1", "Chapter One"), chapterPart(t, dir, "again-2", "Chapter Two"))
 	failingPlan(svc, 3)
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook"); err == nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook", false); err == nil {
 		t.Fatal("the first attempt stood, want it stopped by the failing plan")
 	}
 	if e, err := svc.db.ReviewEntryByID(ctx, id); err != nil || e.MediaType != "audiobook" || e.Title != "Unit Book" {
@@ -115,7 +116,7 @@ func TestAnAudiobookDecisionRetriedWithNoMediumFinishesOneBook(t *testing.T) {
 	}
 	partLanded(t, ctx, svc, id)
 	svc.Ingest.planHook = nil
-	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +148,7 @@ func TestADifferentMediumAfterAFileLandedIsRefused(t *testing.T) {
 		t.Error("a staged entry's medium reads fixed, want it open")
 	}
 	failingPlan(svc, 3)
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", ""); err == nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false); err == nil {
 		t.Fatal("the first attempt stood, want it stopped by the failing plan")
 	}
 	partLanded(t, ctx, svc, id)
@@ -155,7 +156,7 @@ func TestADifferentMediumAfterAFileLandedIsRefused(t *testing.T) {
 		t.Error("an entry with a landed file reads its medium open, want it fixed")
 	}
 	svc.Ingest.planHook = nil
-	_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook")
+	_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook", false)
 	if KindOf(err) != KindConflict || !strings.Contains(err.Error(), "is already in the library as music") {
 		t.Fatalf("decision as audiobook = %v (%s), want a conflict saying part is already in the library", err, KindOf(err))
 	}
@@ -163,7 +164,7 @@ func TestADifferentMediumAfterAFileLandedIsRefused(t *testing.T) {
 		t.Errorf("entry medium = %q, want it left music", got)
 	}
 	partLanded(t, ctx, svc, id)
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "music"); err != nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "music", false); err != nil {
 		t.Fatalf("decision naming the entry's own medium = %v, want it to stand", err)
 	}
 }
@@ -181,7 +182,7 @@ func TestADecisionRefusesAMediumItCannotImportAs(t *testing.T) {
 		{"as-is", "podcast"},
 		{"as-is", "film"},
 	} {
-		if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, tc.action, "", tc.medium); KindOf(err) != KindInvalid {
+		if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, tc.action, "", tc.medium, false); KindOf(err) != KindInvalid {
 			t.Errorf("%s as %s = %v (%s), want invalid-request", tc.action, tc.medium, err, KindOf(err))
 		}
 	}
@@ -200,12 +201,12 @@ func TestAnEntrySwitchedToAudiobookIsNeverApproved(t *testing.T) {
 		chapterPart(t, dir, "switched-1", "Chapter One"), chapterPart(t, dir, "switched-2", "Chapter Two"))
 	withCandidate(t, ctx, svc, id)
 	failingPlan(svc, 3)
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook"); err == nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook", false); err == nil {
 		t.Fatal("the first attempt stood, want it stopped by the failing plan")
 	}
 	partLanded(t, ctx, svc, id)
 	svc.Ingest.planHook = nil
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "approve", "", ""); KindOf(err) != KindInvalid {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "approve", "", "", false); KindOf(err) != KindInvalid {
 		t.Fatalf("approval of the switched entry = %v (%s), want invalid-request", err, KindOf(err))
 	}
 	if status, p := decidedEntry(t, ctx, svc, id); status != reviewPending || p.Tracks[1].PID != "" {
@@ -218,7 +219,7 @@ func TestAnEntrySwitchedToAudiobookIsNeverApproved(t *testing.T) {
 func TestALibraryThatDoesNotAcceptTheMediumRefusesIt(t *testing.T) {
 	ctx, svc, uc := managedUploadFixture(t, Root{Name: "vinyl", Path: t.TempDir(), Managed: true, Media: "music"})
 	id := vinylUnit(t, ctx, svc, uc)
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook"); KindOf(err) != KindInvalid {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook", false); KindOf(err) != KindInvalid {
 		t.Fatalf("decision as audiobook into a music library = %v (%s), want invalid-request", err, KindOf(err))
 	}
 	wantStaged(t, ctx, svc, id)
@@ -233,13 +234,13 @@ func TestARefusedMediumIsInvalidBeforeALandedFileConflicts(t *testing.T) {
 	ctx, svc, uc := managedUploadFixture(t, Root{Name: "vinyl", Path: t.TempDir(), Managed: true, Media: "music"})
 	id := vinylUnit(t, ctx, svc, uc)
 	failingPlan(svc, 3)
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", ""); err == nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false); err == nil {
 		t.Fatal("the first attempt stood, want it stopped by the failing plan")
 	}
 	partLanded(t, ctx, svc, id)
 	svc.Ingest.planHook = nil
 	for _, action := range []string{"approve", "as-is"} {
-		if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, action, "", "audiobook"); KindOf(err) != KindInvalid {
+		if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, action, "", "audiobook", false); KindOf(err) != KindInvalid {
 			t.Errorf("%s as audiobook with a part landed = %v (%s), want invalid-request", action, err, KindOf(err))
 		}
 	}
@@ -312,16 +313,16 @@ func TestAnEntryStagingNoFilesKeepsItsMedium(t *testing.T) {
 		return id
 	}
 	id := open()
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook"); KindOf(err) != KindInvalid {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook", false); KindOf(err) != KindInvalid {
 		t.Fatalf("a rematch decided as audiobook = %v (%s), want invalid-request", err, KindOf(err))
 	}
 	if status, _ := decidedEntry(t, ctx, svc, id); status != reviewPending {
 		t.Fatalf("entry = %s, want it pending", status)
 	}
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "music"); err != nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "music", false); err != nil {
 		t.Fatalf("a rematch decided as its own medium = %v, want it to stand", err)
 	}
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, open(), "skip", "", "audiobook"); err != nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, open(), "skip", "", "audiobook", false); err != nil {
 		t.Fatalf("a skip naming another medium = %v, want the field ignored", err)
 	}
 }
@@ -338,7 +339,7 @@ func TestAnApprovalStoppedAtItsEditsKeepsWhatLanded(t *testing.T) {
 	svc.Ingest.editFieldsHook = func(context.Context, []model.ItemFieldEdit, waxbin.EditOptions) (*waxbin.BatchEditResult, error) {
 		return nil, errors.New("the catalog went away")
 	}
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "approve", "", "music"); err == nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "approve", "", "music", false); err == nil {
 		t.Fatal("the approval stood, want it stopped at its edits")
 	}
 	if got := entryMedium(t, ctx, svc, id); got != "music" {
@@ -354,7 +355,7 @@ func TestAnApprovalStoppedAtItsEditsKeepsWhatLanded(t *testing.T) {
 		}
 	}
 	svc.Ingest.editFieldsHook = nil
-	dto, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "approve", "", "")
+	dto, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "approve", "", "", false)
 	if err != nil {
 		t.Fatalf("retried approval = %v, want it to finish", err)
 	}
@@ -408,9 +409,9 @@ func (h *heldRelease) SearchReleases(context.Context, string, string, int) ([]*m
 	return []*match.Release{h.rel}, nil
 }
 
-func (h *heldRelease) SearchRecordings(context.Context, string, string) ([]*match.Release, error) {
+func (h *heldRelease) SearchRecordings(context.Context, string, string, string, string) (match.RecordingSearch, error) {
 	h.hold()
-	return []*match.Release{h.rel}, nil
+	return match.RecordingSearch{Releases: []*match.Release{h.rel}}, nil
 }
 
 // A decision that switched a music entry to audiobook and then failed
@@ -456,7 +457,7 @@ func TestAFailedMediumChangeStopsAnIdentificationStillRunning(t *testing.T) {
 		t.Fatal("identification never reached the source")
 	}
 	failingPlan(svc, 1)
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook"); err == nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook", false); err == nil {
 		t.Fatal("the decision stood, want it stopped by the failing plan")
 	}
 	if got := entryMedium(t, ctx, svc, id); got != "audiobook" {
@@ -472,5 +473,45 @@ func TestAFailedMediumChangeStopsAnIdentificationStillRunning(t *testing.T) {
 	wantStaged(t, ctx, svc, id)
 	if got := entryMedium(t, ctx, svc, id); got != "audiobook" {
 		t.Errorf("entry medium after identification = %q, want audiobook", got)
+	}
+}
+
+// A discard after an approval that landed the files and then failed takes
+// back what the approval wrote on them before the files stay.
+func TestADiscardAfterAFailedApplyUndoesItOnWhatLanded(t *testing.T) {
+	ctx, svc, uc := managedUploadFixture(t)
+	dir := t.TempDir()
+	id := pendingUnitIn(t, ctx, svc, uc, "music", "Ann Author/Unit Album",
+		chapterPart(t, dir, "landed-1", "Chapter One"), chapterPart(t, dir, "landed-2", "Chapter Two"))
+	withCandidate(t, ctx, svc, id)
+	svc.Ingest.appliedWriteHook = func() error { return errors.New("the database is full") }
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "approve", "", "", false); err == nil {
+		t.Fatal("the approval stood, want its last write to fail")
+	}
+	row, err := svc.db.ReviewEntryByID(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snap reviewSnapshot
+	if err := json.Unmarshal([]byte(row.Snapshot), &snap); err != nil || len(snap.Items) != 2 {
+		t.Fatalf("snapshot = %q (%v), want the landed items' before-state", row.Snapshot, err)
+	}
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "discard", "", "", false); err != nil {
+		t.Fatalf("discard: %v", err)
+	}
+	for pid, fields := range snap.Items {
+		it, err := svc.lib.Get(ctx, model.PID(pid))
+		if err != nil {
+			t.Fatal(err)
+		}
+		now := applyFields(it)
+		for f, want := range fields {
+			if now[f] != want {
+				t.Errorf("%s: %s = %q after the discard, want %q as before the approval", pid, f, now[f], want)
+			}
+		}
+		if it.Album == "Some Release" {
+			t.Errorf("%s still carries the approved album", pid)
+		}
 	}
 }

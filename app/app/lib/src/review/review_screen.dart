@@ -307,6 +307,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen>
               action,
               candidateMbid: candidateMbid,
               mediaType: mediaType,
+              useSuggested: reviewDecisionUseSuggested(ref, entryId, action),
             );
         // A key on the row the pane shows moves the pane as its buttons
         // do, the pane having come to that row meanwhile included.

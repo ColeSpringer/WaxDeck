@@ -396,7 +396,8 @@ class UploadsController extends AsyncNotifier<UploadsState>
   /// ones window through their lazy accessor. [batchId] and
   /// [batchPath] join the session to a batch; [identify] is the
   /// submission's identification choice, which a batch overrides with
-  /// its own. Answers false for one discarded while it was sent, which
+  /// its own; [acceptBestMatch] likewise, and only music identified can
+  /// act on it. Answers false for one discarded while it was sent, which
   /// is no failure and was not uploaded.
   Future<bool> uploadPicked(
     PickedAudioFile file, {
@@ -404,6 +405,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
     String? libraryPid,
     String? batchId,
     bool? identify,
+    bool? acceptBestMatch,
   }) async {
     final path = file.path;
     if (path != null) {
@@ -416,6 +418,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
         batchPath: file.relativeDir,
         sizeBytes: file.size,
         identify: identify,
+        acceptBestMatch: acceptBestMatch,
       );
     }
     final openRead = file.openRead;
@@ -431,6 +434,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
       batchId: batchId,
       batchPath: file.relativeDir,
       identify: identify,
+      acceptBestMatch: acceptBestMatch,
     );
   }
 
@@ -450,6 +454,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
     String? batchPath,
     int? sizeBytes,
     bool? identify,
+    bool? acceptBestMatch,
   }) async {
     final size = sizeBytes ?? await localFileLength(path);
     final session = await _open(
@@ -460,6 +465,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
       batchId: batchId,
       batchPath: batchPath,
       identify: identify,
+      acceptBestMatch: acceptBestMatch,
     );
     _upsert(session);
     ref.read(_retryPathsProvider)[session.id] = path;
@@ -483,6 +489,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
     String? batchId,
     String? batchPath,
     bool? identify,
+    bool? acceptBestMatch,
   }) async {
     final session = await _open(
       fileName: fileName,
@@ -492,6 +499,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
       batchId: batchId,
       batchPath: batchPath,
       identify: identify,
+      acceptBestMatch: acceptBestMatch,
     );
     _upsert(session);
     ref.read(_retryReadersProvider)[session.id] = openRead;
@@ -513,6 +521,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
     required String? batchId,
     required String? batchPath,
     required bool? identify,
+    required bool? acceptBestMatch,
   }) async {
     // What is listed now: the caller that started the run waited for the
     // list ([untilUploadsListed]).
@@ -531,6 +540,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
             batchId: batchId,
             batchPath: _cleanBatchPath(batchId, batchPath),
             identify: identify,
+            acceptBestMatch: acceptBestMatch,
           );
       _emit(session.id, const TransferStarted(0));
       return session;

@@ -2,12 +2,15 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/colespringer/waxbin"
@@ -85,6 +88,11 @@ type reviewTrackDoc struct {
 	DurationMS  int64             `json:"durationMs"`
 	Tags        map[string]string `json:"tags,omitempty"`
 	Fingerprint string            `json:"fingerprint,omitempty"`
+	// SourceType and SourceURL name the source provider a download came
+	// through and its item's address; empty for an upload, which knows
+	// the bytes arrived, not where from.
+	SourceType model.SourceType `json:"sourceType,omitempty"`
+	SourceURL  string           `json:"sourceUrl,omitempty"`
 	// Duplicate is the warning the file's upload arrived with, as the
 	// reader may see it; filled for the read, never stored.
 	Duplicate *DuplicateDTO `json:"-"`
@@ -94,6 +102,16 @@ type reviewTrackDoc struct {
 // landed on an item the import did not create, or its audio was already
 // where it would have gone. No decision on the entry edits it.
 func (d reviewTrackDoc) heldBefore() bool { return d.Joined || d.Held }
+
+// importMeta is what importing the file claims about it: a download's
+// origin, which the catalog records only on an item the file makes (a
+// copy joining a held item takes none), and nothing for an upload.
+func (d reviewTrackDoc) importMeta() waxbin.AcquiredMeta {
+	return waxbin.AcquiredMeta{
+		SourceType: d.SourceType, SourceURL: d.SourceURL,
+		Copy: false, DupPolicy: model.DupAllow,
+	}
+}
 
 // reviewPairingDoc is one stored file-to-release-track pairing.
 type reviewPairingDoc struct {
@@ -159,6 +177,12 @@ type reviewPayload struct {
 	// identified, so a reader can tell an empty candidate list that was
 	// never searched from one that was searched and found nothing.
 	IdentifyDeclined bool `json:"identifyDeclined,omitempty"`
+	// AcceptBest records that the submission asked to take its best match
+	// without review; AcceptBestWithheld is why the last identification
+	// did not ("below-floor", "ambiguous", "no-candidates"), empty when it
+	// did or something other than the candidates held the entry back.
+	AcceptBest         bool   `json:"acceptBest,omitempty"`
+	AcceptBestWithheld string `json:"acceptBestWithheld,omitempty"`
 	// Override is what the last re-identify asked to search for.
 	Override *reviewOverride `json:"override,omitempty"`
 	// Suggested is what the matching parse read out of a loose
@@ -166,18 +190,173 @@ type reviewPayload struct {
 	// point. A suggestion and nothing else: nothing here is written to
 	// the files, and a stored Override supersedes it.
 	Suggested *reviewOverride `json:"suggested,omitempty"`
-	// WaitingForCatalog records that a declined import met another job
-	// holding the catalog, so the next start takes the wait up again.
-	WaitingForCatalog bool `json:"waitingForCatalog,omitempty"`
+	// WaitingForCatalog records that a declined import, or an auto-apply
+	// of WaitingApply (WaitingAsked: the submission asked for it), met
+	// another job holding the catalog, so the next start takes the wait
+	// up again. WaitingDigest is the payload as the apply left it, so
+	// the retry applies only to an entry nobody changed since.
+	WaitingForCatalog bool   `json:"waitingForCatalog,omitempty"`
+	WaitingApply      string `json:"waitingApply,omitempty"`
+	WaitingAsked      bool   `json:"waitingAsked,omitempty"`
+	WaitingDigest     string `json:"waitingDigest,omitempty"`
 	// List is the title of the list an acquisition fetched the unit from,
 	// which names a book in parts where a folder would.
 	List string `json:"list,omitempty"`
 }
 
+// waitDigest digests the payload apart from its wait for the catalog.
+func (p reviewPayload) waitDigest() string {
+	p.WaitingForCatalog, p.WaitingApply, p.WaitingAsked, p.WaitingDigest = false, "", false, ""
+	sum := sha256.Sum256([]byte(marshalJSON(p)))
+	return hex.EncodeToString(sum[:])
+}
+
 // reviewSnapshot preserves pre-apply values for revert: per catalog
-// item, the scalar fields the apply overwrote.
+// item, the scalar fields the apply overwrote, where its recording id
+// came from, the front it replaced, and the release ids it recorded, as
+// they were. It is recorded on the entry ahead of the writes, while the
+// entry is still pending; Applying is then what the apply writes over
+// each field, so a retry knows which before-values still stand.
 type reviewSnapshot struct {
-	Items map[string]map[string]string `json:"items"`
+	Items      map[string]map[string]string `json:"items"`
+	Recordings map[string]reviewAttribution `json:"recordings,omitempty"`
+	Covers     map[string]reviewCoverDoc    `json:"covers,omitempty"`
+	Entities   []reviewEntityDoc            `json:"entities,omitempty"`
+	Applying   map[string]map[string]string `json:"applying,omitempty"`
+}
+
+// record notes that an apply writes value over an item's field: its
+// before-value is kept unless an earlier attempt's already is.
+func (s *reviewSnapshot) record(pid, field, before, value string) {
+	if s.Items[pid] == nil {
+		s.Items[pid] = map[string]string{}
+	}
+	if _, held := s.Items[pid][field]; !held {
+		s.Items[pid][field] = before
+	}
+	if s.Applying == nil {
+		s.Applying = map[string]map[string]string{}
+	}
+	if s.Applying[pid] == nil {
+		s.Applying[pid] = map[string]string{}
+	}
+	s.Applying[pid][field] = storedFieldValue(field, value)
+}
+
+// storedFieldValue is value as the catalog stores an edit of field and
+// applyFields reads it back: trimmed, an identifier in its canonical
+// form, a number without padding, a flag as true or false.
+func storedFieldValue(field, value string) string {
+	v := strings.TrimSpace(value)
+	if n, ok := model.NormalizeIdentifierField(field, v); ok {
+		v = n
+	}
+	switch field {
+	case "year", "track_no", "disc_no", "track_total", "disc_total":
+		if n, err := strconv.Atoi(v); err == nil {
+			return zeroableInt(n)
+		}
+	case "compilation":
+		if b, ok := model.ParseBoolValue(v); ok {
+			return strconv.FormatBool(b)
+		}
+	}
+	return v
+}
+
+// applyFields is the fields an apply may change, as an item holds them.
+func applyFields(it *model.ItemView) map[string]string {
+	return map[string]string{
+		"title": it.Title, "artist": it.Artist, "album_artist": it.AlbumArtist,
+		"album": it.Album, "year": zeroableInt(it.Year), "track_no": zeroableInt(it.TrackNo),
+		"disc_no": zeroableInt(it.DiscNo), "mbid": it.MBID,
+		"compilation": strconv.FormatBool(it.Compilation),
+		"track_total": zeroableInt(it.TrackTotal), "disc_total": zeroableInt(it.DiscTotal),
+	}
+}
+
+// retrySnapshot is the before-state an earlier attempt at applying a
+// still-pending entry recorded, as far as the catalog still holds what
+// that attempt wrote: a field, id or front holding anything else was not
+// written by it, or was changed since, and is nothing of its to undo.
+func (l *Ingest) retrySnapshot(ctx context.Context, entry *wdb.ReviewEntry) reviewSnapshot {
+	snap := reviewSnapshot{Items: map[string]map[string]string{}}
+	var was reviewSnapshot
+	if entry.Status != reviewPending || entry.Snapshot == "" || json.Unmarshal([]byte(entry.Snapshot), &was) != nil {
+		return snap
+	}
+	for pid, fields := range was.Items {
+		it, err := l.lib.Get(ctx, model.PID(pid))
+		if err != nil {
+			continue
+		}
+		now := applyFields(it)
+		for f, before := range fields {
+			wrote, ok := was.Applying[pid][f]
+			if !ok || now[f] != wrote {
+				continue
+			}
+			snap.record(pid, f, before, wrote)
+			if a, ok := was.Recordings[pid]; ok && f == recordingIDField {
+				if snap.Recordings == nil {
+					snap.Recordings = map[string]reviewAttribution{}
+				}
+				snap.Recordings[pid] = a
+			}
+		}
+	}
+	for _, e := range was.Entities {
+		if id, ok := l.entityMBID(ctx, e.Type, model.PID(e.PID)); ok && e.Applied != "" && id == e.Applied {
+			snap.Entities = append(snap.Entities, e)
+		}
+	}
+	for pid, c := range was.Covers {
+		prov, err := l.lib.ArtProvenance(ctx, model.EntityRef{Type: model.ArtTrack, PID: model.PID(pid)}, model.ArtRoleFront)
+		if err != nil || prov.Level != model.ArtTrack || c.Applied == "" || prov.SourceHash != c.Applied {
+			continue
+		}
+		if snap.Covers == nil {
+			snap.Covers = map[string]reviewCoverDoc{}
+		}
+		snap.Covers[pid] = c
+	}
+	return snap
+}
+
+// recordApplying records on a pending entry what its apply is about to
+// replace, ahead of the writes, so an attempt that fails after them
+// leaves its retry, and the revert after that, what stood before.
+func (l *Ingest) recordApplying(ctx context.Context, entry *wdb.ReviewEntry, snap reviewSnapshot) error {
+	raw, err := json.Marshal(snap)
+	if err != nil {
+		return err
+	}
+	if err := l.db.SetPendingSnapshot(ctx, entry.ID, string(raw)); err != nil {
+		return err
+	}
+	entry.Snapshot = string(raw)
+	return nil
+}
+
+// reviewAttribution is where a value came from, as provenance records it.
+type reviewAttribution struct {
+	Source   model.ProvenanceSource `json:"source"`
+	Provider string                 `json:"provider,omitempty"`
+}
+
+// recordingAttribution is where an item's recording id came from, when
+// provenance records it.
+func (l *Ingest) recordingAttribution(ctx context.Context, pid model.PID) (reviewAttribution, bool) {
+	prov, err := l.lib.Provenance(ctx, pid)
+	if err != nil {
+		return reviewAttribution{}, false
+	}
+	for _, p := range prov {
+		if p.Field == recordingIDField {
+			return reviewAttribution{Source: p.Source, Provider: p.Provider}, true
+		}
+	}
+	return reviewAttribution{}, false
 }
 
 // reviewMatchProvider names what an approved match's values came from.
@@ -301,6 +480,15 @@ func (l *Ingest) openReviewEntry(ctx context.Context, e wdb.ReviewEntry, payload
 	return e.ID, nil
 }
 
+// resolveAcceptBest picks a submission's accept-best choice the way
+// resolveIdentify does, the account default being off.
+func (l *Ingest) resolveAcceptBest(ctx context.Context, userID string, asked *bool) bool {
+	if asked != nil {
+		return *asked
+	}
+	return l.Identity.PrefsForUser(ctx, userID).AcceptBestMatch
+}
+
 // resolveIdentify picks a submission's identification choice: what it
 // asked for, or the account's own default when it asked for nothing.
 // Resolved once, when the submission is accepted, so a preference
@@ -348,6 +536,10 @@ func (l *Ingest) importDeclinedEntry(ctx context.Context, entryID string) {
 	var payload reviewPayload
 	if err := json.Unmarshal([]byte(entry.Payload), &payload); err != nil {
 		l.log.Warn("decoding a declined entry", "entry", entryID, "err", err)
+		return
+	}
+	if payload.WaitingApply != "" {
+		l.applyWaitingEntry(ctx, &entry, &payload)
 		return
 	}
 	if !payload.IdentifyDeclined {
@@ -398,6 +590,15 @@ func (l *Ingest) importDeclinedEntry(ctx context.Context, entryID string) {
 		l.notifyReviewReady(ctx, &entry)
 		l.notifyReview(ctx, entry.ID, entry.UploadedBy)
 		return
+	}
+	// A field edit takes no file-mutation scope, so the catalog wait the
+	// import retries on never refuses it, so nothing here waits for it.
+	single, failed := l.defaultSingleAlbum(ctx, &entry, &payload, nil)
+	for _, w := range single {
+		l.log.Info("giving a declined download its single's album", "entry", entryID, "warning", w)
+	}
+	for _, f := range failed {
+		l.log.Warn("a declined download was not given its single's album", "entry", entryID, "err", f)
 	}
 	entry.Payload = marshalJSON(payload)
 	entry.Status = reviewAsIs
@@ -758,6 +959,15 @@ func (l *Ingest) matchTracks(ctx context.Context, docs []reviewTrackDoc) []match
 	return out
 }
 
+// markUploadDates flags an acquired file's DATE as its upload's: the tag
+// pass writes an album, and with it a release date or none, only from an
+// Art Track's description, so a date beside no album is the downloader's.
+func markUploadDates(tracks []match.Track) {
+	for i := range tracks {
+		tracks[i].UploadDated = tracks[i].Tags["ALBUM"] == ""
+	}
+}
+
 // LibraryMatchingMode reads a library's matching mode (default auto).
 // The key is the bare catalog pid; a prefixed API pid is normalized so
 // both the handler (prefixed) and the pipeline (bare) read one truth.
@@ -785,34 +995,85 @@ func (l *Ingest) LibrarySinglesAutoApply(ctx context.Context, libraryPID string)
 	return err == nil && v == "true"
 }
 
-// singlesAutoApplyFor resolves the singles switch for one entry. An
-// upload or acquisition that named no target library falls back to the
-// one library that could hold the entry's media - the unambiguous
-// destination on the common single-library server. More than one
-// candidate stays off: guessing which library's opt-in to honor would
-// auto-apply under a grant nobody made for that destination.
-//
-// The candidate set is the destination picker's, minus visibility:
-// non-podcast, accepts the kind, and writable. Writability matters
-// because the picker offers only writable libraries, so a server with
-// one writable music root and one read-only one shows no picker, sends
-// no pid, and would land here - counting two candidates and staying
-// off for an ambiguity the uploader was never given a way to resolve.
-// Visibility is left out because it is per-user and this is not: an
-// entry reaches here after its uploader is gone from the request.
+// singlesAutoApplyFor resolves the singles switch for one entry, read
+// from its matchingLibrary. With no single library deciding it is on
+// only where every library the entry could land in has it on: honoring
+// one library's opt-in would auto-apply under a grant nobody made for
+// the others.
 func (l *Ingest) singlesAutoApplyFor(ctx context.Context, entry *wdb.ReviewEntry) bool {
-	if entry.LibraryPID != "" {
-		return l.LibrarySinglesAutoApply(ctx, entry.LibraryPID)
+	if pid := l.matchingLibrary(ctx, entry); pid != "" {
+		return l.LibrarySinglesAutoApply(ctx, pid)
 	}
+	libs := l.destinationLibraries(ctx, entry)
+	for _, pid := range libs {
+		if !l.LibrarySinglesAutoApply(ctx, string(pid)) {
+			return false
+		}
+	}
+	return len(libs) > 0
+}
+
+// matchingLibrary is the library whose matching behavior governs an
+// entry: the one it targets, or, for an upload or acquisition that named
+// none, the one library that could hold the entry's media - the
+// unambiguous destination on the common single-library server. Empty
+// when there is no such library.
+func (l *Ingest) matchingLibrary(ctx context.Context, entry *wdb.ReviewEntry) string {
+	if entry.LibraryPID != "" {
+		return entry.LibraryPID
+	}
+	if libs := l.destinationLibraries(ctx, entry); len(libs) == 1 {
+		return string(libs[0])
+	}
+	return ""
+}
+
+// matchingModeFor is the matching mode governing an entry: its
+// matchingLibrary's, or, with several libraries an untargeted entry
+// could land in, the strictest mode among them that still identifies:
+// review where any is, off only where all are, so a download is neither
+// applied unseen under a library that asked to review nor identified for
+// libraries that all declined it.
+func (l *Ingest) matchingModeFor(ctx context.Context, entry *wdb.ReviewEntry) string {
+	if pid := l.matchingLibrary(ctx, entry); pid != "" {
+		return l.LibraryMatchingMode(ctx, pid)
+	}
+	libs := l.destinationLibraries(ctx, entry)
+	if len(libs) == 0 {
+		return l.LibraryMatchingMode(ctx, "")
+	}
+	mode := matchingOff
+	for _, pid := range libs {
+		switch l.LibraryMatchingMode(ctx, string(pid)) {
+		case matchingReview:
+			return matchingReview
+		case matchingOff:
+		default:
+			mode = matchingAuto
+		}
+	}
+	return mode
+}
+
+// destinationLibraries is every library an entry naming none could land
+// in: the destination picker's set, minus visibility. Non-podcast,
+// accepts the kind, and writable. Writability matters because the picker
+// offers only writable libraries, so a server with one writable music
+// root and one read-only one shows no picker, sends no pid, and would
+// otherwise count two candidates for an ambiguity the uploader was never
+// given a way to resolve. Visibility is left out because it is per-user
+// and this is not: an entry reaches here after its uploader is gone from
+// the request.
+func (l *Ingest) destinationLibraries(ctx context.Context, entry *wdb.ReviewEntry) []model.PID {
 	kind, ok := kindForMediaType(entry.MediaType)
 	if !ok {
-		return false
+		return nil
 	}
 	libs, err := l.lib.Libraries(ctx)
 	if err != nil {
-		return false
+		return nil
 	}
-	var only *model.Library
+	var out []model.PID
 	for _, lib := range libs {
 		if lib.Mode == model.ModePodcast {
 			continue
@@ -823,12 +1084,9 @@ func (l *Ingest) singlesAutoApplyFor(ctx context.Context, entry *wdb.ReviewEntry
 		if l.Settings.CheckWritable(ctx, string(lib.PID)) != nil {
 			continue
 		}
-		if only != nil {
-			return false
-		}
-		only = lib
+		out = append(out, lib.PID)
 	}
-	return only != nil && l.LibrarySinglesAutoApply(ctx, string(only.PID))
+	return out
 }
 
 // LibraryMatching is a library's matching behavior for the API.
@@ -987,11 +1245,22 @@ func (l *Ingest) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) erro
 	if err := json.Unmarshal([]byte(entry.Payload), &payload); err != nil {
 		return fmt.Errorf("decoding payload: %w", err)
 	}
-	mode := l.LibraryMatchingMode(ctx, entry.LibraryPID)
+	// An entry naming no library is governed by where it would land, so a
+	// destination set to off is not identified through an upload.
+	mode := l.matchingModeFor(ctx, entry)
 	if l.engine == nil || mode == matchingOff || entry.MediaType != "music" {
 		entry.Identifying = false
+		// Out of the matcher's reach, so out of its waiting apply's too.
+		dropped := dropApplyWait(&payload)
+		if dropped || payload.AcceptBestWithheld != "" {
+			payload.AcceptBestWithheld = ""
+			entry.Payload = marshalJSON(payload)
+		}
 		if err := l.db.UpdateReviewEntry(ctx, *entry); err != nil {
 			return err
+		}
+		if dropped {
+			l.waitingForCatalog.Delete(entry.ID)
 		}
 		l.notifyReview(ctx, entry.ID, entry.UploadedBy)
 		l.notifyIdentified(ctx, entry.ID)
@@ -1007,6 +1276,9 @@ func (l *Ingest) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) erro
 	// it, so a decision or a re-identify landing mid-run is not
 	// overwritten by this one.
 	wasPayload := entry.Payload
+	if entry.Origin == reviewOriginAcquire {
+		markUploadDates(tracks)
+	}
 	applyQueryOverride(tracks, payload.Override)
 	units := match.Cluster(tracks)
 	unit := match.Unit{Tracks: tracks}
@@ -1040,6 +1312,49 @@ func (l *Ingest) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) erro
 		entry.BestYear = best.Release.Year
 		entry.BestSimilarity = best.Similarity() * 100
 	}
+
+	// Decided before the write, so a withheld reason lands with the
+	// candidates.
+	autoApply := payload.Override == nil && proposal.Decision == match.DecisionAutoApply && mode == matchingAuto
+	// A one-file unit auto-applies only where the library opted in: a
+	// lone track picking among near-tied releases is a wrong-release
+	// risk, so the default queues every single for a person even when
+	// the engine is confident. Checked last so the setting is only read
+	// when it would decide anything.
+	singlesOff := autoApply && len(unit.Tracks) == 1 && !l.singlesAutoApplyFor(ctx, entry)
+	autoApply = autoApply && !singlesOff
+	// The submission's own ask to take its best match goes past the
+	// singles switch and mode review; never past a typed search, a
+	// duplicate, or mode off (which returned above).
+	asking := payload.AcceptBest && payload.Override == nil
+	// A unit duplicating the library waits for a person: what to do with
+	// a second copy is theirs to say, and importing is one-way.
+	duplicate := (autoApply || asking) && l.entryHasFlaggedDuplicate(ctx, entry.ID)
+	// The accepted candidate need not be the stored top: a one-track unit is
+	// judged on the artist and title its tags derive to.
+	acceptMBID := ""
+	payload.AcceptBestWithheld = ""
+	// This run decides afresh what to apply.
+	dropped := dropApplyWait(&payload)
+	if asking && !autoApply && !duplicate {
+		best, verdict := proposal.JudgeBest(l.engine.Config())
+		if verdict == match.BestAcceptable {
+			acceptMBID = best.Release.MBID
+			// Judged on what its title splits into, the best can rank past
+			// the stored cut; it is stored to be applied.
+			stored := false
+			for _, c := range payload.Candidates {
+				stored = stored || c.MBID == acceptMBID
+			}
+			if !stored {
+				payload.Candidates = append(payload.Candidates, candidateDoc(best, unit, indexOf))
+			}
+		} else {
+			payload.AcceptBestWithheld = verdict.String()
+		}
+	}
+	acceptBest := acceptMBID != ""
+	autoApply = autoApply && !duplicate
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -1055,40 +1370,41 @@ func (l *Ingest) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) erro
 	if !wrote {
 		return errIdentifyStale
 	}
+	if dropped {
+		l.waitingForCatalog.Delete(entry.ID)
+	}
 
 	// Never on the reviewer's own guess: an override is what the scorer
 	// measures, so the distance collapses and a locked auto-apply would
 	// write the guess into the catalog unseen.
-	if payload.Override != nil && proposal.Decision == match.DecisionAutoApply {
+	if payload.Override != nil && (proposal.Decision == match.DecisionAutoApply || payload.AcceptBest) {
 		l.log.Info("auto-apply withheld: the query was typed by a reviewer", "entry", entry.ID)
 	}
-	autoApply := payload.Override == nil && proposal.Decision == match.DecisionAutoApply && mode == matchingAuto
-	// A one-file unit auto-applies only where the library opted in: a
-	// lone track picking among near-tied releases is a wrong-release
-	// risk, so the default queues every single for a person even when
-	// the engine is confident. Checked last so the setting is only read
-	// when it would decide anything.
-	if autoApply && len(unit.Tracks) == 1 && !l.singlesAutoApplyFor(ctx, entry) {
-		autoApply = false
+	if singlesOff && !acceptBest {
 		l.log.Info("auto-apply withheld: singles auto-apply is off for the destination library", "entry", entry.ID)
 	}
-	// A unit duplicating the library waits for a person: what to do with
-	// a second copy is theirs to say, and importing is one-way.
-	if autoApply && l.entryHasFlaggedDuplicate(ctx, entry.ID) {
-		autoApply = false
+	if duplicate {
 		l.log.Info("auto-apply withheld: the unit duplicates something the library holds", "entry", entry.ID)
 	}
-	if autoApply {
-		l.autoApplyEntry(ctx, entry, &payload)
+	if payload.AcceptBestWithheld != "" {
+		l.log.Info("accept-best withheld", "entry", entry.ID, "reason", payload.AcceptBestWithheld)
+	}
+	switch {
+	case autoApply:
+		l.autoApplyEntry(ctx, entry, &payload, entry.BestMBID, false)
+	case acceptBest:
+		l.autoApplyEntry(ctx, entry, &payload, acceptMBID, true)
 	}
 	l.notifyReview(ctx, entry.ID, entry.UploadedBy)
 	l.notifyIdentified(ctx, entry.ID)
 	return nil
 }
 
-// autoApplyEntry applies an identification's confident candidate,
+// autoApplyEntry applies an identification's confident candidate mbid,
 // unless a person decided the entry meanwhile or is deciding it now.
-func (l *Ingest) autoApplyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload) {
+// asked says the submission asked for it rather than the matcher's own
+// threshold deciding, which keeps it out of calibration.
+func (l *Ingest) autoApplyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload, mbid string, asked bool) {
 	release, ok := l.claimEntry(entry.ID)
 	if !ok {
 		l.log.Info("auto-apply withheld: the entry is being decided", "entry", entry.ID)
@@ -1107,11 +1423,98 @@ func (l *Ingest) autoApplyEntry(ctx context.Context, entry *wdb.ReviewEntry, pay
 		l.log.Info("auto-apply withheld: the entry is no longer music", "entry", entry.ID, "medium", fresh.MediaType)
 		return
 	}
-	if _, err := l.applyEntry(ctx, &fresh, payload, fresh.BestMBID, nil, true); err != nil {
-		// A failed apply leaves the entry pending for a person; the
-		// evidence is stored either way.
+	l.applyClaimed(ctx, &fresh, payload, mbid, asked)
+}
+
+// applyClaimed applies mbid to a claimed pending entry for the matcher or
+// the submission's ask. One that meets another job holding the catalog
+// waits for it, as a declined import does (importDeclinedEntry takes it
+// up again); any other failure leaves the entry for a person, its
+// evidence stored either way.
+func (l *Ingest) applyClaimed(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload, mbid string, asked bool) {
+	was := entry.AcceptedBest
+	entry.AcceptedBest = asked
+	_, err := l.applyEntry(ctx, entry, payload, mbid, nil, true)
+	switch {
+	case KindOf(err) == KindCatalogBusy:
+		l.log.Info("auto-apply waits for the catalog", "entry", entry.ID)
+		entry.AcceptedBest = was
+		payload.WaitingApply, payload.WaitingAsked = mbid, asked
+		payload.WaitingDigest = payload.waitDigest()
+		l.markWaiting(ctx, entry, payload, true)
+		l.waitingForCatalog.Store(entry.ID, struct{}{})
+	case err != nil:
 		l.log.Warn("auto apply failed; leaving entry for review", "entry", entry.ID, "err", err)
 	}
+}
+
+// applyWaitingEntry takes up on a claimed entry the auto-apply a busy
+// catalog held back, if the entry and its library still stand as the
+// apply left them.
+func (l *Ingest) applyWaitingEntry(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload) {
+	mbid, asked, digest := payload.WaitingApply, payload.WaitingAsked, payload.WaitingDigest
+	dropApplyWait(payload)
+	l.markWaiting(ctx, entry, payload, false)
+	if why := l.applyWaitStale(ctx, entry, payload, mbid, asked, digest); why != "" {
+		l.log.Info("auto-apply withheld: "+why, "entry", entry.ID)
+		l.notifyReview(ctx, entry.ID, entry.UploadedBy)
+		return
+	}
+	l.applyClaimed(ctx, entry, payload, mbid, asked)
+	l.notifyReview(ctx, entry.ID, entry.UploadedBy)
+}
+
+// applyWaitStale says why a waiting apply of mbid no longer stands, ""
+// when it does: the identification's own gates, read again.
+func (l *Ingest) applyWaitStale(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload, mbid string, asked bool, digest string) string {
+	stored := false
+	for _, c := range payload.Candidates {
+		stored = stored || c.MBID == mbid
+	}
+	switch {
+	case entry.Identifying || payload.Override != nil || digest == "" || payload.waitDigest() != digest || !stored:
+		return "the entry changed since the apply began to wait"
+	case entry.MediaType != "music":
+		return "the entry is no longer music"
+	}
+	mode := l.matchingModeFor(ctx, entry)
+	switch {
+	case l.engine == nil || mode == matchingOff:
+		return "matching is off for the destination library"
+	case !asked && mode != matchingAuto:
+		return "the destination library no longer auto-applies"
+	case !asked && len(payload.Tracks) == 1 && !l.singlesAutoApplyFor(ctx, entry):
+		return "singles auto-apply is off for the destination library"
+	case l.entryHasFlaggedDuplicate(ctx, entry.ID):
+		return "the unit duplicates something the library holds"
+	}
+	return ""
+}
+
+// dropApplyWait clears an auto-apply's wait for the catalog off a payload,
+// reporting whether it had one. The in-memory mark goes only once the
+// drop is written, so a failed write leaves the wait standing in both.
+func dropApplyWait(payload *reviewPayload) bool {
+	if payload.WaitingApply == "" {
+		return false
+	}
+	payload.WaitingForCatalog, payload.WaitingApply, payload.WaitingAsked, payload.WaitingDigest = false, "", false, ""
+	return true
+}
+
+// writeDroppedWait drops e's apply wait and writes the drop at once,
+// ahead of a person's change: one failing after it leaves no wait a
+// restart could take up.
+func (l *Ingest) writeDroppedWait(ctx context.Context, e *wdb.ReviewEntry, payload *reviewPayload) error {
+	if !dropApplyWait(payload) {
+		return nil
+	}
+	e.Payload = marshalJSON(*payload)
+	if err := l.db.UpdateReviewEntry(ctx, *e); err != nil {
+		return err
+	}
+	l.waitingForCatalog.Delete(e.ID)
+	return nil
 }
 
 // writeBackWarnings words the files a committed batch could not write,
@@ -1141,18 +1544,22 @@ func (l *Ingest) writeBackWarnings(ctx context.Context, reader *UserCtx, res *wa
 var errIdentifyStale = errors.New("the entry changed while it was being identified")
 
 // applyQueryOverride carries typed values two ways: a complete Query
-// for the recording search (half-filled, it re-derives and splits a
-// typed title into an artist), and unit-level tags for the album search
-// and scoring. Per-track ARTIST and TITLE are left alone - scoring
-// pairs on both - and the maps are copied, since the payload is
-// re-marshalled after the run.
+// for the recording search, and unit-level tags for the album search
+// and scoring. The half nobody typed is derived here, the title as it
+// is judged, so the search still knows which recording the file names.
+// Per-track ARTIST and TITLE are left alone - scoring pairs on both -
+// and the maps are copied, since the payload is re-marshalled after
+// the run.
 func applyQueryOverride(tracks []match.Track, o *reviewOverride) {
 	if o == nil || o.empty() {
 		return
 	}
 	single := len(tracks) == 1
 	for i := range tracks {
-		derivedArtist, derivedTitle, _ := match.SuggestedQuery(tracks[i])
+		derivedArtist, derivedTitle := match.DerivedQuery(tracks[i])
+		if _, judged, ok := match.SuggestedQuery(tracks[i]); ok {
+			derivedTitle = judged
+		}
 		tags := make(map[string]string, len(tracks[i].Tags)+2)
 		for k, v := range tracks[i].Tags {
 			tags[k] = v
@@ -1263,7 +1670,8 @@ func (l *Ingest) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload
 		}
 	}
 
-	snapshot := reviewSnapshot{Items: map[string]map[string]string{}}
+	// A retry keeps what an earlier attempt replaced, where it stands.
+	snapshot := l.retrySnapshot(ctx, entry)
 	// One edit per item, first-seen order. EditItemsFields rejects a duplicate
 	// pid, so if two pairings resolve to the same file the last one wins, the
 	// same outcome the old per-item last-write-wins loop produced.
@@ -1287,14 +1695,6 @@ func (l *Ingest) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload
 		if err != nil {
 			warnings = append(warnings, fmt.Sprintf("%s: %v", doc.PID, err))
 			continue
-		}
-		// The fields the apply may change, as they were: the item's own
-		// recording id included.
-		was := map[string]string{
-			"title": it.Title, "artist": it.Artist, "album_artist": it.AlbumArtist,
-			"album": it.Album, "year": zeroableInt(it.Year), "track_no": zeroableInt(it.TrackNo),
-			"disc_no": zeroableInt(it.DiscNo), "mbid": it.MBID,
-			"compilation": strconv.FormatBool(it.Compilation),
 		}
 		edits := map[string]string{
 			"album":        cand.Title,
@@ -1327,20 +1727,35 @@ func (l *Ingest) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload
 		if cand.Compilation {
 			edits["compilation"] = "true"
 		}
-		// The revert restores, and unlocks, exactly what the apply names:
-		// a field it leaves alone keeps its value and any lock someone
-		// set, and a compilation flag it sets is reached, which scans and
-		// enrichment would otherwise refuse to change.
-		prior := map[string]string{}
-		for f := range edits {
-			prior[f] = was[f]
-		}
 		if _, seen := editByPID[pid]; !seen {
 			order = append(order, pid)
 		}
 		editByPID[pid] = edits
 		before[pid] = it
-		snapshot.Items[doc.PID] = prior
+	}
+	// The revert restores, and unlocks, exactly what the apply names: a
+	// field it leaves alone keeps its value and any lock someone set, and
+	// a compilation flag it sets is reached, which scans and enrichment
+	// would otherwise refuse to change.
+	for _, pid := range order {
+		it, edits := before[pid], editByPID[pid]
+		// The fields the apply may change, as they were: the item's own
+		// recording id included.
+		was := applyFields(it)
+		for f, v := range edits {
+			snapshot.record(string(pid), f, was[f], v)
+		}
+		// A prior id the revert may restore held keeps its attribution,
+		// unless an earlier attempt's before-value stands.
+		_, kept := snapshot.Recordings[string(pid)]
+		if _, ok := edits[recordingIDField]; ok && it.MBID != "" && !kept && snapshot.Items[string(pid)][recordingIDField] == it.MBID {
+			if a, ok := l.recordingAttribution(ctx, pid); ok {
+				if snapshot.Recordings == nil {
+					snapshot.Recordings = map[string]reviewAttribution{}
+				}
+				snapshot.Recordings[string(pid)] = a
+			}
+		}
 	}
 
 	// Apply the whole unit in one atomic catalog batch, so a mid-unit failure
@@ -1361,35 +1776,59 @@ func (l *Ingest) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload
 		//
 		// The files take what the catalog takes where their library
 		// allows; the catalog refuses the others file by file, which the
-		// warnings name and the health rule lists.
+		// warnings name and the health rule lists. The recording ids stay
+		// in the catalog (recordingIDField).
 		edit := l.lib.EditItemsFields
 		if l.editFieldsHook != nil {
 			edit = l.editFieldsHook
 		}
-		res, err := edit(ctx, batch, waxbin.EditOptions{
+		opts := waxbin.EditOptions{
 			Lock: model.LockOn, Force: true, WriteBack: l.unitWritable(ctx, order),
 			Source: model.SourceEnrichment, Provider: reviewMatchProvider,
-		})
+		}
+		batch, recordings := splitRecordingIDs(batch)
+		if err := l.recordApplying(ctx, entry, snapshot); err != nil {
+			return stop(&Error{Kind: KindInternal, Err: err})
+		}
+		res, err := edit(ctx, batch, opts)
 		if err != nil && (res == nil || len(res.Edited) == 0) {
 			return stop(classify(err))
 		}
 		warnings = append(warnings, l.writeBackWarnings(ctx, decider, res, err)...)
+		if len(recordings) > 0 {
+			if _, err := recordRecordingIDs(ctx, l.lib, l.recordingIDsHook, recordings, opts); err != nil {
+				warnings = append(warnings, "recording ids not recorded: "+l.failureWords(err.Error()))
+			}
+		}
 		// A total a new number past it cleared is the apply's doing too.
 		for _, pid := range order {
 			now, err := l.lib.Get(ctx, pid)
 			if err != nil {
 				continue
 			}
-			was, prior := before[pid], snapshot.Items[string(pid)]
+			was := before[pid]
 			if now.TrackTotal != was.TrackTotal {
-				prior["track_total"] = zeroableInt(was.TrackTotal)
+				snapshot.record(string(pid), "track_total", zeroableInt(was.TrackTotal), zeroableInt(now.TrackTotal))
 			}
 			if now.DiscTotal != was.DiscTotal {
-				prior["disc_total"] = zeroableInt(was.DiscTotal)
+				snapshot.record(string(pid), "disc_total", zeroableInt(was.DiscTotal), zeroableInt(now.DiscTotal))
 			}
 		}
+		// The release ids and fronts this apply replaces are recorded
+		// before any is written, as the fields were.
+		ids := l.planReleaseIdentity(ctx, cand, order, &snapshot)
+		covers, w := l.planApprovalArt(ctx, entry.ID, cand, order, before, &snapshot)
+		warnings = append(warnings, w...)
+		if err := l.recordApplying(ctx, entry, snapshot); err != nil {
+			l.dropUnrecordedCovers(covers)
+			return stop(&Error{Kind: KindInternal, Err: err})
+		}
+		warnings = append(warnings, l.writeReleaseIdentity(ctx, ids, &snapshot)...)
+		warnings = append(warnings, l.writeApprovalArt(ctx, covers, order, &snapshot, decider)...)
 	}
 
+	// Applied: nothing is left in progress for a retry to weigh.
+	snapshot.Applying = nil
 	rawSnap, err := json.Marshal(snapshot)
 	if err != nil {
 		return stop(&Error{Kind: KindInternal, Err: err})
@@ -1416,14 +1855,23 @@ func (l *Ingest) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload
 	entry.BestArtist = cand.Artist
 	entry.BestYear = cand.Year
 	entry.BestSimilarity = cand.SimilarityPct
-	if err := l.db.UpdateReviewEntry(ctx, *entry); err != nil {
+	err = nil
+	if l.appliedWriteHook != nil {
+		err = l.appliedWriteHook()
+	}
+	if err == nil {
+		err = l.db.UpdateReviewEntry(ctx, *entry)
+	}
+	if err != nil {
 		return warnings, &Error{Kind: KindInternal, Err: err}
 	}
 	return warnings, nil
 }
 
 // revertEntry restores the snapshot an apply took and unlocks the
-// fields the apply locked.
+// fields the apply locked, and puts back the release ids and fronts it
+// replaced. An acquired music track left with no album then gets the
+// single's album an unmatched download is given.
 func (l *Ingest) revertEntry(ctx context.Context, entry *wdb.ReviewEntry, decidedBy string) error {
 	if entry.Status != reviewApplied && entry.Status != reviewAutoApplied {
 		return &Error{Kind: KindConflict, Msg: "only applied entries revert"}
@@ -1432,6 +1880,57 @@ func (l *Ingest) revertEntry(ctx context.Context, entry *wdb.ReviewEntry, decide
 	if entry.Snapshot == "" || json.Unmarshal([]byte(entry.Snapshot), &snap) != nil || len(snap.Items) == 0 {
 		return &Error{Kind: KindConflict, Msg: "the entry carries no snapshot to restore"}
 	}
+	if err := l.restoreSnapshot(ctx, entry.ID, snap); err != nil {
+		return err
+	}
+	// A reverted download is unmatched again: it gets the album an
+	// unmatched one is given.
+	if acquiredMusic(entry) {
+		var payload reviewPayload
+		if err := json.Unmarshal([]byte(entry.Payload), &payload); err == nil {
+			single, failed := l.defaultSingleAlbum(ctx, entry, &payload, nil)
+			for _, w := range append(single, failed...) {
+				l.log.Warn("giving a reverted download its single's album", "entry", entry.ID, "warning", w)
+			}
+		}
+	}
+	entry.Status = reviewReverted
+	entry.DecidedAtNS = time.Now().UnixNano()
+	entry.DecidedBy = decidedBy
+	if err := l.db.UpdateReviewEntry(ctx, *entry); err != nil {
+		return &Error{Kind: KindInternal, Err: err}
+	}
+	l.dropKeptCovers(entry.ID)
+	l.notifyReview(ctx, entry.ID, entry.UploadedBy)
+	return nil
+}
+
+// undoFailedApply takes back what an apply that failed part way wrote on
+// a still-pending entry, before the entry is decided otherwise: only
+// where the catalog still holds what that attempt wrote, so a person's
+// edit since stands. An entry with nothing standing is left as it is.
+func (l *Ingest) undoFailedApply(ctx context.Context, entry *wdb.ReviewEntry) error {
+	if entry.Snapshot == "" {
+		return nil
+	}
+	snap := l.retrySnapshot(ctx, entry)
+	if len(snap.Items) > 0 || len(snap.Entities) > 0 || len(snap.Covers) > 0 {
+		if err := l.restoreSnapshot(ctx, entry.ID, snap); err != nil {
+			return err
+		}
+	}
+	if err := l.db.SetPendingSnapshot(ctx, entry.ID, ""); err != nil {
+		return &Error{Kind: KindInternal, Err: err}
+	}
+	entry.Snapshot = ""
+	l.dropKeptCovers(entry.ID)
+	return nil
+}
+
+// restoreSnapshot puts back what an apply replaced, as its snapshot
+// recorded it, and unlocks the fields the apply locked, then the release
+// ids and fronts it replaced.
+func (l *Ingest) restoreSnapshot(ctx context.Context, entryID string, snap reviewSnapshot) error {
 	batch := make([]model.ItemFieldEdit, 0, len(snap.Items))
 	for pid, fields := range snap.Items {
 		batch = append(batch, model.ItemFieldEdit{ItemPID: model.PID(pid), Fields: fields})
@@ -1459,31 +1958,69 @@ func (l *Ingest) revertEntry(ctx context.Context, entry *wdb.ReviewEntry, decide
 	for pid := range snap.Items {
 		pids = append(pids, model.PID(pid))
 	}
-	res, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{
-		Lock: model.LockOff, Force: true, Source: model.SourceTag, WriteBack: l.unitWritable(ctx, pids),
-	})
-	if err != nil && (res == nil || len(res.Edited) == 0) {
-		return classify(err)
+	for pid := range snap.Covers {
+		if _, ok := snap.Items[pid]; !ok {
+			pids = append(pids, model.PID(pid))
+		}
 	}
-	for _, w := range l.writeBackWarnings(ctx, nil, res, err) {
-		l.log.Info("reverting a review entry", "entry", entry.ID, "warning", w)
+	opts := waxbin.EditOptions{
+		Lock: model.LockOff, Force: true, Source: model.SourceTag, WriteBack: l.unitWritable(ctx, pids),
+	}
+	// The recording ids, which key no release, restore to the catalog
+	// alone, as the apply set them. One the file does not carry stays
+	// locked (lacksRecordingID), under the attribution it had.
+	batch, recordings := splitRecordingIDs(batch)
+	held := map[string]bool{}
+	var freed []model.ItemFieldEdit
+	type idGroup struct {
+		ids  []model.ItemFieldEdit
+		opts waxbin.EditOptions
+	}
+	var groups []idGroup
+	for _, e := range recordings {
+		if !lacksRecordingID(ctx, l.lib, e.ItemPID, e.Fields[recordingIDField]) {
+			freed = append(freed, e)
+			continue
+		}
+		held[string(e.ItemPID)] = true
+		o := opts
+		o.Lock = model.LockOn
+		if a, ok := snap.Recordings[string(e.ItemPID)]; ok {
+			o.Source, o.Provider = a.Source, a.Provider
+		}
+		groups = append(groups, idGroup{[]model.ItemFieldEdit{e}, o})
+	}
+	if len(freed) > 0 {
+		groups = append(groups, idGroup{freed, opts})
+	}
+	if len(batch) > 0 {
+		res, err := l.lib.EditItemsFields(ctx, batch, opts)
+		if err != nil && (res == nil || len(res.Edited) == 0) {
+			return classify(err)
+		}
+		for _, w := range l.writeBackWarnings(ctx, nil, res, err) {
+			l.log.Info("reverting a review entry", "entry", entryID, "warning", w)
+		}
+	}
+	// Not reverted until the ids are back: a retry restores them.
+	for _, g := range groups {
+		if _, err := recordRecordingIDs(ctx, l.lib, l.recordingIDsHook, g.ids, g.opts); err != nil {
+			return classify(err)
+		}
 	}
 	for pid, fields := range snap.Items {
 		names := make([]string, 0, len(fields))
 		for f := range fields {
+			if f == recordingIDField && held[pid] {
+				continue
+			}
 			names = append(names, f)
 		}
 		if err := l.lib.Unlock(ctx, model.PID(pid), names...); err != nil {
 			l.log.Warn("unlocking reverted fields", "item", pid, "err", err)
 		}
 	}
-	entry.Status = reviewReverted
-	entry.DecidedAtNS = time.Now().UnixNano()
-	entry.DecidedBy = decidedBy
-	if err := l.db.UpdateReviewEntry(ctx, *entry); err != nil {
-		return &Error{Kind: KindInternal, Err: err}
-	}
-	l.notifyReview(ctx, entry.ID, entry.UploadedBy)
+	l.revertApprovalExtras(ctx, entryID, snap, pids)
 	return nil
 }
 

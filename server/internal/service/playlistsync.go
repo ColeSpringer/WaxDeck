@@ -1285,6 +1285,7 @@ func (l *Playlists) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask
 		dp := toolTaskParams{
 			MediaType:        "music",
 			IdentifyDeclined: !l.Ingest.resolveIdentify(ctx, uc.ID, nil),
+			AcceptBest:       l.Ingest.resolveAcceptBest(ctx, uc.ID, nil),
 		}
 		// Per-item fetch failures skip rather than fail the run: one
 		// age-gated video past the enrichment budget must not starve

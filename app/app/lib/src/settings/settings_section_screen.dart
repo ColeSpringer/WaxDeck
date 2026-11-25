@@ -771,6 +771,24 @@ class _LibraryBody extends ConsumerWidget {
                 ),
               ),
             ),
+            SettingAnchor(
+              id: 'accept-best-match',
+              child: WaxSettingRow(
+                title: l10n.settingsAcceptBestMatchTitle,
+                info: l10n.settingsAcceptBestMatchHelp,
+                control: WaxSwitch(
+                  value: prefs?.acceptBestMatch ?? false,
+                  label: l10n.settingsAcceptBestMatchTitle,
+                  semanticsId: SemanticsIds.setting('accept-best-match'),
+                  onChanged: prefs == null
+                      ? null
+                      : (on) => saveSetting(
+                          context,
+                          prefsController.setAcceptBestMatch(on),
+                        ),
+                ),
+              ),
+            ),
           ],
         ),
         const _LibraryAccessGroup(),

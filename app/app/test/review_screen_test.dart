@@ -112,12 +112,14 @@ class _RefetchFails extends FakeRepository {
     required String action,
     String? candidateMbid,
     String? mediaType,
+    bool? useSuggested,
   }) async {
     final decided = await super.decideReviewEntry(
       entryId,
       action: action,
       candidateMbid: candidateMbid,
       mediaType: mediaType,
+      useSuggested: useSuggested,
     );
     _failing = true;
     return decided;
@@ -148,6 +150,7 @@ class _HeldOn extends FakeRepository {
     required String action,
     String? candidateMbid,
     String? mediaType,
+    bool? useSuggested,
   }) async {
     if (entryId == held) await release.future;
     return super.decideReviewEntry(
@@ -155,6 +158,7 @@ class _HeldOn extends FakeRepository {
       action: action,
       candidateMbid: candidateMbid,
       mediaType: mediaType,
+      useSuggested: useSuggested,
     );
   }
 }
@@ -171,6 +175,7 @@ class _Revertible extends FakeRepository {
     required String action,
     String? candidateMbid,
     String? mediaType,
+    bool? useSuggested,
   }) {
     reviewEntryDetails.remove(entryId);
     return super.decideReviewEntry(
@@ -178,6 +183,7 @@ class _Revertible extends FakeRepository {
       action: action,
       candidateMbid: candidateMbid,
       mediaType: mediaType,
+      useSuggested: useSuggested,
     );
   }
 
@@ -201,12 +207,14 @@ class _Warns extends FakeRepository {
     required String action,
     String? candidateMbid,
     String? mediaType,
+    bool? useSuggested,
   }) async {
     final decided = await super.decideReviewEntry(
       entryId,
       action: action,
       candidateMbid: candidateMbid,
       mediaType: mediaType,
+      useSuggested: useSuggested,
     );
     return ReviewDecideResult(
       entry: decided.entry,
@@ -243,12 +251,14 @@ class _HeldDecisions extends FakeRepository {
     required String action,
     String? candidateMbid,
     String? mediaType,
+    bool? useSuggested,
   }) async {
     final decided = await super.decideReviewEntry(
       entryId,
       action: action,
       candidateMbid: candidateMbid,
       mediaType: mediaType,
+      useSuggested: useSuggested,
     );
     await release.future;
     return decided;
@@ -604,6 +614,114 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.decideReviewCalls.single.action, 'unofficial');
     expect(repo.decideReviewCalls.single.mediaType, 'audiobook');
+  });
+
+  group('u with the suggested artist and title', () {
+    const suggestion = ReviewOverride(artist: 'Mono Tides', title: 'Long Dive');
+
+    Future<FakeRepository> open(WidgetTester tester, {bool on = false}) async {
+      final repo = FakeRepository()
+        ..reviewEntries = [testReviewEntry('rv-1', origin: 'acquisition')]
+        ..reviewEntryDetails['rv-1'] = ReviewEntryDetail(
+          id: 'rv-1',
+          kind: 'match',
+          status: 'pending',
+          mediaType: MediaType.music,
+          origin: 'acquisition',
+          trackCount: 1,
+          suggested: suggestion,
+          createdAt: DateTime.utc(2026, 7, 1),
+        );
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pumpOpenEntry(tester, appContainer(repo: repo));
+      if (on) {
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.reviewUseSuggested),
+        );
+        await tester.pumpAndSettle();
+      }
+      return repo;
+    }
+
+    testWidgets('follows the pane\'s control when on', (tester) async {
+      final repo = await open(tester, on: true);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+      await tester.pumpAndSettle();
+      expect(repo.decideReviewCalls.single.action, 'unofficial');
+      expect(repo.decideReviewCalls.single.useSuggested, isTrue);
+    });
+
+    testWidgets('sends nothing extra when off', (tester) async {
+      final repo = await open(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+      await tester.pumpAndSettle();
+      expect(repo.decideReviewCalls.single.action, 'unofficial');
+      expect(repo.decideReviewCalls.single.useSuggested, isNull);
+    });
+
+    testWidgets('u never sends it for an audiobook', (tester) async {
+      final repo = await open(tester, on: true);
+      await tester.tap(
+        find.bySemanticsIdentifier(
+          SemanticsIds.reviewMediumOption('audiobook'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+      await tester.pumpAndSettle();
+      expect(repo.decideReviewCalls.single.action, 'unofficial');
+      expect(repo.decideReviewCalls.single.mediaType, 'audiobook');
+      expect(repo.decideReviewCalls.single.useSuggested, isNull);
+    });
+
+    testWidgets('a never sends it', (tester) async {
+      final repo = await open(tester, on: true);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.pumpAndSettle();
+      expect(repo.decideReviewCalls.single.action, 'approve');
+      expect(repo.decideReviewCalls.single.useSuggested, isNull);
+    });
+
+    testWidgets('u with the pane closed sends no useSuggested', (tester) async {
+      final repo = await open(tester, on: true);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.reviewUseSuggested),
+        findsNothing,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+      await tester.pumpAndSettle();
+      expect(repo.decideReviewCalls.single.action, 'unofficial');
+      expect(repo.decideReviewCalls.single.useSuggested, isNull);
+    });
+
+    testWidgets('reopening the entry finds the switch off', (tester) async {
+      await open(tester, on: true);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+      await tester.pumpAndSettle();
+      final control = find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.reviewUseSuggested),
+        matching: find.byType(WaxSwitch),
+      );
+      expect(tester.widget<WaxSwitch>(control).value, isFalse);
+    });
+
+    testWidgets('s never sends it', (tester) async {
+      final repo = await open(tester, on: true);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await tester.pumpAndSettle();
+      expect(repo.decideReviewCalls.single.action, 'skip');
+      expect(repo.decideReviewCalls.single.useSuggested, isNull);
+    });
   });
 
   testWidgets('a medium picked before a track landed is not sent by a key', (

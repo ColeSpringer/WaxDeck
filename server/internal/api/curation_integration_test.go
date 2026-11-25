@@ -8,11 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,6 +24,8 @@ import (
 	"github.com/colespringer/waxdeck/fixtures"
 	"github.com/colespringer/waxdeck/server/internal/match"
 	"github.com/colespringer/waxdeck/server/internal/service"
+	"github.com/colespringer/waxdeck/server/internal/sourcetags"
+	"github.com/colespringer/waxdeck/server/internal/syncsource"
 )
 
 // cannedSource is a deterministic CandidateSource for the pipeline
@@ -52,8 +56,8 @@ func (c *cannedSource) SearchReleases(context.Context, string, string, int) ([]*
 	return c.releases, nil
 }
 
-func (c *cannedSource) SearchRecordings(context.Context, string, string) ([]*match.Release, error) {
-	return c.releases, nil
+func (c *cannedSource) SearchRecordings(context.Context, string, string, string, string) (match.RecordingSearch, error) {
+	return match.RecordingSearch{Releases: c.releases}, nil
 }
 
 // drainMatches runs the identify worker until idle.
@@ -967,8 +971,20 @@ type fakeAcquireSource struct {
 	listTitle string
 	entries   []struct{ title, url string }
 	files     map[string]string
+	// descriptions are what the source says under a video, by URL.
+	descriptions map[string]string
+
+	mu sync.Mutex
 	// failOnce names videos whose first fetch fails.
 	failOnce map[string]bool
+	// asked is the options each URL's last fetch was given.
+	asked map[string]syncsource.FetchOptions
+}
+
+func (f *fakeAcquireSource) askedFor(url string) syncsource.FetchOptions {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.asked[url]
 }
 
 func (f *fakeAcquireSource) title() string {
@@ -998,24 +1014,40 @@ func (f *fakeAcquireSource) Enumerate(_ context.Context, req source.Request) (*s
 	return &source.Enumeration{Feed: feed, IdentityKey: "youtube:test"}, nil
 }
 
-func (f *fakeAcquireSource) Fetch(_ context.Context, req source.FetchRequest, w io.Writer) (*source.FetchResult, error) {
-	if f.failOnce[req.URL] {
-		delete(f.failOnce, req.URL)
+func (f *fakeAcquireSource) Fetch(ctx context.Context, req source.FetchRequest, w io.Writer) (*source.FetchResult, error) {
+	return f.FetchWith(ctx, req, w, syncsource.FetchOptions{})
+}
+
+// FetchWith runs the providers' source tags pass over the canned file, with
+// its own ARTIST and TITLE standing for the uploader and the video title.
+func (f *fakeAcquireSource) FetchWith(ctx context.Context, req source.FetchRequest, w io.Writer, opts syncsource.FetchOptions) (*source.FetchResult, error) {
+	f.mu.Lock()
+	if f.asked == nil {
+		f.asked = map[string]syncsource.FetchOptions{}
+	}
+	f.asked[req.URL] = opts
+	failing := f.failOnce[req.URL]
+	delete(f.failOnce, req.URL)
+	f.mu.Unlock()
+	if failing {
 		return nil, errors.New("the video did not answer")
 	}
 	path, ok := f.files[req.URL]
 	if !ok {
 		return nil, errors.New("no such video")
 	}
-	raw, err := os.ReadFile(path)
+	in, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	n, err := w.Write(raw)
+	defer in.Close()
+	n, err := sourcetags.Restamp(ctx, "", filepath.Ext(path), in, w, sourcetags.Source{
+		URL: req.URL, Description: f.descriptions[req.URL], Music: opts.Music,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &source.FetchResult{Bytes: int64(n), ContentType: "audio/mpeg"}, nil
+	return &source.FetchResult{Bytes: n, ContentType: "audio/mpeg"}, nil
 }
 
 func drainTools(t *testing.T, h *harness) {
@@ -1090,11 +1122,16 @@ func TestAcquireFromURL(t *testing.T) {
 	}
 	paths, err := fixtures.Generate(media,
 		fixtures.Spec{Name: "cut-one", Codec: fixtures.CodecMP3, Duration: 3 * time.Second,
-			Tags: map[string]string{"TITLE": "Basement Cut One", "ARTIST": "DJ Harness", "ALBUM": "Basement Tapes Vol 1"}},
+			Tags: map[string]string{"TITLE": "Basement Cut One", "ARTIST": "DJ Harness - Topic", "ALBUM": "Basement Tapes Vol 1"}},
 		fixtures.Spec{Name: "cut-two", Codec: fixtures.CodecMP3, Duration: 4 * time.Second,
-			Tags: map[string]string{"TITLE": "Basement Cut Two", "ARTIST": "DJ Harness", "ALBUM": "Basement Tapes Vol 1"}},
+			Tags: map[string]string{"TITLE": "Basement Cut Two", "ARTIST": "DJ Harness - Topic", "ALBUM": "Basement Tapes Vol 1"}},
 		fixtures.Spec{Name: "lone-rip", Codec: fixtures.CodecMP3, Duration: 5 * time.Second,
 			Tags: map[string]string{"TITLE": "Warehouse Set (Unreleased)", "ARTIST": "DJ Harness"}},
+		// Topic-shaped uploads: the channel as ARTIST, an upload note on the title.
+		fixtures.Spec{Name: "topic-unofficial", Codec: fixtures.CodecMP3, Duration: 6 * time.Second,
+			Tags: map[string]string{"TITLE": "Back That Azz Up (Official Video)", "ARTIST": "Juvenile - Topic"}},
+		fixtures.Spec{Name: "topic-declined", Codec: fixtures.CodecMP3, Duration: 7 * time.Second,
+			Tags: map[string]string{"TITLE": "Ha (Official Audio)", "ARTIST": "Juvenile - Topic"}},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1106,6 +1143,8 @@ func TestAcquireFromURL(t *testing.T) {
 	src.files["https://tube.example/watch?v=one"] = paths[0]
 	src.files["https://tube.example/watch?v=two"] = paths[1]
 	src.files["https://tube.example/watch?v=lone"] = paths[2]
+	src.files["https://tube.example/watch?v=unofficial"] = paths[3]
+	src.files["https://tube.example/watch?v=declined"] = paths[4]
 
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.SourceProviders = append(cfg.SourceProviders, src)
@@ -1168,6 +1207,9 @@ func TestAcquireFromURL(t *testing.T) {
 	for _, it := range h.items(t, "?limit=200").Items {
 		if it.Title == "Basement Cut One" {
 			trackPid = it.Pid
+			if a := deref(it.Artist); a != "DJ Harness" {
+				t.Errorf("as-is import artist = %q, want the channel without its Topic suffix", a)
+			}
 		}
 	}
 	if trackPid == "" {
@@ -1252,9 +1294,10 @@ func TestAcquireFromURL(t *testing.T) {
 		t.Fatal("the permissions read disagrees with the metadata read's mayCurate")
 	}
 
-	// A single video URL takes the non-playlist fallback.
+	// A single video URL takes the non-playlist fallback, and its format
+	// preference reaches the provider beside the media type.
 	resp = post(digger, "/api/v1/acquisitions", map[string]any{
-		"url": "https://tube.example/watch?v=lone", "mediaType": "music",
+		"url": "https://tube.example/watch?v=lone", "mediaType": "music", "format": "mp3",
 	})
 	if resp.StatusCode != 202 {
 		t.Fatalf("single acquisition status = %d", resp.StatusCode)
@@ -1269,6 +1312,62 @@ func TestAcquireFromURL(t *testing.T) {
 	lone := decode[ReviewEntryDetail](t, get(t, h.ts, "/api/v1/review/queue/"+(*got.ResultPids)[0], digger))
 	if lone.TrackCount != 1 || lone.Tracks[0].Title != "Warehouse Set (Unreleased)" {
 		t.Fatalf("single acquire entry = %+v", lone)
+	}
+	if got, want := src.askedFor("https://tube.example/watch?v=lone"), (syncsource.FetchOptions{Format: "mp3", Music: true}); got != want {
+		t.Errorf("fetch options = %+v, want %+v", got, want)
+	}
+	resp = post(digger, "/api/v1/review/queue/"+lone.Id+"/decide", map[string]any{"action": "as-is"})
+	if resp.StatusCode != 200 {
+		t.Fatalf("single as-is status = %d", resp.StatusCode)
+	}
+
+	// Unofficial and declined imports land the clean artist and title too:
+	// the provider's pass wrote them into the file before review saw it.
+	acquireOne := func(url string, extra map[string]any) string {
+		t.Helper()
+		body := map[string]any{"url": url, "mediaType": "music"}
+		maps.Copy(body, extra)
+		resp := post(digger, "/api/v1/acquisitions", body)
+		if resp.StatusCode != 202 {
+			t.Fatalf("acquiring %s status = %d", url, resp.StatusCode)
+		}
+		task := decode[ToolTask](t, resp)
+		drainTools(t, h)
+		drainMatches(t, h)
+		got := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+task.Id, digger))
+		if got.State != "done" || got.ResultPids == nil || len(*got.ResultPids) != 1 {
+			t.Fatalf("acquiring %s: task = %+v", url, got)
+		}
+		return (*got.ResultPids)[0]
+	}
+	unofficial := acquireOne("https://tube.example/watch?v=unofficial", nil)
+	if tr := reviewAs(t, h, digger, unofficial).Tracks; len(tr) != 1 || tr[0].Title != "Back That Azz Up" {
+		t.Fatalf("unofficial entry tracks = %+v, want the title without its upload note", tr)
+	}
+	resp = post(digger, "/api/v1/review/queue/"+unofficial+"/decide", map[string]any{"action": "unofficial"})
+	if resp.StatusCode != 200 {
+		t.Fatalf("unofficial status = %d", resp.StatusCode)
+	}
+	acquireOne("https://tube.example/watch?v=declined", map[string]any{"identify": false})
+	h.rescanAndWait(t)
+	landed := map[string]string{}
+	for _, it := range h.items(t, "?limit=200").Items {
+		landed[it.Title] = deref(it.Artist)
+	}
+	for title, want := range map[string]string{"Back That Azz Up": "Juvenile", "Ha": "Juvenile"} {
+		if got, ok := landed[title]; !ok || got != want {
+			t.Errorf("item %q artist = %q (present %v), want %q; library: %v", title, got, ok, want, landed)
+		}
+	}
+	// Each unmatched download without an album is filed as a single of its
+	// own, whichever way it went unmatched; one that carried an album keeps
+	// it.
+	wantSingleAlbum(t, h, "Warehouse Set (Unreleased)", "DJ Harness")
+	if a, b := wantSingleAlbum(t, h, "Back That Azz Up", "Juvenile"), wantSingleAlbum(t, h, "Ha", "Juvenile"); a == b {
+		t.Errorf("two downloads by one artist share the album %s", a)
+	}
+	if a := deref(h.itemTitled(t, h.token, "Basement Cut Two").Album); a != "Basement Tapes Vol 1" {
+		t.Errorf("an acquired album's track album = %q, want its own", a)
 	}
 
 	// An address that is not the web's is refused before any download, in
@@ -1317,6 +1416,67 @@ func TestAcquireFromURL(t *testing.T) {
 	if err := json.NewDecoder(nmResp.Body).Decode(&nmErr); err != nil ||
 		!strings.Contains(nmErr.Message, "managed") {
 		t.Fatalf("no-managed-root error = %+v (%v)", nmErr, err)
+	}
+}
+
+// An Art Track's description names its real artists, album and date; the
+// pass writes several artists as a repeated ARTIST, which the catalog
+// credits one by one rather than as one joined name.
+func TestAnAcquiredArtTrackCreditsEachArtist(t *testing.T) {
+	t.Parallel()
+	media := t.TempDir()
+	paths, err := fixtures.Generate(media, fixtures.Spec{Name: "art-track", Codec: fixtures.CodecMP3, Duration: 3 * time.Second,
+		Tags: map[string]string{"TITLE": "Under Pressure", "ARTIST": "Queen - Topic"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const url = "https://tube.example/watch?v=pressure"
+	src := &fakeAcquireSource{
+		playlistURL: "https://tube.example/playlist?list=PLnone",
+		files:       map[string]string{url: paths[0]},
+		descriptions: map[string]string{url: "Provided to YouTube by Sony Music Entertainment\n\n" +
+			"Under Pressure \u00b7 Queen \u00b7 David Bowie\n\nHot Space\n\n" +
+			"\u2117 1982 Queen Productions Ltd\n\nReleased on: 1982-05-21\n\nAuto-generated by YouTube."},
+	}
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.SourceProviders = append(cfg.SourceProviders, src)
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+		cfg.AllowPrivateFeedHosts = true
+	})
+	decodeStatus[ToolTask](t, h.postJSON(t, "/api/v1/acquisitions",
+		map[string]any{"url": url, "mediaType": "music", "identify": false}), 202, "acquisition")
+	drainTools(t, h)
+	drainMatches(t, h)
+	h.rescanAndWait(t)
+
+	var item *ItemSummary
+	for _, it := range h.items(t, "?limit=200").Items {
+		if it.Title == "Under Pressure" {
+			item = &it
+		}
+	}
+	if item == nil {
+		t.Fatal("the art track did not enter the library")
+	}
+	if a := deref(item.Album); a != "Hot Space" {
+		t.Errorf("album = %q, want the description's", a)
+	}
+	if y := decode[Item](t, get(t, h.ts, "/api/v1/items/"+item.Pid, h.token)).Year; y == nil || *y != 1982 {
+		t.Errorf("year = %v, want the release year", y)
+	}
+	credited := map[string]int{}
+	for _, b := range decodeStatus[FacetPage](t, get(t, h.ts, "/api/v1/library/facets?dimension=credit-artist", h.token), 200, "credited artists").Buckets {
+		credited[b.Label] = b.Count
+	}
+	if credited["Queen"] != 1 || credited["David Bowie"] != 1 {
+		t.Errorf("credited artists = %v, want Queen and David Bowie once each", credited)
+	}
+	for label := range credited {
+		if strings.Contains(label, "Topic") || strings.Contains(label, ",") {
+			t.Errorf("credited artist %q, want each name on its own", label)
+		}
 	}
 }
 
@@ -1521,4 +1681,342 @@ func provenanceOf(t *testing.T, h *harness, pid string) map[string]provenanceRow
 		out[r.Field] = row
 	}
 	return out
+}
+
+// acceptBestHarness acquires single videos against the canned releases.
+func acceptBestHarness(t *testing.T, releases ...*match.Release) (*harness, *fakeAcquireSource) {
+	t.Helper()
+	src := &fakeAcquireSource{playlistURL: "https://tube.example/playlist?list=PLbest", files: map[string]string{}}
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.MatchSource = &cannedSource{releases: releases}
+		cfg.SourceProviders = append(cfg.SourceProviders, src)
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+		cfg.AllowPrivateFeedHosts = true
+	})
+	return h, src
+}
+
+// acquireVideo downloads one canned video, uploaded as artist with the
+// given title, with the request's extra fields, and answers its entry
+// once identified.
+func acquireVideo(t *testing.T, h *harness, src *fakeAcquireSource, name, artist, title string, extra map[string]any) ReviewEntryDetail {
+	t.Helper()
+	paths, err := fixtures.Generate(t.TempDir(), fixtures.Spec{
+		Name: name, Codec: fixtures.CodecMP3, Duration: 3 * time.Second,
+		Tags: map[string]string{"TITLE": title, "ARTIST": artist},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := "https://tube.example/watch?v=" + name
+	src.files[url] = paths[0]
+	body := map[string]any{"url": url, "mediaType": "music"}
+	for k, v := range extra {
+		body[k] = v
+	}
+	task := decodeStatus[ToolTask](t, postJSONAs(t, h, h.token, "/api/v1/acquisitions", body), 202, "acquisition")
+	drainTools(t, h)
+	drainMatches(t, h)
+	got := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+task.Id, h.token))
+	if got.State != "done" || got.ResultPids == nil || len(*got.ResultPids) != 1 {
+		t.Fatalf("acquire task = %+v", got)
+	}
+	return getReview(t, h, (*got.ResultPids)[0])
+}
+
+// withheld reads an entry's accept-best reason, "" when absent.
+func withheld(e ReviewEntryDetail) string {
+	if e.AcceptBestWithheld == nil {
+		return ""
+	}
+	return string(*e.AcceptBestWithheld)
+}
+
+// setMatching stores the only library's matching behavior.
+func setMatching(t *testing.T, h *harness, mode string, singles bool) {
+	t.Helper()
+	lib := decode[Libraries](t, get(t, h.ts, "/api/v1/libraries", h.token)).Libraries[0].Pid
+	wantStatus(t, h.putJSON(t, "/api/v1/libraries/"+lib+"/matching",
+		map[string]any{"mode": mode, "singlesAutoApply": singles}), 200, "library matching")
+}
+
+// A download asking for its best match takes a clear one though singles
+// may not apply themselves, and the calibration counters never see it.
+func TestAcceptBestAppliesASingleWithSinglesOff(t *testing.T) {
+	t.Parallel()
+	h, src := acceptBestHarness(t, obviousRelease()...)
+
+	asked := acquireVideo(t, h, src, "asked", "Hold Steady State", "Quiet Wire", map[string]any{"acceptBestMatch": true})
+	if asked.Status != "auto-applied" || asked.AppliedMbid == nil || *asked.AppliedMbid != "rel-obvious" {
+		t.Fatalf("asked entry = %s applied %v, want auto-applied rel-obvious", asked.Status, asked.AppliedMbid)
+	}
+	if w := withheld(asked); w != "" {
+		t.Fatalf("an applied entry says it was withheld: %q", w)
+	}
+	stats := decode[ReviewStats](t, get(t, h.ts, "/api/v1/review/stats", h.token))
+	if stats.AutoApplied != 0 {
+		t.Fatalf("stats = %+v, want an asked-for apply outside autoApplied", stats)
+	}
+	wantStatus(t, h.postJSON(t, "/api/v1/review/queue/"+asked.Id+"/revert", nil), 200, "revert")
+	stats = decode[ReviewStats](t, get(t, h.ts, "/api/v1/review/stats", h.token))
+	if stats.Reverted != 1 || stats.RevertedAutoApplied != 0 {
+		t.Fatalf("stats after revert = %+v, want one revert outside revertedAutoApplied", stats)
+	}
+
+	// Not asked, the same clear match waits for a person and says nothing.
+	quiet := acquireVideo(t, h, src, "quiet", "Hold Steady State", "Quiet Wire", nil)
+	if quiet.Status != "pending" || withheld(quiet) != "" {
+		t.Fatalf("unasked entry = %s withheld %q, want pending with no reason", quiet.Status, withheld(quiet))
+	}
+}
+
+// An official video titled "Artist - Title" under the band's channel is
+// judged on the title and artist it splits into, while the stored best
+// stays scored on the tags as read.
+func TestAcceptBestAppliesAnArtistTitleUpload(t *testing.T) {
+	t.Parallel()
+	h, src := acceptBestHarness(t, obviousRelease()...)
+	e := acquireVideo(t, h, src, "omv", "Hold Steady State", "Hold Steady State - Quiet Wire", map[string]any{"acceptBestMatch": true})
+	if e.Status != "auto-applied" || e.AppliedMbid == nil || *e.AppliedMbid != "rel-obvious" {
+		t.Fatalf("official video entry = %s applied %v withheld %q, want auto-applied rel-obvious",
+			e.Status, e.AppliedMbid, withheld(e))
+	}
+}
+
+// The matcher's own threshold apply stays counted when the submission
+// asked as well.
+func TestAcceptBestLeavesTheMatchersOwnApplyCounted(t *testing.T) {
+	t.Parallel()
+	h, src := acceptBestHarness(t, obviousRelease()...)
+	setMatching(t, h, "auto", true)
+	e := acquireVideo(t, h, src, "own", "Hold Steady State", "Quiet Wire", map[string]any{"acceptBestMatch": true})
+	if e.Status != "auto-applied" {
+		t.Fatalf("entry = %s, want auto-applied", e.Status)
+	}
+	if stats := decode[ReviewStats](t, get(t, h.ts, "/api/v1/review/stats", h.token)); stats.AutoApplied != 1 {
+		t.Fatalf("stats = %+v, want the matcher's apply counted", stats)
+	}
+}
+
+func TestAcceptBestAppliesUnderReviewMode(t *testing.T) {
+	t.Parallel()
+	h, src := acceptBestHarness(t, obviousRelease()...)
+	setMatching(t, h, "review", false)
+	e := acquireVideo(t, h, src, "review", "Hold Steady State", "Quiet Wire", map[string]any{"acceptBestMatch": true})
+	if e.Status != "auto-applied" {
+		t.Fatalf("entry under review mode = %s, want auto-applied", e.Status)
+	}
+}
+
+// Below the floor the entry waits and says why; a typed search takes the
+// entry over, so even a clear answer to it waits, saying nothing.
+func TestAcceptBestWaitsBelowTheFloor(t *testing.T) {
+	t.Parallel()
+	far := obviousRelease()
+	far[0].Artist = "Hold Steady"
+	h, src := acceptBestHarness(t, far...)
+	e := acquireVideo(t, h, src, "far", "Hold Steady State", "Quiet Wire", map[string]any{"acceptBestMatch": true})
+	if e.Status != "pending" || withheld(e) != "below-floor" || e.Best == nil {
+		t.Fatalf("far entry = %s withheld %q best %+v, want pending below-floor with its best", e.Status, withheld(e), e.Best)
+	}
+
+	wantStatus(t, postJSONAs(t, h, h.token, "/api/v1/review/queue/"+e.Id+"/identify",
+		map[string]any{"artist": "Hold Steady", "title": "Quiet Wire"}), 200, "re-identify")
+	if mid := getReview(t, h, e.Id); withheld(mid) != "" {
+		t.Fatalf("an entry being identified says %q", withheld(mid))
+	}
+	drainMatches(t, h)
+	typed := getReview(t, h, e.Id)
+	if typed.Status != "pending" || typed.Best == nil || typed.Best.SimilarityPct < 99 {
+		t.Fatalf("typed entry = %s best %+v, want pending on an exact best", typed.Status, typed.Best)
+	}
+	if w := withheld(typed); w != "" {
+		t.Fatalf("a typed search says %q, want no reason", w)
+	}
+}
+
+func TestAcceptBestWaitsWhenAnotherRecordingIsClose(t *testing.T) {
+	t.Parallel()
+	twin := obviousRelease()[0]
+	other := *twin
+	other.MBID, other.ReleaseGroupMBID = "rel-other", "rg-other"
+	other.Tracks = []match.ReleaseTrack{twin.Tracks[0]}
+	other.Tracks[0].RecordingMBID = "00000000-0000-4000-8000-0000000000b2"
+	h, src := acceptBestHarness(t, twin, &other)
+	e := acquireVideo(t, h, src, "twin", "Hold Steady State", "Quiet Wire", map[string]any{"acceptBestMatch": true})
+	if e.Status != "pending" || withheld(e) != "ambiguous" {
+		t.Fatalf("twin entry = %s withheld %q, want pending ambiguous", e.Status, withheld(e))
+	}
+}
+
+func TestAcceptBestWaitsWithNoCandidates(t *testing.T) {
+	t.Parallel()
+	h, src := acceptBestHarness(t)
+	e := acquireVideo(t, h, src, "none", "Hold Steady State", "Quiet Wire", map[string]any{"acceptBestMatch": true})
+	if e.Status != "pending" || withheld(e) != "no-candidates" {
+		t.Fatalf("unfound entry = %s withheld %q, want pending no-candidates", e.Status, withheld(e))
+	}
+}
+
+func TestAcceptBestDoesNothingUnderModeOff(t *testing.T) {
+	t.Parallel()
+	h, src := acceptBestHarness(t, obviousRelease()...)
+	setMatching(t, h, "off", false)
+	e := acquireVideo(t, h, src, "off", "Hold Steady State", "Quiet Wire", map[string]any{"acceptBestMatch": true})
+	if e.Status != "pending" || len(e.Candidates) != 0 || withheld(e) != "" {
+		t.Fatalf("entry under mode off = %s, %d candidates, withheld %q; want pending, unsearched, no reason",
+			e.Status, len(e.Candidates), withheld(e))
+	}
+}
+
+// A clear best still waits on a possible duplicate, whose own flag says why.
+func TestAcceptBestWaitsOnADuplicate(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.MatchSource = &cannedSource{releases: obviousRelease()}
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+	})
+	spec := fixtures.Spec{
+		Name: "held", Codec: fixtures.CodecMP3, Duration: 3 * time.Second,
+		Tags: map[string]string{"TITLE": "Quiet Wire", "ARTIST": "Hold Steady State"},
+	}
+	if _, err := fixtures.Generate(h.library, spec); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	paths, err := fixtures.Generate(t.TempDir(), spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := uploadDeclaring(t, h, h.token, paths[0], map[string]any{"acceptBestMatch": true})
+	if up.Duplicate == nil {
+		t.Fatalf("the re-upload was not flagged: %+v", up)
+	}
+	drainMatches(t, h)
+	e := entryOf(t, h, h.token, up)
+	if e.Status != "pending" || e.Best == nil || withheld(e) != "" {
+		t.Fatalf("duplicate entry = %s best %+v withheld %q, want pending with its best and no reason",
+			e.Status, e.Best, withheld(e))
+	}
+}
+
+// With several libraries that could take a download and every one of them
+// set to off, nothing identifies it, asked or not.
+func TestAcceptBestDoesNothingWhenEveryDestinationIsOff(t *testing.T) {
+	t.Parallel()
+	src := &fakeAcquireSource{files: map[string]string{}}
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.MatchSource = &cannedSource{releases: obviousRelease()}
+		cfg.SourceProviders = append(cfg.SourceProviders, src)
+		cfg.Roots = append(cfg.Roots, service.Root{Name: "second", Path: t.TempDir()})
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+		cfg.AllowPrivateFeedHosts = true
+	})
+	libs := decode[Libraries](t, get(t, h.ts, "/api/v1/libraries", h.token)).Libraries
+	if len(libs) != 2 {
+		t.Fatalf("libraries = %d, want 2", len(libs))
+	}
+	for _, lib := range libs {
+		wantStatus(t, h.putJSON(t, "/api/v1/libraries/"+lib.Pid+"/matching",
+			map[string]any{"mode": "off", "singlesAutoApply": false}), 200, "library matching")
+	}
+	e := acquireVideo(t, h, src, "all-off", "Hold Steady State", "Quiet Wire", map[string]any{"acceptBestMatch": true})
+	if e.Status != "pending" || len(e.Candidates) != 0 || withheld(e) != "" {
+		t.Fatalf("entry with every destination off = %s, %d candidates, withheld %q; want pending, unsearched, no reason",
+			e.Status, len(e.Candidates), withheld(e))
+	}
+}
+
+// An album uploaded without naming a library follows the one library that
+// could hold it: under review, the matcher's own confident apply waits.
+func TestAnUntargetedAlbumWaitsUnderASoleReviewLibrary(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.MatchSource = &cannedSource{releases: []*match.Release{nightfallRelease()}}
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+	})
+	setMatching(t, h, "review", true)
+	staging := t.TempDir()
+	b := createBatch(t, h, h.token, "album", "music")
+	for _, spec := range messyNightfallSpecs() {
+		spec.Tags["ARTIST"] = "The Cardinal Waves"
+		paths, err := fixtures.Generate(staging, spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		uploadBatchMember(t, h, h.token, paths[0], "music", b.Id, "Nightfall Circuit/"+filepath.Base(paths[0]))
+	}
+	final := finalizeBatch(t, h, h.token, b.Id)
+	drainMatches(t, h)
+	if len(final.ReviewEntryIds) != 1 {
+		t.Fatalf("finalize opened %v, want one album entry", final.ReviewEntryIds)
+	}
+	e := getReview(t, h, final.ReviewEntryIds[0])
+	if e.Status != "pending" || e.Best == nil || e.Best.Mbid != "rel-nightfall" || e.Best.SimilarityPct < 99 {
+		t.Fatalf("album entry = %s best %+v, want pending on a confident rel-nightfall", e.Status, e.Best)
+	}
+}
+
+// An album uploaded without naming a library, with several that could
+// hold it, follows the strictest of them: under review in either, the
+// matcher's own confident apply waits. The music library takes it over
+// the mixed one when it applies.
+func TestAnUntargetedAlbumFollowsTheStrictestOfItsLibraries(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		modes [2]string
+		want  string
+	}{
+		{[2]string{"review", "review"}, "pending"},
+		{[2]string{"review", "auto"}, "pending"},
+		{[2]string{"auto", "review"}, "pending"},
+		{[2]string{"auto", "auto"}, "auto-applied"},
+	} {
+		t.Run(tc.modes[0]+"-"+tc.modes[1], func(t *testing.T) {
+			t.Parallel()
+			h := newHarnessWith(t, func(cfg *service.Config) {
+				cfg.MatchSource = &cannedSource{releases: []*match.Release{nightfallRelease()}}
+				cfg.Roots[0].Media = "music"
+				cfg.Roots = append(cfg.Roots, service.Root{Name: "mixed", Path: t.TempDir()})
+				for i := range cfg.Roots {
+					cfg.Roots[i].Managed = true
+				}
+			})
+			libs := decode[Libraries](t, get(t, h.ts, "/api/v1/libraries", h.token)).Libraries
+			if len(libs) != 2 {
+				t.Fatalf("libraries = %d, want 2", len(libs))
+			}
+			for i, lib := range libs {
+				wantStatus(t, h.putJSON(t, "/api/v1/libraries/"+lib.Pid+"/matching",
+					map[string]any{"mode": tc.modes[i], "singlesAutoApply": true}), 200, "library matching")
+			}
+			staging := t.TempDir()
+			b := createBatch(t, h, h.token, "album", "music")
+			for _, spec := range messyNightfallSpecs() {
+				spec.Tags["ARTIST"] = "The Cardinal Waves"
+				paths, err := fixtures.Generate(staging, spec)
+				if err != nil {
+					t.Fatal(err)
+				}
+				uploadBatchMember(t, h, h.token, paths[0], "music", b.Id, "Nightfall Circuit/"+filepath.Base(paths[0]))
+			}
+			final := finalizeBatch(t, h, h.token, b.Id)
+			drainMatches(t, h)
+			if len(final.ReviewEntryIds) != 1 {
+				t.Fatalf("finalize opened %v, want one album entry", final.ReviewEntryIds)
+			}
+			e := getReview(t, h, final.ReviewEntryIds[0])
+			if e.Status != tc.want || e.Best == nil || e.Best.Mbid != "rel-nightfall" || e.Best.SimilarityPct < 99 {
+				t.Fatalf("album entry = %s best %+v, want %s on a confident rel-nightfall", e.Status, e.Best, tc.want)
+			}
+		})
+	}
 }

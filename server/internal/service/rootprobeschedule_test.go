@@ -139,7 +139,7 @@ func TestARefusedUploadProbesTheRootsAgain(t *testing.T) {
 	if w := listedWritable(t, ctx, svc, root); w == nil || !*w {
 		t.Fatalf("before any write the root lists writable %s, want the boot probe's answer", said(w))
 	}
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", ""); KindOf(err) != KindStorageUnwritable {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false); KindOf(err) != KindStorageUnwritable {
 		t.Fatalf("decision = %v, want storage-unwritable", err)
 	}
 	waitFor(t, func() bool {

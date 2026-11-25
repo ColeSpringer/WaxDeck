@@ -603,9 +603,9 @@ func (l *Health) itemFileRules(ctx context.Context, it *model.ItemView, findings
 	rules, d, owed := l.itemFindings(ctx, it, findings)
 	// Owed values make the item out of sync only where a person or a
 	// source set them; a clean-up pass's catalog-only rewrite is the
-	// file's to keep.
+	// file's to keep, and a recording id the catalog's.
 	if len(owed) > 0 && !slices.Contains(rules, ruleWriteUnsynced) {
-		if keys, err := l.owedBesideNormalized(ctx, it.PID, owed); err != nil || len(keys) > 0 {
+		if keys, err := l.owedToFiles(ctx, it, owed); err != nil || len(keys) > 0 {
 			rules = append(slices.Clone(rules), ruleWriteUnsynced)
 		}
 	}
@@ -662,14 +662,17 @@ func (l *Health) itemFindings(ctx context.Context, it *model.ItemView, findings 
 	return ff.rules, d, ff.owed
 }
 
-// owedBesideNormalized drops the owed keys whose catalog value a clean-up
-// pass set: those rewrite the catalog alone by design, and the file keeps
-// what it says.
-func (l *Health) owedBesideNormalized(ctx context.Context, pid model.PID, keys []string) ([]string, error) {
+// owedToFiles drops the owed keys no file is to be written: a value a
+// clean-up pass set, which rewrites the catalog alone by design, and a
+// track's recording id (recordingIDField).
+func (l *Health) owedToFiles(ctx context.Context, it *model.ItemView, keys []string) ([]string, error) {
+	if it.Kind == model.KindTrack {
+		keys = slices.DeleteFunc(slices.Clone(keys), func(k string) bool { return k == recordingIDField })
+	}
 	if len(keys) == 0 {
 		return nil, nil
 	}
-	prov, err := l.lib.Provenance(ctx, pid)
+	prov, err := l.lib.Provenance(ctx, it.PID)
 	if err != nil {
 		return keys, classify(err)
 	}

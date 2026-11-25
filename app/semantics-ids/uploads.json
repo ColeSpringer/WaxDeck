@@ -1,6 +1,7 @@
 {
   "doc": "Uploads: batches, rows, duplicates, and the add-to-library flow.",
   "ids": {
+    "acquireAcceptBest": "acquire-accept-best",
     "acquireFormat": "acquire-format",
     "acquireIdentify": "acquire-identify",
     "acquireSubmit": "acquire-submit",
@@ -10,6 +11,7 @@
     "addUploadFile": "add-upload-file",
     "addUploadFolder": "add-upload-folder",
     "addUploadSessions": "add-upload-sessions",
+    "uploadAcceptBest": "upload-accept-best",
     "uploadBatch": "upload-batch-{batchId}",
     "uploadDelete": "upload-delete-{id}",
     "uploadDropTarget": "upload-drop-target",

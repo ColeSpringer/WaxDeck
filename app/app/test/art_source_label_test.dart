@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/art_source_label.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_es.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 ItemMetadata _holding(
@@ -107,6 +108,53 @@ void main() {
         ], 'genre'),
         isNull,
       );
+    });
+  });
+
+  group('acquisition art', () {
+    final es = AppLocalizationsEs();
+    ArtSource art(String? provider, {bool derived = false}) =>
+        ArtSource(source: 'acquisition', provider: provider, derived: derived);
+
+    test('a download thumbnail names its source', () {
+      expect(artSourceLabel(l10n, art('youtube')), 'Art from YouTube');
+      expect(artSourceLabel(es, art('youtube')), 'Ilustración de YouTube');
+    });
+
+    test('an unknown provider is named as it stands', () {
+      expect(artSourceLabel(l10n, art('vimeo')), 'Art from vimeo');
+    });
+
+    test('with no provider it says only that a download brought it', () {
+      expect(artSourceLabel(l10n, art(null)), 'Art that came with a download');
+      expect(artSourceLabel(l10n, art('')), 'Art that came with a download');
+      expect(
+        artSourceLabel(es, art(null)),
+        'Ilustración que llegó con una descarga',
+      );
+    });
+
+    test('the borrowed form names the track', () {
+      expect(
+        artSourceLabelWithBorrow(l10n, art('youtube', derived: true)),
+        'Art from YouTube, for a track',
+      );
+      expect(
+        artSourceLabelWithBorrow(es, art('youtube', derived: true)),
+        'Ilustración de YouTube, para una pista',
+      );
+      expect(
+        artSourceLabelWithBorrow(l10n, art(null, derived: true)),
+        'Art that came with a download, for a track',
+      );
+      expect(
+        artSourceLabelWithBorrow(es, art(null, derived: true)),
+        'Ilustración que llegó con una descarga, para una pista',
+      );
+    });
+
+    test('youtube reads right as a provenance producer', () {
+      expect(provenanceProducerName(l10n, 'youtube'), 'YouTube');
     });
   });
 

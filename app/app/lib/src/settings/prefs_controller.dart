@@ -426,6 +426,7 @@ class PrefsController extends AsyncNotifier<Prefs> {
     replayGain: current.replayGain,
     radioScrobbleOptOut: current.radioScrobbleOptOut,
     identifyOptOut: current.identifyOptOut,
+    acceptBestMatch: current.acceptBestMatch,
     browseShowUnknown: current.browseShowUnknown,
     browseSorts: current.browseSorts,
     autoplay: current.autoplay,
@@ -478,6 +479,12 @@ class PrefsController extends AsyncNotifier<Prefs> {
   /// explicitly, so a preference changed mid-upload never moves one.
   Future<void> setIdentifyOptOut(bool optOut) =>
       _write((current) => current.copyWith(identifyOptOut: optOut));
+
+  /// Stores whether this account's identified submissions take their
+  /// best match without waiting for review. The sheets seed their switch
+  /// from it, as they do from [setIdentifyOptOut].
+  Future<void> setAcceptBestMatch(bool on) =>
+      _write((current) => current.copyWith(acceptBestMatch: on));
 
   /// Stores the pinned radio stations, in dial order.
   ///

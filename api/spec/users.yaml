@@ -1084,7 +1084,7 @@ components:
           type: boolean
           description: >
             Stop identifying this account's own submissions by
-            default, and let them into the library as delivered.
+            default, and let them into the library without a match.
             Uploads and acquisitions are matched against MusicBrainz
             unless the submission says otherwise, which is right for a
             rip with whatever tags the ripper wrote and wrong for a
@@ -1095,6 +1095,17 @@ components:
             for what declining does. Administrator matching modes are
             a separate, wider switch: a library set to `off`
             identifies nothing regardless.
+        acceptBestMatch:
+          type: boolean
+          description: >
+            Let this account's identified submissions take their best
+            MusicBrainz match without waiting for review, by default.
+            Turning it on flips the default the upload and
+            Add-from-URL sheets open with; either sheet can still say
+            so per submission, and a submission that says so wins.
+            Absent means off. See `UploadCreate.acceptBestMatch` for when
+            it acts: never with identification off, and never in a
+            library whose matching mode is `off`.
 
     AppPassword:
       type: object

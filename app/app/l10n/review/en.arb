@@ -1,6 +1,18 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
+  "reviewAcceptBestWithheldAmbiguous": "Another recording could be the right one, or the others could not be ruled out",
+  "@reviewAcceptBestWithheldAmbiguous": {
+    "description": "Why an entry asked to accept its best match is waiting: another recording the search found is about as close as the top one, or the candidates cannot rule the other recordings out."
+  },
+  "reviewAcceptBestWithheldBelowFloor": "The best match was not close enough to accept",
+  "@reviewAcceptBestWithheldBelowFloor": {
+    "description": "Why an entry asked to accept its best match is waiting: the top candidate is too far from the files."
+  },
+  "reviewAcceptBestWithheldNoCandidates": "No match was found to accept",
+  "@reviewAcceptBestWithheldNoCandidates": {
+    "description": "Why an entry asked to accept its best match is waiting: nothing was found."
+  },
   "reviewActionAddCopy": "Add as another copy",
   "@reviewActionAddCopy": {
     "description": "Review decision button for an entry whose every file is already in the library: import the files anyway, as copies beside the items that hold their audio."
@@ -608,5 +620,23 @@
   "reviewUntitled": "Untitled",
   "@reviewUntitled": {
     "description": "Stands in for an entry's name when the files carry none."
+  },
+  "reviewUseSuggested": "Use the suggested artist and title",
+  "@reviewUseSuggested": {
+    "description": "Switch on the decision bar of an entry that offers a suggested artist and title (parsed from the source's title): with it on, Keep as is and Mark unofficial file the tracks under those values."
+  },
+  "reviewUseSuggestedValue": "{artist} - {title}",
+  "@reviewUseSuggestedValue": {
+    "description": "Under the use-suggested switch: the suggested artist and title it would write.",
+    "placeholders": {
+      "artist": {
+        "type": "String",
+        "example": "Mono Tides"
+      },
+      "title": {
+        "type": "String",
+        "example": "Long Dive"
+      }
+    }
   }
 }

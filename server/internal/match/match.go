@@ -36,12 +36,16 @@ type Track struct {
 	// Query, when set, is a recording search somebody supplied outright
 	// for this track. Nil for everything the engine derives on its own.
 	Query *TrackQuery
+	// UploadDated says DATE is when the file was published where it was
+	// downloaded from, not a release date: accept-best judges a one-track
+	// unit without it.
+	UploadDated bool
 }
 
-// TrackQuery is a recording search a person typed, taken verbatim per
-// field: the derivation rescues titles machines wrote, and running it
-// over a hand-typed one only damages it. An empty field falls back to
-// the derivation for that half.
+// TrackQuery is a recording search a person typed, kept as typed: the
+// artist is searched as it stands and the title as the song it names
+// (recordingQuery), never split into an artist. An empty field falls
+// back to the derivation for that half.
 type TrackQuery struct {
 	Artist string
 	Title  string
@@ -127,8 +131,36 @@ type CandidateSource interface {
 	SearchReleases(ctx context.Context, artist, album string, trackCount int) ([]*Release, error)
 	// SearchRecordings finds releases carrying a recording that matches the
 	// artist and track title text. It is the descriptive path for loose tracks
-	// with no album, where a release search has nothing to key on.
-	SearchRecordings(ctx context.Context, artist, title string) ([]*Release, error)
+	// with no album, where a release search has nothing to key on. title is
+	// the song alone; named, when set, is the title with what names the
+	// recording kept ("Song (X Remix)"): the same search asks for it too,
+	// ranked above the song's other recordings, and hits titled so are
+	// hydrated first (SpreadReleases). album, when set, is the album the
+	// unit names: a release titled so is hydrated before any other.
+	SearchRecordings(ctx context.Context, artist, title, named, album string) (RecordingSearch, error)
+}
+
+// RecordingSearch is what a recording search answered.
+type RecordingSearch struct {
+	// Releases are the releases it hydrated, tracklists included.
+	Releases []*Release
+	// Listed is every recording the search listed, hydrated or not, as the
+	// listing describes it: enough to judge as a rival, not to apply.
+	Listed []ListedRecording
+	// Capped says the search listed releases it did not hydrate.
+	Capped bool
+	// Unlisted says the search counted more hits than it listed.
+	Unlisted bool
+}
+
+// ListedRecording is one recording a search listed.
+type ListedRecording struct {
+	MBID        string
+	Title       string
+	Artist      string
+	DurationSec float64 // 0 = unknown
+	// Score is the search's relevance for the hit, 0 to 100.
+	Score int
 }
 
 // Pairing links one unit track to one release track in an assignment.
@@ -202,6 +234,21 @@ type Proposal struct {
 	Unit       Unit
 	Candidates []Match
 	Decision   Decision
+
+	// judged is the whole ranking accept-best reads, before the cut to
+	// MaxCandidates, scored against judgedUnit; nil reads Candidates. found
+	// is that ranking on the tags as read, Candidates before the cut. listed
+	// is every recording the recording searches listed, and capped says one
+	// listed releases it did not hydrate. unlisted says one counted hits past
+	// its page, and pageEnd is the score its page ended at.
+	judged     []Match
+	found      []Match
+	judgedUnit Unit
+	weights    Weights
+	listed     []ListedRecording
+	capped     bool
+	unlisted   bool
+	pageEnd    int
 }
 
 // Best returns the top candidate or nil when there is none.

@@ -229,6 +229,10 @@
   "@errorReadOnly": {
     "description": "Error sentence for the spec code `read-only`: reads and playback keep working."
   },
+  "errorRecordingIdHeld": "This track's recording ID stays locked because its file carries none. Unlocked, the next scan of the file would clear it.",
+  "@errorRecordingIdHeld": {
+    "description": "Error sentence for `invalid-request` when the params' reason is recording-id-held: someone tried to unlock a track's MusicBrainz recording ID while its file carries no recording ID, so only the server's catalog holds it."
+  },
   "errorServiceUnreachable": "An outside service this needs did not answer. Try again later.",
   "@errorServiceUnreachable": {
     "description": "Error sentence for the spec code `service-unreachable`, such as a scrobbling provider."

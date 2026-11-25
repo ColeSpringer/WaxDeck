@@ -3,6 +3,7 @@ package match
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // normalize lowercases, folds common Latin diacritics to ASCII, replaces
@@ -55,19 +56,124 @@ var diacritics = map[rune]rune{
 	'æ': 'a', 'œ': 'o', 'þ': 't',
 }
 
-// stripFeat removes a trailing featured artist clause from an already
-// normalized string ("song feat someone" and "song" compare equal).
-// Markers are whole normalized words; "with" is deliberately absent
-// because it is too common a genuine title word to cut on.
+// stripFeat removes the featured artist clauses from a raw title or artist
+// ("Song (feat. Someone)" and "Song" compare equal). Only the clause goes: a
+// group opening with the marker goes whole, a marker later in a group takes
+// the rest of that group, and one outside any group runs to the next group,
+// " - " tail or the end. What follows names the recording ("(Live)", "(X
+// Remix)", " - Live at X") and stays compared. Markers are whole words after
+// at least one other; "with" is deliberately absent because it is too common
+// a genuine title word to cut on.
 func stripFeat(s string) string {
-	words := strings.Fields(s)
-	for i := 1; i < len(words); i++ {
-		switch words[i] {
-		case "feat", "featuring", "ft":
-			return strings.Join(words[:i], " ")
+	for {
+		start, end, ok := featClause(s)
+		if !ok {
+			return s
+		}
+		s = s[:start] + " " + s[end:]
+	}
+}
+
+// featTails end a featured artist clause outside any group.
+var featTails = []string{" - ", " \u2013 ", " \u2014 "}
+
+// featClause locates the first featured artist clause in s as stripFeat cuts
+// it.
+func featClause(s string) (start, end int, ok bool) {
+	// opens are the groups still open, and worded whether each holds a word
+	// yet.
+	var (
+		opens  []int
+		worded []bool
+		seen   bool
+	)
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		switch {
+		case isOpenBracket(r):
+			opens, worded = append(opens, i), append(worded, false)
+		case isCloseBracket(r):
+			if len(opens) > 0 {
+				opens, worded = opens[:len(opens)-1], worded[:len(worded)-1]
+			}
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			j := wordEnd(s, i)
+			if seen && isFeatMarker(s[i:j]) {
+				top := len(opens) - 1
+				if top < 0 {
+					return i, clauseEnd(s, j), true
+				}
+				closing := groupEnd(s, j)
+				if worded[top] {
+					return i, closing, true
+				}
+				return opens[top], min(closing+1, len(s)), true
+			}
+			seen = true
+			if len(worded) > 0 {
+				worded[len(worded)-1] = true
+			}
+			i = j
+			continue
+		}
+		i += size
+	}
+	return 0, 0, false
+}
+
+func isFeatMarker(word string) bool {
+	switch strings.ToLower(word) {
+	case "feat", "featuring", "ft":
+		return true
+	}
+	return false
+}
+
+func isOpenBracket(r rune) bool  { return r == '(' || r == '[' || r == '{' }
+func isCloseBracket(r rune) bool { return r == ')' || r == ']' || r == '}' }
+
+// wordEnd is the end of the run of letters and digits starting at i.
+func wordEnd(s string, i int) int {
+	for i < len(s) {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			break
+		}
+		i += size
+	}
+	return i
+}
+
+// groupEnd is the index of the bracket closing the group open at i, len(s)
+// when nothing closes it.
+func groupEnd(s string, i int) int {
+	depth := 1
+	for ; i < len(s); i++ {
+		switch r := rune(s[i]); {
+		case isOpenBracket(r):
+			depth++
+		case isCloseBracket(r):
+			if depth--; depth == 0 {
+				return i
+			}
 		}
 	}
-	return s
+	return len(s)
+}
+
+// clauseEnd is where a clause outside any group ends, from i on: the next
+// group, the next " - " tail, or the end.
+func clauseEnd(s string, i int) int {
+	end := len(s)
+	if at := strings.IndexAny(s[i:], "([{"); at >= 0 {
+		end = i + at
+	}
+	for _, sep := range featTails {
+		if at := strings.Index(s[i:end], sep); at >= 0 {
+			end = i + at
+		}
+	}
+	return end
 }
 
 // editionWords are the trailing words stripEdition may remove from a
@@ -165,14 +271,17 @@ func stringDist(a, b string) float64 {
 	return float64(d) / float64(longest)
 }
 
-// titleDist compares track or artist strings, forgiving featured artist
-// suffixes on either side.
+// titleDist compares track or artist strings, forgiving a featured artist
+// clause on either side. With a clause on both sides what is left decides:
+// the plain distance would spread a "(Live)" one side adds over both
+// clauses' length.
 func titleDist(a, b string) float64 {
 	d := stringDist(a, b)
 	if d == 0 {
 		return 0
 	}
-	if s := stringDist(stripFeat(normalize(a)), stripFeat(normalize(b))); s < d {
+	sa, sb := stripFeat(a), stripFeat(b)
+	if s := stringDist(sa, sb); s < d || (sa != a && sb != b) {
 		d = s
 	}
 	return d

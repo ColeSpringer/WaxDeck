@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -162,5 +163,58 @@ func TestFetchImageRefusesNonHTTPSRedirect(t *testing.T) {
 	if _, _, err := fetchImage(context.Background(), c, srv.URL+"/redir"); err == nil ||
 		!strings.Contains(err.Error(), "non-https") || !errors.Is(err, errImageGone) {
 		t.Fatalf("want non-https redirect error, got %v", err)
+	}
+}
+
+// The response cache is bounded by what it holds as well as by how many: a
+// few large bodies must not sit in memory for the days a provider keeps them.
+func TestCoreCacheIsBoundedByBytes(t *testing.T) {
+	body := bytes.Repeat([]byte("x"), 1000)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/huge" {
+			w.Write(bytes.Repeat([]byte("y"), 5000))
+			return
+		}
+		w.Write(body)
+	}))
+	defer srv.Close()
+
+	c := newCore(srv.Client(), "test", time.Nanosecond)
+	c.maxBytes = 4000
+	get := func(path string) {
+		t.Helper()
+		if _, status, err := c.get(context.Background(), srv.URL+path, time.Hour); err != nil || status != 200 {
+			t.Fatalf("get %s: status %d, %v", path, status, err)
+		}
+	}
+	held := func() (n, size int) {
+		for k, e := range c.cache {
+			n, size = n+1, size+len(k)+len(e.body)
+		}
+		return n, size
+	}
+	for i := range 10 {
+		get(fmt.Sprintf("/%d", i))
+		if _, size := held(); size > c.maxBytes || size != c.cacheBytes {
+			t.Fatalf("after %d bodies the cache holds %d bytes (counted %d), over its bound of %d", i+1, size, c.cacheBytes, c.maxBytes)
+		}
+	}
+	// The newest stay, the oldest went.
+	n, _ := held()
+	if _, ok := c.cached(srv.URL+"/9", time.Hour); !ok || n != 3 {
+		t.Fatalf("cache holds %d entries (newest kept %v), want the three newest that fit", n, ok)
+	}
+	if _, ok := c.cached(srv.URL+"/0", time.Hour); ok {
+		t.Fatal("the oldest body is still cached")
+	}
+	// A body larger than the whole bound is answered and not kept.
+	get("/huge")
+	if _, ok := c.cached(srv.URL+"/huge", time.Hour); ok {
+		t.Fatal("a body larger than the bound was cached")
+	}
+	// Forgetting gives the bytes back.
+	c.forgetPrefix(srv.URL)
+	if n, size := held(); n != 0 || size != 0 || c.cacheBytes != 0 {
+		t.Fatalf("after forgetting: %d entries, %d bytes, counted %d", n, size, c.cacheBytes)
 	}
 }

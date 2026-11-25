@@ -227,13 +227,20 @@ that another device or tab is still sending shows how far it has got,
 and can be discarded only once nothing has arrived for six minutes. A
 notification about an upload opens the same list, as does the origin
 line on a review entry. Either way the download runs as a background
-task: the files arrive with the source's own title, thumbnail, and
-provenance tags, cluster into album units, and wait in the review queue
-where you approve a match, keep them as is, or mark them unofficial
-(for remixes and rips with no canonical release). A user with upload
-rights keeps editing rights over what their own uploads and
-acquisitions bring in, so hand-naming an unofficial track does not need
-an administrator.
+task: the files arrive with the source's title (a music download's
+cleaned of upload notes such as "(Official Video)"), thumbnail, and
+provenance tags, cluster into album units, and are identified. A
+confident match applies itself, as for any file: a multi-track
+download's album unit under the library's `auto` matching, and a
+single download only when the "auto-apply confident singles" switch is
+on. With **Accept the best match** on in the dialog, an entry also
+takes a close, clear best on its own. Otherwise it waits in the review
+queue where you approve a match, keep it as is, or mark it unofficial
+(for remixes and rips with no canonical release). A music download
+kept with no album gets "<Title> - Single". A user with upload rights
+keeps editing rights over what their own uploads and acquisitions
+bring in, so hand-naming an unofficial track does not need an
+administrator.
 
 By default an acquisition keeps the source's highest-quality audio with
 no re-encode (Opus, in practice, for YouTube), delivered in a clean,

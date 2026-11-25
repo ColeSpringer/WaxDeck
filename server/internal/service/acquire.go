@@ -19,6 +19,7 @@ import (
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/match"
+	"github.com/colespringer/waxdeck/server/internal/syncsource"
 )
 
 // Acquisition: download audio from a source URL (a single video, or
@@ -32,11 +33,13 @@ import (
 
 const taskTypeAcquire = "acquire"
 
-// formatFetcher is the optional capability a source provider advertises when it
-// can honor a preferred output format for a URL acquisition. The empty format
-// means the provider's default (best-audio copy).
-type formatFetcher interface {
-	FetchFormat(ctx context.Context, req source.FetchRequest, w io.Writer, format string) (*source.FetchResult, error)
+// acquireFetcher is the optional capability a source provider advertises when
+// it can honour an acquisition's options: the preferred output format, and
+// whether the download is music, for which it may clean the tags the source
+// got wrong. A provider without it gets plain Fetch: its default format and
+// no cleaning.
+type acquireFetcher interface {
+	FetchWith(ctx context.Context, req source.FetchRequest, w io.Writer, opts syncsource.FetchOptions) (*source.FetchResult, error)
 }
 
 // onceEnumerator is the optional capability a source provider advertises
@@ -65,9 +68,9 @@ type acquireItem struct {
 // the acquired bytes will count against the caller's upload quota. format
 // is the caller's preferred output format ("" or "best" copies the
 // source's highest-quality audio; "opus"/"mp3"/"m4a"/"flac" transcode).
-// identify is the submission's identification choice, nil for the
-// account default.
-func (l *Ingest) StartAcquisition(ctx context.Context, uc *UserCtx, rawURL, mediaType, libraryPID, format string, identify *bool) (ToolTaskDTO, error) {
+// identify and acceptBest are the submission's identification and
+// accept-best choices, nil for the account defaults.
+func (l *Ingest) StartAcquisition(ctx context.Context, uc *UserCtx, rawURL, mediaType, libraryPID, format string, identify, acceptBest *bool) (ToolTaskDTO, error) {
 	if err := l.Settings.CheckWritable(ctx, ""); err != nil {
 		return ToolTaskDTO{}, err
 	}
@@ -119,6 +122,7 @@ func (l *Ingest) StartAcquisition(ctx context.Context, uc *UserCtx, rawURL, medi
 		// before this field existed reads as "identify" instead of
 		// silently opting itself out.
 		IdentifyDeclined: !l.resolveIdentify(ctx, uc.ID, identify),
+		AcceptBest:       l.resolveAcceptBest(ctx, uc.ID, acceptBest),
 	})
 }
 
@@ -391,13 +395,12 @@ func (l *Ingest) fetchAcquireItem(ctx context.Context, provider source.Provider,
 		return reviewTrackDoc{}, "", err
 	}
 	// WaxDeck drives the acquisition fetch directly, not through the WaxBin
-	// facade, so a format preference rides a WaxDeck-owned capability rather than
-	// the source.FetchRequest port. A provider that does not advertise it (or an
-	// empty preference) gets the default best-audio copy.
+	// facade, so the acquisition's options ride a WaxDeck-owned capability
+	// rather than the source.FetchRequest port.
 	freq := source.FetchRequest{URL: item.URL}
 	var res *source.FetchResult
-	if ff, ok := provider.(formatFetcher); ok && p.Format != "" {
-		res, err = ff.FetchFormat(ctx, freq, f, p.Format)
+	if af, ok := provider.(acquireFetcher); ok {
+		res, err = af.FetchWith(ctx, freq, f, syncsource.FetchOptions{Format: p.Format, Music: p.MediaType == "music"})
 	} else {
 		res, err = provider.Fetch(ctx, freq, f)
 	}
@@ -427,8 +430,10 @@ func (l *Ingest) fetchAcquireItem(ctx context.Context, provider source.Provider,
 	}
 
 	doc := reviewTrackDoc{
-		Path:  final,
-		Title: firstNonEmpty(item.Title, strings.TrimSuffix(name, filepath.Ext(name))),
+		Path:       final,
+		Title:      firstNonEmpty(item.Title, strings.TrimSuffix(name, filepath.Ext(name))),
+		SourceType: provider.SourceType(),
+		SourceURL:  item.URL,
 	}
 	// The provider embeds the source metadata; read it back so the
 	// identify pipeline and the review diff see what the file carries.
@@ -458,6 +463,7 @@ func (l *Ingest) fetchAcquireItem(ctx context.Context, provider source.Provider,
 		// Carried even though this path opens its own entries: an unset
 		// field writes 0, so the row would read "declined" later.
 		Identify:     !p.IdentifyDeclined,
+		AcceptBest:   p.AcceptBest,
 		CreatedAtNS:  now.UnixNano(),
 		ReceivedAtNS: now.UnixNano(),
 		ExpiresAtNS:  now.Add(l.uploadRetention).UnixNano(),
@@ -479,10 +485,11 @@ func (l *Ingest) fetchAcquireItem(ctx context.Context, provider source.Provider,
 	return doc, uploadID, nil
 }
 
-// suggestedQueryFor reads what the matcher would search for out of a
-// loose acquisition's source title, so the review surface can offer it
-// as a starting point rather than making somebody retype a video title
-// they can see.
+// suggestedQueryFor reads the artist and title a loose acquisition's
+// source title is judged as (match.SuggestedQuery: upload notes dropped,
+// what names the recording kept, where the search asks for the song
+// alone), so the review surface can offer it as a starting point rather
+// than making somebody retype a video title they can see.
 //
 // Single-file units only. An album-shaped unit arrived with real ALBUM
 // and ARTIST tags, so a guess derived from one member's title would be
@@ -549,6 +556,7 @@ func (l *Ingest) openAcquireEntries(ctx context.Context, t *wdb.ToolTask, p tool
 		}
 		id, err := l.openReviewEntry(ctx, entry, reviewPayload{
 			Tracks: unitDocs, Suggested: suggestedQueryFor(p.MediaType, unit), List: listTitle,
+			AcceptBest: p.AcceptBest,
 		}, !p.IdentifyDeclined)
 		if err != nil {
 			return entryIDs, err

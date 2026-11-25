@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/colespringer/waxbin"
+	"github.com/colespringer/waxbin/identity"
 	"github.com/colespringer/waxbin/model"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -68,6 +69,10 @@ type ReviewDetailDTO struct {
 	// which is what tells an empty candidate list apart from a search
 	// that came back empty.
 	IdentifyDeclined bool
+	// AcceptBestWithheld is why a pending entry that asked to take its
+	// best match waits ("below-floor", "ambiguous", "no-candidates");
+	// empty otherwise, and while it is being identified.
+	AcceptBestWithheld string
 	// MediumFixed says a file of the unit is in the library, so a
 	// decision naming another medium is refused.
 	MediumFixed bool
@@ -192,6 +197,9 @@ func (l *Ingest) GetReviewEntry(ctx context.Context, uc *UserCtx, id string) (Re
 		IdentifyDeclined: payload.IdentifyDeclined,
 		MediumFixed:      anyLanded(payload.Tracks),
 	}
+	if e.Status == reviewPending && !e.Identifying {
+		detail.AcceptBestWithheld = payload.AcceptBestWithheld
+	}
 	if o := payload.Override; o != nil {
 		detail.Override = &ReviewOverrideDTO{
 			Artist: o.Artist, Album: o.Album, Title: o.Title,
@@ -282,8 +290,12 @@ func errEntryBusy() error {
 // DecideReviewEntry applies one decision to a pending entry. Once it
 // starts it finishes, whether or not the client is still there for the
 // answer: stopping between moving the files and recording them would
-// leave them landed under an entry that says they never did.
-func (l *Ingest) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action, candidateMBID, mediaType string) (ReviewEntryDTO, []string, error) {
+// leave them landed under an entry that says they never did. With
+// useSuggested, an as-is or unofficial import as music writes the artist
+// and title the entry suggests onto its tracks once they land, as a
+// metadata edit does; the files keep the place their delivered tags gave
+// them until organized.
+func (l *Ingest) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action, candidateMBID, mediaType string, useSuggested bool) (ReviewEntryDTO, []string, error) {
 	release, ok := l.claimEntry(id)
 	if !ok {
 		return ReviewEntryDTO{}, nil, errEntryBusy()
@@ -302,6 +314,17 @@ func (l *Ingest) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action,
 	if err := json.Unmarshal([]byte(e.Payload), &payload); err != nil {
 		return ReviewEntryDTO{}, nil, &Error{Kind: KindInternal, Err: err}
 	}
+	// A person deciding takes the entry from an auto-apply waiting for
+	// the catalog, whether their decision stands or fails.
+	if err := l.writeDroppedWait(ctx, &e, &payload); err != nil {
+		return ReviewEntryDTO{}, nil, &Error{Kind: KindInternal, Err: err}
+	}
+
+	// Ahead of the medium's own refusals, as nothing has landed yet.
+	if useSuggested && (action == "as-is" || action == "unofficial") &&
+		cmp.Or(mediaType, e.MediaType) == "music" && payload.Suggested == nil {
+		return ReviewEntryDTO{}, nil, errInvalid("the entry offers no suggested artist and title")
+	}
 
 	// Skips and discards touch no files; every other decision can write
 	// into the entry's target library.
@@ -314,6 +337,14 @@ func (l *Ingest) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action,
 			bareLib = string(pid)
 		}
 		if err := l.Settings.CheckWritable(ctx, bareLib); err != nil {
+			return ReviewEntryDTO{}, nil, err
+		}
+	}
+
+	// Deciding otherwise takes back first what a failed apply wrote, on
+	// the files it landed too before a discard leaves them standing.
+	if action == "as-is" || action == "unofficial" || action == "skip" || (action == "discard" && e.Kind == reviewKindImport) {
+		if err := l.undoFailedApply(ctx, &e); err != nil {
 			return ReviewEntryDTO{}, nil, err
 		}
 	}
@@ -340,15 +371,14 @@ func (l *Ingest) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action,
 			}
 			e.Payload = marshalJSON(payload)
 		}
+		if useSuggested {
+			warnings = append(warnings, l.writeSuggested(ctx, &e, &payload, uc)...)
+		}
+		w, failed := l.defaultSingleAlbum(ctx, &e, &payload, uc)
+		warnings = append(append(warnings, w...), failed...)
 		if action == "unofficial" {
 			// The mark reaches the files as an approval's values do.
-			var marked []model.PID
-			for _, doc := range payload.Tracks {
-				if doc.PID != "" && !doc.heldBefore() {
-					marked = append(marked, model.PID(doc.PID))
-				}
-			}
-			writeBack := l.unitWritable(ctx, marked)
+			writeBack := l.unitWritable(ctx, ownLanded(&payload))
 			for _, doc := range payload.Tracks {
 				// A joined file's item was the library's before this
 				// entry, and is not this decision's to mark; it says so,
@@ -408,6 +438,132 @@ func (l *Ingest) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action,
 	}
 	l.notifyReview(ctx, e.ID, e.UploadedBy)
 	return reviewDTO(e), warnings, nil
+}
+
+// singleAlbumSuffix closes the album an unmatched download is given,
+// "<Title> - Single", which the matcher reads as no album.
+const singleAlbumSuffix = " - Single"
+
+// acquiredMusic reports an acquisition imported as music, the entry the
+// suggestion and the album default write to.
+func acquiredMusic(e *wdb.ReviewEntry) bool {
+	return e.Origin == reviewOriginAcquire && e.MediaType == "music"
+}
+
+// ownLanded is the items the entry's files landed as, leaving out those
+// the library held before it.
+func ownLanded(payload *reviewPayload) []model.PID {
+	var out []model.PID
+	for _, doc := range payload.Tracks {
+		if doc.PID != "" && !doc.heldBefore() {
+			out = append(out, model.PID(doc.PID))
+		}
+	}
+	return out
+}
+
+// writeSuggested writes the artist and title an acquired music entry
+// suggests, those it holds, onto its own tracks as a metadata edit by
+// the decider would: locked, never forced. A title already reading the
+// value is left alone, and so is an artist the track already credits,
+// so a suggestion corrects a channel's credit and never thins a real
+// one. A lock set since keeps its value, named in the warnings. One edit
+// per field, since a lock refuses the whole edit it is named in.
+func (l *Ingest) writeSuggested(ctx context.Context, e *wdb.ReviewEntry, payload *reviewPayload, decider *UserCtx) []string {
+	s := payload.Suggested
+	if s == nil || !acquiredMusic(e) {
+		return nil
+	}
+	var out []string
+	write := func(field, value string, holds func(*model.ItemView) bool) {
+		if value == "" {
+			return
+		}
+		warnings, failed := l.editOwnTracks(ctx, payload, decider, waxbin.EditOptions{Lock: model.LockOn},
+			func(it *model.ItemView) map[string]string {
+				if holds(it) {
+					return nil
+				}
+				return map[string]string{field: value}
+			})
+		for _, w := range append(warnings, failed...) {
+			if !slices.Contains(out, w) {
+				out = append(out, w)
+			}
+		}
+	}
+	write("artist", s.Artist, func(it *model.ItemView) bool { return l.creditsArtist(ctx, it, s.Artist) })
+	write("title", s.Title, func(it *model.ItemView) bool { return it.Title == s.Title })
+	return out
+}
+
+// creditsArtist reports whether an item already credits name, compared
+// folded: its artist as a whole, each name of a joined "A, B", or one of
+// its artist credits.
+func (l *Ingest) creditsArtist(ctx context.Context, it *model.ItemView, name string) bool {
+	want := identity.MatchKey(name)
+	if want == "" {
+		return false
+	}
+	names := append(strings.Split(it.Artist, ","), it.Artist)
+	if credits, err := l.lib.Credits(ctx, it.PID); err == nil {
+		for _, c := range credits {
+			if c.Role == model.RoleArtist {
+				names = append(names, c.Name)
+			}
+		}
+	}
+	return slices.ContainsFunc(names, func(n string) bool { return identity.MatchKey(n) == want })
+}
+
+// defaultSingleAlbum gives each of an acquired music entry's own tracks
+// that has a title and no album the album "<Title> - Single" by its
+// artist, unlocked and attributed to normalization, so a match, an
+// enrichment or an edit replaces it. It answers the files the write
+// could not reach apart from the items the edit refused.
+func (l *Ingest) defaultSingleAlbum(ctx context.Context, e *wdb.ReviewEntry, payload *reviewPayload, decider *UserCtx) (warnings, failed []string) {
+	if !acquiredMusic(e) {
+		return nil, nil
+	}
+	return l.editOwnTracks(ctx, payload, decider, waxbin.EditOptions{Lock: model.LockOff, Source: model.SourceNormalize},
+		func(it *model.ItemView) map[string]string {
+			if it.Album != "" || it.Title == "" {
+				return nil
+			}
+			fields := map[string]string{"album": it.Title + singleAlbumSuffix}
+			if it.Artist != "" {
+				fields["album_artist"] = it.Artist
+			}
+			return fields
+		})
+}
+
+// editOwnTracks edits each of the entry's own items as fields says, in
+// the files too where the library allows. It answers the files the write
+// could not reach, as reader may read of them, and apart, each item the
+// edit refused, by its file's name; the decision stands either way.
+func (l *Ingest) editOwnTracks(ctx context.Context, payload *reviewPayload, reader *UserCtx, opts waxbin.EditOptions, fields func(*model.ItemView) map[string]string) (warnings, failed []string) {
+	opts.WriteBack = l.unitWritable(ctx, ownLanded(payload))
+	for _, doc := range payload.Tracks {
+		if doc.PID == "" || doc.heldBefore() {
+			continue
+		}
+		it, err := l.lib.Get(ctx, model.PID(doc.PID))
+		if err != nil {
+			failed = append(failed, filepath.Base(doc.Path)+": "+classify(err).Error())
+			continue
+		}
+		f := fields(it)
+		if len(f) == 0 {
+			continue
+		}
+		w, err := l.tagWriteBackWarnings(ctx, reader, l.lib.EditFields(ctx, it.PID, f, opts))
+		if err != nil {
+			failed = append(failed, filepath.Base(doc.Path)+": "+err.Error())
+		}
+		warnings = append(warnings, w...)
+	}
+	return warnings, failed
 }
 
 // chooseMedium checks the medium a decision imports the entry as, its
@@ -610,6 +766,11 @@ func (l *Ingest) ReidentifyEntry(ctx context.Context, uc *UserCtx, id string, o 
 	if err := json.Unmarshal([]byte(e.Payload), &payload); err != nil {
 		return ReviewEntryDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
+	// Nor does an apply waiting for the catalog outlive the new search,
+	// even one failing below.
+	if err := l.writeDroppedWait(ctx, &e, &payload); err != nil {
+		return ReviewEntryDTO{}, &Error{Kind: KindInternal, Err: err}
+	}
 	if override.empty() {
 		payload.Override = nil
 	} else {
@@ -619,6 +780,9 @@ func (l *Ingest) ReidentifyEntry(ctx context.Context, uc *UserCtx, id string, o 
 	// submission originally said - so the declined mark goes with it,
 	// and the empty state stops claiming nothing was searched.
 	payload.IdentifyDeclined = false
+	payload.AcceptBestWithheld = ""
+	// A declined import waiting for the catalog is moot with it.
+	payload.WaitingForCatalog = false
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return ReviewEntryDTO{}, &Error{Kind: KindInternal, Err: err}
@@ -634,6 +798,7 @@ func (l *Ingest) ReidentifyEntry(ctx context.Context, uc *UserCtx, id string, o 
 	if err := l.db.UpdateReviewEntry(ctx, e); err != nil {
 		return ReviewEntryDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
+	l.waitingForCatalog.Delete(e.ID)
 	l.matchWakeup()
 	return reviewDTO(e), nil
 }
@@ -652,9 +817,11 @@ type BulkOutcome struct {
 // decision that stood with its warnings, and a refusal with none, since
 // what landed before it is no part of a decision.
 func (l *Ingest) DecideReviewBulk(ctx context.Context, uc *UserCtx, entryIDs []string, action string) []BulkOutcome {
+	// One bound on the approvals' cover fetches for the whole call.
+	ctx = withCoverBudget(ctx, bulkCoverBudget)
 	out := make([]BulkOutcome, 0, len(entryIDs))
 	for _, id := range entryIDs {
-		_, warnings, err := l.DecideReviewEntry(ctx, uc, id, action, "", "")
+		_, warnings, err := l.DecideReviewEntry(ctx, uc, id, action, "", "", false)
 		o := BulkOutcome{EntryID: id, OK: err == nil}
 		if err == nil {
 			o.Warnings = warnings

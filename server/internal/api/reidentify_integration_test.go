@@ -52,11 +52,11 @@ func (r *recordingSource) SearchReleases(_ context.Context, artist, album string
 	return r.answer, nil
 }
 
-func (r *recordingSource) SearchRecordings(_ context.Context, artist, title string) ([]*match.Release, error) {
+func (r *recordingSource) SearchRecordings(_ context.Context, artist, title, _, _ string) (match.RecordingSearch, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.recordings = append(r.recordings, struct{ artist, title string }{artist, title})
-	return r.answer, nil
+	return match.RecordingSearch{Releases: r.answer}, nil
 }
 
 func (r *recordingSource) recorded() (
@@ -161,6 +161,39 @@ func TestReidentifySearchesTheTypedValues(t *testing.T) {
 		deref(detail.IdentifyOverride.Album) != "Stillmatic" ||
 		deref(detail.IdentifyOverride.Title) != "How Ya Livin'" {
 		t.Fatalf("reported override = %+v", detail.IdentifyOverride)
+	}
+}
+
+// A typed title searches cleaned as a derived one is, so one pre-filled from
+// the suggestion with a cut mark, or typed with an upload note, still finds
+// the song; the override reports exactly what was typed.
+func TestReidentifySearchesATypedTitleCleaned(t *testing.T) {
+	t.Parallel()
+	src := &recordingSource{}
+	h := reidentifyHarness(t, src)
+	up := uploadDeclaring(t, h, h.token, looseTrack(t, "typed-note"), nil)
+	drainMatches(t, h)
+	entryID := *up.ReviewEntryId
+	src.reset()
+
+	const typed = "How Ya Livin' (Official Video) (Clean)"
+	resp := postJSONAs(t, h, h.token, "/api/v1/review/queue/"+entryID+"/identify",
+		map[string]any{"artist": "Nas", "title": typed})
+	if resp.StatusCode != 200 {
+		t.Fatalf("re-identify status = %d", resp.StatusCode)
+	}
+	drainMatches(t, h)
+	recordings, _ := src.recorded()
+	if len(recordings) == 0 {
+		t.Fatal("no recording search ran")
+	}
+	for _, r := range recordings {
+		if r.artist != "Nas" || r.title != "How Ya Livin'" {
+			t.Fatalf("recording search = %+v, want the typed title cleaned", r)
+		}
+	}
+	if o := getReview(t, h, entryID).IdentifyOverride; o == nil || deref(o.Title) != typed {
+		t.Fatalf("reported override = %+v, want the title as typed", o)
 	}
 }
 
@@ -401,9 +434,91 @@ func TestAcquisitionSuggestsTheParsedQuery(t *testing.T) {
 		t.Fatalf("a loose track has no album to suggest; got %q", *detail.Suggested.Album)
 	}
 	// A suggestion, not a claim: the entry's own track still reports the
-	// title the file carries.
-	if got := detail.Tracks[0].Title; got != "Nas - How Ya Livin' (Official Video)" {
+	// title the file carries, which the download's pass cleaned of its
+	// upload note but never split.
+	if got := detail.Tracks[0].Title; got != "Nas - How Ya Livin'" {
 		t.Fatalf("stored track title = %q, want the file's own", got)
+	}
+}
+
+// The suggestion keeps what names the recording ("(Live at the BBC)"),
+// and the search fields are pre-filled from it: searched as typed, that
+// phrase finds nothing, since MusicBrainz titles a live take by the song.
+// The search asks for the song; the override keeps what was typed.
+func TestReidentifyFromALiveSuggestionSearchesTheSong(t *testing.T) {
+	t.Parallel()
+	media := t.TempDir()
+	src := &fakeAcquireSource{
+		playlistURL: "https://tube.example/watch?v=live",
+		files:       map[string]string{},
+	}
+	paths, err := fixtures.Generate(media,
+		fixtures.Spec{Name: "live", Codec: fixtures.CodecMP3, Duration: 3 * time.Second,
+			Tags: map[string]string{
+				"TITLE":  "Nas - How Ya Livin' (Live at the BBC)",
+				"ARTIST": "Blue Room Records - Topic",
+			}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src.entries = []struct{ title, url string }{
+		{"Nas - How Ya Livin' (Live at the BBC)", "https://tube.example/watch?v=live"},
+	}
+	src.files["https://tube.example/watch?v=live"] = paths[0]
+
+	searches := &recordingSource{}
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.MatchSource = searches
+		cfg.SourceProviders = append(cfg.SourceProviders, src)
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+		cfg.AllowPrivateFeedHosts = true
+	})
+	resp := postJSONAs(t, h, h.token, "/api/v1/acquisitions", map[string]any{
+		"url": src.playlistURL, "mediaType": "music",
+	})
+	if resp.StatusCode != 202 {
+		t.Fatalf("acquisition status = %d", resp.StatusCode)
+	}
+	task := decode[ToolTask](t, resp)
+	drainTools(t, h)
+	drainMatches(t, h)
+	got := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+task.Id, h.token))
+	if got.ResultPids == nil || len(*got.ResultPids) != 1 {
+		t.Fatalf("acquire task = %+v", got)
+	}
+	entryID := (*got.ResultPids)[0]
+	suggested := getReview(t, h, entryID).Suggested
+	if suggested == nil || deref(suggested.Artist) != "Nas" || deref(suggested.Title) != "How Ya Livin' (Live at the BBC)" {
+		t.Fatalf("suggested = %+v, want the live group kept", suggested)
+	}
+	wantSong := func(when string) {
+		t.Helper()
+		recordings, _ := searches.recorded()
+		if len(recordings) == 0 {
+			t.Fatalf("%s: no recording search ran", when)
+		}
+		for _, r := range recordings {
+			if r.artist != "Nas" || r.title != "How Ya Livin'" {
+				t.Fatalf("%s: recording search = %+v, want the song alone", when, r)
+			}
+		}
+	}
+	wantSong("derived")
+
+	searches.reset()
+	resp = postJSONAs(t, h, h.token, "/api/v1/review/queue/"+entryID+"/identify",
+		map[string]any{"artist": *suggested.Artist, "title": *suggested.Title})
+	if resp.StatusCode != 200 {
+		t.Fatalf("re-identify status = %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+	drainMatches(t, h)
+	wantSong("seeded from the suggestion")
+	if o := getReview(t, h, entryID).IdentifyOverride; o == nil || deref(o.Title) != *suggested.Title {
+		t.Fatalf("reported override = %+v, want the title as typed", o)
 	}
 }
 
@@ -419,9 +534,10 @@ func TestUploadsCarryNoSuggestion(t *testing.T) {
 	}
 }
 
-// Searched as typed: every part of the derivation that helps a
-// machine-written title hurts a hand-written one.
-func TestReidentifySearchesTypedValuesVerbatim(t *testing.T) {
+// A typed title is never split into an artist, which helps a
+// machine-written title and hurts a hand-written one: it is searched
+// whole, less its upload note.
+func TestReidentifyNeverSplitsATypedTitle(t *testing.T) {
 	t.Parallel()
 	src := &recordingSource{}
 	h := reidentifyHarness(t, src)
@@ -447,9 +563,12 @@ func TestReidentifySearchesTypedValuesVerbatim(t *testing.T) {
 		t.Fatal("the override ran no recording search")
 	}
 	for _, r := range recordings {
-		if r.artist != "Benny Goodman" || r.title != "Sing - Sing - Sing (Official Video)" {
-			t.Fatalf("recording search = %+v, want the typed values untouched", r)
+		if r.artist != "Benny Goodman" || r.title != "Sing - Sing - Sing" {
+			t.Fatalf("recording search = %+v, want the typed values unsplit, the note dropped", r)
 		}
+	}
+	if o := getReview(t, h, entryID).IdentifyOverride; o == nil || deref(o.Title) != "Sing - Sing - Sing (Official Video)" {
+		t.Fatalf("reported override = %+v, want the title as typed", o)
 	}
 }
 
@@ -462,12 +581,12 @@ type blockingSource struct {
 	once    sync.Once
 }
 
-func (b *blockingSource) SearchRecordings(ctx context.Context, artist, title string) ([]*match.Release, error) {
+func (b *blockingSource) SearchRecordings(ctx context.Context, artist, title, named, album string) (match.RecordingSearch, error) {
 	b.once.Do(func() {
 		close(b.entered)
 		<-b.release
 	})
-	return b.recordingSource.SearchRecordings(ctx, artist, title)
+	return b.recordingSource.SearchRecordings(ctx, artist, title, named, album)
 }
 
 // A re-identify landing while the engine works must not be swallowed:

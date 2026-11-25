@@ -19,6 +19,7 @@ import (
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxdeck/fixtures"
+	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // decidedEntry reads an entry and its payload back.
@@ -53,11 +54,11 @@ func TestASecondDecisionOfAnEntryWaitsForTheFirst(t *testing.T) {
 	}
 	first := make(chan error, 1)
 	go func() {
-		_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+		_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 		first <- err
 	}()
 	<-planning
-	_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+	_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 	close(release)
 	if KindOf(err) != KindConflict {
 		t.Errorf("a second decision while the first runs = %v, want a conflict", err)
@@ -84,7 +85,7 @@ func TestAnEntryBeingDecidedTakesNoOtherChange(t *testing.T) {
 			t.Errorf("%s while the entry is being decided = %v, want a conflict saying so", what, err)
 		}
 	}
-	_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "skip", "", "")
+	_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "skip", "", "", false)
 	busy("a decision", err)
 	_, err = svc.Ingest.RevertReviewEntry(ctx, uc, id)
 	busy("a revert", err)
@@ -116,7 +117,7 @@ func TestADecisionOutlivesTheClientThatAskedForIt(t *testing.T) {
 		hangUp()
 		return svc.lib.ImportAcquired(ctx, f, kind, meta)
 	}
-	if _, _, err := svc.Ingest.DecideReviewEntry(request, uc, id, "as-is", "", ""); err != nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(request, uc, id, "as-is", "", "", false); err != nil {
 		t.Fatalf("decision whose client went away: %v", err)
 	}
 	status, p := decidedEntry(t, ctx, svc, id)
@@ -292,7 +293,7 @@ func TestAFileWhosePlaceAnotherItemTakesIsNotHeld(t *testing.T) {
 	if row.DuplicatePID == "" {
 		t.Fatal("the relabelled recording arrived as no duplicate")
 	}
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", "", ""); KindOf(err) != KindConflict {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", "", "", false); KindOf(err) != KindConflict {
 		t.Fatalf("decision = %v, want a conflict over the taken place", err)
 	}
 	stagedStill(t, ctx, svc, up.ID)
@@ -332,7 +333,7 @@ func TestAHolderInAnotherLibraryDoesNotHoldAFile(t *testing.T) {
 	if row.DuplicatePID == "" {
 		t.Fatal("the recording arrived as no duplicate of the other library's")
 	}
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", "", ""); KindOf(err) != KindConflict {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", "", "", false); KindOf(err) != KindConflict {
 		t.Fatalf("decision = %v, want a conflict over the taken place", err)
 	}
 	stagedStill(t, ctx, svc, up.ID)
@@ -402,7 +403,7 @@ func TestAnUploadDuplicatesNothingTheLibraryNoLongerHolds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", "", ""); err != nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", "", "", false); err != nil {
 		t.Fatal(err)
 	}
 	it, err := svc.lib.Get(ctx, model.PID(holder))
@@ -453,7 +454,7 @@ func TestARefusalForAMissingStagedFileReadsPlainly(t *testing.T) {
 	if err := os.Remove(svc.Ingest.uploadFinalPath(row)); err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+	_, _, err = svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 	if KindOf(err) != KindConflict {
 		t.Fatalf("decision = %v, want a conflict", err)
 	}
@@ -487,7 +488,7 @@ func TestARefusalForAFileTheCatalogCannotImportNamesNoStagingPath(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = svc.Ingest.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", "", "")
+	_, _, err = svc.Ingest.DecideReviewEntry(ctx, uc, row.ReviewEntryID, "as-is", "", "", false)
 	wantPlainRefusal(t, svc, err)
 }
 
@@ -587,11 +588,11 @@ func TestAnUnofficialMarkNamesTheFilesItLeftAlone(t *testing.T) {
 	uploadPathAsking(t, ctx, svc, uc, held, false, "")
 	id := pendingUnit(t, ctx, svc, uc, held, unitTrack(t, dir, "other", "Other Two", "2"))
 	failingPlan(svc, 3)
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "unofficial", "", ""); err == nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "unofficial", "", "", false); err == nil {
 		t.Fatal("the first attempt stood, want it stopped by the failing plan")
 	}
 	svc.Ingest.planHook = nil
-	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "unofficial", "", "")
+	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "unofficial", "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -605,7 +606,7 @@ func TestAnUnofficialMarkNamesTheFilesItLeftAlone(t *testing.T) {
 func TestALandedUploadsTrackIsNamedNotByItsStagingPath(t *testing.T) {
 	ctx, svc, uc := managedUploadFixture(t)
 	_, id := pendingUploadEntry(t, ctx, svc, uc)
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", ""); err != nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false); err != nil {
 		t.Fatal(err)
 	}
 	detail, err := svc.Ingest.GetReviewEntry(ctx, uc, id)
@@ -636,7 +637,7 @@ func TestALibraryTurnedReadOnlyMidDecisionIsSaidSo(t *testing.T) {
 		}
 		return res, err
 	}
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", ""); KindOf(err) != KindReadOnly {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false); KindOf(err) != KindReadOnly {
 		t.Fatalf("decision = %v (%s), want read-only", err, KindOf(err))
 	}
 	stagedStill(t, ctx, svc, up.ID)
@@ -693,7 +694,7 @@ func TestABooksLaterPartsAreItsOwnNotJoined(t *testing.T) {
 	id := pendingUnitOf(t, ctx, svc, uc, "audiobook",
 		bookPart(t, dir, "part-1", "Chapter One", "1"), bookPart(t, dir, "part-2", "Chapter Two", "2"),
 		bookPart(t, dir, "part-3", "Chapter Three", "3"))
-	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -720,7 +721,7 @@ func TestABookWithNoAlbumLandsAsOneBookNamedFromItsFolder(t *testing.T) {
 	dir := t.TempDir()
 	id := pendingUnitIn(t, ctx, svc, uc, "audiobook", "Ann Author/Unit Book",
 		chapterPart(t, dir, "chapter-1", "Chapter One"), chapterPart(t, dir, "chapter-2", "Chapter Two"))
-	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -749,7 +750,7 @@ func TestAUnitOpenedAsMusicLandsAsOneBookNamedFromItsFolder(t *testing.T) {
 	if e.Title != "Chapter One" {
 		t.Fatalf("music entry titled %q, want its first part's title", e.Title)
 	}
-	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook")
+	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -830,7 +831,7 @@ func TestATypedTitleWinsOverTheAlbumABooksPartsShare(t *testing.T) {
 	if err := svc.db.UpdateReviewEntry(ctx, e); err != nil {
 		t.Fatal(err)
 	}
-	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -865,7 +866,7 @@ func TestABookAcrossDiscFoldersIsNumberedFolderByFolder(t *testing.T) {
 				t.Fatalf("batch = %v (%v), want one entry", done.ReviewEntryIDs, err)
 			}
 			id := done.ReviewEntryIDs[0]
-			_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+			_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -911,7 +912,7 @@ func TestABookInPartFoldersIsNumberedFolderByFolder(t *testing.T) {
 		t.Fatalf("batch = %v (%v), want one entry", done.ReviewEntryIDs, err)
 	}
 	id := done.ReviewEntryIDs[0]
-	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1049,7 +1050,7 @@ func TestABookInNestedPartAndDiscFoldersIsNumberedInOrder(t *testing.T) {
 		t.Run(grouping, func(t *testing.T) {
 			ctx, svc, uc := managedUploadFixture(t)
 			id := batchUnit(t, ctx, svc, uc, grouping, "audiobook", files)
-			_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+			_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1073,7 +1074,7 @@ func TestMusicDecidedAsABookKeepsItsFolderOrder(t *testing.T) {
 	if got := unitOrder(t, ctx, svc, id); got != strings.Join(order, ",") {
 		t.Errorf("music order = %s, want %s", got, strings.Join(order, ","))
 	}
-	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook")
+	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "audiobook", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1089,13 +1090,13 @@ func TestABookRefusedBeforeAnythingLandsKeepsItsUploadedTags(t *testing.T) {
 	id := pendingUnitIn(t, ctx, svc, uc, "audiobook", "Ann Author/Unit Book",
 		chapterPart(t, dir, "refused-1", "Chapter One"), chapterPart(t, dir, "refused-2", "Chapter Two"))
 	failingPlan(svc, 1)
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", ""); err == nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false); err == nil {
 		t.Fatal("the decision stood, want it stopped by the failing plan")
 	}
 	wantUploadedTags(t, ctx, svc, id)
 
 	svc.Ingest.planHook = nil
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "music"); err != nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "music", false); err != nil {
 		t.Fatal(err)
 	}
 	_, p := decidedEntry(t, ctx, svc, id)
@@ -1118,14 +1119,14 @@ func TestAStampedBookRetriedAfterItsFirstPartFinishesOneBook(t *testing.T) {
 	id := pendingUnitIn(t, ctx, svc, uc, "audiobook", "Ann Author/Unit Book",
 		chapterPart(t, dir, "retried-1", "Chapter One"), chapterPart(t, dir, "retried-2", "Chapter Two"))
 	failingPlan(svc, 3)
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", ""); err == nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false); err == nil {
 		t.Fatal("the first attempt stood, want it stopped by the failing plan")
 	}
 	if _, p := decidedEntry(t, ctx, svc, id); p.Tracks[0].PID == "" || p.Tracks[1].PID != "" {
 		t.Fatalf("after the first attempt: pids %q / %q, want the first part landed alone", p.Tracks[0].PID, p.Tracks[1].PID)
 	}
 	svc.Ingest.planHook = nil
-	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1149,7 +1150,7 @@ func TestAPartThatCannotBeStampedRefusesTheBook(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
-	_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+	_, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 	if KindOf(err) != KindConflict || !strings.Contains(err.Error(), filepath.Base(p.Tracks[1].Path)) {
 		t.Fatalf("decision = %v, want a conflict naming %s", err, filepath.Base(p.Tracks[1].Path))
 	}
@@ -1160,7 +1161,7 @@ func TestAPartThatCannotBeStampedRefusesTheBook(t *testing.T) {
 	if err := os.Chmod(locked, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1241,7 +1242,7 @@ func TestTwoBooksNothingNamesStayTwoBooks(t *testing.T) {
 	}
 	books := map[model.PID]string{}
 	for _, id := range ids {
-		_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+		_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1275,7 +1276,7 @@ func TestABookFromAGenericFolderIsTitledByItsFileNames(t *testing.T) {
 	id := pendingUnitIn(t, ctx, svc, uc, "audiobook", "Downloads/MP3",
 		chapterPart(t, dir, "The Quiet Year - Part 01", "Chapter One"),
 		chapterPart(t, dir, "The Quiet Year - Part 02", "Chapter Two"))
-	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1353,7 +1354,7 @@ func TestABooksPartsCreditingANarratorAreOneBook(t *testing.T) {
 			if len(ids) != 1 {
 				t.Fatalf("the batch opened %d entries, want one", len(ids))
 			}
-			_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, ids[0], "as-is", "", "")
+			_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, ids[0], "as-is", "", "", false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1414,7 +1415,7 @@ func TestOneAlbumByTwoAuthorsIsTwoBooks(t *testing.T) {
 	}
 	books := map[model.PID]bool{}
 	for _, id := range ids {
-		_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+		_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1460,7 +1461,7 @@ func TestARetriedBookDecisionFinishesTheBookItStarted(t *testing.T) {
 	// Both parts planned up front, the first landing on its plan, then
 	// the second's own plan fails.
 	failingPlan(svc, 3)
-	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", ""); err == nil {
+	if _, _, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false); err == nil {
 		t.Fatal("the first attempt stood, want it stopped by the failing plan")
 	}
 	_, p := decidedEntry(t, ctx, svc, id)
@@ -1472,7 +1473,7 @@ func TestARetriedBookDecisionFinishesTheBookItStarted(t *testing.T) {
 		plans.Add(1)
 		return svc.lib.ImportAcquired(ctx, f, kind, meta)
 	}
-	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "")
+	_, warnings, err := svc.Ingest.DecideReviewEntry(ctx, uc, id, "as-is", "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1519,5 +1520,44 @@ func TestACompletionThatCouldNotCheckKeepsTheOpeningWarning(t *testing.T) {
 	}
 	if done.Duplicate == nil || done.Duplicate.Kind != "content" || done.State != uploadStaged {
 		t.Fatalf("after a check that could not run = %s with duplicate %+v, want the content warning kept and the copy waiting", done.State, done.Duplicate)
+	}
+}
+
+// With no library named and several that could hold an entry, the
+// strictest mode among them governs, and singles apply themselves only
+// where every one lets them.
+func TestAnUntargetedEntryFollowsTheStrictestOfItsLibraries(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := managedUploadFixtureWith(t, nil, Root{Name: "second", Path: t.TempDir(), Managed: true})
+	libs, err := svc.lib.Libraries(ctx)
+	if err != nil || len(libs) != 2 {
+		t.Fatalf("libraries = %d (%v), want 2", len(libs), err)
+	}
+	entry := &wdb.ReviewEntry{MediaType: "music"}
+	for _, tc := range []struct {
+		modes   [2]string
+		singles [2]bool
+		mode    string
+		single  bool
+	}{
+		{[2]string{matchingReview, matchingReview}, [2]bool{true, true}, matchingReview, true},
+		{[2]string{matchingReview, matchingAuto}, [2]bool{true, false}, matchingReview, false},
+		{[2]string{matchingOff, matchingReview}, [2]bool{false, true}, matchingReview, false},
+		{[2]string{matchingAuto, matchingOff}, [2]bool{true, true}, matchingAuto, true},
+		{[2]string{matchingAuto, matchingAuto}, [2]bool{false, false}, matchingAuto, false},
+		{[2]string{matchingOff, matchingOff}, [2]bool{true, true}, matchingOff, true},
+	} {
+		for i, lib := range libs {
+			pid := apiPID(PrefixLibrary, lib.PID)
+			if err := svc.Ingest.SetLibraryMatching(ctx, uc, pid, LibraryMatching{Mode: tc.modes[i], SinglesAutoApply: tc.singles[i]}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got := svc.Ingest.matchingModeFor(ctx, entry); got != tc.mode {
+			t.Errorf("modes %v: mode = %q, want %q", tc.modes, got, tc.mode)
+		}
+		if got := svc.Ingest.singlesAutoApplyFor(ctx, entry); got != tc.single {
+			t.Errorf("singles %v: singles apply themselves = %v, want %v", tc.singles, got, tc.single)
+		}
 	}
 }

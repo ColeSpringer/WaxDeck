@@ -40,7 +40,10 @@ type Upload struct {
 	ItemPID string
 	// Identify carries the submission's identification choice from
 	// session creation to the review entry this session opens.
-	Identify    bool
+	Identify bool
+	// AcceptBest carries whether that entry takes its best match without
+	// review, the same way.
+	AcceptBest  bool
 	CreatedAtNS int64
 	ExpiresAtNS int64
 }
@@ -48,15 +51,15 @@ type Upload struct {
 const uploadCols = `id, user_id, file_name, size_bytes, received_bytes, received_at_ns,
 	media_type, library_pid, batch_id, batch_path, sha256, state, staging_path,
 	review_entry_id, track_doc, duplicate_pid, duplicate_kind, item_pid, identify,
-	created_at_ns, expires_at_ns`
+	accept_best, created_at_ns, expires_at_ns`
 
 func scanUpload(row interface{ Scan(...any) error }) (Upload, error) {
 	var u Upload
 	err := row.Scan(&u.ID, &u.UserID, &u.FileName, &u.SizeBytes, &u.ReceivedBytes,
 		&u.ReceivedAtNS, &u.MediaType, &u.LibraryPID, &u.BatchID, &u.BatchPath,
 		&u.SHA256, &u.State, &u.StagingPath, &u.ReviewEntryID, &u.TrackDoc,
-		&u.DuplicatePID, &u.DuplicateKind, &u.ItemPID, &u.Identify, &u.CreatedAtNS,
-		&u.ExpiresAtNS)
+		&u.DuplicatePID, &u.DuplicateKind, &u.ItemPID, &u.Identify, &u.AcceptBest,
+		&u.CreatedAtNS, &u.ExpiresAtNS)
 	return u, err
 }
 
@@ -64,11 +67,11 @@ func scanUpload(row interface{ Scan(...any) error }) (Upload, error) {
 func (d *DB) InsertUpload(ctx context.Context, u Upload) error {
 	_, err := d.w.ExecContext(ctx, `
 		INSERT INTO uploads (`+uploadCols+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.ID, u.UserID, u.FileName, u.SizeBytes, u.ReceivedBytes, u.ReceivedAtNS,
 		u.MediaType, u.LibraryPID, u.BatchID, u.BatchPath, u.SHA256, u.State,
 		u.StagingPath, u.ReviewEntryID, u.TrackDoc, u.DuplicatePID, u.DuplicateKind,
-		u.ItemPID, u.Identify, u.CreatedAtNS, u.ExpiresAtNS)
+		u.ItemPID, u.Identify, u.AcceptBest, u.CreatedAtNS, u.ExpiresAtNS)
 	if err != nil {
 		return fmt.Errorf("db: inserting upload: %w", err)
 	}
@@ -286,6 +289,27 @@ func (d *DB) UploadOwnsItem(ctx context.Context, userID, itemPID string) (bool, 
 		return false, fmt.Errorf("db: checking upload ownership: %w", err)
 	}
 	return true, nil
+}
+
+// ReviewEntryIDsForItem lists the review entries of the upload sessions
+// that produced a catalog item.
+func (d *DB) ReviewEntryIDsForItem(ctx context.Context, itemPID string) ([]string, error) {
+	rows, err := d.r.QueryContext(ctx, `
+		SELECT DISTINCT review_entry_id FROM uploads
+		WHERE item_pid = ? AND review_entry_id != ''`, itemPID)
+	if err != nil {
+		return nil, fmt.Errorf("db: listing an item's review entries: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("db: listing an item's review entries: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 // UploadedItemPIDs reports which of the given catalog items an upload

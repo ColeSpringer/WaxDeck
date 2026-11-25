@@ -11,6 +11,7 @@
     "matchingMenu": "matching-menu",
     "matchingOption": "matching-{libraryPid}-{mode}",
     "matchingSingles": "matching-singles-{libraryPid}",
+    "reviewAcceptBestWithheld": "review-accept-best-withheld",
     "reviewAddCopy": "review-add-copy",
     "reviewApprove": "review-approve",
     "reviewAsIs": "review-as-is",
@@ -37,6 +38,7 @@
     "reviewSkip": "review-skip",
     "reviewSplitter": "review-splitter",
     "reviewUnofficial": "review-unofficial",
+    "reviewUseSuggested": "review-use-suggested",
     "trackMenu": "track-menu-{pid}"
   }
 }

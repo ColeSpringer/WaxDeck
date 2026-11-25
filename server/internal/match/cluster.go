@@ -19,9 +19,10 @@ import (
 // multi disc rip stays one unit. Output is deterministic: tracks sort as
 // CompareTracks says, and units sort by key.
 func Cluster(tracks []Track) []Unit {
+	shared := sharedAlbums(tracks)
 	keys := make([]string, len(tracks))
 	for i, t := range tracks {
-		keys[i] = clusterKey(t)
+		keys[i] = clusterKey(t, shared)
 	}
 
 	// Merge pass: same album title in the same folded directory means
@@ -51,7 +52,7 @@ func Cluster(tracks []Track) []Unit {
 	}
 	byAlbumDir := make(map[string]string)
 	for i, t := range tracks {
-		album := normalize(t.Tags["ALBUM"])
+		album := albumOf(t, shared)
 		if album == "" {
 			continue
 		}
@@ -268,13 +269,59 @@ func leadingRun(s string) (string, bool) {
 
 func isDigit(c byte) bool { return '0' <= c && c <= '9' }
 
+// albumOf is the track's normalized album, or "" when the album is only the
+// placeholder "<title> - Single" a store convention (and our own import) writes
+// for a lone track: it names no release, so it must neither key a unit nor
+// stand in for a search term. An album in shared (sharedAlbums) is a release
+// whatever this track is titled.
+func albumOf(t Track, shared map[string]bool) string {
+	album := normalize(t.Tags["ALBUM"])
+	if ownSingle(t, album) && !shared[album] {
+		return ""
+	}
+	return album
+}
+
+// ownSingle reports whether the normalized album is "<t's title> - Single".
+func ownSingle(t Track, album string) bool {
+	title := normalize(t.Tags["TITLE"])
+	return album != "" && title != "" && album == title+" single"
+}
+
+// sharedAlbums is the normalized albums some track of the input carries
+// under a title of its own: a store single of several tracks ("Song -
+// Single" holding "Song" and "Song (Acoustic)") is a release, where the same
+// album on the track it is named for alone is the placeholder.
+func sharedAlbums(tracks []Track) map[string]bool {
+	shared := make(map[string]bool)
+	for _, t := range tracks {
+		if album := normalize(t.Tags["ALBUM"]); album != "" && !ownSingle(t, album) {
+			shared[album] = true
+		}
+	}
+	return shared
+}
+
+// unitAlbum is the most common raw ALBUM value across the unit's tracks whose
+// albumOf is not empty, ties broken lexically. A value that normalizes to
+// nothing ("???") is skipped with the placeholder: it is no search key.
+func unitAlbum(u Unit) string {
+	shared := sharedAlbums(u.Tracks)
+	return majorityValue(u, func(t Track) string {
+		if albumOf(t, shared) == "" {
+			return ""
+		}
+		return t.Tags["ALBUM"]
+	})
+}
+
 // clusterKey derives the first pass grouping key for one track.
-func clusterKey(t Track) string {
+func clusterKey(t Track, shared map[string]bool) string {
 	artist := t.Tags["ALBUMARTIST"]
 	if artist == "" {
 		artist = t.Tags["ARTIST"]
 	}
-	na, nb := normalize(artist), normalize(t.Tags["ALBUM"])
+	na, nb := normalize(artist), albumOf(t, shared)
 	if nb != "" {
 		return "tags\x00" + na + "\x00" + nb
 	}

@@ -839,6 +839,7 @@ class WaxDeckClient extends _WaxDeckCalls
     String? batchId,
     String? batchPath,
     bool? identify,
+    bool? acceptBestMatch,
   }) => _guard(() async {
     final response = await _createUpload(
       body: UploadCreate(
@@ -850,6 +851,7 @@ class WaxDeckClient extends _WaxDeckCalls
         batchId: batchId,
         batchPath: batchPath,
         identify: identify,
+        acceptBestMatch: acceptBestMatch,
       ),
     );
     return _decode(
@@ -865,6 +867,7 @@ class WaxDeckClient extends _WaxDeckCalls
     required String mediaType,
     String? libraryPid,
     bool? identify,
+    bool? acceptBestMatch,
   }) => _guard(() async {
     final response = await _createUploadBatch(
       body: UploadBatchCreate(
@@ -872,6 +875,7 @@ class WaxDeckClient extends _WaxDeckCalls
         mediaType: _uploadMediaType(mediaType),
         libraryPid: libraryPid,
         identify: identify,
+        acceptBestMatch: acceptBestMatch,
       ),
     );
     return _decode(
@@ -983,6 +987,7 @@ class WaxDeckClient extends _WaxDeckCalls
     String? libraryPid,
     String? format,
     bool? identify,
+    bool? acceptBestMatch,
   }) => _guard(() async {
     final response = await _createAcquisition(
       body: AcquisitionRequest(
@@ -990,6 +995,7 @@ class WaxDeckClient extends _WaxDeckCalls
         mediaType: _uploadMediaType(mediaType.wireName),
         libraryPid: libraryPid,
         identify: identify,
+        acceptBestMatch: acceptBestMatch,
         // "best" is the server default, so it rides as an absent field.
         format: switch (format) {
           null || '' || 'best' => null,

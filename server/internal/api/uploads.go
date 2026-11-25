@@ -138,6 +138,7 @@ func (s *Server) CreateUpload(ctx context.Context, req CreateUploadRequestObject
 		BatchID:    deref(req.Body.BatchId),
 		BatchPath:  deref(req.Body.BatchPath),
 		Identify:   req.Body.Identify,
+		AcceptBest: req.Body.AcceptBestMatch,
 	})
 	if err != nil {
 		if k := service.KindOf(err); k == service.KindInvalid || k == service.KindNotFound {
@@ -237,6 +238,7 @@ func (s *Server) CreateUploadBatch(ctx context.Context, req CreateUploadBatchReq
 		MediaType:  string(req.Body.MediaType),
 		LibraryPID: deref(req.Body.LibraryPid),
 		Identify:   req.Body.Identify,
+		AcceptBest: req.Body.AcceptBestMatch,
 	})
 	if err != nil {
 		if k := service.KindOf(err); k == service.KindInvalid || k == service.KindNotFound {
@@ -271,7 +273,7 @@ func (s *Server) CreateAcquisition(ctx context.Context, req CreateAcquisitionReq
 	if req.Body.Format != nil {
 		format = string(*req.Body.Format)
 	}
-	task, err := s.svc.Ingest.StartAcquisition(ctx, uc, req.Body.Url, string(req.Body.MediaType), deref(req.Body.LibraryPid), format, req.Body.Identify)
+	task, err := s.svc.Ingest.StartAcquisition(ctx, uc, req.Body.Url, string(req.Body.MediaType), deref(req.Body.LibraryPid), format, req.Body.Identify, req.Body.AcceptBestMatch)
 	if err != nil {
 		if k := service.KindOf(err); k == service.KindInvalid || k == service.KindNotFound {
 			return nil, refuse(http.StatusBadRequest, "invalid-request", serviceMessage(err))

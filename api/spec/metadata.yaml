@@ -193,10 +193,11 @@ paths:
       description: >
         Applies one or more scalar field edits atomically to the
         catalog. `writeBack` additionally writes the new values into
-        the backing file's tags (refused by upstream design for
-        episodes, virtual tracks, and files shared by several items;
-        the edit still lands in the catalog and the response carries
-        the per-file failures). `lock` (default true) locks each
+        the backing file's tags, all but a track's recording id
+        (`mbid`), which stays in the catalog. Write-back is refused by
+        upstream design for episodes, virtual tracks, and files shared
+        by several items; the edit still lands in the catalog and the
+        response carries the per-file failures. `lock` (default true) locks each
         edited field against scans and enrichment; editing a field
         someone locked earlier requires `force` or answers
         `field-locked`. Unknown fields for the item's kind answer
@@ -390,7 +391,9 @@ paths:
         fields and reports them instead of failing the batch;
         without it a locked item fails the whole batch with
         `field-locked`. Write-back failures are reported per item and
-        never undo the catalog batch. Every edited field is locked on
+        never undo the catalog batch. A track's recording id (`mbid`)
+        is never written back; it stays in the catalog. Every edited
+        field is locked on
         every edited item, so a repeat edit of the same field needs
         `force` or `skipLocked`. Editing a release-keying field
         (`album`, `album_artist`) moves the edited tracks to a new
@@ -1067,6 +1070,14 @@ paths:
         `kind`.
 
 
+        A track's recording id (`mbid`) cannot be unlocked while its
+        file carries no recording id: the catalog alone holds it, so
+        the next scan would clear it. Naming it to unlock answers
+        `invalid-request` with `params.reason` `recording-id-held`
+        and changes no lock. A file carrying another recording id
+        allows the unlock, and the next scan takes the file's.
+
+
         `kind` pins whether the item is a track or a book: an upload
         imported under a media type its file would not get on its own
         takes the pin, and while it holds a scan keeps the item's kind
@@ -1404,6 +1415,14 @@ paths:
         whole-library pass lives under `/library/enrichment`.
 
 
+        A cover lands in the catalog. One that replaces a download's
+        thumbnail (an `acquisition` cover) is written into the item's
+        file too, as a review approval's cover is, so a later re-read
+        of the file keeps it; where the file cannot be written the
+        cover stands in the catalog alone and `skipped` carries
+        `cover: not written to the file: ` and why.
+
+
         With a `proposal` in the body, nothing is fetched: the call
         commits exactly the proposal a preview returned, so what was
         approved is what lands - a fresh fetch could answer with a
@@ -1630,7 +1649,9 @@ components:
           type: boolean
           description: >
             Whether the value can write into file tags; false means
-            database-only by upstream design.
+            it stays in the catalog, by upstream design or, for a
+            track's recording id (`mbid`), because the catalog keys a
+            track by the recording id its file carries.
 
     EntityTypeFields:
       type: object
@@ -1957,9 +1978,10 @@ components:
             `user` (set through the curation surface), `enrichment`
             (supplied by a metadata provider, named in `provider`),
             `organize` (written by an organize tag write-back),
-            `normalize` (rewritten by a clean-up pass, such as the genre
-            normalizer, in the catalog alone), or `feed` (a podcast
-            feed). A string, not a closed enum. `sidecar` and
+            `normalize` (written by a clean-up pass: the genre
+            normalizer, in the catalog alone, or the `<Title> - Single`
+            album a download with none is given), or `feed` (a
+            podcast feed). A string, not a closed enum. `sidecar` and
             `feed` reach only artifact rows; a scalar field is never
             produced from a cover image or a feed.
         provider:
@@ -2146,7 +2168,12 @@ components:
         lock:
           type: boolean
           default: true
-          description: Lock the edited fields.
+          description: >
+            Lock the edited fields. A track's recording id (`mbid`)
+            that is not empty and that its file does not carry is
+            locked either way, since no file holds it for a scan to fall
+            back on; a cleared one, or the one its file carries, follows
+            this.
         force:
           type: boolean
           default: false
@@ -3071,6 +3098,8 @@ components:
           type: array
           description: >
             Artifacts not stored, each naming why (locked, already
-            present, no provider hit, provider unconfigured).
+            present, no provider hit, provider unconfigured), and a
+            cover stored in the catalog but not written into the file
+            it was meant to reach.
           items:
             type: string

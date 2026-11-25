@@ -33,16 +33,19 @@ type ReviewEntry struct {
 	BestSimilarity float64
 	AppliedMBID    string
 	Auto           bool
-	Payload        string
-	Snapshot       string
-	CreatedAtNS    int64
-	DecidedAtNS    int64
-	DecidedBy      string
+	// AcceptedBest marks an auto apply the submission asked for, which
+	// the calibration counters leave out.
+	AcceptedBest bool
+	Payload      string
+	Snapshot     string
+	CreatedAtNS  int64
+	DecidedAtNS  int64
+	DecidedBy    string
 }
 
 const reviewCols = `id, kind, status, media_type, origin, library_pid, uploaded_by,
 	title, artist, track_count, identifying, best_mbid, best_title, best_artist,
-	best_year, best_similarity, applied_mbid, auto, payload, snapshot,
+	best_year, best_similarity, applied_mbid, auto, accepted_best, payload, snapshot,
 	created_at_ns, decided_at_ns, decided_by`
 
 func scanReview(row interface{ Scan(...any) error }) (ReviewEntry, error) {
@@ -50,7 +53,7 @@ func scanReview(row interface{ Scan(...any) error }) (ReviewEntry, error) {
 	err := row.Scan(&e.ID, &e.Kind, &e.Status, &e.MediaType, &e.Origin, &e.LibraryPID,
 		&e.UploadedBy, &e.Title, &e.Artist, &e.TrackCount, &e.Identifying, &e.BestMBID,
 		&e.BestTitle, &e.BestArtist, &e.BestYear, &e.BestSimilarity, &e.AppliedMBID,
-		&e.Auto, &e.Payload, &e.Snapshot, &e.CreatedAtNS, &e.DecidedAtNS, &e.DecidedBy)
+		&e.Auto, &e.AcceptedBest, &e.Payload, &e.Snapshot, &e.CreatedAtNS, &e.DecidedAtNS, &e.DecidedBy)
 	return e, err
 }
 
@@ -58,10 +61,10 @@ func scanReview(row interface{ Scan(...any) error }) (ReviewEntry, error) {
 func (d *DB) InsertReviewEntry(ctx context.Context, e ReviewEntry) error {
 	_, err := d.w.ExecContext(ctx, `
 		INSERT INTO review_entries (`+reviewCols+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		e.ID, e.Kind, e.Status, e.MediaType, e.Origin, e.LibraryPID, e.UploadedBy,
 		e.Title, e.Artist, e.TrackCount, e.Identifying, e.BestMBID, e.BestTitle,
-		e.BestArtist, e.BestYear, e.BestSimilarity, e.AppliedMBID, e.Auto, e.Payload,
+		e.BestArtist, e.BestYear, e.BestSimilarity, e.AppliedMBID, e.Auto, e.AcceptedBest, e.Payload,
 		e.Snapshot, e.CreatedAtNS, e.DecidedAtNS, e.DecidedBy)
 	if err != nil {
 		return fmt.Errorf("db: inserting review entry: %w", err)
@@ -100,6 +103,21 @@ func (d *DB) UpdateIdentifyResult(ctx context.Context, e ReviewEntry, wasPayload
 	return n > 0, nil
 }
 
+// SetPendingSnapshot records on a pending entry the before-state an
+// apply in progress is about to replace, touching nothing else; an entry
+// decided meanwhile answers ErrNotFound.
+func (d *DB) SetPendingSnapshot(ctx context.Context, id, snapshot string) error {
+	res, err := d.w.ExecContext(ctx, `UPDATE review_entries SET snapshot = ? WHERE id = ? AND status = 'pending'`,
+		snapshot, id)
+	if err != nil {
+		return fmt.Errorf("db: recording an apply's before-state: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // UpdateReviewEntry rewrites a stored entry (same id).
 func (d *DB) UpdateReviewEntry(ctx context.Context, e ReviewEntry) error {
 	res, err := d.w.ExecContext(ctx, `
@@ -107,11 +125,11 @@ func (d *DB) UpdateReviewEntry(ctx context.Context, e ReviewEntry) error {
 			library_pid = ?, uploaded_by = ?, title = ?, artist = ?, track_count = ?,
 			identifying = ?, best_mbid = ?, best_title = ?, best_artist = ?,
 			best_year = ?, best_similarity = ?, applied_mbid = ?, auto = ?,
-			payload = ?, snapshot = ?, decided_at_ns = ?, decided_by = ?
+			accepted_best = ?, payload = ?, snapshot = ?, decided_at_ns = ?, decided_by = ?
 		WHERE id = ?`,
 		e.Kind, e.Status, e.MediaType, e.Origin, e.LibraryPID, e.UploadedBy, e.Title,
 		e.Artist, e.TrackCount, e.Identifying, e.BestMBID, e.BestTitle, e.BestArtist,
-		e.BestYear, e.BestSimilarity, e.AppliedMBID, e.Auto, e.Payload, e.Snapshot,
+		e.BestYear, e.BestSimilarity, e.AppliedMBID, e.Auto, e.AcceptedBest, e.Payload, e.Snapshot,
 		e.DecidedAtNS, e.DecidedBy, e.ID)
 	if err != nil {
 		return fmt.Errorf("db: updating review entry: %w", err)
@@ -211,12 +229,12 @@ func (d *DB) ReviewStatsNow(ctx context.Context, uploader string) (ReviewStats, 
 			COUNT(*) FILTER (WHERE status = 'pending'),
 			COUNT(*) FILTER (WHERE status = 'pending' AND identifying = 1),
 			COUNT(*) FILTER (WHERE status = 'applied'),
-			COUNT(*) FILTER (WHERE status = 'auto-applied'),
+			COUNT(*) FILTER (WHERE status = 'auto-applied' AND accepted_best = 0),
 			COUNT(*) FILTER (WHERE status = 'as-is'),
 			COUNT(*) FILTER (WHERE status = 'unofficial'),
 			COUNT(*) FILTER (WHERE status = 'skipped'),
 			COUNT(*) FILTER (WHERE status = 'reverted'),
-			COUNT(*) FILTER (WHERE status = 'reverted' AND auto = 1),
+			COUNT(*) FILTER (WHERE status = 'reverted' AND auto = 1 AND accepted_best = 0),
 			COUNT(*) FILTER (WHERE status != 'pending')
 		FROM review_entries`
 	var args []any

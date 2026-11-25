@@ -34,7 +34,20 @@ mixin FakeUsers on FakeRepositoryState implements UsersApi {
   }
 
   @override
-  Future<Prefs> getPrefs() async => prefs;
+  Future<Prefs> getPrefs() async {
+    final gate = prefsReadGate;
+    if (gate != null) await gate.future;
+    final error = prefsReadError;
+    if (error != null) throw error;
+    return prefs;
+  }
+
+  /// Thrown by [getPrefs] when set: an account preference that cannot be read.
+  WaxDeckApiException? prefsReadError;
+
+  /// Holds [getPrefs] until completed (never, for a server that takes the
+  /// socket and does not answer).
+  Completer<void>? prefsReadGate;
 
   /// Thrown by [putPrefs] when set, to exercise validation feedback
   /// (a rejected timezone, for instance).

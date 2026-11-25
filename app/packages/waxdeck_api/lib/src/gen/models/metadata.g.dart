@@ -230,8 +230,9 @@ class EditableField {
   /// The field or role name the edit APIs accept.
   final String name;
 
-  /// Whether the value can write into file tags; false means database-only by
-  /// upstream design.
+  /// Whether the value can write into file tags; false means it stays in the
+  /// catalog, by upstream design or, for a track's recording id (`mbid`),
+  /// because the catalog keys a track by the recording id its file carries.
   final bool writeBack;
 }
 
@@ -313,7 +314,8 @@ class EnrichItemResult {
   final List<String> applied;
 
   /// Artifacts not stored, each naming why (locked, already present, no
-  /// provider hit, provider unconfigured).
+  /// provider hit, provider unconfigured), and a cover stored in the catalog
+  /// but not written into the file it was meant to reach.
   final List<String> skipped;
 }
 
@@ -532,10 +534,11 @@ class FieldProvenance {
   /// beside the audio - a `cover.jpg`, an `.lrc`), `user` (set through the
   /// curation surface), `enrichment` (supplied by a metadata provider, named in
   /// `provider`), `organize` (written by an organize tag write-back),
-  /// `normalize` (rewritten by a clean-up pass, such as the genre normalizer,
-  /// in the catalog alone), or `feed` (a podcast feed). A string, not a closed
-  /// enum. `sidecar` and `feed` reach only artifact rows; a scalar field is
-  /// never produced from a cover image or a feed.
+  /// `normalize` (written by a clean-up pass: the genre normalizer, in the
+  /// catalog alone, or the `<Title> - Single` album a download with none is
+  /// given), or `feed` (a podcast feed). A string, not a closed enum. `sidecar`
+  /// and `feed` reach only artifact rows; a scalar field is never produced from
+  /// a cover image or a feed.
   final String source;
 
   /// The enrichment provider, for enriched fields.
@@ -1045,7 +1048,10 @@ class MetadataEdit {
   /// Also write the new values into the file's tags.
   final bool writeBack;
 
-  /// Lock the edited fields.
+  /// Lock the edited fields. A track's recording id (`mbid`) that is not empty
+  /// and that its file does not carry is locked either way, since no file holds
+  /// it for a scan to fall back on; a cleared one, or the one its file carries,
+  /// follows this.
   final bool lock;
 
   /// Override existing locks on the edited fields.

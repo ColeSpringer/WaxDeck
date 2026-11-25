@@ -152,9 +152,9 @@ func TestMetadataFieldsVocabulary(t *testing.T) {
 	if f := field(book, "author_sort"); f == nil || !f.WriteBack {
 		t.Fatalf("book author_sort = %+v, want writeBack true", f)
 	}
-	for _, dbOnly := range []string{"subtitle", "asin", "isbn", "publisher", "edition", "description", "mbid"} {
-		if f := field(book, dbOnly); f == nil || f.WriteBack {
-			t.Fatalf("book %s = %+v, want writeBack false", dbOnly, f)
+	for _, written := range []string{"subtitle", "asin", "isbn", "publisher", "edition", "description", "mbid"} {
+		if f := field(book, written); f == nil || !f.WriteBack {
+			t.Fatalf("book %s = %+v, want writeBack true", written, f)
 		}
 	}
 	roleWriteBack := map[string]bool{}
@@ -941,7 +941,8 @@ func TestMetadataBookChapters(t *testing.T) {
 		t.Fatalf("restored chapters = %+v", md.Chapters)
 	}
 
-	// Database-only book fields persist and surface on the read.
+	// Book fields edited without write-back persist and surface on the
+	// read.
 	resp = h.patchJSON(t, "/api/v1/items/"+single+"/metadata", map[string]any{
 		"fields": map[string]string{"publisher": "Fixture House", "isbn": "978-0-306-40615-7"},
 	})

@@ -813,6 +813,10 @@ const baselineSchema = `
 		best_similarity REAL   NOT NULL DEFAULT 0,
 		applied_mbid   TEXT    NOT NULL DEFAULT '',
 		auto           INTEGER NOT NULL DEFAULT 0,
+		-- An auto apply the submission asked for (accept its best
+		-- match) rather than the matcher's own threshold: calibration
+		-- counts leave it out.
+		accepted_best  INTEGER NOT NULL DEFAULT 0,
 		payload        TEXT    NOT NULL DEFAULT '{}',
 		snapshot       TEXT    NOT NULL DEFAULT '',
 		created_at_ns  INTEGER NOT NULL,
@@ -821,6 +825,23 @@ const baselineSchema = `
 	);
 	CREATE INDEX review_entries_status ON review_entries (status, created_at_ns DESC, id);
 	CREATE INDEX review_entries_uploader ON review_entries (uploaded_by, created_at_ns DESC, id);
+	-- The front picture a download landed with, by its content hash, and
+	-- the source it came through. Once a rescan re-reads it the catalog
+	-- holds a thumbnail as the file's own art, so this is what tells it
+	-- from a cover someone put in the file since.
+	CREATE TABLE acquired_art (
+		item_pid    TEXT PRIMARY KEY,
+		art_hash    TEXT NOT NULL,
+		source_type TEXT NOT NULL
+	);
+	-- An album borrowing a member's picture is matched by the hash.
+	CREATE INDEX acquired_art_hash ON acquired_art (art_hash);
+	-- The front an approval wrote on an item, by its content hash: the
+	-- one locked front a later approval may replace.
+	CREATE TABLE approval_art (
+		item_pid TEXT PRIMARY KEY,
+		art_hash TEXT NOT NULL
+	);
 	CREATE TABLE match_queue (
 		id             INTEGER PRIMARY KEY,
 		entry_id       TEXT    NOT NULL UNIQUE,
@@ -858,6 +879,9 @@ const baselineSchema = `
 		-- not move a file already on the wire. Default 1 is the
 		-- unchanged behaviour.
 		identify       INTEGER NOT NULL DEFAULT 1,
+		-- Whether that entry takes its best match without review,
+		-- resolved and held the way identify is.
+		accept_best    INTEGER NOT NULL DEFAULT 0,
 		created_at_ns  INTEGER NOT NULL,
 		expires_at_ns  INTEGER NOT NULL DEFAULT 0
 	);
@@ -902,6 +926,7 @@ const baselineSchema = `
 		-- Decided once for the whole batch, for uploads.identify's
 		-- reason; a member's own value is ignored.
 		identify         INTEGER NOT NULL DEFAULT 1,
+		accept_best      INTEGER NOT NULL DEFAULT 0,
 		created_at_ns    INTEGER NOT NULL,
 		expires_at_ns    INTEGER NOT NULL
 	);

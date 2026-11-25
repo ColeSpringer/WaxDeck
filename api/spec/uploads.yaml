@@ -386,12 +386,36 @@ paths:
         entries; the response task reports progress per item).
         Downloaded files stage exactly like uploads, appear as
         upload sessions, and flow through the same identify and
-        review pipeline, grouped into album units; the source's own
-        metadata (title, channel, thumbnail) arrives embedded, and
-        provenance tags record the origin, so content with no
-        canonical release reaches the review queue ready for
-        keep-as-is or mark-unofficial and stays hand-editable by
-        the acquiring user afterward. Needs upload rights and a
+        review pipeline, grouped into album units. Each file carries
+        the source's own metadata in its tags, and provenance tags
+        record the origin, so content with no canonical release
+        reaches the review queue ready for keep-as-is or
+        mark-unofficial and stays hand-editable by the acquiring user
+        afterward.
+
+
+        What the fetch writes into a downloaded file's tags: the
+        source's title; its channel as the artist, with a ` - Topic`
+        channel suffix dropped; and its thumbnail as the cover,
+        attributed to the source (`ArtSource.source` `acquisition`), so
+        any better cover may replace it. For music, the title loses its
+        trailing upload-note groups, such as `(Official Video)` or
+        `[Lyrics]`, and only those: groups naming a recording or a cut,
+        such as `(Live)`, `(Remix)`, `(Clean)`, `(Teaser)` or
+        `(8D Audio)`, stay. Where a music source carries an
+        auto-generated Art Track description, and that description names
+        the same title as the video, it supplies the title, the artist
+        (the artists it names, in place of the channel), the album and
+        the release date; one that gives no release date leaves the date
+        unwritten, and the upload date is never written in its place. A
+        description naming another title is not used. A music track with
+        a title that still has no album once it lands, whether kept
+        `as-is`, marked `unofficial`, or imported because its
+        identification was declined, is given the album
+        `<Title> - Single` (see `as-is` on `decideReviewEntry`).
+
+
+        Needs upload rights and a
         running acquisition bridge (`source-unavailable` without
         one). Acquired bytes count against the caller's upload
         quota; a quota hit stops the task and keeps what already
@@ -561,6 +585,40 @@ components:
 
             Ignored on a batch member: the batch's own value decides
             for every file in it.
+        acceptBestMatch:
+          type: boolean
+          description: >
+            Whether an identified entry takes its best MusicBrainz
+            match without waiting for review. Absent means the
+            account's own default (`acceptBestMatch` in preferences),
+            with no schema default for the reason `identify` has none.
+            Decided when the submission is accepted and carried with
+            it, as `identify` is.
+
+
+            With identification on, an entry whose best candidate clears
+            the confidence floor, and leads every candidate naming a
+            different recording by a margin, is applied without waiting,
+            as an `approve` of that candidate would apply it, and reads
+            `auto-applied`. Such an apply counts in neither of the
+            review statistics' calibration counters
+            (`ReviewStats.autoApplied`,
+            `ReviewStats.revertedAutoApplied`), which measure only what
+            the matcher applied at its own threshold. This holds in a
+            library whose matching mode is `review`, and for a one-file
+            unit whatever the library's `singlesAutoApply` says. It
+            never acts in a library set to `off`, never on a search for
+            typed values (an entry carrying `identifyOverride`), and
+            never for an entry flagged as a possible duplicate.
+            Otherwise the entry waits for review as usual, and its
+            `acceptBestWithheld` says why when the candidates themselves
+            held it back.
+
+
+            Inert, not refused, when identification is off; audiobooks
+            are never identified, so it never acts on one. Ignored on a
+            batch member: the batch's own value decides for every file
+            in it.
 
     Upload:
       type: object
@@ -696,6 +754,15 @@ components:
             why there is no schema default, and for what declining
             does. Decided once here and applied to every entry the
             batch opens, so a member's own value is ignored.
+        acceptBestMatch:
+          type: boolean
+          description: >
+            Whether the batch's identified entries take their best
+            MusicBrainz match without waiting for review. Absent means
+            the account's own default (`acceptBestMatch` in
+            preferences); see `UploadCreate` for when it acts and when
+            it does not. Decided once here and applied to every entry
+            the batch opens, so a member's own value is ignored.
 
     UploadBatch:
       type: object
@@ -866,7 +933,19 @@ components:
             Whether what this acquisition downloads is identified
             against MusicBrainz. Absent means the account's own default
             (`identifyOptOut` in preferences); see `UploadCreate` for
-            why there is no schema default, and for what declining
-            does. Decided when the acquisition is accepted and carried
-            by the task, so a preference changed while it downloads
-            does not move it.
+            why there is no schema default, and for what declining does.
+            Decided when the acquisition is accepted and carried by the
+            task, so a preference changed while it downloads does not
+            move it. A declined acquisition enters the library without a
+            stop as a declined upload does, except that a music track
+            with a title and no album is given the album
+            `<Title> - Single` (see `createAcquisition`).
+        acceptBestMatch:
+          type: boolean
+          description: >
+            Whether what this acquisition downloads takes its best
+            MusicBrainz match without waiting for review. Absent means
+            the account's own default (`acceptBestMatch` in
+            preferences); see `UploadCreate` for when it acts and when
+            it does not. Decided when the acquisition is accepted and
+            carried by the task, as `identify` is.

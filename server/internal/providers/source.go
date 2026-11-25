@@ -43,6 +43,6 @@ func (s *Source) SearchReleases(ctx context.Context, artist, album string, track
 
 // SearchRecordings finds releases carrying a recording that matches the artist
 // and track title text.
-func (s *Source) SearchRecordings(ctx context.Context, artist, title string) ([]*match.Release, error) {
-	return s.MB.SearchRecordings(ctx, artist, title)
+func (s *Source) SearchRecordings(ctx context.Context, artist, title, named, album string) (match.RecordingSearch, error) {
+	return s.MB.SearchRecordings(ctx, artist, title, named, album)
 }

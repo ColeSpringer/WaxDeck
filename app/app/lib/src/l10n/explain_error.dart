@@ -180,6 +180,7 @@ String? _invalidRequest(AppLocalizations l, WaxDeckApiException e) =>
     : switch (e.params?['reason']) {
         'cue-rip' => l.errorCueRipDelete,
         'incompatible-schema' => l.errorIncompatibleBackup,
+        'recording-id-held' => l.errorRecordingIdHeld,
         _ => null,
       };
 

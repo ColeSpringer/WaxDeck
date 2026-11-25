@@ -2,6 +2,9 @@
   "@@locale": "es",
   "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
   "@@x-template": "en.arb",
+  "reviewAcceptBestWithheldAmbiguous": "Otra grabación podría ser la correcta, o no se pudieron descartar las demás",
+  "reviewAcceptBestWithheldBelowFloor": "La mejor coincidencia no era lo bastante cercana para aceptarla",
+  "reviewAcceptBestWithheldNoCandidates": "No se encontró ninguna coincidencia que aceptar",
   "reviewActionAddCopy": "Añadir como otra copia",
   "reviewActionApprove": "Aprobar",
   "reviewActionAsIs": "Dejar como está",
@@ -97,5 +100,7 @@
   "reviewTracksTitle": "Pistas",
   "reviewUndo": "Deshacer",
   "reviewUndone": "Decisión deshecha",
-  "reviewUntitled": "Sin título"
+  "reviewUntitled": "Sin título",
+  "reviewUseSuggested": "Usar el artista y el título sugeridos",
+  "reviewUseSuggestedValue": "{artist} - {title}"
 }

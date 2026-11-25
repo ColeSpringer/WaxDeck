@@ -23,15 +23,37 @@ func TestNormalize(t *testing.T) {
 
 func TestStripFeat(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"song feat someone", "song"},
-		{"song featuring someone else", "song"},
-		{"song ft someone", "song"},
-		{"dancing with myself", "dancing with myself"},
-		{"feat first word stays", "feat first word stays"},
-		{"plain title", "plain title"},
+		{"Song feat. Someone", "song"},
+		{"Song featuring Someone Else", "song"},
+		{"Song ft. Someone", "song"},
+		{"Band feat. Guest & Other", "band"},
+		{"Dancing with Myself", "dancing with myself"},
+		{"Feat first word stays", "feat first word stays"},
+		{"Plain Title", "plain title"},
+		{"Song (feat. Guest)", "song"},
+		{"Song [ft. Guest]", "song"},
+		{"Song (feat. Guest", "song"},
+		{"Song (feat. A) [feat. B]", "song"},
+		// Only the guest clause goes: what follows its group or clause names
+		// the recording.
+		{"Song (feat. Guest) (Live)", "song live"},
+		{"Song (feat. Guest) (X Remix)", "song x remix"},
+		{"Song (feat. Guest) (Demo)", "song demo"},
+		{"Song (feat. Guest) (Acoustic)", "song acoustic"},
+		{"Song (feat. Guest) (Clean)", "song clean"},
+		{"Song (feat. Guest) - Live at X", "song live at x"},
+		{"Song (feat. Guest (UK)) (Live)", "song live"},
+		{"Song (Live) (feat. Guest)", "song live"},
+		{"Song feat. Guest (Live)", "song live"},
+		{"Song feat. Guest [Demo]", "song demo"},
+		{"Song feat. Guest - Live at X", "song live at x"},
+		{"Song feat. Guest \u2013 Live at X", "song live at x"},
+		{"Song (X Remix feat. Guest)", "song x remix"},
+		{"Song (X Remix feat. Guest) (Clean)", "song x remix clean"},
+		{"Twenty-One feat. Jay-Z", "twenty one"},
 	}
 	for _, c := range cases {
-		if got := stripFeat(c.in); got != c.want {
+		if got := normalize(stripFeat(c.in)); got != c.want {
 			t.Errorf("stripFeat(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
@@ -71,8 +93,42 @@ func TestStringDist(t *testing.T) {
 }
 
 func TestTitleDistForgivesFeat(t *testing.T) {
-	if d := titleDist("Song Title (feat. Guest)", "Song Title"); d != 0 {
-		t.Errorf("featured suffix should be free, got %v", d)
+	for _, c := range [][2]string{
+		{"Song Title (feat. Guest)", "Song Title"},
+		{"Song Title feat. Guest", "Song Title"},
+		{"Song Title [ft. Guest]", "Song Title (featuring Guest)"},
+		{"Band feat. Guest", "Band"},
+		{"Song Title (feat. Guest) (Live)", "Song Title (Live)"},
+		{"Song Title (feat. Guest) - Live at X", "Song Title (Live at X)"},
+	} {
+		if d := titleDist(c[0], c[1]); d != 0 {
+			t.Errorf("titleDist(%q, %q) = %v, want the guest clause free", c[0], c[1], d)
+		}
+	}
+}
+
+// A guest credit forgives itself only: the group or tail after it names
+// another recording and still counts.
+func TestTitleDistKeepsWhatFollowsAGuest(t *testing.T) {
+	for _, title := range []string{
+		"Song Title (feat. Guest) (Live)",
+		"Song Title (feat. Guest) (X Remix)",
+		"Song Title (feat. Guest) (Demo)",
+		"Song Title (feat. Guest) (Acoustic)",
+		"Song Title (feat. Guest) (Clean)",
+		"Song Title (feat. Guest) - Live at X",
+		"Song Title feat. Guest (Live)",
+	} {
+		for _, studio := range []string{"Song Title (feat. Guest)", "Song Title"} {
+			// At least what the group costs a title with no guest on it.
+			want := stringDist("Song Title (Demo)", "Song Title")
+			if d := titleDist(title, studio); d < want {
+				t.Errorf("titleDist(%q, %q) = %.3f, want what follows the guest counted (%.3f or more)", title, studio, d, want)
+			}
+			if d := titleDist(studio, title); d < want {
+				t.Errorf("titleDist(%q, %q) = %.3f, want what follows the guest counted (%.3f or more)", studio, title, d, want)
+			}
+		}
 	}
 }
 

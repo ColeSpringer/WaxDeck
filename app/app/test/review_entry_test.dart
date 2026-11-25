@@ -22,6 +22,7 @@ ReviewEntryDetail _detail({
   String? libraryPid,
   bool landed = false,
   bool? mediumFixed,
+  ReviewOverride? suggested,
 }) => ReviewEntryDetail(
   id: 'rv-1',
   kind: 'match',
@@ -33,6 +34,7 @@ ReviewEntryDetail _detail({
   title: 'Neon Meridian',
   artist: 'The Cardinal Waves',
   trackCount: 2,
+  suggested: suggested,
   createdAt: DateTime.utc(2026, 7, 1),
   candidates: const [
     ReviewCandidate(
@@ -103,12 +105,14 @@ class _HeldDecisions extends FakeRepository {
     required String action,
     String? candidateMbid,
     String? mediaType,
+    bool? useSuggested,
   }) async {
     final decided = await super.decideReviewEntry(
       entryId,
       action: action,
       candidateMbid: candidateMbid,
       mediaType: mediaType,
+      useSuggested: useSuggested,
     );
     await release.future;
     reviewEntryDetails.remove(entryId);
@@ -500,6 +504,186 @@ void main() {
     expect(repo.decideReviewCalls, hasLength(1));
     expect(repo.decideReviewCalls.single.action, 'approve');
     expect(repo.decideReviewCalls.single.candidateMbid, 'mb-2');
+  });
+
+  group('the suggested artist and title', () {
+    const suggestion = ReviewOverride(artist: 'Mono Tides', title: 'Long Dive');
+    Finder control() =>
+        find.bySemanticsIdentifier(SemanticsIds.reviewUseSuggested);
+
+    Future<FakeRepository> pumped(
+      WidgetTester tester, {
+      ReviewOverride? suggested = suggestion,
+      bool on = false,
+    }) async {
+      final repo = _repoWith(_detail(suggested: suggested));
+      await _pump(tester, repo);
+      if (on) {
+        await tester.tap(control());
+        await tester.pumpAndSettle();
+      }
+      return repo;
+    }
+
+    testWidgets('are offered, both values shown, only with a suggestion', (
+      tester,
+    ) async {
+      await pumped(tester);
+      expect(control(), findsOneWidget);
+      expect(find.text('Use the suggested artist and title'), findsOneWidget);
+      expect(find.text('Mono Tides - Long Dive'), findsOneWidget);
+    });
+
+    testWidgets('show only the field that is present', (tester) async {
+      await pumped(tester, suggested: const ReviewOverride(title: 'Long Dive'));
+      expect(find.text('Long Dive'), findsOneWidget);
+      expect(find.textContaining(' - '), findsNothing);
+    });
+
+    testWidgets('show an artist alone as just the artist', (tester) async {
+      await pumped(
+        tester,
+        suggested: const ReviewOverride(artist: 'Mono Tides'),
+      );
+      expect(find.text('Mono Tides'), findsWidgets);
+      expect(find.textContaining(' - '), findsNothing);
+    });
+
+    testWidgets('draw no line when the suggestion holds neither field', (
+      tester,
+    ) async {
+      await pumped(tester, suggested: const ReviewOverride());
+      expect(control(), findsOneWidget);
+      expect(
+        find.byWidgetPredicate((w) => w is Text && (w.data ?? '').isEmpty),
+        findsNothing,
+      );
+    });
+
+    testWidgets('are not offered without one', (tester) async {
+      await pumped(tester, suggested: null);
+      expect(control(), findsNothing);
+    });
+
+    testWidgets('are not offered once the entry is decided', (tester) async {
+      final repo = _repoWith(_detail(status: 'applied', suggested: suggestion));
+      await _pump(tester, repo);
+      expect(control(), findsNothing);
+    });
+
+    for (final (id, action) in [
+      (SemanticsIds.reviewAsIs, 'as-is'),
+      (SemanticsIds.reviewUnofficial, 'unofficial'),
+    ]) {
+      testWidgets('$action carries it when on', (tester) async {
+        final repo = await pumped(tester, on: true);
+        await tester.tap(find.bySemanticsIdentifier(id));
+        await tester.pumpAndSettle();
+        expect(repo.decideReviewCalls.single.action, action);
+        expect(repo.decideReviewCalls.single.useSuggested, isTrue);
+      });
+
+      testWidgets('$action does not carry it when off', (tester) async {
+        final repo = await pumped(tester);
+        await tester.tap(find.bySemanticsIdentifier(id));
+        await tester.pumpAndSettle();
+        expect(repo.decideReviewCalls.single.action, action);
+        expect(repo.decideReviewCalls.single.useSuggested, isNull);
+      });
+
+      testWidgets('$action does not carry it once turned off again', (
+        tester,
+      ) async {
+        final repo = await pumped(tester, on: true);
+        await tester.tap(control());
+        await tester.pumpAndSettle();
+        await tester.tap(find.bySemanticsIdentifier(id));
+        await tester.pumpAndSettle();
+        expect(repo.decideReviewCalls.single.useSuggested, isNull);
+      });
+    }
+
+    for (final (id, action) in [
+      (SemanticsIds.reviewApprove, 'approve'),
+      (SemanticsIds.reviewSkip, 'skip'),
+      (SemanticsIds.reviewDiscard, 'discard'),
+    ]) {
+      testWidgets('$action never carries it', (tester) async {
+        final repo = await pumped(tester, on: true);
+        await tester.tap(find.bySemanticsIdentifier(id));
+        await tester.pumpAndSettle();
+        expect(repo.decideReviewCalls.single.action, action);
+        expect(repo.decideReviewCalls.single.useSuggested, isNull);
+      });
+    }
+
+    testWidgets('a retry reads the control again', (tester) async {
+      final repo = await pumped(tester, on: true);
+      repo.reviewError = const WaxDeckApiException(
+        code: 'catalog-busy',
+        message: 'a conflicting catalog job is already running',
+        statusCode: 409,
+      );
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+      await tester.pumpAndSettle();
+      await tester.tap(control());
+      await tester.pumpAndSettle();
+
+      repo.reviewError = null;
+      await pressRaisedAction(tester);
+      expect(repo.decideReviewCalls.map((c) => c.useSuggested), [true, null]);
+    });
+
+    testWidgets('are neither offered nor sent for an audiobook', (
+      tester,
+    ) async {
+      final repo = await pumped(tester, on: true);
+      await tester.tap(
+        find.bySemanticsIdentifier(
+          SemanticsIds.reviewMediumOption('audiobook'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(control(), findsNothing);
+
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+      await tester.pumpAndSettle();
+      expect(repo.decideReviewCalls.single.mediaType, 'audiobook');
+      expect(repo.decideReviewCalls.single.useSuggested, isNull);
+    });
+
+    testWidgets('come back, still on, when music is chosen again', (
+      tester,
+    ) async {
+      final repo = await pumped(tester, on: true);
+      for (final medium in ['audiobook', 'music']) {
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.reviewMediumOption(medium)),
+        );
+        await tester.pumpAndSettle();
+      }
+      expect(control(), findsOneWidget);
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+      await tester.pumpAndSettle();
+      expect(repo.decideReviewCalls.single.useSuggested, isTrue);
+    });
+
+    testWidgets('are not offered on an entry that is an audiobook', (
+      tester,
+    ) async {
+      final repo = _repoWith(
+        _detail(mediaType: MediaType.audiobook, suggested: suggestion),
+      );
+      await _pump(tester, repo);
+      expect(control(), findsNothing);
+    });
+
+    testWidgets('an entry with no suggestion never sends it', (tester) async {
+      final repo = await pumped(tester, suggested: null);
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+      await tester.pumpAndSettle();
+      expect(repo.decideReviewCalls.single.useSuggested, isNull);
+    });
   });
 
   group('reviewMediaOffered', () {

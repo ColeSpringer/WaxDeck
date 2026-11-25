@@ -5,24 +5,24 @@ import (
 )
 
 // editorTrackFields is the track scalar vocabulary; every track field
-// has an on-disk tag form.
+// writes back but the recording id, which stays in the catalog
+// (recordingIDField).
 var editorTrackFields = []EditableFieldDTO{
 	{"title", true}, {"artist", true}, {"album_artist", true}, {"album", true},
 	{"composer", true}, {"composer_sort", true}, {"comment", true}, {"genre", true},
 	{"year", true}, {"track_no", true}, {"track_total", true}, {"disc_no", true},
-	{"disc_total", true}, {"bpm", true}, {"isrc", true}, {"mbid", true},
+	{"disc_total", true}, {"bpm", true}, {"isrc", true}, {"mbid", false},
 	{"compilation", true},
 }
 
-// editorBookFields is the book scalar vocabulary. Only the fields the
-// audiobook scanner reconstructs from tags write back; the enrichment
-// fields (subtitle, identifiers, publisher, edition, description, mbid)
-// are database-only by upstream design.
+// editorBookFields is the book scalar vocabulary; every field writes
+// back, as the catalog's writer maps each to a tag the audiobook scanner
+// reads back.
 var editorBookFields = []EditableFieldDTO{
 	{"title", true}, {"author", true}, {"author_sort", true}, {"narrator", true},
-	{"series", true}, {"subtitle", false}, {"genre", true}, {"year", true},
-	{"asin", false}, {"isbn", false}, {"publisher", false}, {"edition", false},
-	{"description", false}, {"mbid", false},
+	{"series", true}, {"subtitle", true}, {"genre", true}, {"year", true},
+	{"asin", true}, {"isbn", true}, {"publisher", true}, {"edition", true},
+	{"description", true}, {"mbid", true},
 }
 
 // editorEpisodeFields is the episode scalar vocabulary. Episodes are

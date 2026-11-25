@@ -33,6 +33,17 @@ type Ingest struct {
 	// editFieldsHook stands in for the catalog's field edit an approval
 	// applies, in a test; nothing in the server sets it.
 	editFieldsHook func(context.Context, []model.ItemFieldEdit, waxbin.EditOptions) (*waxbin.BatchEditResult, error)
+	// recordingIDsHook runs once a decision's other fields have committed
+	// and before its recording ids are recorded, in a test; an error
+	// stands in for theirs. Nothing in the server sets it.
+	recordingIDsHook func() error
+	// resolveArtHook stands in for the catalog's read of the front an
+	// approval replaces, in a test; nothing in the server sets it.
+	resolveArtHook func(context.Context, model.EntityRef, model.ArtRole, int) (*model.ArtBlob, error)
+	// appliedWriteHook runs before an apply records its entry decided, in
+	// a test; an error stands in for that write's. Nothing in the server
+	// sets it.
+	appliedWriteHook func() error
 	// batchFinalizeMu serializes upload-batch finalization (the flip,
 	// entry opening, and member linking as one unit): two concurrent
 	// finalizes of one batch would otherwise both gather the same
@@ -83,6 +94,11 @@ type Ingest struct {
 	// the acquire-from-URL surface (the catalog holds its own copy for
 	// show dispatch).
 	sourceProviders []source.Provider
+	// releaseCovers fetches an approved release's cover; nil when matching
+	// is off. reviewCoverDir keeps the front an approval replaced, per
+	// entry, for its revert.
+	releaseCovers  ReleaseCovers
+	reviewCoverDir string
 }
 
 func newIngest(c *core, cfg Config) *Ingest {

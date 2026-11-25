@@ -26,6 +26,7 @@ const _stored = Prefs(
   replayGain: true,
   radioScrobbleOptOut: true,
   identifyOptOut: true,
+  acceptBestMatch: true,
   browseShowUnknown: false,
   browseSorts: <String, String>{'artist': 'label'},
   autoplay: false,
@@ -121,6 +122,7 @@ void main() {
         expect(kept.replayGain, isTrue);
         expect(kept.radioScrobbleOptOut, isTrue);
         expect(kept.identifyOptOut, isTrue);
+        expect(kept.acceptBestMatch, isTrue);
         expect(kept.browseShowUnknown, isFalse);
         expect(kept.browseSorts, <String, String>{'artist': 'label'});
         expect(kept.autoplay, isFalse);

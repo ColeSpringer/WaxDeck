@@ -120,6 +120,7 @@ class _ListedBeforeCreated extends FakeRepository {
     String? batchId,
     String? batchPath,
     bool? identify,
+    bool? acceptBestMatch,
   }) async {
     final session = await super.createUpload(
       fileName: fileName,
@@ -130,6 +131,7 @@ class _ListedBeforeCreated extends FakeRepository {
       batchId: batchId,
       batchPath: batchPath,
       identify: identify,
+      acceptBestMatch: acceptBestMatch,
     );
     reached.complete();
     await release.future;
@@ -155,6 +157,7 @@ class _HeldCreates extends FakeRepository {
     String? batchId,
     String? batchPath,
     bool? identify,
+    bool? acceptBestMatch,
   }) async {
     final session = await super.createUpload(
       fileName: fileName,
@@ -165,6 +168,7 @@ class _HeldCreates extends FakeRepository {
       batchId: batchId,
       batchPath: batchPath,
       identify: identify,
+      acceptBestMatch: acceptBestMatch,
     );
     final gate = Completer<void>();
     held.add(gate);

@@ -11,6 +11,7 @@ class AcquisitionRequest {
     this.libraryPid,
     this.format,
     this.identify,
+    this.acceptBestMatch,
   });
 
   /// The source URL: a single video, a playlist, or a channel the acquisition
@@ -29,8 +30,18 @@ class AcquisitionRequest {
   /// Absent means the account's own default (`identifyOptOut` in preferences);
   /// see `UploadCreate` for why there is no schema default, and for what
   /// declining does. Decided when the acquisition is accepted and carried by
-  /// the task, so a preference changed while it downloads does not move it.
+  /// the task, so a preference changed while it downloads does not move it. A
+  /// declined acquisition enters the library without a stop as a declined
+  /// upload does, except that a music track with a title and no album is given
+  /// the album `<Title> - Single` (see `createAcquisition`).
   final bool? identify;
+
+  /// Whether what this acquisition downloads takes its best MusicBrainz match
+  /// without waiting for review. Absent means the account's own default
+  /// (`acceptBestMatch` in preferences); see `UploadCreate` for when it acts
+  /// and when it does not. Decided when the acquisition is accepted and carried
+  /// by the task, as `identify` is.
+  final bool? acceptBestMatch;
 }
 
 /// One upload batch.
@@ -81,6 +92,7 @@ class UploadBatchCreate {
     required this.mediaType,
     this.libraryPid,
     this.identify,
+    this.acceptBestMatch,
   });
 
   final UploadGrouping grouping;
@@ -98,6 +110,13 @@ class UploadBatchCreate {
   /// does. Decided once here and applied to every entry the batch opens, so a
   /// member's own value is ignored.
   final bool? identify;
+
+  /// Whether the batch's identified entries take their best MusicBrainz match
+  /// without waiting for review. Absent means the account's own default
+  /// (`acceptBestMatch` in preferences); see `UploadCreate` for when it acts
+  /// and when it does not. Decided once here and applied to every entry the
+  /// batch opens, so a member's own value is ignored.
+  final bool? acceptBestMatch;
 }
 
 /// A new upload session.
@@ -111,6 +130,7 @@ class UploadCreate {
     this.batchId,
     this.batchPath,
     this.identify,
+    this.acceptBestMatch,
   });
 
   /// The file's name (base name only; any path is rejected). The extension
@@ -175,6 +195,31 @@ class UploadCreate {
   /// Ignored on a batch member: the batch's own value decides for every file in
   /// it.
   final bool? identify;
+
+  /// Whether an identified entry takes its best MusicBrainz match without
+  /// waiting for review. Absent means the account's own default
+  /// (`acceptBestMatch` in preferences), with no schema default for the reason
+  /// `identify` has none. Decided when the submission is accepted and carried
+  /// with it, as `identify` is.
+  ///
+  /// With identification on, an entry whose best candidate clears the
+  /// confidence floor, and leads every candidate naming a different recording
+  /// by a margin, is applied without waiting, as an `approve` of that candidate
+  /// would apply it, and reads `auto-applied`. Such an apply counts in neither
+  /// of the review statistics' calibration counters (`ReviewStats.autoApplied`,
+  /// `ReviewStats.revertedAutoApplied`), which measure only what the matcher
+  /// applied at its own threshold. This holds in a library whose matching mode
+  /// is `review`, and for a one-file unit whatever the library's
+  /// `singlesAutoApply` says. It never acts in a library set to `off`, never on
+  /// a search for typed values (an entry carrying `identifyOverride`), and
+  /// never for an entry flagged as a possible duplicate. Otherwise the entry
+  /// waits for review as usual, and its `acceptBestWithheld` says why when the
+  /// candidates themselves held it back.
+  ///
+  /// Inert, not refused, when identification is off; audiobooks are never
+  /// identified, so it never acts on one. Ignored on a batch member: the
+  /// batch's own value decides for every file in it.
+  final bool? acceptBestMatch;
 }
 
 /// One page of uploads.

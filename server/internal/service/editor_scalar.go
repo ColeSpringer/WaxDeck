@@ -8,7 +8,8 @@ import (
 )
 
 // EditItemMetadata applies scalar field edits to one item's catalog
-// row, optionally mirroring them into the backing file's tags.
+// row, optionally mirroring them into the backing file's tags, all but a
+// track's recording id, which the catalog keeps (editTrackFields).
 func (l *Editor) EditItemMetadata(ctx context.Context, uc *UserCtx, apiPID string, fields map[string]string, p MetadataEditParams) (EditOutcomeDTO, error) {
 	it, err := l.Grants.getVisibleItem(ctx, uc, apiPID)
 	if err != nil {
@@ -22,10 +23,11 @@ func (l *Editor) EditItemMetadata(ctx context.Context, uc *UserCtx, apiPID strin
 			return EditOutcomeDTO{}, err
 		}
 	}
-	err = l.lib.EditFields(ctx, it.PID, fields, waxbin.EditOptions{
-		WriteBack: p.WriteBack, Lock: model.LockOf(p.Lock), Force: p.Force,
-	})
-	return editOutcomeFromWriteBack(err)
+	opts := waxbin.EditOptions{WriteBack: p.WriteBack, Lock: model.LockOf(p.Lock), Force: p.Force}
+	if it.Kind == model.KindTrack {
+		return editOutcomeFromWriteBack(l.editTrackFields(ctx, it.PID, fields, opts))
+	}
+	return editOutcomeFromWriteBack(l.lib.EditFields(ctx, it.PID, fields, opts))
 }
 
 // BulkEditMetadata applies the same scalar edits to many items in one
@@ -44,6 +46,7 @@ func (l *Editor) BulkEditMetadata(ctx context.Context, uc *UserCtx, apiPIDs []st
 	}
 	pids := make([]model.PID, 0, len(apiPIDs))
 	apiByBare := make(map[model.PID]string, len(apiPIDs))
+	tracks := map[model.PID]bool{}
 	for _, apiPID := range apiPIDs {
 		it, err := l.Grants.getVisibleItem(ctx, uc, apiPID)
 		if err != nil {
@@ -60,13 +63,17 @@ func (l *Editor) BulkEditMetadata(ctx context.Context, uc *UserCtx, apiPIDs []st
 		if _, seen := apiByBare[it.PID]; seen {
 			continue
 		}
+		if it.Kind == model.KindTrack {
+			tracks[it.PID] = true
+		}
 		pids = append(pids, it.PID)
 		apiByBare[it.PID] = apiPID
 	}
-	res, err := l.lib.EditManyFields(ctx, pids, fields, waxbin.EditOptions{
+	opts := waxbin.EditOptions{
 		WriteBack: writeBack, Force: force, SkipLocked: skipLocked,
 		Lock: model.LockOn,
-	})
+	}
+	res, err := l.editManyKeepingRecordingID(ctx, pids, tracks, fields, opts)
 	if err != nil {
 		return BulkEditOutcomeDTO{}, classify(err)
 	}

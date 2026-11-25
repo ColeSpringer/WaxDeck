@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"slices"
 	"sort"
 
 	"github.com/colespringer/waxbin/model"
@@ -36,6 +37,12 @@ func (l *Editor) SetItemLocks(ctx context.Context, uc *UserCtx, apiPID string, f
 		}
 		canonical = append(canonical, f)
 	}
+	// A file carrying another id may take the field back; one carrying
+	// none would clear it.
+	if !locked && it.Kind == model.KindTrack && it.MBID != "" && slices.Contains(canonical, recordingIDField) &&
+		fileRecordingID(ctx, l.lib, it.PID) == "" {
+		return nil, errRecordingIDHeld()
+	}
 	if locked {
 		err = l.lib.Lock(ctx, it.PID, canonical...)
 	} else {
@@ -43,6 +50,9 @@ func (l *Editor) SetItemLocks(ctx context.Context, uc *UserCtx, apiPID string, f
 	}
 	if err != nil {
 		return nil, classify(err)
+	}
+	if locked && slices.Contains(canonical, "art") {
+		l.forgetApprovalFront(ctx, it.PID)
 	}
 	return l.lockedFieldsFor(ctx, it.PID)
 }

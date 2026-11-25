@@ -811,6 +811,29 @@ func TestPrefsRoundTrip(t *testing.T) {
 	resp.Body.Close()
 }
 
+func TestPrefsAcceptBestMatchRoundTrips(t *testing.T) {
+	t.Parallel()
+	ts := newAuthTestServer(t)
+	lr := bootstrap(t, ts)
+
+	stored := decode[map[string]any](t, putJSON(t, ts, "/api/v1/users/me/prefs", lr.Token,
+		map[string]any{"acceptBestMatch": true}))
+	if stored["acceptBestMatch"] != true {
+		t.Fatalf("stored prefs = %+v, want acceptBestMatch true", stored)
+	}
+	read := decode[map[string]any](t, get(t, ts, "/api/v1/users/me/prefs", lr.Token))
+	if read["acceptBestMatch"] != true {
+		t.Fatalf("read-back prefs = %+v, want acceptBestMatch true", read)
+	}
+
+	// The document is replaced whole, and off is the default, so absent.
+	cleared := decode[map[string]any](t, putJSON(t, ts, "/api/v1/users/me/prefs", lr.Token,
+		map[string]any{}))
+	if _, ok := cleared["acceptBestMatch"]; ok {
+		t.Fatalf("cleared prefs = %+v, want acceptBestMatch absent", cleared)
+	}
+}
+
 // The dial's pinned stations are per account, which is what this field is
 // for: the station library is shared by the household, so which of its
 // stations are yours is the one piece of per-user station state there is.

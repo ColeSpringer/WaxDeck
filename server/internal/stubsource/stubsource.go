@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/colespringer/waxbin/source"
 	"github.com/colespringer/waxbin/waxerr"
 
+	"github.com/colespringer/waxdeck/server/internal/sourcetags"
 	"github.com/colespringer/waxdeck/server/internal/syncsource"
 )
 
@@ -129,8 +131,17 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 	return &source.Enumeration{Feed: feed, IdentityKey: "stub:" + m.ID, SourceID: m.ID}, nil
 }
 
-// Fetch streams one entry's audio.
+// Fetch streams one entry's audio through the source tags pass.
 func (p *Provider) Fetch(ctx context.Context, freq source.FetchRequest, w io.Writer) (*source.FetchResult, error) {
+	return p.FetchWith(ctx, freq, w, syncsource.FetchOptions{})
+}
+
+// FetchWith lands the entry's audio in a temp file, runs the providers' source
+// tags pass with the file's own ARTIST and TITLE standing for the uploader and
+// the video title (the stub has no description), then streams it to w. The
+// format is ignored: the stub cannot transcode. The provenance timestamp
+// makes each fetch's bytes differ, as the real bridge's do.
+func (p *Provider) FetchWith(ctx context.Context, freq source.FetchRequest, w io.Writer, opts syncsource.FetchOptions) (*source.FetchResult, error) {
 	if !p.ownsURL(freq.URL) {
 		return nil, errors.New("stubsource: not this source's URL")
 	}
@@ -146,11 +157,18 @@ func (p *Provider) Fetch(ctx context.Context, freq source.FetchRequest, w io.Wri
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("stubsource: audio answered %d", resp.StatusCode)
 	}
-	n, err := io.Copy(w, resp.Body)
+	ctype := resp.Header.Get("Content-Type")
+	ext := ""
+	if ctype == "audio/mpeg" {
+		ext = ".mp3"
+	}
+	n, err := sourcetags.Restamp(ctx, "", ext, resp.Body, w, sourcetags.Source{
+		URL: freq.URL, ID: path.Base(freq.URL), Music: opts.Music,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &source.FetchResult{Bytes: n, ContentType: resp.Header.Get("Content-Type")}, nil
+	return &source.FetchResult{Bytes: n, ContentType: ctype}, nil
 }
 
 // PlaylistSnapshot lists the manifest in playlist order. Every entry

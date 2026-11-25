@@ -69,6 +69,9 @@ func (l *Editor) SetItemArtwork(ctx context.Context, uc *UserCtx, apiPID, role s
 		// built from this item's old art, and a replacement in place moves
 		// no membership, so the epoch is what tells those covers to rebuild.
 		l.Playlists.noteArtworkChanged(ctx)
+		if art == model.ArtRoleFront {
+			l.forgetApprovalFront(ctx, it.PID)
+		}
 	}
 	return out, err
 }
@@ -95,6 +98,9 @@ func (l *Editor) ClearItemArtwork(ctx context.Context, uc *UserCtx, apiPID, role
 		return classify(err)
 	}
 	l.Playlists.noteArtworkChanged(ctx)
+	if art == model.ArtRoleFront {
+		l.forgetApprovalFront(ctx, it.PID)
+	}
 	return nil
 }
 

@@ -212,11 +212,13 @@ info:
       `reason: unreadable` marks a completed upload whose bytes do not
       read as audio at all, a damaged file rather than a format the
       server refuses. Under `invalid-request`, `reason` names
-      two refusals a client words itself: `incompatible-schema` (a backup
-      whose schema this server cannot open) and `cue-rip` (a delete
+      three refusals a client words itself: `incompatible-schema` (a backup
+      whose schema this server cannot open), `cue-rip` (a delete
       naming some tracks of a cue rip but not all, which also carries
       `tracks`: every track of the rips it named some of, comma-separated
-      in the order they play, for the client to offer them together); a
+      in the order they play, for the client to offer them together) and
+      `recording-id-held` (an unlock of a track's recording id whose
+      file carries none); a
       subscribe also
       names the feed address it will not take, in a message that is
       already a sentence for a person (an import names it per entry, in

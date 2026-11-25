@@ -26,12 +26,13 @@ abstract interface class HealthApi {
   /// files whose tags lag the catalog: a refused or failed write-back, a value
   /// the format could not store, and a value an edit changed in the catalog
   /// without writing it (a value a clean-up pass normalized in the catalog
-  /// alone does not count). Its fix writes those values and counts an item
-  /// filled only when none remains. `genre-whitelist` flags an item carrying a
-  /// genre the server's genre tree does not know; it is deliberately not
-  /// bulk-fixable, because the background normalizer already rewrites
-  /// everything the tree does know, so what remains is answered by editing the
-  /// tree (`/admin/genre-tree`), not the item.
+  /// alone does not count, nor does a track's recording id, which the catalog
+  /// keeps alone). Its fix writes those values and counts an item filled only
+  /// when none remains. `genre-whitelist` flags an item carrying a genre the
+  /// server's genre tree does not know; it is deliberately not bulk-fixable,
+  /// because the background normalizer already rewrites everything the tree
+  /// does know, so what remains is answered by editing the tree
+  /// (`/admin/genre-tree`), not the item.
   Future<HealthSummary> getLibraryHealth();
 
   /// `GET /library/health/issues`: List items failing health rules.

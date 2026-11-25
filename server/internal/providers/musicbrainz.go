@@ -116,6 +116,14 @@ type mbRelease struct {
 	Media        []mbMedium       `json:"media"`
 }
 
+// mbSearchRelease is a release as a recording search lists it, its group
+// inline.
+type mbSearchRelease struct {
+	ID           string          `json:"id"`
+	Title        string          `json:"title"`
+	ReleaseGroup *mbReleaseGroup `json:"release-group"`
+}
+
 // ReleaseByMBID fetches one release with its tracklist. A 404 is a clean
 // miss: (nil, nil).
 func (m *MusicBrainz) ReleaseByMBID(ctx context.Context, mbid string) (*match.Release, error) {
@@ -263,79 +271,166 @@ func (m *MusicBrainz) SearchReleases(ctx context.Context, artist, album string, 
 	return out, nil
 }
 
+// namedBoost is the Lucene boost on the named title's phrase in a recording
+// search: a hit holding it also holds the song's phrase, and the boost puts
+// it above every hit that holds the song's alone.
+const namedBoost = 3
+
+// mbListing is a recording search reduced to what is read from it, which is
+// what the cache holds: a page of a hundred hits is megabytes as MusicBrainz
+// sends it, every hit listing its releases in full, and about 20 KB like
+// this.
+type mbListing struct {
+	// Count is how many hits the search counted, listed or not.
+	Count int `json:"count"`
+	// Releases is how many distinct releases the hits listed.
+	Releases   int        `json:"releases"`
+	Recordings []mbListed `json:"recordings"`
+}
+
+// mbListed is one hit. Releases are the ids of the releases carrying it,
+// ranked as covers are (album, single, the rest, compilations behind) and cut
+// to match.RecordingSearchCap, the most of one hit a spread can reach. Album
+// is the first of them titled as the album the search was reduced for.
+type mbListed struct {
+	ID       string   `json:"id"`
+	Score    int      `json:"score"`
+	Title    string   `json:"title"`
+	Artist   string   `json:"artist,omitempty"`
+	LengthMS int      `json:"length,omitempty"`
+	Releases []string `json:"releases,omitempty"`
+	Album    string   `json:"album,omitempty"`
+}
+
+// reduceRecordingSearch turns a recording search body into its mbListing,
+// keeping each hit's release titled as album (match.AlbumKey; "" for none).
+func reduceRecordingSearch(body []byte, album string) ([]byte, error) {
+	var parsed struct {
+		Count      int `json:"count"`
+		Recordings []struct {
+			ID           string            `json:"id"`
+			Score        int               `json:"score"`
+			Title        string            `json:"title"`
+			Length       *int              `json:"length"`
+			ArtistCredit []mbArtistCredit  `json:"artist-credit"`
+			Releases     []mbSearchRelease `json:"releases"`
+		} `json:"recordings"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("providers: decode musicbrainz recording search: %w", err)
+	}
+	listing := mbListing{Count: parsed.Count, Recordings: make([]mbListed, 0, len(parsed.Recordings))}
+	listed := make(map[string]bool)
+	for _, rec := range parsed.Recordings {
+		l := mbListed{ID: rec.ID, Score: rec.Score, Title: rec.Title, Artist: joinCredit(rec.ArtistCredit)}
+		if rec.Length != nil {
+			l.LengthMS = *rec.Length
+		}
+		slices.SortStableFunc(rec.Releases, func(a, b mbSearchRelease) int {
+			return coverReleaseRank(a.ReleaseGroup) - coverReleaseRank(b.ReleaseGroup)
+		})
+		for _, rel := range rec.Releases {
+			if rel.ID == "" {
+				continue
+			}
+			listed[rel.ID] = true
+			if len(l.Releases) < match.RecordingSearchCap && !slices.Contains(l.Releases, rel.ID) {
+				l.Releases = append(l.Releases, rel.ID)
+			}
+			if album != "" && l.Album == "" && match.AlbumKey(rel.Title) == album {
+				l.Album = rel.ID
+			}
+		}
+		listing.Recordings = append(listing.Recordings, l)
+	}
+	listing.Releases = len(listed)
+	return json.Marshal(listing)
+}
+
 // SearchRecordings finds releases carrying a recording that matches the artist
-// and track title. It is the descriptive path for loose tracks with no album:
-// the recording search returns the releases each hit appears on, and the
-// distinct top releases are hydrated through ReleaseByMBID (cached and paced),
-// so the engine scores full tracklists as with any other candidate. A 400 (bad
-// lucene edge case) or 404 is a clean miss.
-func (m *MusicBrainz) SearchRecordings(ctx context.Context, artist, title string) ([]*match.Release, error) {
+// and track title, each asked for as a phrase: a title holding more than the
+// song ("Song (Live at X)") matches nothing, which is why title is the song
+// alone. named, the title with what names the recording kept, is asked for
+// beside it in the same request, boosted (namedBoost): a popular song has
+// more plain-titled recordings than a page lists, and the one named would
+// sit past them. It is the descriptive path for loose tracks, and for a unit
+// whose album no release search found: the recording search lists a page of match.RecordingSearchPage hits with the
+// releases each appears on, and match.SpreadReleases picks which are hydrated
+// through ReleaseByMBID (cached and paced), a release titled as album (the
+// album the unit names) first, then the hits titled as named, then the first
+// match.RecordingSearchSpread: one search and at most
+// match.RecordingSearchCap lookups, spread over several recordings, each
+// recording's releases ranked as covers are (album, single, the rest,
+// compilations behind). Every listed recording is answered as well, with its
+// score, from the same listing; and whether releases were listed that were
+// not hydrated, and hits counted that were not listed. A 400 (bad lucene edge
+// case) or 404 is a clean miss.
+func (m *MusicBrainz) SearchRecordings(ctx context.Context, artist, title, named, album string) (match.RecordingSearch, error) {
+	var res match.RecordingSearch
 	if strings.TrimSpace(title) == "" {
-		return nil, nil
+		return res, nil
 	}
 	query := "recording:" + luceneQuote(title)
+	if strings.TrimSpace(named) != "" {
+		query = "(" + query + " OR recording:" + luceneQuote(named) + "^" + strconv.Itoa(namedBoost) + ")"
+	}
 	if artist != "" {
 		query += " AND artist:" + luceneQuote(artist)
 	}
 	q := url.Values{}
 	q.Set("query", query)
 	q.Set("fmt", "json")
-	q.Set("limit", "8")
+	q.Set("limit", strconv.Itoa(match.RecordingSearchPage))
 	u := m.base + "/recording?" + q.Encode()
-	body, status, err := m.core.get(ctx, u, m.ttl)
+	key := match.AlbumKey(album)
+	variant := ""
+	if key != "" {
+		variant = "album=" + url.QueryEscape(key)
+	}
+	body, status, err := m.core.getReduced(ctx, u, variant, m.ttl, func(b []byte) ([]byte, error) {
+		return reduceRecordingSearch(b, key)
+	})
 	if err != nil {
-		return nil, err
+		return res, err
 	}
 	switch status {
 	case http.StatusOK:
 	case http.StatusBadRequest, http.StatusNotFound:
-		return nil, nil
+		return res, nil
 	default:
-		return nil, fmt.Errorf("providers: musicbrainz recording search: status %d", status)
+		return res, fmt.Errorf("providers: musicbrainz recording search: status %d", status)
 	}
-	var parsed struct {
-		Recordings []struct {
-			Releases []struct {
-				ID string `json:"id"`
-			} `json:"releases"`
-		} `json:"recordings"`
+	var listing mbListing
+	if err := json.Unmarshal(body, &listing); err != nil {
+		return res, fmt.Errorf("providers: decode musicbrainz recording search: %w", err)
 	}
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, fmt.Errorf("providers: decode musicbrainz recording search: %w", err)
-	}
-	// Collect distinct release ids in hit order, capped so one loose track never
-	// fans out into a page of hydration calls.
-	var ids []string
-	seen := make(map[string]bool)
-	for _, rec := range parsed.Recordings {
-		for _, rel := range rec.Releases {
-			if rel.ID == "" || seen[rel.ID] {
-				continue
-			}
-			seen[rel.ID] = true
-			ids = append(ids, rel.ID)
-			if len(ids) >= 5 {
-				break
-			}
-		}
-		if len(ids) >= 5 {
-			break
+	res.Unlisted = listing.Count > len(listing.Recordings)
+	hits := make([]match.SearchHit, len(listing.Recordings))
+	for i, rec := range listing.Recordings {
+		res.Listed = append(res.Listed, match.ListedRecording{
+			MBID: rec.ID, Title: rec.Title, Artist: rec.Artist, Score: rec.Score,
+			DurationSec: float64(rec.LengthMS) / 1000,
+		})
+		hits[i] = match.SearchHit{Title: rec.Title, Releases: rec.Releases}
+		if rec.Album != "" {
+			hits[i].Albums = map[string]string{key: rec.Album}
 		}
 	}
-	var out []*match.Release
+	ids := match.SpreadReleases(hits, named, album)
+	res.Capped = listing.Releases > len(ids)
 	for _, id := range ids {
 		rel, err := m.ReleaseByMBID(ctx, id)
 		if err != nil {
 			if ctx.Err() != nil {
-				return nil, fmt.Errorf("providers: musicbrainz recording hydration: %w", ctx.Err())
+				return match.RecordingSearch{}, fmt.Errorf("providers: musicbrainz recording hydration: %w", ctx.Err())
 			}
 			continue
 		}
 		if rel != nil {
-			out = append(out, rel)
+			res.Releases = append(res.Releases, rel)
 		}
 	}
-	return out, nil
+	return res, nil
 }
 
 // ReleaseMBIDsForRecording answers the releases an announced artist and

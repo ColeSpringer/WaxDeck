@@ -680,23 +680,25 @@ paths:
             X-Art-Source:
               description: >
                 Where the answering image came from: `tag`, `sidecar`,
-                `user`, `enrichment`, `feed`, or `generated` for a picture
+                `user`, `enrichment`, `acquisition`, `feed`, or
+                `generated` for a picture
                 this server built (a playlist mosaic). Omitted when the
                 store holds no attribution for it.
               schema:
                 type: string
             X-Art-Provider:
               description: >
-                The provider that supplied an `enrichment` cover.
-                Omitted for every other source.
+                The provider that supplied an `enrichment` cover, or the
+                acquisition source of an `acquisition` one. Omitted for
+                every other source.
               schema:
                 type: string
             X-Art-Source-Url:
               description: >
                 Where a fetched cover's bytes came from, redacted as
                 `ArtSource.sourceUrl` is. Omitted for a cover that never
-                crossed the network, and for one whose feed is
-                credentialed.
+                crossed the network, for an `acquisition` cover, and for
+                one whose feed is credentialed.
               schema:
                 type: string
             X-Art-Level:
@@ -1932,12 +1934,15 @@ components:
           type: string
           description: >
             Where this slot's image came from, in `ArtSource`'s
-            vocabulary (`tag`, `sidecar`, `user`, `enrichment`, `feed`,
-            `generated`). A string, not a closed enum.
+            vocabulary (`tag`, `sidecar`, `user`, `enrichment`,
+            `acquisition`, `feed`, `generated`). A string, not a closed
+            enum.
           example: tag
         provider:
           type: string
-          description: The provider that supplied an `enrichment` cover.
+          description: >
+            The provider that supplied an `enrichment` cover, or the
+            acquisition source of an `acquisition` one.
         sourceUrl:
           type: string
           description: >

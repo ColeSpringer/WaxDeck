@@ -1144,7 +1144,7 @@ func (l *Reads) Art(ctx context.Context, uc *UserCtx, apiPID, role string, size 
 		}
 		return ArtBlob{}, classify(err)
 	}
-	source := l.artSourceFor(ctx, ref, artSourceFromBlob(blob))
+	source := l.artSourceFor(ctx, ref, art, blob.SourceHash, artSourceFromBlob(blob))
 	if generated {
 		// Drawn from the members for this reader, as the stored cover is
 		// drawn from them for the owner: nobody chose it.
@@ -1221,12 +1221,12 @@ func (l *Reads) artSourceForRef(ctx context.Context, ref model.EntityRef) ArtSou
 	if err != nil || prov == nil {
 		return ArtSourceDTO{}
 	}
-	return l.artSourceFor(ctx, ref, artSourceFromProvenance(prov))
+	return l.artSourceFor(ctx, ref, model.ArtRoleFront, prov.SourceHash, artSourceFromProvenance(prov))
 }
 
 // artSourceFor is the provenance a caller may be shown for one resolved
-// cover: what the blob carried, minus a source URL that is somebody's
-// credential.
+// cover: what the blob carried, a download's thumbnail named as its
+// source's, minus a source URL that is somebody's credential.
 //
 // A feed cover's URL is minted from the feed document and lives on the
 // feed's host, so for a credentialed show it carries the same token the
@@ -1237,7 +1237,10 @@ func (l *Reads) artSourceForRef(ctx context.Context, ref model.EntityRef) ArtSou
 // It lives here, between the resolve and every DTO, rather than at the
 // call sites: the leak this closes was four call sites wide, and a
 // fifth would not know the rule either.
-func (l *Reads) artSourceFor(ctx context.Context, ref model.EntityRef, out ArtSourceDTO) ArtSourceDTO {
+func (l *Reads) artSourceFor(ctx context.Context, ref model.EntityRef, role model.ArtRole, hash string, out ArtSourceDTO) ArtSourceDTO {
+	if role == model.ArtRoleFront {
+		out = l.Ingest.downloadMark(ctx, ref, hash, out)
+	}
 	return l.artSourceRedactor(ctx, ref)(out)
 }
 
@@ -1424,16 +1427,20 @@ func (l *Reads) ItemArtRoles(ctx context.Context, uc *UserCtx, apiPID string) (A
 	// URL here while the mark beside it withheld the same value.
 	redact := l.artSourceRedactor(ctx, ref)
 	for _, i := range infos {
-		mark := redact(ArtSourceDTO{
-			Source: string(i.Source), Provider: i.Provider, SourceURL: i.SourceURL,
-		})
+		mark := ArtSourceDTO{Source: string(i.Source), Provider: i.Provider, SourceURL: i.SourceURL}
+		if i.Role == model.ArtRoleFront {
+			// A slot is the entity's own, so it answers at the entity's level.
+			mark.Level = string(ref.Type)
+			mark = l.Ingest.downloadMark(ctx, ref, i.SourceHash, mark)
+		}
+		mark = redact(mark)
 		role := ArtRoleInfoDTO{
 			Role:       string(i.Role),
 			Format:     i.Format,
 			Width:      i.Width,
 			Height:     i.Height,
-			Source:     string(i.Source),
-			Provider:   i.Provider,
+			Source:     mark.Source,
+			Provider:   mark.Provider,
 			SourceURL:  mark.SourceURL,
 			Locked:     i.Locked,
 			RoleLocked: i.RoleLocked,

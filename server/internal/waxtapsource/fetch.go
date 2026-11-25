@@ -2,41 +2,43 @@ package waxtapsource
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/colespringer/waxbin/identity"
 	"github.com/colespringer/waxbin/source"
 	"github.com/colespringer/waxbin/waxerr"
-	waxlabel "github.com/colespringer/waxlabel"
-	"github.com/colespringer/waxlabel/tag"
 	waxtap "github.com/colespringer/waxtap/v3"
+
+	"github.com/colespringer/waxdeck/server/internal/sourcetags"
+	"github.com/colespringer/waxdeck/server/internal/syncsource"
 )
 
 // Fetch downloads one video's audio and streams it to w, copying the source's
 // highest-quality audio without re-encoding. WaxTap lands the file atomically in
 // WorkDir (remuxed to a clean container, with the configured SponsorBlock cut
-// and embeds applied), provenance tags are stamped best-effort, and the bytes
+// and embeds applied), the source tags pass runs best-effort, and the bytes
 // are then copied to w through the same tagged hasher WaxBin's HTTP provider
-// uses. The temp file is always removed.
+// uses. The temp file is always removed. It is the path a podcast subscription
+// takes, so the title stays as delivered.
 func (p *Provider) Fetch(ctx context.Context, req source.FetchRequest, w io.Writer) (*source.FetchResult, error) {
-	return p.fetch(ctx, req, w, "")
+	return p.fetch(ctx, req, w, syncsource.FetchOptions{})
 }
 
-// FetchFormat downloads honoring a preferred output format. An empty format (or
-// "best") copies the source's highest-quality audio; "opus", "mp3", "m4a", and
-// "flac" transcode to that container. It satisfies the acquisition path's
-// optional format capability.
-func (p *Provider) FetchFormat(ctx context.Context, req source.FetchRequest, w io.Writer, format string) (*source.FetchResult, error) {
-	return p.fetch(ctx, req, w, format)
+// FetchWith is Fetch honouring an acquisition's options: a preferred output
+// format (empty or "best" copies the source's highest-quality audio; "opus",
+// "mp3", "m4a" and "flac" transcode to that container), and for music a
+// cleaned title and an Art Track description's artists, album and date.
+func (p *Provider) FetchWith(ctx context.Context, req source.FetchRequest, w io.Writer, opts syncsource.FetchOptions) (*source.FetchResult, error) {
+	return p.fetch(ctx, req, w, opts)
 }
 
-func (p *Provider) fetch(ctx context.Context, req source.FetchRequest, w io.Writer, format string) (*source.FetchResult, error) {
+func (p *Provider) fetch(ctx context.Context, req source.FetchRequest, w io.Writer, opts syncsource.FetchOptions) (*source.FetchResult, error) {
 	const op = "waxtapsource.Fetch"
 
 	// A FormatCopy remux muxes into the container named by the output path's
@@ -49,7 +51,7 @@ func (p *Provider) fetch(ctx context.Context, req source.FetchRequest, w io.Writ
 	if err != nil {
 		return nil, err
 	}
-	tspec, ext := transcodeFor(format, v.Formats)
+	tspec, ext := transcodeFor(opts.Format, v.Formats)
 
 	tmp, err := os.CreateTemp(p.cfg.WorkDir, "fetch-*."+ext)
 	if err != nil {
@@ -112,7 +114,9 @@ func (p *Provider) fetch(ctx context.Context, req source.FetchRequest, w io.Writ
 	// why it is logged here and not on the Info path.
 	p.log.Info("youtube download delivered", "video", videoID,
 		"client", res.Client, "via_watch_page", res.ViaWatchPage)
-	p.stampProvenance(ctx, path, req.URL, videoID)
+	p.stampSourceTags(ctx, path, sourcetags.Source{
+		URL: req.URL, ID: videoID, Author: v.Author, Title: v.Title, Description: v.Description, Music: opts.Music,
+	})
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -179,43 +183,23 @@ func (p *Provider) warningEvents(ctx context.Context, url string) func(waxtap.Ev
 	}
 }
 
-// stampProvenance writes SOURCE_URL/SOURCE_ID/ACQUISITION_DATE tags onto the
-// downloaded file with WaxLabel. Provenance is best effort: a container WaxLabel
-// cannot parse or write is logged and the download proceeds untagged.
-func (p *Provider) stampProvenance(ctx context.Context, path, sourceURL, videoID string) {
-	doc, err := waxlabel.ParseFile(ctx, path)
-	if err != nil {
-		p.log.Warn("provenance stamp skipped: parse failed", "path", path, "err", err)
-		return
+// stampSourceTags runs the source tags pass on the downloaded file: the
+// provenance tags, and the clean artist, title, album and date where WaxTap
+// embedded the video's own. Best effort: a container WaxLabel cannot parse or
+// write is logged and the download proceeds as delivered.
+func (p *Provider) stampSourceTags(ctx context.Context, path string, src sourcetags.Source) {
+	if !p.cfg.EmbedMetadata {
+		// Nothing was embedded, so there is nothing to clean.
+		src.Author, src.Title, src.Description = "", "", ""
 	}
-	plan, err := doc.Edit().
-		Set(tag.SourceURL, sourceURL).
-		Set(tag.SourceID, videoID).
-		Set(tag.AcquisitionDate, time.Now().UTC().Format(time.RFC3339)).
-		Prepare()
-	if err != nil {
-		p.log.Warn("provenance stamp skipped: prepare failed", "path", path, "err", err)
-		return
+	err := sourcetags.Stamp(ctx, path, src)
+	switch {
+	case err == nil:
+	case errors.Is(err, sourcetags.ErrPostCommit):
+		p.log.Warn("source tags written; post-commit step failed", "path", path, "err", err)
+	default:
+		p.log.Warn("source tags skipped", "path", path, "err", err)
 	}
-	if _, res, err := plan.Execute(ctx, waxlabel.SaveBack()); err != nil {
-		// Committed says the tags landed and a step after the write failed,
-		// so the stamp is on disk and only the sync is worth reporting.
-		if writeLanded(res, err) {
-			p.log.Warn("provenance stamped; post-commit step failed", "path", path, "err", err)
-		} else {
-			p.log.Warn("provenance stamp skipped: write failed", "path", path, "err", err)
-		}
-	}
-}
-
-// writeLanded says whether a SaveBack write reached the file. Committed is
-// what answers that, not the error: an error with Committed set is a landed
-// write whose post-commit step failed, so the bytes are in place and the plan
-// is spent. A clean run with Committed clear is a no-op plan, which writes
-// nothing by contract and is not a failure either. Duplicated from the
-// service package, which this one cannot import.
-func writeLanded(res waxlabel.SaveResult, err error) bool {
-	return err == nil || res.Committed
 }
 
 // transcodeFor maps a caller's format preference to the WaxTap transcode spec

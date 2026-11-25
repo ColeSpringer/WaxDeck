@@ -19,18 +19,21 @@ type UploadBatch struct {
 	State          string
 	ReviewEntryIDs string
 	// Identify decides identification for every entry the batch opens.
-	Identify    bool
+	Identify bool
+	// AcceptBest decides, the same way, whether those entries take their
+	// best match without review.
+	AcceptBest  bool
 	CreatedAtNS int64
 	ExpiresAtNS int64
 }
 
 const uploadBatchCols = `id, user_id, grouping, media_type, library_pid, state,
-	review_entry_ids, identify, created_at_ns, expires_at_ns`
+	review_entry_ids, identify, accept_best, created_at_ns, expires_at_ns`
 
 func scanUploadBatch(row interface{ Scan(...any) error }) (UploadBatch, error) {
 	var b UploadBatch
 	err := row.Scan(&b.ID, &b.UserID, &b.Grouping, &b.MediaType, &b.LibraryPID,
-		&b.State, &b.ReviewEntryIDs, &b.Identify, &b.CreatedAtNS, &b.ExpiresAtNS)
+		&b.State, &b.ReviewEntryIDs, &b.Identify, &b.AcceptBest, &b.CreatedAtNS, &b.ExpiresAtNS)
 	return b, err
 }
 
@@ -38,9 +41,9 @@ func scanUploadBatch(row interface{ Scan(...any) error }) (UploadBatch, error) {
 func (d *DB) InsertUploadBatch(ctx context.Context, b UploadBatch) error {
 	_, err := d.w.ExecContext(ctx, `
 		INSERT INTO upload_batches (`+uploadBatchCols+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		b.ID, b.UserID, b.Grouping, b.MediaType, b.LibraryPID, b.State,
-		b.ReviewEntryIDs, b.Identify, b.CreatedAtNS, b.ExpiresAtNS)
+		b.ReviewEntryIDs, b.Identify, b.AcceptBest, b.CreatedAtNS, b.ExpiresAtNS)
 	if err != nil {
 		return fmt.Errorf("db: inserting upload batch: %w", err)
 	}

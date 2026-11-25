@@ -979,3 +979,48 @@ func TestDeezerForgetMissesSparesTheEnrichmentSearches(t *testing.T) {
 		t.Fatalf("album searches = %d, want enrichment's cache left alone", got)
 	}
 }
+
+// A release group's front comes from the group's own address, at the
+// same rendition, and a group the archive holds nothing for is
+// remembered apart from a release with the same id.
+func TestCoverArtGroupFront(t *testing.T) {
+	t.Parallel()
+	var paths []string
+	var mu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		if strings.Contains(r.URL.Path, "/bare/") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(pngBytes())
+	}))
+	defer srv.Close()
+	caa := testCAA(srv, 0)
+
+	data, mime, err := caa.GroupFrontCover(context.Background(), "rg-1")
+	if err != nil || mime != "image/png" || len(data) == 0 {
+		t.Fatalf("group front = (%d bytes, %q, %v)", len(data), mime, err)
+	}
+	if got, want := caa.GroupFrontCoverURL("rg-1"), srv.URL+"/release-group/rg-1/front-500"; got != want {
+		t.Errorf("group front url = %q, want %q", got, want)
+	}
+	for range 2 {
+		if _, _, err := caa.GroupFrontCover(context.Background(), "bare"); !errors.Is(err, ErrNoCover) {
+			t.Fatalf("a bare group = %v, want ErrNoCover", err)
+		}
+	}
+	// The group's miss says nothing about a release.
+	if _, _, err := caa.FrontCover(context.Background(), "bare"); !errors.Is(err, ErrNoCover) {
+		t.Fatalf("a bare release = %v, want ErrNoCover", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	want := []string{"/release-group/rg-1/front-500", "/release-group/bare/front-500", "/release/bare/front-500"}
+	if !slices.Equal(paths, want) {
+		t.Errorf("asked %v, want %v (one ask per bare id)", paths, want)
+	}
+}

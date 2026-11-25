@@ -302,3 +302,74 @@ func TestCompareFoldersBySegmentNumbers(t *testing.T) {
 		t.Errorf("order = %q, want %q", in, want)
 	}
 }
+
+func TestClusterPlaceholderAlbumKeepsSinglesApart(t *testing.T) {
+	tracks := []Track{
+		{PID: "1", Path: "/dl/a/Song.opus", Tags: map[string]string{"ARTIST": "Band", "TITLE": "Song", "ALBUM": "Song - Single"}},
+		{PID: "2", Path: "/dl/b/Song.opus", Tags: map[string]string{"ARTIST": "Band", "TITLE": "Song", "ALBUM": "Song \u2013 single"}},
+	}
+	if units := Cluster(tracks); len(units) != 2 {
+		t.Fatalf("placeholder albums must not merge two singles, got %d units", len(units))
+	}
+}
+
+func TestUnitAlbumSkipsValuesThatNormalizeToNothing(t *testing.T) {
+	u := Unit{Tracks: []Track{
+		{PID: "1", Tags: map[string]string{"TITLE": "One", "ALBUM": "???"}},
+		{PID: "2", Tags: map[string]string{"TITLE": "Two", "ALBUM": "???"}},
+		{PID: "3", Tags: map[string]string{"TITLE": "Three", "ALBUM": "Real Album"}},
+	}}
+	if got := unitAlbum(u); got != "Real Album" {
+		t.Fatalf("unitAlbum = %q, want the one album that is a search key", got)
+	}
+	u.Tracks = u.Tracks[:2]
+	if got := unitAlbum(u); got != "" {
+		t.Fatalf("unitAlbum = %q, want none for an album of punctuation", got)
+	}
+}
+
+func TestClusterNonPlaceholderSingleAlbumStillMerges(t *testing.T) {
+	tracks := []Track{
+		{PID: "1", Path: "/dl/a/One.opus", Tags: map[string]string{"ARTIST": "Band", "TITLE": "One", "ALBUM": "Other - Single"}},
+		{PID: "2", Path: "/dl/a/Two.opus", Tags: map[string]string{"ARTIST": "Band", "TITLE": "Two", "ALBUM": "Other - Single"}},
+	}
+	if units := Cluster(tracks); len(units) != 1 {
+		t.Fatalf("a real album named like a single still merges, got %d units", len(units))
+	}
+}
+
+// A store single of several tracks is named "<lead title> - Single" too:
+// another track carrying the album under its own title makes it a real one.
+func TestClusterStoreSingleOfSeveralTracksIsOneUnit(t *testing.T) {
+	single := func(dir string, titles ...string) []Track {
+		var ts []Track
+		for i, title := range titles {
+			ts = append(ts, Track{PID: itoa(i + 1), Path: dir + "/" + title + ".flac", Tags: map[string]string{
+				"ARTIST": "Band", "ALBUMARTIST": "Band", "TITLE": title, "ALBUM": "Song - Single",
+			}})
+		}
+		return ts
+	}
+	for _, c := range []struct {
+		name   string
+		tracks []Track
+	}{
+		{"the song and its acoustic take", single("/lib/Band/Song - Single", "Song", "Song (Acoustic)")},
+		{"the song, a b-side and an edit", single("/lib/Band/Song - Single", "Song", "B-Side", "Song (Radio Edit)")},
+		{"across two folders", append(single("/dl/a", "Song"), single("/dl/b", "Song (Acoustic)")...)},
+	} {
+		units := Cluster(c.tracks)
+		if len(units) != 1 || len(units[0].Tracks) != len(c.tracks) {
+			t.Errorf("%s: %d units, want one of %d tracks", c.name, len(units), len(c.tracks))
+			continue
+		}
+		if got := unitAlbum(units[0]); got != "Song - Single" {
+			t.Errorf("%s: unitAlbum = %q, want the single's own album", c.name, got)
+		}
+	}
+	// Carried by its one track, the same album names no release.
+	lone := Cluster(single("/dl/a", "Song"))
+	if len(lone) != 1 || unitAlbum(lone[0]) != "" {
+		t.Errorf("a lone track's placeholder: %d units, unitAlbum %q, want one unit naming no album", len(lone), unitAlbum(lone[0]))
+	}
+}

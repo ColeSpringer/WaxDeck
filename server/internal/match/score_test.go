@@ -205,3 +205,13 @@ func TestScoreYearGrading(t *testing.T) {
 		t.Fatalf("year grading should order same < near < far: %v %v %v", same, near, far)
 	}
 }
+
+func TestScorePlaceholderAlbumAddsNoAlbumComponent(t *testing.T) {
+	u := unitFor("Artist", "One - Single", "One")
+	r := release("Artist", "Something Else", 0, "One")
+	for _, c := range Score(u, r, Weights{}).Components {
+		if c.Name == "album" {
+			t.Fatalf("placeholder album must add no album component: %+v", c)
+		}
+	}
+}

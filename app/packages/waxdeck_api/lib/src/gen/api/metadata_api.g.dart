@@ -77,9 +77,10 @@ abstract interface class MetadataApi {
   ///
   /// Applies one or more scalar field edits atomically to the catalog.
   /// `writeBack` additionally writes the new values into the backing file's
-  /// tags (refused by upstream design for episodes, virtual tracks, and files
-  /// shared by several items; the edit still lands in the catalog and the
-  /// response carries the per-file failures). `lock` (default true) locks each
+  /// tags, all but a track's recording id (`mbid`), which stays in the catalog.
+  /// Write-back is refused by upstream design for episodes, virtual tracks, and
+  /// files shared by several items; the edit still lands in the catalog and the
+  /// response carries the per-file failures. `lock` (default true) locks each
   /// edited field against scans and enrichment; editing a field someone locked
   /// earlier requires `force` or answers `field-locked`. Unknown fields for the
   /// item's kind answer `invalid-request`. Identifier fields (ISRC, ISBN, ASIN,
@@ -175,17 +176,19 @@ abstract interface class MetadataApi {
   /// skips items with locked target fields and reports them instead of failing
   /// the batch; without it a locked item fails the whole batch with
   /// `field-locked`. Write-back failures are reported per item and never undo
-  /// the catalog batch. Every edited field is locked on every edited item, so a
-  /// repeat edit of the same field needs `force` or `skipLocked`. Editing a
-  /// release-keying field (`album`, `album_artist`) moves the edited tracks to
-  /// a new release identity, and where they land depends on coverage: a batch
-  /// holding **every** member of the album renames the release in place, so the
-  /// album keeps its pid along with its artwork, curation and play state, while
-  /// a batch holding only **some** of them forks those onto a fresh album
-  /// entity and leaves the rest behind. A rename onto a name another release
-  /// already owns merges into it. `resultingAlbumPid` reports where the edited
-  /// items sit either way. A year keys no release: an album's year follows the
-  /// years of its tracks, so a `year` edit changes it without moving anything.
+  /// the catalog batch. A track's recording id (`mbid`) is never written back;
+  /// it stays in the catalog. Every edited field is locked on every edited
+  /// item, so a repeat edit of the same field needs `force` or `skipLocked`.
+  /// Editing a release-keying field (`album`, `album_artist`) moves the edited
+  /// tracks to a new release identity, and where they land depends on coverage:
+  /// a batch holding **every** member of the album renames the release in
+  /// place, so the album keeps its pid along with its artwork, curation and
+  /// play state, while a batch holding only **some** of them forks those onto a
+  /// fresh album entity and leaves the rest behind. A rename onto a name
+  /// another release already owns merges into it. `resultingAlbumPid` reports
+  /// where the edited items sit either way. A year keys no release: an album's
+  /// year follows the years of its tracks, so a `year` edit changes it without
+  /// moving anything.
   Future<BulkEditResult> bulkEditMetadata({
     required List<String> itemPids,
     required Map<String, String> fields,
@@ -452,6 +455,12 @@ abstract interface class MetadataApi {
   /// `lyrics`, `chapters`, `art`, `art.ROLE`, `acquisition`, `credit.ROLE`, and
   /// `tag.KEY`, and `kind`.
   ///
+  /// A track's recording id (`mbid`) cannot be unlocked while its file carries
+  /// no recording id: the catalog alone holds it, so the next scan would clear
+  /// it. Naming it to unlock answers `invalid-request` with `params.reason`
+  /// `recording-id-held` and changes no lock. A file carrying another recording
+  /// id allows the unlock, and the next scan takes the file's.
+  ///
   /// `kind` pins whether the item is a track or a book: an upload imported
   /// under a media type its file would not get on its own takes the pin, and
   /// while it holds a scan keeps the item's kind whatever its library or tags
@@ -579,6 +588,12 @@ abstract interface class MetadataApi {
   /// synchronously and applies what they return, respecting locks and never
   /// overwriting a non-empty curated value. This is the editor's "fetch for me"
   /// button; the whole-library pass lives under `/library/enrichment`.
+  ///
+  /// A cover lands in the catalog. One that replaces a download's thumbnail (an
+  /// `acquisition` cover) is written into the item's file too, as a review
+  /// approval's cover is, so a later re-read of the file keeps it; where the
+  /// file cannot be written the cover stands in the catalog alone and `skipped`
+  /// carries `cover: not written to the file: ` and why.
   ///
   /// With a `proposal` in the body, nothing is fetched: the call commits
   /// exactly the proposal a preview returned, so what was approved is what

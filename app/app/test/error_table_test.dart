@@ -178,6 +178,15 @@ void main() {
       expect(explainError(en, schema), en.errorIncompatibleBackup);
       expect(explainError(es, schema), es.errorIncompatibleBackup);
 
+      const held = WaxDeckApiException(
+        code: 'invalid-request',
+        message: _serverMessage,
+        params: <String, String>{'reason': 'recording-id-held'},
+      );
+      expect(explainError(en, held), en.errorRecordingIdHeld);
+      expect(explainError(es, held), es.errorRecordingIdHeld);
+      expect(explainRefusal(en, held), en.errorRecordingIdHeld);
+
       const later = WaxDeckApiException(
         code: 'invalid-request',
         message: _serverMessage,

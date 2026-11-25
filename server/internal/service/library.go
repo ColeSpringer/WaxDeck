@@ -194,6 +194,10 @@ type Config struct {
 	// ahead of the catalog's built-ins and reused for per-item
 	// enrichment.
 	EnrichmentProviders []enrich.Provider
+	// ReleaseCovers fetches a release's and a release group's front
+	// covers for an approved match; nil when matching is off, and an
+	// approval then fetches no cover.
+	ReleaseCovers ReleaseCovers
 	// FpcalcPath locates the fingerprint binary; empty looks it up on
 	// PATH, and a missing binary just disables fingerprint evidence.
 	FpcalcPath string
@@ -502,6 +506,9 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	}
 	l.Enrichment.musicbrainzConfigured = cfg.EnrichmentContact != ""
 	l.Ingest.sourceProviders = cfg.SourceProviders
+	l.Ingest.releaseCovers = cfg.ReleaseCovers
+	l.Ingest.reviewCoverDir = filepath.Join(cfg.DataDir, reviewCoverDirName)
+	l.Ingest.sweepReviewCovers(ctx)
 	if err := l.initSync(ctx); err != nil {
 		paths.Close()
 		lib.Close()

@@ -58,7 +58,8 @@ func (h *harness) rematchAndWait(t *testing.T, pid string) string {
 }
 
 // An approved match is written into the files as well as the catalog,
-// so a rescan reads back what the catalog holds and nothing stays owed.
+// all but the recording id, which the catalog keeps: a rescan reads back
+// what the catalog holds and nothing else stays owed.
 func TestApprovedMatchIsWrittenToTheFiles(t *testing.T) {
 	t.Parallel()
 	h, pid, path := nightfallLibrary(t, nil)
@@ -68,19 +69,23 @@ func TestApprovedMatchIsWrittenToTheFiles(t *testing.T) {
 	if got := tagOnDisk(t, path, tag.Artist); got != "The Cardinal Waves" {
 		t.Fatalf("artist on disk = %q, want the release's", got)
 	}
-	if got := tagOnDisk(t, path, tag.MBRecordingID); got != "00000000-0000-4000-8000-000000000001" {
-		t.Fatalf("recording id on disk = %q, want the pairing's", got)
+	if got := tagOnDisk(t, path, tag.MBRecordingID); got != "" {
+		t.Fatalf("recording id on disk = %q, want it kept in the catalog", got)
+	}
+	if item := decode[Item](t, get(t, h.ts, "/api/v1/items/"+pid, h.token)); item.Mbid == nil || *item.Mbid != "00000000-0000-4000-8000-000000000001" {
+		t.Fatalf("catalog recording id = %v, want the pairing's", item.Mbid)
 	}
 	owed := decode[FileDiagnosticPage](t, get(t, h.ts, "/api/v1/library/diagnostics?code=tag_write_owed", h.token))
 	for _, d := range owed.Diagnostics {
-		if strings.Contains(d.Path, "nightfall") {
+		if strings.Contains(d.Path, "nightfall") && (d.TagKey == nil || *d.TagKey != "mbid") {
 			t.Fatalf("a value is still owed to %s: %+v", d.Path, d)
 		}
 	}
 }
 
 // A revert writes the snapshot back to the files too, and a file's own
-// recording id survives the round trip rather than being blanked.
+// recording id stays on it throughout: the apply keeps the pairing's in
+// the catalog, and the revert puts the file's back there.
 func TestRevertWritesTheSnapshotBackAndKeepsAFilesOwnMBID(t *testing.T) {
 	t.Parallel()
 	const own = "00000000-0000-4000-8000-0000000000ff"
@@ -88,8 +93,11 @@ func TestRevertWritesTheSnapshotBackAndKeepsAFilesOwnMBID(t *testing.T) {
 		specs[0].Tags["MUSICBRAINZ_TRACKID"] = own
 	})
 	entry := h.rematchAndWait(t, pid)
-	if got := tagOnDisk(t, path, tag.MBRecordingID); got == own {
-		t.Fatal("the apply left the file's recording id alone")
+	if got := tagOnDisk(t, path, tag.MBRecordingID); got != own {
+		t.Fatalf("recording id on disk after the apply = %q, want the file's own", got)
+	}
+	if item := decode[Item](t, get(t, h.ts, "/api/v1/items/"+pid, h.token)); item.Mbid == nil || *item.Mbid == own {
+		t.Fatalf("catalog recording id after the apply = %v, want the pairing's", item.Mbid)
 	}
 	wantStatus(t, h.postJSON(t, "/api/v1/review/queue/"+entry+"/revert", nil), 200, "revert")
 	if got := tagOnDisk(t, path, tag.MBRecordingID); got != own {

@@ -48,6 +48,9 @@ type Prefs struct {
 	// zero value is the default, which is what "absent means identify"
 	// already means.
 	IdentifyOptOut bool `json:"identifyOptOut,omitempty"`
+	// AcceptBestMatch is the default this account's submissions open
+	// with for taking their best match without review. Off by default.
+	AcceptBestMatch bool `json:"acceptBestMatch,omitempty"`
 	// BrowseShowUnknown draws the bucket for items a dimension is absent
 	// from. A presentation choice, not a server filter. Pointer here and
 	// on Autoplay because absent means on and false is a choice.

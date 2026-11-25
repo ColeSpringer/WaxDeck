@@ -206,7 +206,7 @@ func parseConfig(fs *flag.FlagSet, args []string, lookupEnv func(string) (string
 
 		matchingOn   = env.Bool("matching", "WAXDECK_MATCHING", true, "identify new and uploaded music against MusicBrainz (paced background lookups)")
 		mbBase       = fs.String("musicbrainz-base", envOr("WAXDECK_MUSICBRAINZ_BASE", ""), "MusicBrainz API base override for matching, the ISRC upgrade and radio artwork (a local mirror, or a stub in tests); the enrichment pass always asks the public service")
-		coverArtBase = fs.String("coverart-base", envOr("WAXDECK_COVERART_BASE", ""), "Cover Art Archive base override for radio artwork (a mirror, or a stub in tests); that rung only exists when matching is on, and the enrichment pass always asks the public archive")
+		coverArtBase = fs.String("coverart-base", envOr("WAXDECK_COVERART_BASE", ""), "Cover Art Archive base override for radio artwork and review approval covers (a mirror, or a stub in tests); both only exist when matching is on, and the enrichment pass always asks the public archive")
 		trustedProxy = fs.String("trusted-proxies", envOr("WAXDECK_TRUSTED_PROXIES", ""), "comma-separated CIDRs or addresses of reverse proxies whose X-Forwarded-For may be believed; empty counts the socket address")
 		corsOrigins  = fs.String("cors-origins", envOr("WAXDECK_CORS_ORIGINS", ""), "comma-separated origins allowed to call this server from a browser on another origin (a self-hosted Feishin, say); empty serves same-origin only")
 		acoustidKey  = fs.String("acoustid-key", envOr("WAXDECK_ACOUSTID_KEY", ""), "AcoustID API key; empty disables fingerprint evidence in matching")

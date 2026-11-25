@@ -182,6 +182,7 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState>
     String action, {
     String? candidateMbid,
     MediaType? mediaType,
+    bool? useSuggested,
   }) async {
     final writes = ref.read(catalogWritesProvider);
     final result = await ref
@@ -191,6 +192,7 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState>
           action: action,
           candidateMbid: candidateMbid,
           mediaType: mediaType?.wireName,
+          useSuggested: useSuggested,
         );
     // A decision applied rewrites the items it was about.
     writes.landed();
@@ -302,6 +304,45 @@ final selectedMediumProvider =
       SelectedMedium.new,
     );
 
+/// Whether the reviewer turned on filing an entry under its suggested
+/// artist and title. The pane's buttons and the queue's keys both decide the
+/// entry, but the switch belongs to the open entry: closing the pane or
+/// moving to another entry drops it, so it never outlives the detail it was
+/// set on.
+class UseSuggested extends Notifier<bool> {
+  UseSuggested(this.entryId);
+
+  final String entryId;
+
+  @override
+  bool build() => false;
+
+  void set(bool value) => state = value;
+}
+
+final useSuggestedProvider = NotifierProvider.autoDispose
+    .family<UseSuggested, bool, String>(UseSuggested.new);
+
+/// The `useSuggested` a decision on [entryId] goes out with: true only for
+/// `as-is` and `unofficial`, only while the reviewer has it on, and only
+/// while the loaded detail still offers a suggestion and the entry imports
+/// as music; null otherwise. Every path that sends such a decision reads it
+/// here, a retry included.
+bool? reviewDecisionUseSuggested(WidgetRef ref, String entryId, String action) {
+  if (action != 'as-is' && action != 'unofficial') return null;
+  if (!ref.read(useSuggestedProvider(entryId))) return null;
+  final detail = ref.read(reviewEntryProvider(entryId)).value;
+  if (detail?.suggested == null) return null;
+  // The suggestion files music; an audiobook import ignores it.
+  final medium = reviewEntryMedium(
+    ref,
+    entryId,
+    detail!.origin,
+    detail.mediaType,
+  );
+  return medium == MediaType.audiobook ? null : true;
+}
+
 /// Whether an entry stages new files, which is what lets its medium
 /// change before they are imported. A scanned or rematched entry's items
 /// are already in the library, so their kind is not the review's to set.
@@ -404,6 +445,7 @@ class ReviewEntryController extends AsyncNotifier<ReviewEntryDetail> {
     String action, {
     String? candidateMbid,
     MediaType? mediaType,
+    bool? useSuggested,
   }) async {
     final writes = ref.read(catalogWritesProvider);
     final result = await ref
@@ -413,6 +455,7 @@ class ReviewEntryController extends AsyncNotifier<ReviewEntryDetail> {
           action: action,
           candidateMbid: candidateMbid,
           mediaType: mediaType?.wireName,
+          useSuggested: useSuggested,
         );
     writes.landed();
     _refresh();

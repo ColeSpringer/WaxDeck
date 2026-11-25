@@ -132,6 +132,25 @@ func (c *CoverArt) FrontCoverURL(releaseMBID string) string {
 	return c.base + "/release/" + url.PathEscape(releaseMBID) + "/front-500"
 }
 
+// GroupFrontCoverURL is the address GroupFrontCover fetches a release
+// group's front cover from, at the same rendition as a release's.
+func (c *CoverArt) GroupFrontCoverURL(releaseGroupMBID string) string {
+	if releaseGroupMBID == "" {
+		return ""
+	}
+	return c.base + "/release-group/" + url.PathEscape(releaseGroupMBID) + "/front-500"
+}
+
+// GroupFrontCover downloads a release group's front cover: the archive's
+// pick among its releases' fronts. Same pacing, size bound and miss
+// memory as FrontCover, with a group's misses kept apart from releases'.
+func (c *CoverArt) GroupFrontCover(ctx context.Context, releaseGroupMBID string) ([]byte, string, error) {
+	if releaseGroupMBID == "" {
+		return nil, "", ErrNoCover
+	}
+	return c.fetchFront(ctx, "release-group/"+releaseGroupMBID, c.GroupFrontCoverURL(releaseGroupMBID))
+}
+
 // FrontCover downloads a release's front cover, at the archive's 500px
 // rendition rather than the original: an original scan can be a 20 MB
 // TIFF, and the archive's storage is slow enough that the bytes are the
@@ -144,12 +163,16 @@ func (c *CoverArt) FrontCover(ctx context.Context, releaseMBID string) ([]byte, 
 	if releaseMBID == "" {
 		return nil, "", ErrNoCover
 	}
+	return c.fetchFront(ctx, releaseMBID, c.FrontCoverURL(releaseMBID))
+}
+
+// fetchFront fetches one front from raw, remembering a 404 under key.
+func (c *CoverArt) fetchFront(ctx context.Context, key, raw string) ([]byte, string, error) {
 	// Asked and answered. Releases with nothing on file are the bulk of
 	// any walk, so this is what makes a second walk cheap.
-	if c.knownBare(releaseMBID) {
+	if c.knownBare(key) {
 		return nil, "", ErrNoCover
 	}
-	raw := c.FrontCoverURL(releaseMBID)
 	u, err := url.Parse(raw)
 	if err != nil {
 		return nil, "", err
@@ -176,7 +199,7 @@ func (c *CoverArt) FrontCover(ctx context.Context, releaseMBID string) ([]byte, 
 	case http.StatusNotFound:
 		// The only outcome that is about this release rather than about
 		// the archive's afternoon, so the only one remembered.
-		c.rememberBare(releaseMBID)
+		c.rememberBare(key)
 		return nil, "", ErrNoCover
 	default:
 		return nil, "", fmt.Errorf("providers: cover art archive: status %d", resp.StatusCode)

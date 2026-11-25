@@ -129,11 +129,12 @@ class ArtRoleInfo {
   final int? height;
 
   /// Where this slot's image came from, in `ArtSource`'s vocabulary (`tag`,
-  /// `sidecar`, `user`, `enrichment`, `feed`, `generated`). A string, not a
-  /// closed enum.
+  /// `sidecar`, `user`, `enrichment`, `acquisition`, `feed`, `generated`). A
+  /// string, not a closed enum.
   final String? source;
 
-  /// The provider that supplied an `enrichment` cover.
+  /// The provider that supplied an `enrichment` cover, or the acquisition
+  /// source of an `acquisition` one.
   final String? provider;
 
   /// Where a fetched cover's bytes came from, redacted exactly as

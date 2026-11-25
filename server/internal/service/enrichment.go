@@ -8,6 +8,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"slices"
 	"sort"
@@ -638,9 +639,9 @@ func (l *Enrichment) EnrichItemFor(ctx context.Context, uc *UserCtx, apiItemPID 
 		return nil, nil, err
 	}
 	if proposal == nil {
-		return l.enrichItemFully(ctx, it, wants)
+		return l.enrichItemFully(ctx, uc, it, wants)
 	}
-	applied, skipped, err = l.enrichCommitProposal(ctx, it.PID, wants, *proposal)
+	applied, skipped, err = l.enrichCommitProposal(ctx, uc, it.PID, wants, *proposal)
 	if err != nil {
 		return applied, skipped, err
 	}
@@ -654,9 +655,10 @@ func (l *Enrichment) EnrichItemFor(ctx context.Context, uc *UserCtx, apiItemPID 
 // enrichItemFully fetches the wanted artifacts for one item from the
 // injected providers, then runs the catalog's key-free built-ins for it,
 // which the injected-provider port cannot reach: the interactive button's
-// path, and a scoped health fix's.
-func (l *Enrichment) enrichItemFully(ctx context.Context, it *model.ItemView, wants []string) (applied, skipped []string, err error) {
-	applied, skipped, err = l.enrichItemNow(ctx, it.PID, wants, true)
+// path, and a scoped health fix's. reader is who reads the result, nil
+// for anyone.
+func (l *Enrichment) enrichItemFully(ctx context.Context, reader *UserCtx, it *model.ItemView, wants []string) (applied, skipped []string, err error) {
+	applied, skipped, err = l.enrichItemNow(ctx, reader, it.PID, wants, true)
 	if err != nil {
 		return applied, skipped, err
 	}
@@ -791,11 +793,12 @@ func dropEntriesWithPrefix(entries []string, prefix string) []string {
 // per item across whole rules, where re-reading would double every
 // facade round trip.
 func (l *Enrichment) EnrichItemNow(ctx context.Context, pid model.PID, wants []string) (applied, skipped []string, err error) {
-	return l.enrichItemNow(ctx, pid, wants, false)
+	return l.enrichItemNow(ctx, nil, pid, wants, false)
 }
 
-// enrichItemNow is EnrichItemNow, told whether the catalog's pass follows.
-func (l *Enrichment) enrichItemNow(ctx context.Context, pid model.PID, wants []string, catalogAfter bool) (applied, skipped []string, err error) {
+// enrichItemNow is EnrichItemNow, told who reads the result and whether
+// the catalog's pass follows.
+func (l *Enrichment) enrichItemNow(ctx context.Context, reader *UserCtx, pid model.PID, wants []string, catalogAfter bool) (applied, skipped []string, err error) {
 	if err := validateEnrichWants(wants); err != nil {
 		return nil, nil, err
 	}
@@ -803,7 +806,7 @@ func (l *Enrichment) enrichItemNow(ctx context.Context, pid model.PID, wants []s
 	if err != nil {
 		return nil, nil, err
 	}
-	st.catalogAfter = catalogAfter
+	st.catalogAfter, st.reader = catalogAfter, reader
 	preview := l.enrichPropose(ctx, st, wants)
 	if st.unofficial {
 		// The propose half already skipped every want; the commit would
@@ -838,6 +841,9 @@ type enrichItemState struct {
 	locked     map[string]bool
 	// catalogAfter says the catalog's own pass follows for what is unmet.
 	catalogAfter bool
+	// reader is who reads the result, nil for anyone: a file a write could
+	// not reach is named to them only as mayReadFailure allows.
+	reader *UserCtx
 }
 
 // loadEnrichItemState reads the item, its release status, and - for
@@ -1018,7 +1024,7 @@ func (l *Enrichment) validateEnrichProposal(wants []string, proposal EnrichPropo
 // enrichCommitProposal is the API's apply-with-proposal entry: load the
 // item state fresh (this is a separate request from the preview) and
 // commit.
-func (l *Enrichment) enrichCommitProposal(ctx context.Context, pid model.PID, wants []string, proposal EnrichProposalDTO) (applied, skipped []string, err error) {
+func (l *Enrichment) enrichCommitProposal(ctx context.Context, reader *UserCtx, pid model.PID, wants []string, proposal EnrichProposalDTO) (applied, skipped []string, err error) {
 	if err := validateEnrichWants(wants); err != nil {
 		return nil, nil, err
 	}
@@ -1026,6 +1032,7 @@ func (l *Enrichment) enrichCommitProposal(ctx context.Context, pid model.PID, wa
 	if err != nil {
 		return nil, nil, err
 	}
+	st.reader = reader
 	return l.enrichCommit(ctx, st, wants, proposal)
 }
 
@@ -1054,7 +1061,7 @@ func (l *Enrichment) enrichCommit(ctx context.Context, st enrichItemState, wants
 		}
 	}
 	if proposal.Cover != nil {
-		record(l.commitCover(ctx, st.it, *proposal.Cover, st.locked))
+		record(l.commitCover(ctx, st.it, *proposal.Cover, st.locked, st.reader))
 	}
 	// Routed on the want each field belongs to, which enrichWantForField
 	// already owns: a second list of names here would let a field added
@@ -1137,8 +1144,10 @@ func (l *Enrichment) enrichProvidersWith(want enrich.Capability, target enrich.T
 // propose and commit halves so a slot that locked or filled between a
 // preview and its apply is skipped, never overwritten. Presence is
 // judged through the art resolution chain, so an item already covered
-// by its album's art is left alone.
-func (l *Enrichment) coverGuard(ctx context.Context, it *model.ItemView, locked map[string]bool) (skippedEntry string) {
+// by its album's art is left alone; a download's thumbnail is a vacancy
+// any provider's cover may fill. rank is the front's, when the guard got
+// as far as reading it.
+func (l *Enrichment) coverGuard(ctx context.Context, it *model.ItemView, locked map[string]bool) (skippedEntry string, rank int) {
 	// The catalog holds item-level art for tracks and books only, so an
 	// episode write is refused whatever the bytes are. Without this the
 	// want fetches a cover from every provider first and reports "no
@@ -1146,23 +1155,23 @@ func (l *Enrichment) coverGuard(ctx context.Context, it *model.ItemView, locked 
 	// that could never have landed - and re-fetches on the next request.
 	// An episode's picture is the feed's, resolved from its show.
 	if it.Kind == model.KindEpisode {
-		return "cover: an episode's cover comes from its feed"
+		return "cover: an episode's cover comes from its feed", 0
 	}
 	if locked["art"] {
-		return "cover: locked"
+		return "cover: locked", 0
 	}
-	ref := model.EntityRef{Type: model.ArtTrack, PID: it.PID}
-	if _, err := l.lib.ArtProvenance(ctx, ref, model.ArtRoleFront); err == nil {
-		return "cover: already present"
+	rank = l.Ingest.frontArtRank(ctx, model.EntityRef{Type: model.ArtTrack, PID: it.PID}, false)
+	if !artVacant(rank) {
+		return "cover: already present", rank
 	}
-	return ""
+	return "", rank
 }
 
 // proposeCover asks the cover providers for one item's front cover and
 // returns the first answer as a proposal, writing nothing.
 func (l *Enrichment) proposeCover(ctx context.Context, st enrichItemState) (proposal *EnrichCoverProposalDTO, skippedEntry string) {
 	it, locked := st.it, st.locked
-	if s := l.coverGuard(ctx, it, locked); s != "" {
+	if s, _ := l.coverGuard(ctx, it, locked); s != "" {
 		return nil, s
 	}
 	providers, viaCatalog := l.itemProviders(st, enrichWantCover, enrich.CapCover, enrich.TargetReleaseGroup)
@@ -1203,9 +1212,11 @@ func (l *Enrichment) proposeCover(ctx context.Context, st enrichItemState) (prop
 }
 
 // commitCover stores a proposed cover. The bytes were validated with
-// the whole proposal before any write.
-func (l *Enrichment) commitCover(ctx context.Context, it *model.ItemView, proposal EnrichCoverProposalDTO, locked map[string]bool) (appliedEntry, skippedEntry string) {
-	if s := l.coverGuard(ctx, it, locked); s != "" {
+// the whole proposal before any write. reader is who reads the result,
+// nil for anyone.
+func (l *Enrichment) commitCover(ctx context.Context, it *model.ItemView, proposal EnrichCoverProposalDTO, locked map[string]bool, reader *UserCtx) (appliedEntry, skippedEntry string) {
+	s, rank := l.coverGuard(ctx, it, locked)
+	if s != "" {
 		return "", s
 	}
 	// The cover is stamped with the provider that supplied it, so a
@@ -1215,15 +1226,39 @@ func (l *Enrichment) commitCover(ctx context.Context, it *model.ItemView, propos
 	// read off the transport, and it is a fallback the bytes beat: it
 	// only decides for a picture that neither decodes nor sniffs, which
 	// is otherwise stored with no name for what it is.
-	if err := l.lib.SetItemArt(ctx, it.PID, model.ArtRoleFront, proposal.Data, waxbin.ArtEditOptions{
+	opts := waxbin.ArtEditOptions{
 		Source: model.SourceEnrichment, Provider: proposal.Provider, SourceURL: proposal.SourceURL,
 		Format: proposal.Format, Lock: model.LockUnchanged,
-	}); err != nil {
+	}
+	// Over a download's thumbnail the cover goes into the file too, as an
+	// approval's does: the file still carries the thumbnail, and a forced
+	// re-read would put it back over an unlocked front.
+	const unwritten = "cover: not written to the file: "
+	var note string
+	if rank == artRankDownload {
+		if err := l.Settings.checkPathWritable(ctx, string(it.Path)); err != nil {
+			note = unwritten + l.Ingest.failureWords(err.Error())
+		} else {
+			opts.WriteBack = true
+		}
+	}
+	err := l.lib.SetItemArt(ctx, it.PID, model.ArtRoleFront, proposal.Data, opts)
+	var wbe *waxbin.WriteBackError
+	if err != nil && !errors.As(err, &wbe) {
 		l.log.Warn("enrich: applying cover", "provider", proposal.Provider, "item", it.PID, "err", err)
 		return "", "cover: could not be stored"
 	}
+	if wbe != nil {
+		for _, f := range wbe.Failures {
+			if l.Ingest.mayReadFailure(ctx, reader, f) {
+				note = unwritten + l.Ingest.failureWords(f.Reason)
+				break
+			}
+		}
+	}
 	l.Playlists.noteArtworkChanged(ctx)
-	return "cover: " + proposal.Provider, ""
+	l.forgetApprovalFront(ctx, it.PID)
+	return "cover: " + proposal.Provider, note
 }
 
 // genresGuard is the genre want's local preconditions, shared by the

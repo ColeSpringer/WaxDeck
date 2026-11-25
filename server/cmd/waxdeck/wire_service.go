@@ -101,6 +101,11 @@ func newServiceConfig(ctx context.Context, cfg *config, secret []byte, store *db
 	}
 	if matchSource != nil {
 		svcCfg.MatchSource = matchSource
+		// One archive client for radio artwork and approval covers: a
+		// second would be an unpaced caller against a service that allows
+		// one request a second.
+		coverArt := waxproviders.NewCoverArt(waxproviders.CoverArtConfig{BaseURL: cfg.matching.coverArtBase, UserAgent: agent})
+		svcCfg.ReleaseCovers = coverArt
 		// The ISRC upgrade and the archive half of the rung above ride the
 		// same paced client as matching: a second would be an unthrottled
 		// caller against a service that allows one request a second.
@@ -110,7 +115,7 @@ func newServiceConfig(ctx context.Context, cfg *config, secret []byte, store *db
 		// for, not because it is the better first ask.
 		radioArt.Sources = append(radioArt.Sources, waxproviders.RecordingCover{
 			MB:  matchSource.MB,
-			CAA: waxproviders.NewCoverArt(waxproviders.CoverArtConfig{BaseURL: cfg.matching.coverArtBase, UserAgent: agent}),
+			CAA: coverArt,
 		})
 	}
 	svcCfg.RadioArtResolver = radioArt

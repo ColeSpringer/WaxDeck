@@ -100,8 +100,8 @@ func Score(unit Unit, release *Release, w Weights) Match {
 	} else if unitArtist := unitAlbumArtist(unit); unitArtist != "" && release.Artist != "" {
 		component("artist", titleDist(unitArtist, release.Artist), w.Artist)
 	}
-	if unitAlbum := majorityTag(unit, "ALBUM"); unitAlbum != "" && release.Title != "" {
-		component("album", albumDist(unitAlbum, release.Title), w.Album)
+	if ua := unitAlbum(unit); ua != "" && release.Title != "" {
+		component("album", albumDist(ua, release.Title), w.Album)
 	}
 	if unitYear := unitYear(unit); unitYear > 0 && release.Year > 0 {
 		component("year", yearDist(unitYear, release.Year), w.Year)
@@ -298,10 +298,16 @@ func parseYear(s string) int {
 // majorityTag returns the most common non empty value for a tag across
 // the unit, with ties broken lexically for determinism.
 func majorityTag(u Unit, key string) string {
+	return majorityValue(u, func(t Track) string { return t.Tags[key] })
+}
+
+// majorityValue is the most common non-empty trimmed value read gives
+// across the unit's tracks, ties broken lexically.
+func majorityValue(u Unit, read func(Track) string) string {
 	counts := make(map[string]int)
 	best, bestCount := "", 0
 	for _, t := range u.Tracks {
-		v := strings.TrimSpace(t.Tags[key])
+		v := strings.TrimSpace(read(t))
 		if v == "" {
 			continue
 		}

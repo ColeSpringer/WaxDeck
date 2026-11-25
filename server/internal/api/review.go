@@ -103,6 +103,9 @@ func reviewDetailJSON(d service.ReviewDetailDTO) ReviewEntryDetail {
 	if d.MediumFixed {
 		out.MediumFixed = ptr(true)
 	}
+	if d.AcceptBestWithheld != "" {
+		out.AcceptBestWithheld = ptr(ReviewEntryDetailAcceptBestWithheld(d.AcceptBestWithheld))
+	}
 	out.IdentifyOverride = identifyRequestJSON(d.Override)
 	out.Suggested = identifyRequestJSON(d.Suggested)
 	for _, t := range d.Tracks {
@@ -220,7 +223,7 @@ func (s *Server) DecideReviewEntry(ctx context.Context, req DecideReviewEntryReq
 		mediaType = string(*req.Body.MediaType)
 	}
 	entry, warnings, err := s.svc.Ingest.DecideReviewEntry(ctx, uc, string(req.EntryId),
-		string(req.Body.Action), deref(req.Body.CandidateMbid), mediaType)
+		string(req.Body.Action), deref(req.Body.CandidateMbid), mediaType, derefBool(req.Body.UseSuggested))
 	if err != nil {
 		return nil, err
 	}

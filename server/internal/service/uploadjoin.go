@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 
@@ -131,7 +132,8 @@ func (l *Ingest) landedItem(ctx context.Context, res *waxbin.AcquiredResult, rep
 // heldWhereItGoes reports whether an import plan stopped a file because
 // its place is taken by the library's own copy of it: the plan refused
 // a taken place, the item holding the audio is what the file's tags
-// describe, and its file in the library the plan targets plays from
+// describe, as it reads now or as the entry that landed it delivered it,
+// and its file in the library the plan targets plays from
 // disk. Importing it would add nothing the library lacks. Anything else
 // - another file in its place, a holder elsewhere or gone, a refusal of
 // another kind - leaves the plan's refusal standing, and the staged
@@ -139,7 +141,10 @@ func (l *Ingest) landedItem(ctx context.Context, res *waxbin.AcquiredResult, rep
 //
 // The plan does not say whose file takes the place (a refused action
 // keeps no destination), so the holder's details stand in for it: a
-// file tagged as another item would land on that one's place.
+// file tagged as another item would land on that one's place. A place
+// is rendered from the tags a file arrived with, which an edit since (a
+// suggestion taken, a single's album) leaves behind, so the tags of the
+// staged copy that landed it count as well.
 func (l *Ingest) heldWhereItGoes(ctx context.Context, res *waxbin.AcquiredResult, doc *reviewTrackDoc) bool {
 	if !res.AlreadyPresent || res.Plan == nil || len(res.Plan.Actions) == 0 {
 		return false
@@ -148,7 +153,8 @@ func (l *Ingest) heldWhereItGoes(ctx context.Context, res *waxbin.AcquiredResult
 	if a.Outcome != inbox.OutcomeQuarantine || !placeTaken(a.Reason) || a.Library == nil || a.Essence == "" {
 		return false
 	}
-	if it, err := l.lib.Get(ctx, res.AlreadyPresentPID); err != nil || !describes(doc, it) {
+	it, err := l.lib.Get(ctx, res.AlreadyPresentPID)
+	if err != nil || (!describes(doc, it) && !l.landedAs(ctx, it.PID, doc)) {
 		return false
 	}
 	refs, err := l.lib.ItemFiles(ctx, res.AlreadyPresentPID)
@@ -191,4 +197,42 @@ func describes(doc *reviewTrackDoc, it *model.ItemView) bool {
 	return same(it.Title, t["TITLE"]) && same(it.Album, t["ALBUM"]) &&
 		same(firstNonEmpty(it.AlbumArtist, it.Artist), author) &&
 		it.TrackNo == doc.TrackNo && it.DiscNo == doc.DiscNo
+}
+
+// landedAs reports whether item's file landed from a staged copy
+// carrying doc's tags, as an entry that brought it in recorded them.
+func (l *Ingest) landedAs(ctx context.Context, item model.PID, doc *reviewTrackDoc) bool {
+	ids, err := l.db.ReviewEntryIDsForItem(ctx, string(item))
+	if err != nil {
+		return false
+	}
+	for _, id := range ids {
+		e, err := l.db.ReviewEntryByID(ctx, id)
+		if err != nil {
+			continue
+		}
+		var p reviewPayload
+		if json.Unmarshal([]byte(e.Payload), &p) != nil {
+			continue
+		}
+		for _, landed := range p.Tracks {
+			if landed.PID == string(item) && !landed.heldBefore() && sameDelivered(doc, &landed) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// sameDelivered reports whether two staged copies carry the tags a
+// place is rendered from alike.
+func sameDelivered(a, b *reviewTrackDoc) bool {
+	if a.Tags == nil || b.Tags == nil {
+		return false
+	}
+	same := func(key string) bool {
+		return strings.EqualFold(strings.TrimSpace(a.Tags[key]), strings.TrimSpace(b.Tags[key]))
+	}
+	return same("TITLE") && same("ALBUM") && same("ALBUMARTIST") && same("ARTIST") &&
+		a.TrackNo == b.TrackNo && a.DiscNo == b.DiscNo
 }

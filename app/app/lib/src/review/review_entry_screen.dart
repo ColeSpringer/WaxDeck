@@ -275,6 +275,11 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
                         detail.mediaType,
                         action,
                       ),
+                useSuggested: reviewDecisionUseSuggested(
+                  ref,
+                  widget.entryId,
+                  action,
+                ),
               );
         } on WaxDeckApiException catch (e) {
           // A `conflict` names the file the library cannot take, which the
@@ -388,6 +393,10 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
               busyBy: (action) => pending.contains(
                 PendingAction.reviewAction(widget.entryId, action),
               ),
+              useSuggested: ref.watch(useSuggestedProvider(widget.entryId)),
+              onUseSuggested: ref
+                  .read(useSuggestedProvider(widget.entryId).notifier)
+                  .set,
               onDecide: _decide,
               onRevert: _revert,
             ),
@@ -449,6 +458,23 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
             oneTrack: detail.trackCount == 1,
           ),
         ],
+        if (detail.status == 'pending' && detail.acceptBestWithheld != null)
+          switch (_acceptBestWithheldText(l10n, detail.acceptBestWithheld!)) {
+            final text? => Padding(
+              padding: const EdgeInsets.only(top: WaxSpace.s16),
+              child: Semantics(
+                identifier: SemanticsIds.reviewAcceptBestWithheld,
+                container: true,
+                child: Text(
+                  text,
+                  style: WaxType.bodySmall.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+            null => const SizedBox.shrink(),
+          },
         const SizedBox(height: WaxSpace.s20),
         SectionHeader(title: l10n.reviewCandidatesTitle),
         // Two different empty lists: one searched and found nothing, one
@@ -563,6 +589,27 @@ class _DuplicateWarning extends StatelessWidget {
   }
 }
 
+/// Why an entry that asked to take its best match is waiting; null for a
+/// reason this client does not know, which draws nothing.
+String? _acceptBestWithheldText(AppLocalizations l10n, String reason) =>
+    switch (reason) {
+      'below-floor' => l10n.reviewAcceptBestWithheldBelowFloor,
+      'ambiguous' => l10n.reviewAcceptBestWithheldAmbiguous,
+      'no-candidates' => l10n.reviewAcceptBestWithheldNoCandidates,
+      _ => null,
+    };
+
+/// What the suggestion would write: the artist and title where both are
+/// there, otherwise whichever one is; null where neither is.
+String? _suggestedLine(AppLocalizations l10n, ReviewOverride suggested) {
+  final artist = suggested.artist ?? '';
+  final title = suggested.title ?? '';
+  if (artist.isEmpty && title.isEmpty) return null;
+  if (artist.isEmpty) return title;
+  if (title.isEmpty) return artist;
+  return l10n.reviewUseSuggestedValue(artist, title);
+}
+
 /// The decision bar. Pinned under the scroll rather than in it: it is
 /// what somebody came here to press, and a bar that scrolls away is a
 /// bar that has to be hunted for on every entry.
@@ -575,6 +622,8 @@ class _ActionBar extends StatelessWidget {
     required this.onMedium,
     required this.busy,
     required this.busyBy,
+    required this.useSuggested,
+    required this.onUseSuggested,
     required this.onDecide,
     required this.onRevert,
   });
@@ -593,6 +642,11 @@ class _ActionBar extends StatelessWidget {
   /// busy and no other takes a press.
   final bool busy;
   final bool Function(String action) busyBy;
+
+  /// Whether Keep as is and Mark unofficial file the tracks under the
+  /// entry's suggested artist and title, and its setter.
+  final bool useSuggested;
+  final ValueChanged<bool> onUseSuggested;
   final void Function(String action, {String? candidateMbid}) onDecide;
   final VoidCallback onRevert;
 
@@ -613,6 +667,7 @@ class _ActionBar extends StatelessWidget {
         detail.tracks.isNotEmpty &&
         detail.tracks.every((t) => t.duplicate?.kind == 'content');
     final staged = reviewMediumChangeable(detail.origin);
+    final suggested = detail.suggested;
     // A MusicBrainz release is music: the server refuses approving a unit
     // as an audiobook, so the entry does not offer it.
     final audiobook = medium == MediaType.audiobook;
@@ -652,85 +707,118 @@ class _ActionBar extends StatelessWidget {
                     ),
                 ],
               )
-            : Wrap(
-                spacing: WaxSpace.s8,
-                runSpacing: WaxSpace.s8,
-                crossAxisAlignment: WrapCrossAlignment.center,
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  if (staged && media.length > 1)
-                    WaxSegmented(
-                      label: l10n.reviewMedium,
-                      semanticsId: SemanticsIds.reviewMedium,
-                      selected: medium.wireName,
-                      onSelect: busy
-                          ? null
-                          : (name) => onMedium(
-                              MediaType.values.firstWhere(
-                                (t) => t.wireName == name,
-                              ),
-                            ),
-                      segments: <WaxSegment>[
-                        for (final type in media)
-                          WaxSegment(
-                            name: type.wireName,
-                            label: switch (type) {
-                              MediaType.audiobook => l10n.reviewMediumAudiobook,
-                              _ => l10n.reviewMediumMusic,
-                            },
-                            semanticsId: SemanticsIds.reviewMediumOption(
-                              type.wireName,
-                            ),
+                  if (suggested != null && !audiobook) ...<Widget>[
+                    WaxSettingRow(
+                      title: l10n.reviewUseSuggested,
+                      control: WaxSwitch(
+                        label: l10n.reviewUseSuggested,
+                        value: useSuggested,
+                        semanticsId: SemanticsIds.reviewUseSuggested,
+                        onChanged: busy ? null : onUseSuggested,
+                      ),
+                    ),
+                    if (_suggestedLine(l10n, suggested) case final line?)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          WaxSpace.s4,
+                          0,
+                          WaxSpace.s4,
+                          WaxSpace.s8,
+                        ),
+                        child: Text(
+                          line,
+                          style: WaxType.bodySmall.copyWith(
+                            color: colors.textSecondary,
                           ),
-                      ],
-                    ),
-                  // Throwing the staged files away comes first when the
-                  // library already holds them.
-                  if (staged && held) discard,
-                  if (!audiobook)
-                    WaxButton(
-                      label: l10n.reviewActionApprove,
-                      semanticsId: SemanticsIds.reviewApprove,
-                      busy: busyBy('approve'),
-                      onPressed: busy || candidate == null || allCopies
-                          ? null
-                          : () => onDecide(
-                              'approve',
-                              candidateMbid: candidate!.mbid,
-                            ),
-                    ),
-                  if (allCopies)
-                    WaxButton(
-                      label: l10n.reviewActionAddCopy,
-                      kind: WaxButtonKind.tonal,
-                      semanticsId: SemanticsIds.reviewAddCopy,
-                      busy: busyBy('as-is'),
-                      onPressed: busy ? null : () => onDecide('as-is'),
-                    )
-                  else
-                    WaxButton(
-                      label: l10n.reviewActionAsIs,
-                      kind: WaxButtonKind.tonal,
-                      semanticsId: SemanticsIds.reviewAsIs,
-                      busy: busyBy('as-is'),
-                      onPressed: busy ? null : () => onDecide('as-is'),
-                    ),
-                  WaxButton(
-                    label: l10n.reviewActionUnofficial,
-                    kind: WaxButtonKind.tonal,
-                    semanticsId: SemanticsIds.reviewUnofficial,
-                    busy: busyBy('unofficial'),
-                    onPressed: busy || allCopies
-                        ? null
-                        : () => onDecide('unofficial'),
+                        ),
+                      ),
+                  ],
+                  Wrap(
+                    spacing: WaxSpace.s8,
+                    runSpacing: WaxSpace.s8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: <Widget>[
+                      if (staged && media.length > 1)
+                        WaxSegmented(
+                          label: l10n.reviewMedium,
+                          semanticsId: SemanticsIds.reviewMedium,
+                          selected: medium.wireName,
+                          onSelect: busy
+                              ? null
+                              : (name) => onMedium(
+                                  MediaType.values.firstWhere(
+                                    (t) => t.wireName == name,
+                                  ),
+                                ),
+                          segments: <WaxSegment>[
+                            for (final type in media)
+                              WaxSegment(
+                                name: type.wireName,
+                                label: switch (type) {
+                                  MediaType.audiobook =>
+                                    l10n.reviewMediumAudiobook,
+                                  _ => l10n.reviewMediumMusic,
+                                },
+                                semanticsId: SemanticsIds.reviewMediumOption(
+                                  type.wireName,
+                                ),
+                              ),
+                          ],
+                        ),
+                      // Throwing the staged files away comes first when the
+                      // library already holds them.
+                      if (staged && held) discard,
+                      if (!audiobook)
+                        WaxButton(
+                          label: l10n.reviewActionApprove,
+                          semanticsId: SemanticsIds.reviewApprove,
+                          busy: busyBy('approve'),
+                          onPressed: busy || candidate == null || allCopies
+                              ? null
+                              : () => onDecide(
+                                  'approve',
+                                  candidateMbid: candidate!.mbid,
+                                ),
+                        ),
+                      if (allCopies)
+                        WaxButton(
+                          label: l10n.reviewActionAddCopy,
+                          kind: WaxButtonKind.tonal,
+                          semanticsId: SemanticsIds.reviewAddCopy,
+                          busy: busyBy('as-is'),
+                          onPressed: busy ? null : () => onDecide('as-is'),
+                        )
+                      else
+                        WaxButton(
+                          label: l10n.reviewActionAsIs,
+                          kind: WaxButtonKind.tonal,
+                          semanticsId: SemanticsIds.reviewAsIs,
+                          busy: busyBy('as-is'),
+                          onPressed: busy ? null : () => onDecide('as-is'),
+                        ),
+                      WaxButton(
+                        label: l10n.reviewActionUnofficial,
+                        kind: WaxButtonKind.tonal,
+                        semanticsId: SemanticsIds.reviewUnofficial,
+                        busy: busyBy('unofficial'),
+                        onPressed: busy || allCopies
+                            ? null
+                            : () => onDecide('unofficial'),
+                      ),
+                      WaxButton(
+                        label: l10n.reviewActionSkip,
+                        kind: WaxButtonKind.text,
+                        semanticsId: SemanticsIds.reviewSkip,
+                        busy: busyBy('skip'),
+                        onPressed: busy ? null : () => onDecide('skip'),
+                      ),
+                      if (staged && !held) discard,
+                    ],
                   ),
-                  WaxButton(
-                    label: l10n.reviewActionSkip,
-                    kind: WaxButtonKind.text,
-                    semanticsId: SemanticsIds.reviewSkip,
-                    busy: busyBy('skip'),
-                    onPressed: busy ? null : () => onDecide('skip'),
-                  ),
-                  if (staged && !held) discard,
                 ],
               ),
       ),

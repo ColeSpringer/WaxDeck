@@ -1513,6 +1513,26 @@ void main() {
       expect(infoTipHolding(sentence), findsNothing);
     });
 
+    testWidgets('accept-best-match writes the preference', (tester) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo();
+      await _pumpSection(tester, repo, SettingsSection.library);
+      final control = find.bySemanticsIdentifier(
+        SemanticsIds.setting('accept-best-match'),
+      );
+      await _show(tester, control);
+      expect(find.text('Accept the best match'), findsOneWidget);
+      expect(repo.prefs.acceptBestMatch, isNull);
+
+      await tester.tap(control);
+      await tester.pumpAndSettle();
+      expect(repo.prefs.acceptBestMatch, isTrue);
+
+      await tester.tap(control);
+      await tester.pumpAndSettle();
+      expect(repo.prefs.acceptBestMatch, isFalse);
+    });
+
     testWidgets('a restricted account is told how many libraries', (
       tester,
     ) async {

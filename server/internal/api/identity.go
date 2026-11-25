@@ -574,6 +574,7 @@ func (s *Server) PutPrefs(ctx context.Context, req PutPrefsRequestObject) (PutPr
 		ReplayGain:          derefBool(req.Body.ReplayGain),
 		RadioScrobbleOptOut: derefBool(req.Body.RadioScrobbleOptOut),
 		IdentifyOptOut:      derefBool(req.Body.IdentifyOptOut),
+		AcceptBestMatch:     derefBool(req.Body.AcceptBestMatch),
 		// Pointers, not flattened: absent and false differ, and the
 		// document is replaced whole.
 		BrowseShowUnknown: req.Body.BrowseShowUnknown,
@@ -636,6 +637,9 @@ func prefsJSON(p service.Prefs) Prefs {
 	}
 	if p.IdentifyOptOut {
 		out.IdentifyOptOut = ptr(true)
+	}
+	if p.AcceptBestMatch {
+		out.AcceptBestMatch = ptr(true)
 	}
 	out.BrowseShowUnknown = p.BrowseShowUnknown
 	out.Autoplay = p.Autoplay

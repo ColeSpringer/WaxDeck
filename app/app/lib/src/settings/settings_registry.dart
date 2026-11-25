@@ -391,6 +391,12 @@ List<SettingEntry> settingsEntries(AppLocalizations l10n) => <SettingEntry>[
     keywords: _words(l10n.settingsIdentifyUploadsKeywords),
   ),
   SettingEntry(
+    id: 'accept-best-match',
+    title: l10n.settingsAcceptBestMatchTitle,
+    section: SettingsSection.library,
+    keywords: _words(l10n.settingsAcceptBestMatchKeywords),
+  ),
+  SettingEntry(
     id: 'library-access',
     title: l10n.settingsLibraryAccessTitle,
     section: SettingsSection.library,

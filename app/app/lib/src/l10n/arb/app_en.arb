@@ -2960,6 +2960,34 @@
   "@artSlotFrontInline": {
     "description": "The front cover named inside a sentence. English lower-cases it; a language needing an article or a different case writes that here, because the sentences around it cannot know the gender of the words in this list."
   },
+  "artSourceAcquisition": "Art from {provider}",
+  "@artSourceAcquisition": {
+    "description": "Source mark under a cover that came with a download, such as a video's thumbnail. {provider} is the service's own name, a proper noun.",
+    "placeholders": {
+      "provider": {
+        "type": "String",
+        "example": "YouTube"
+      }
+    }
+  },
+  "artSourceAcquisitionUnnamed": "Art that came with a download",
+  "@artSourceAcquisitionUnnamed": {
+    "description": "Source mark under a cover that came with a download whose source the server did not name."
+  },
+  "artSourceBorrowedAcquisition": "Art from {provider}, for a track",
+  "@artSourceBorrowedAcquisition": {
+    "description": "Source mark under a cover a release borrowed from a member track whose picture came with a download. One sentence, like the other borrowed marks.",
+    "placeholders": {
+      "provider": {
+        "type": "String",
+        "example": "YouTube"
+      }
+    }
+  },
+  "artSourceBorrowedAcquisitionUnnamed": "Art that came with a download, for a track",
+  "@artSourceBorrowedAcquisitionUnnamed": {
+    "description": "The borrowed mark for a download's picture whose source went unnamed."
+  },
   "artSourceBorrowedProvider": "From {provider}, for a track",
   "@artSourceBorrowedProvider": {
     "description": "Source mark under a cover a release borrowed from a member track whose picture a named metadata provider fetched. One sentence: the borrowed marks replaced a two-sentence join that read as two captions glued together.",
@@ -5286,6 +5314,10 @@
   "errorReadOnly": "The server or this library is read-only right now, so nothing can be changed.",
   "@errorReadOnly": {
     "description": "Error sentence for the spec code `read-only`: reads and playback keep working."
+  },
+  "errorRecordingIdHeld": "This track's recording ID stays locked because its file carries none. Unlocked, the next scan of the file would clear it.",
+  "@errorRecordingIdHeld": {
+    "description": "Error sentence for `invalid-request` when the params' reason is recording-id-held: someone tried to unlock a track's MusicBrainz recording ID while its file carries no recording ID, so only the server's catalog holds it."
   },
   "errorServiceUnreachable": "An outside service this needs did not answer. Try again later.",
   "@errorServiceUnreachable": {
@@ -13070,6 +13102,18 @@
       }
     }
   },
+  "reviewAcceptBestWithheldAmbiguous": "Another recording could be the right one, or the others could not be ruled out",
+  "@reviewAcceptBestWithheldAmbiguous": {
+    "description": "Why an entry asked to accept its best match is waiting: another recording the search found is about as close as the top one, or the candidates cannot rule the other recordings out."
+  },
+  "reviewAcceptBestWithheldBelowFloor": "The best match was not close enough to accept",
+  "@reviewAcceptBestWithheldBelowFloor": {
+    "description": "Why an entry asked to accept its best match is waiting: the top candidate is too far from the files."
+  },
+  "reviewAcceptBestWithheldNoCandidates": "No match was found to accept",
+  "@reviewAcceptBestWithheldNoCandidates": {
+    "description": "Why an entry asked to accept its best match is waiting: nothing was found."
+  },
   "reviewActionAddCopy": "Add as another copy",
   "@reviewActionAddCopy": {
     "description": "Review decision button for an entry whose every file is already in the library: import the files anyway, as copies beside the items that hold their audio."
@@ -13678,6 +13722,24 @@
   "@reviewUntitled": {
     "description": "Stands in for an entry's name when the files carry none."
   },
+  "reviewUseSuggested": "Use the suggested artist and title",
+  "@reviewUseSuggested": {
+    "description": "Switch on the decision bar of an entry that offers a suggested artist and title (parsed from the source's title): with it on, Keep as is and Mark unofficial file the tracks under those values."
+  },
+  "reviewUseSuggestedValue": "{artist} - {title}",
+  "@reviewUseSuggestedValue": {
+    "description": "Under the use-suggested switch: the suggested artist and title it would write.",
+    "placeholders": {
+      "artist": {
+        "type": "String",
+        "example": "Mono Tides"
+      },
+      "title": {
+        "type": "String",
+        "example": "Long Dive"
+      }
+    }
+  },
   "searchAction": "Search",
   "@searchAction": {
     "description": "App-bar button that opens the search screen. A verb."
@@ -13857,6 +13919,18 @@
   "settingsAboutTitle": "About WaxDeck",
   "@settingsAboutTitle": {
     "description": "Name of the \"About WaxDeck\" setting, drawn on its own row and in settings search."
+  },
+  "settingsAcceptBestMatchHelp": "Skips review when one match clearly leads",
+  "@settingsAcceptBestMatchHelp": {
+    "description": "Info tip on the accept-best-match switch: what on does, and that a close call still waits for review. No full stop."
+  },
+  "settingsAcceptBestMatchKeywords": "musicbrainz, match, identify, automatic, review, upload, acquire",
+  "@settingsAcceptBestMatchKeywords": {
+    "description": "Comma-separated search keywords for the \"Accept the best match\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsAcceptBestMatchTitle": "Accept the best match",
+  "@settingsAcceptBestMatchTitle": {
+    "description": "Name of the \"Accept the best match\" setting: the default the upload and Add-from-URL sheets open on, drawn on its own row and in settings search."
   },
   "settingsAccountSignedIn": "Signed in",
   "@settingsAccountSignedIn": {
@@ -16964,6 +17038,14 @@
         "example": "44.1"
       }
     }
+  },
+  "uploadsAcceptBestHelp": "Skips review when one match clearly leads",
+  "@uploadsAcceptBestHelp": {
+    "description": "Info on the accept-best-match switch under Identify: what it does when it is on, and that a close call still waits."
+  },
+  "uploadsAcceptBestTitle": "Accept the best match",
+  "@uploadsAcceptBestTitle": {
+    "description": "The switch under Identify that files music under its best MusicBrainz match without review, when that match is clear."
   },
   "uploadsAcquireQueued": "Downloading; appears in review when ready",
   "@uploadsAcquireQueued": {
