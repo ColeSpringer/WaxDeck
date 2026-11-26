@@ -2,6 +2,7 @@ import 'package:flutter/semantics.dart' show debugSemanticsDisableAnimations;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/notifications/notifications_bell.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
 import 'package:waxdeck/src/shell/routes.dart';
@@ -18,6 +19,7 @@ Finder _byId(String id) => find.bySemanticsIdentifier(id);
 Future<ProviderContainer> _pump(
   WidgetTester tester, {
   ValueNotifier<int>? generation,
+  FakeRepository? repo,
 }) async {
   return pumpApp(
     tester,
@@ -33,14 +35,56 @@ Future<ProviderContainer> _pump(
       ),
     ),
     container: appContainer(
-      repo: FakeRepository(
-        sessionState: const SessionState(
-          authenticated: true,
-          user: WaxDeckUser(id: 'us-1', username: 'sam', roles: <String>[]),
-        ),
-      ),
+      repo:
+          repo ??
+          FakeRepository(
+            sessionState: const SessionState(
+              authenticated: true,
+              user: WaxDeckUser(id: 'us-1', username: 'sam', roles: <String>[]),
+            ),
+          ),
     ),
   );
+}
+
+ServerNotification _row(
+  String event, {
+  required String id,
+  String body = '',
+  int count = 1,
+  DateTime? resolvedAt,
+  required int minutesAgo,
+  String? target,
+}) {
+  final at = DateTime.now().subtract(Duration(minutes: minutesAgo));
+  return ServerNotification(
+    id: id,
+    event: event,
+    title: 'Server title',
+    body: body,
+    targetPid: target,
+    createdAt: at,
+    updatedAt: at,
+    count: count,
+    resolvedAt: resolvedAt,
+  );
+}
+
+FakeRepository _inboxRepo(List<ServerNotification> rows) => FakeRepository(
+  sessionState: const SessionState(
+    authenticated: true,
+    user: WaxDeckUser(id: 'us-1', username: 'sam', roles: <String>[]),
+  ),
+)..inbox = rows;
+
+/// Reads the inbox the fake holds, as the bell does once signed in.
+Future<void> _loadInbox(
+  WidgetTester tester,
+  ProviderContainer container,
+) async {
+  await container.read(authControllerProvider.future);
+  container.invalidate(notificationsProvider);
+  await tester.pumpAndSettle();
 }
 
 String _location(GoRouter router) =>
@@ -49,35 +93,115 @@ String _location(GoRouter router) =>
 void main() {
   testWidgets('a chosen row opens its own surface, not whatever took its '
       'place', (tester) async {
-    final container = await _pump(tester);
+    final container = await _pump(
+      tester,
+      repo: _inboxRepo(<ServerNotification>[
+        _row('feed-disabled', id: 'nf-feed', minutesAgo: 60),
+      ]),
+    );
+    await _loadInbox(tester, container);
     final notifications = container.read(localNotificationsProvider.notifier);
     final router = GoRouter.of(tester.element(find.byType(NotificationsBell)));
-
-    notifications.record(
-      NotificationKind.feedDisabled,
-      at: DateTime(2026, 8, 12, 9),
-    );
-    await tester.pumpAndSettle();
     await tester.tap(_byId(SemanticsIds.notificationsBell));
     await tester.pumpAndSettle();
 
     // Newer news arrives behind the open menu, which holds the rows it
-    // opened with. The handle names what the row is about, so it goes on
-    // meaning the podcast row however the list reorders underneath.
-    notifications.record(
-      NotificationKind.review,
-      at: DateTime(2026, 8, 12, 10),
-    );
+    // opened with. The handle names the row, so it goes on meaning the
+    // podcast row however the list reorders underneath.
+    notifications.recordDownloadCompleted(at: DateTime.now());
     await tester.pumpAndSettle();
 
     await tester.tap(
-      _byId(
-        SemanticsIds.notificationRowPlain(NotificationKind.feedDisabled.token),
-      ),
+      _byId(SemanticsIds.notificationRow('feed-disabled', 'nf-feed')),
     );
     await tester.pumpAndSettle();
 
     expect(_location(router), WaxRoute.podcasts);
+  });
+
+  // Two rows of one event have to read differently in a menu that draws
+  // a line a row: the count where the row folded, the body where not.
+  testWidgets('a folded row says its count and a plain one what happened', (
+    tester,
+  ) async {
+    final container = await _pump(
+      tester,
+      repo: _inboxRepo(<ServerNotification>[
+        _row(
+          'review-ready',
+          id: 'nf-a',
+          count: 3,
+          body: 'Newest',
+          minutesAgo: 1,
+        ),
+        _row(
+          'feed-disabled',
+          id: 'nf-b',
+          target: 'pc-A',
+          body: 'Alpha stopped refreshing',
+          minutesAgo: 2,
+        ),
+        _row(
+          'feed-disabled',
+          id: 'nf-c',
+          target: 'pc-B',
+          body: 'Beta stopped refreshing',
+          minutesAgo: 3,
+        ),
+      ]),
+    );
+    await _loadInbox(tester, container);
+    await tester.tap(_byId(SemanticsIds.notificationsBell));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Review queue: 3 waiting for review'), findsOneWidget);
+    expect(find.text('Podcasts: Alpha stopped refreshing'), findsOneWidget);
+    expect(find.text('Podcasts: Beta stopped refreshing'), findsOneWidget);
+  });
+
+  testWidgets('a resolved row is listed but opens nothing', (tester) async {
+    final container = await _pump(
+      tester,
+      repo: _inboxRepo(<ServerNotification>[
+        _row(
+          'review-ready',
+          id: 'nf-done',
+          resolvedAt: DateTime.now(),
+          minutesAgo: 1,
+        ),
+        _row(
+          'feed-disabled',
+          id: 'nf-open',
+          target: 'pc-A',
+          body: 'Alpha stopped refreshing',
+          minutesAgo: 2,
+        ),
+      ]),
+    );
+    await _loadInbox(tester, container);
+    final router = GoRouter.of(tester.element(find.byType(NotificationsBell)));
+    final before = _location(router);
+    await tester.tap(_byId(SemanticsIds.notificationsBell));
+    await tester.pumpAndSettle();
+    expect(find.text('Review queue: Review queue cleared'), findsOneWidget);
+
+    await tester.tap(
+      _byId(SemanticsIds.notificationRow('review-ready', 'nf-done')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      _location(router),
+      before,
+      reason: 'a resolved row has nowhere to go',
+    );
+
+    // The menu is still up, and an unresolved row beside it does open.
+    await tester.tap(
+      _byId(SemanticsIds.notificationRow('feed-disabled', 'nf-open')),
+    );
+    await tester.pumpAndSettle();
+    expect(_location(router), WaxRoute.show('pc-A'));
   });
 
   testWidgets('the last row reads the bell rather than opening a surface', (
@@ -89,7 +213,7 @@ void main() {
 
     container
         .read(localNotificationsProvider.notifier)
-        .record(NotificationKind.download, at: DateTime(2026, 8, 12, 9));
+        .recordDownloadCompleted(at: DateTime(2026, 8, 12, 9));
     await tester.pumpAndSettle();
     await tester.tap(_byId(SemanticsIds.notificationsBell));
     await tester.pumpAndSettle();
@@ -132,7 +256,7 @@ void main() {
 
     container
         .read(localNotificationsProvider.notifier)
-        .record(NotificationKind.upload, at: DateTime(2026, 8, 12, 9));
+        .recordDownloadCompleted(at: DateTime(2026, 8, 12, 9));
     await tester.pumpAndSettle();
 
     // The name, not the drawn badge: it is what the e2e waits on.
@@ -162,7 +286,7 @@ void main() {
 
     container
         .read(localNotificationsProvider.notifier)
-        .record(NotificationKind.upload, at: DateTime(2026, 8, 12, 9));
+        .recordDownloadCompleted(at: DateTime(2026, 8, 12, 9));
     await tester.pumpAndSettle();
 
     // Dismissed halfway through appearing: the first frame after the press
@@ -180,7 +304,7 @@ void main() {
     await tester.tap(_byId(SemanticsIds.notificationsBell));
     await tester.pumpAndSettle();
     expect(
-      _byId(SemanticsIds.notificationRowPlain(NotificationKind.upload.token)),
+      _byId(SemanticsIds.notificationRowPlain(NotificationKind.download.token)),
       findsOneWidget,
     );
     handle.dispose();
@@ -197,7 +321,7 @@ void main() {
 
     container
         .read(localNotificationsProvider.notifier)
-        .record(NotificationKind.upload, at: DateTime(2026, 8, 12, 9));
+        .recordDownloadCompleted(at: DateTime(2026, 8, 12, 9));
     await tester.pumpAndSettle();
 
     debugSemanticsDisableAnimations = true;
@@ -232,7 +356,7 @@ void main() {
 
     container
         .read(localNotificationsProvider.notifier)
-        .record(NotificationKind.upload, at: DateTime(2026, 8, 12, 9));
+        .recordDownloadCompleted(at: DateTime(2026, 8, 12, 9));
     await tester.pumpAndSettle();
 
     await tester.tap(_byId(SemanticsIds.notificationsBell));
@@ -258,17 +382,16 @@ void main() {
     final container = await _pump(tester);
     final local = container.read(localNotificationsProvider.notifier);
     final drawn = _byId(
-      SemanticsIds.notificationRowPlain(NotificationKind.review.token),
+      SemanticsIds.notificationRowPlain(NotificationKind.download.token),
     );
-    final missed = _byId(
-      SemanticsIds.notificationRowPlain(NotificationKind.upload.token),
-    );
+    // The same row again, newer: a finished transfer replaces the last.
+    final missed = drawn;
 
     // A bell carrying a stamp, which is an open that drew something and
     // nothing else: the press below has to be shown not to move a stamp
     // that is already there, and an unstamped list would draw the row
     // whatever the press did.
-    local.record(NotificationKind.review, at: DateTime.now());
+    local.recordDownloadCompleted(at: DateTime.now());
     await tester.pumpAndSettle();
     await tester.tap(_byId(SemanticsIds.notificationsBell));
     await tester.pumpAndSettle();
@@ -278,7 +401,9 @@ void main() {
 
     // News lands, and the press comes before the frame that would draw
     // it: no pump between the two.
-    local.record(NotificationKind.upload, at: DateTime.now());
+    local.recordDownloadCompleted(
+      at: DateTime.now().add(const Duration(seconds: 1)),
+    );
     await tester.tap(_byId(SemanticsIds.notificationsBell));
     await tester.pumpAndSettle();
     expect(missed, findsNothing, reason: 'this press cannot have drawn it');

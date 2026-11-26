@@ -261,6 +261,11 @@ func (l *Podcasts) unsubscribe(ctx context.Context, uc *UserCtx, apiShowPID stri
 		// the request is still there, or a client gone at the wrong
 		// moment leaves the account's other devices never told.
 		ctx := context.WithoutCancel(ctx)
+		if existed {
+			// The account's rows about the show are settled, whatever
+			// fails below.
+			l.Integrations.resolveNotificationsFor(ctx, apiPID(PrefixPodcast, pod.PID), uc.ID)
+		}
 		if err := l.dropShowParks(ctx, uc.ID, pod, feedURL); err != nil {
 			return err
 		}

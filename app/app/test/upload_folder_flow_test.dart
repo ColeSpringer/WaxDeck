@@ -412,7 +412,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.acquireSubmit));
-    await tester.pumpAndSettle();
+    // The dialog waits on the check with a spinner, which never settles.
+    await tester.pump();
     await leaveScreen(tester, container);
 
     gate.complete();

@@ -267,6 +267,7 @@ func (l *Migrate) runJellyfinImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 		if ctx.Err() != nil {
 			return sum, ctx.Err()
 		}
+		prog.items(ctx, activityImporting, i, len(songs))
 		prog.report(ctx, float64(i+1)/float64(len(songs))*90)
 		ref := model.PortableRef{
 			Kind:       model.KindTrack,

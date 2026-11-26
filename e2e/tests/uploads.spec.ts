@@ -664,3 +664,98 @@ test('a picked book folder uploads as one book in parts', async ({ app }) => {
     }
   }
 });
+
+// The Add from URL dialog, against the stub source the stack launches
+// beside the feed server (`fixtures/cmd/sourceserv`). A private list is
+// refused while the link is checked: the refusal is the server's answer
+// to the request, so no task is queued for it.
+test('a refused link is told under the field, and queues nothing', async ({ app }) => {
+  test.setTimeout(J.long);
+  const link = 'http://127.0.0.1:4422/playlist-private';
+  await app.nav.enter('music');
+  await app.uploads.openAddFromUrl();
+
+  const reply = await app.uploads.sendUrl(link);
+  expect(reply.status(), 'the link check refuses').toBe(422);
+  expect(await reply.json()).toMatchObject({ code: 'source-refused' });
+
+  // In words rather than a code, under the field: the box is invalid, its
+  // description is the sentence, and the dialog is still open with the
+  // link in it.
+  await expect(app.uploads.acquireUrl()).toBeVisible();
+  await expect(app.uploads.acquireUrlInput()).toHaveValue(link);
+  await expect(app.uploads.acquireUrlInput()).toHaveAttribute('aria-invalid', 'true');
+  await expect(app.uploads.acquireUrlInput()).toHaveAccessibleDescription(
+    'That playlist is private or has been removed.',
+  );
+
+  // An administrator lists every account's tasks, so the list is read for
+  // this link alone.
+  const tasks = await app.api.get('/tools/tasks', { query: { limit: 200 } });
+  expect(
+    tasks.tasks.filter((t) => t.type === 'acquire' && t.summary?.url === link),
+    'a refused link opens no task',
+  ).toEqual([]);
+});
+
+test('a download canceled part way reads Canceled and keeps what it staged', async ({
+  app,
+}) => {
+  test.setTimeout(J.journey);
+  await app.nav.enter('music');
+  await app.uploads.openAddFromUrl();
+  const slowList = 'http://127.0.0.1:4422/playlist-slow';
+  const reply = await app.uploads.sendUrl(slowList);
+  expect(reply.status(), 'the slow list is queued').toBe(202);
+  const queued = (await reply.json()) as { id: string };
+
+  // Let the first of its three items finish, so something is staged.
+  await expect
+    .poll(
+      async () => {
+        const task = await app.api.get('/tools/tasks/{taskId}', { path: { taskId: queued.id } });
+        return task.state === 'running' && (task.activity?.itemsDone ?? 0) >= 1;
+      },
+      { timeout: T.fetch, message: 'the first item should finish while the rest download' },
+    )
+    .toBe(true);
+
+  await app.nav.enter('tasks');
+  await expect(app.uploads.taskRow(queued.id)).toBeVisible();
+  await app.uploads.cancelTask(queued.id);
+
+  // It stops and says so, whichever way the wind-down went.
+  // The row's words are the name of the group inside it.
+  await expect(app.uploads.taskRow(queued.id).getByRole('group').first()).toHaveAccessibleName(
+    /Canceled/,
+    { timeout: T.fetch },
+  );
+  const task = await app.api.get('/tools/tasks/{taskId}', { path: { taskId: queued.id } });
+  expect(task.state).toBe('canceled');
+  expect(task.activity).toBeUndefined();
+
+  // What it staged before the cancel stays in the review queue.
+  const staged = task.resultPids ?? [];
+  expect(staged.length, 'an entry was opened before the cancel').toBeGreaterThan(0);
+  for (const entryId of staged) {
+    // `get` throws the server's own body, so a transient 503 is not read as
+    // an entry that is gone.
+    expect(
+      await app.api.get('/review/queue/{entryId}', { path: { entryId } }),
+      `${entryId} stays in the review queue`,
+    ).toMatchObject({ id: entryId });
+  }
+
+  // The list holds this task canceled, and no other task for the link was
+  // made after it. Read by its own id and time: a retried attempt's task
+  // for the same link, made before it, shares an administrator's list.
+  const after = await app.api.get('/tools/tasks', { query: { limit: 200 } });
+  const forLink = after.tasks.filter((t) => t.type === 'acquire' && t.summary?.url === slowList);
+  const own = forLink.find((t) => t.id === queued.id);
+  expect(own?.state, 'the list reads the task canceled').toBe('canceled');
+  const queuedAt = Date.parse(own?.createdAt ?? '');
+  expect(
+    forLink.filter((t) => t.id !== queued.id && Date.parse(t.createdAt) >= queuedAt).map((t) => t.id),
+    'no task for the link was made after it',
+  ).toEqual([]);
+});

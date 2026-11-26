@@ -39,6 +39,9 @@ type Reads struct {
 	// fileReadHook stands in for the catalog's read of a file's row in a
 	// test; nothing in the server sets it.
 	fileReadHook func(context.Context, model.PID) (*model.File, error)
+	// genrePage is how many items a genre normalize reads a page, zero
+	// for 500; a test shortens it. Nothing in the server sets it.
+	genrePage int
 	// trackFacts caches the compatibility surface's track sweep.
 	trackFacts trackFactsCache
 	// genres holds the built genre vocabulary; facets caches the

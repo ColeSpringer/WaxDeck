@@ -608,8 +608,9 @@ components:
           description: >
             True while a fix for the rule is under way: a pass-backed
             fix from its start until its re-check lands, a task-backed
-            one while its task is queued or running. Another fix for
-            the rule answers `conflict` meanwhile.
+            one while its task is queued or running and not winding
+            down from a cancel. Another fix for the rule answers
+            `conflict` meanwhile.
         fixBlocked:
           type: string
           description: >

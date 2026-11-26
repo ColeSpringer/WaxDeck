@@ -161,10 +161,12 @@ func startCurationWorkers(ctx context.Context, group *supervise.Group, svc *serv
 	})
 	for name, drain := range map[string]func(context.Context) bool{
 		"tool-worker": svc.Tools.DrainToolTasks,
-		// Health fixes and catalog repairs run for hours; on the tool
-		// worker, every acquisition and sync queued behind one would wait
-		// as long.
-		"long-task-worker": svc.Tools.DrainLongToolTasks,
+		// Health fixes and catalog repairs run for hours, and a download
+		// or a sync as long as its source takes: on the tool worker, every
+		// book tool, import and genre fix queued behind one would wait as
+		// long.
+		"long-task-worker":   svc.Tools.DrainLongToolTasks,
+		"source-task-worker": svc.Tools.DrainSourceToolTasks,
 	} {
 		group.Go(ctx, name, func(ctx context.Context) error {
 			tick := time.NewTicker(10 * time.Second)
@@ -183,6 +185,9 @@ func startCurationWorkers(ctx context.Context, group *supervise.Group, svc *serv
 			}
 		})
 	}
+	// What a download or a sync reports is sent to the task's watchers
+	// here, off the source's own path.
+	group.Go(ctx, "task-markers", svc.Tools.RunTaskMarkers)
 	group.Go(ctx, "upload-janitor", func(ctx context.Context) error {
 		tick := time.NewTicker(time.Hour)
 		defer tick.Stop()

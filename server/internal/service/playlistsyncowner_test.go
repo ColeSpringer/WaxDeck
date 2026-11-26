@@ -3,10 +3,16 @@ package service
 import (
 	"context"
 	"errors"
+	"net"
+	"os"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/colespringer/waxbin/source"
+	catalogerr "github.com/colespringer/waxbin/waxerr"
+	waxtap "github.com/colespringer/waxtap/v3"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/syncsource"
@@ -101,5 +107,122 @@ func TestAPlaylistSyncRunsAgainAfterAFailedOwnerRead(t *testing.T) {
 	}
 	if permanentToolErr(err) {
 		t.Fatalf("a failed read of the owner = %v, which fails the task for good", err)
+	}
+}
+
+// refusingLister lists no playlist: every snapshot fails with err.
+type refusingLister struct {
+	onceSource
+	err error
+}
+
+func (s refusingLister) PlaylistSnapshot(context.Context, string, syncsource.SnapshotOptions) (*syncsource.PlaylistSnapshot, error) {
+	return nil, s.err
+}
+
+// Binding a playlist to a link the source refuses says why, and binds
+// nothing; its dry run says the same. A failure the classifier cannot name
+// is no refusal of the link: it answers as any other failure does.
+func TestBindingALinkTheSourceRefusesSaysWhy(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		err    error
+		kind   ErrorKind
+		reason string
+	}{
+		{"private", catalogerr.Wrap(catalogerr.CodeIO, "snapshot", &waxtap.PlaylistUnavailableError{Reason: "This playlist is private."}), KindRefused, "playlist-unavailable"},
+		{"empty", waxtap.ErrPlaylistEmpty, KindRefused, "playlist-empty"},
+		{"throttled", &waxtap.RateLimitError{StatusCode: 429}, KindRefused, "rate-limited"},
+		{"connection dropped", &net.OpError{Op: "read", Net: "tcp", Err: os.NewSyscallError("read", syscall.ECONNRESET)}, KindRefused, "unreachable"},
+		{"stub", &syncsource.Refusal{Reason: "playlist-unavailable"}, KindRefused, "playlist-unavailable"},
+		{"unnamed", errors.New("the bridge said something new"), KindInternal, ""},
+		{"unnamed catalog refusal", catalogerr.Wrap(catalogerr.CodeInvalid, "snapshot", errors.New("bad page")), KindInvalid, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, svc, _ := newCatalogFixtureWith(t, catalogFixtureOptions{sources: []source.Provider{refusingLister{err: tc.err}}})
+			svc.lookupHost = func(context.Context, string) ([]net.IPAddr, error) {
+				return []net.IPAddr{{IP: net.ParseIP("203.0.113.7")}}, nil
+			}
+			_, uc := playlistMember(t, ctx, svc, "binder")
+			pid := playlistAs(t, ctx, svc, uc, "Bound", "private", nil)
+			in := PlaylistSourceUpdateDTO{URL: "https://tube.example/playlist?list=PLprivate", Mode: "append", IntervalHours: 24, NamesSource: true}
+			_, bindErr := svc.Playlists.SetPlaylistSource(ctx, uc, pid, in)
+			_, previewErr := svc.Playlists.PreviewPlaylistSync(ctx, uc, pid, &in)
+			for what, err := range map[string]error{"bind": bindErr, "preview": previewErr} {
+				if KindOf(err) != tc.kind {
+					t.Errorf("%s = %v (%s), want %s", what, err, KindOf(err), tc.kind)
+				}
+				if got := RefusalParams(err)["reason"]; got != tc.reason {
+					t.Errorf("%s reason = %q, want %q", what, got, tc.reason)
+				}
+			}
+			_, bare, _ := parseAPIPID(pid)
+			if _, err := svc.db.PlaylistSourceFor(ctx, string(bare)); !errors.Is(err, wdb.ErrNotFound) {
+				t.Errorf("a refused bind stored a binding: %v", err)
+			}
+		})
+	}
+}
+
+// A link to a single video is no playlist to sync: the bind and its dry
+// run say so in words of their own, before the source is asked, and bind
+// nothing.
+func TestBindingAVideoLinkSaysItNeedsAList(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newCatalogFixtureWith(t, catalogFixtureOptions{sources: []source.Provider{refusingLister{err: errors.New("asked")}}})
+	svc.lookupHost = func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("203.0.113.7")}}, nil
+	}
+	_, uc := playlistMember(t, ctx, svc, "binder")
+	pid := playlistAs(t, ctx, svc, uc, "Bound", "private", nil)
+	in := PlaylistSourceUpdateDTO{URL: "https://tube.example/watch?v=one", Mode: "append", IntervalHours: 24, NamesSource: true}
+	_, bindErr := svc.Playlists.SetPlaylistSource(ctx, uc, pid, in)
+	_, previewErr := svc.Playlists.PreviewPlaylistSync(ctx, uc, pid, &in)
+	for what, err := range map[string]error{"bind": bindErr, "preview": previewErr} {
+		if KindOf(err) != KindInvalid || !strings.Contains(err.Error(), "single video") {
+			t.Errorf("%s = %v (%s), want invalid-request naming the single video", what, err, KindOf(err))
+		}
+	}
+	_, bare, _ := parseAPIPID(pid)
+	if _, err := svc.db.PlaylistSourceFor(ctx, string(bare)); !errors.Is(err, wdb.ErrNotFound) {
+		t.Errorf("a video link bound: %v", err)
+	}
+}
+
+// uncheckableLister lists any playlist but cannot say whether it reads a
+// link, for a reason it does not name.
+type uncheckableLister struct{ onceSource }
+
+func (uncheckableLister) LinkShape(string, bool) (string, error) {
+	return "", errors.New("the link checker broke")
+}
+
+func (uncheckableLister) PlaylistSnapshot(context.Context, string, syncsource.SnapshotOptions) (*syncsource.PlaylistSnapshot, error) {
+	return &syncsource.PlaylistSnapshot{ID: "PLunchecked", IdentityKey: "youtube:PLunchecked", Title: "Unchecked"}, nil
+}
+
+// A bind whose check of the link alone fails for a reason the classifier
+// cannot name binds nothing, and says so as any other failure does.
+func TestBindingALinkNoSourceCouldCheckBindsNothing(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newCatalogFixtureWith(t, catalogFixtureOptions{sources: []source.Provider{uncheckableLister{}}})
+	svc.lookupHost = func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("203.0.113.7")}}, nil
+	}
+	_, uc := playlistMember(t, ctx, svc, "binder")
+	pid := playlistAs(t, ctx, svc, uc, "Bound", "private", nil)
+	in := PlaylistSourceUpdateDTO{URL: "https://tube.example/playlist?list=PLunchecked", Mode: "append", IntervalHours: 24, NamesSource: true}
+	_, bindErr := svc.Playlists.SetPlaylistSource(ctx, uc, pid, in)
+	_, previewErr := svc.Playlists.PreviewPlaylistSync(ctx, uc, pid, &in)
+	for what, err := range map[string]error{"bind": bindErr, "preview": previewErr} {
+		if KindOf(err) != KindInternal {
+			t.Errorf("%s = %v (%s), want internal", what, err, KindOf(err))
+		}
+	}
+	_, bare, _ := parseAPIPID(pid)
+	if _, err := svc.db.PlaylistSourceFor(ctx, string(bare)); !errors.Is(err, wdb.ErrNotFound) {
+		t.Errorf("an unchecked link bound: %v", err)
 	}
 }

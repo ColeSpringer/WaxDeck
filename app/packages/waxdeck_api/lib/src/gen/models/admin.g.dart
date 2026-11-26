@@ -1110,10 +1110,14 @@ class ToolTask {
     required this.type,
     required this.state,
     required this.createdAt,
+    this.cancelRequested = false,
     this.itemPid,
     this.itemTitle,
     this.progressPct,
+    this.activity,
     this.error,
+    this.errorCode,
+    this.errorParams,
     this.waitReason,
     this.retryAt,
     this.bookInTrash = false,
@@ -1131,43 +1135,89 @@ class ToolTask {
   /// not a closed enum.
   final String type;
 
-  /// `queued`, `running`, `done`, `failed`, or `parked`: a book merge or split,
-  /// or a CUE split, whose runs kept ending with the server. Parked is terminal
-  /// and counts as failed: the task is not run again, the delete, Clear
-  /// finished and the retention prune take it as they take a failed task, and
-  /// until one does it keeps the book or rip it works on from another merge or
-  /// split. A string, not a closed enum.
+  /// `queued`, `running`, `done`, `failed`, `canceled` (stopped because
+  /// `cancelToolTask` asked it to), or `parked`: a book merge or split, or a
+  /// CUE split, whose runs kept ending with the server, or a book merge or
+  /// split that failed leaving files it could not remove, which its `error`
+  /// names. Canceled and parked are terminal. Parked counts as failed: the task
+  /// is not run again, the delete, Clear finished and the retention prune take
+  /// it as they take a failed task, and until one does it keeps the book or rip
+  /// it works on from another merge or split. The delete, Clear finished and
+  /// the retention prune take a canceled task as they take a failed one too; a
+  /// book merge or split canceled leaving files it could not remove keeps its
+  /// book until one does, as a parked one does. A `queued` task waits for its
+  /// worker, which runs one task at a time, oldest first: URL downloads and
+  /// playlist syncs have one, health fixes and catalog repairs another, and
+  /// every other kind shares a third, so a task stays `queued`, with no
+  /// `activity`, while an earlier one of its worker runs. A string, not a
+  /// closed enum.
   final String state;
 
-  /// The book, track, or playlist the task was started from.
+  /// True while a `running` task that was asked to cancel winds down. It then
+  /// ends `canceled`, or `done` when it finished first.
+  final bool cancelRequested;
+
+  /// The book, track, or playlist the task was started from, when it was
+  /// started from one.
   final String? itemPid;
 
-  /// What `itemPid` was called when the task was queued: a book merge's or
-  /// split's book, a CUE split's album. Absent for other tasks.
+  /// What the task works on, by name: for a book merge or split, the book, and
+  /// for a CUE split, the album, as `itemPid` was called when the task was
+  /// queued; for an acquisition, the video or playlist as the source names it,
+  /// read when the link was checked, else from the listing once the run reads
+  /// it; for a playlist sync, the playlist's name. Absent for other tasks, and
+  /// for an acquisition whose source has not named it yet.
   final String? itemTitle;
 
-  /// Progress in percent when the engine reports it.
+  /// Progress in percent, when known: a file tool's as the streaming engine
+  /// reports it; an acquisition's or playlist sync's as the items done plus the
+  /// current item's byte fraction, over the items in all; other kinds' as their
+  /// items or steps finish.
   final double? progressPct;
 
-  /// Why the task failed, when `failed`, or stopped, when `parked`, where it
+  final ToolTaskActivity? activity;
+
+  /// Why the task failed, when `failed`, in the server's words (`errorCode`
+  /// says the same for a client to word), or stopped, when `parked`, where it
   /// also says where each file the run made or moved is (new files waiting
   /// beside the book, originals in the trash) and what clearing the task does
-  /// with new files still hidden. While a book merge or split, a CUE split, or
-  /// a catalog repair is `running` it can say what the task waits out instead,
-  /// in the server's words beside `waitReason`.
+  /// with new files still hidden, or, when `canceled` or after a failure, what
+  /// the run made and could not remove, and where. While a task is `running` it
+  /// can say what the task waits out instead, in the server's words beside
+  /// `waitReason`.
   final String? error;
 
-  /// Set while a `running` book merge or split, or CUE split, waits to try
-  /// again on its own, at `retryAt`: `catalog-busy` (another job holds the
-  /// catalog), `catalog-maintenance`, `read-only` (a library it works in is
-  /// flagged read-only), `storage-unwritable` (a folder refuses the server),
-  /// `engine-unavailable`, `part-missing` (a file the catalog has is not where
-  /// it says), `put-back-blocked` (a file going back from the trash cannot),
-  /// `stopped` (the server stopped or the run ran out of time), or `other`. A
-  /// `catalog-repair` that a catalog hand-off cut short waits too, with
-  /// `catalog-maintenance`, and starts over once the catalog is back. A book
-  /// merge or split, or CUE split, waits at most six hours in a row, then ends
-  /// safely for how far it went. A string, not a closed enum.
+  /// Why a `failed` task failed, as a code from the API-level error list, so a
+  /// client words it itself: `source-refused`, with `errorParams.reason`, for
+  /// an acquisition or a playlist sync the source refused, for example. `error`
+  /// keeps the server's sentence. Every failed task carries one: `internal`
+  /// when no more specific code applies, `error` then saying what happened. A
+  /// client shows `error` for a code it does not know.
+  final String? errorCode;
+
+  /// The detail `errorCode` names, as `Error.params` carries it: values are
+  /// strings, best-effort, and a client ignores keys it does not know.
+  final Map<String, String>? errorParams;
+
+  /// Set while a `running` task waits to try again on its own, at `retryAt`.
+  /// Any task can wait with `other`: a failure the server could not classify,
+  /// `error` saying what it was; it still ends `failed` once its attempts run
+  /// out, keeping that error. A book merge or split, or CUE split, waits with
+  /// `catalog-busy` (another job holds the catalog), `catalog-maintenance`,
+  /// `read-only` (a library it works in is flagged read-only),
+  /// `storage-unwritable` (a folder refuses the server), `engine-unavailable`,
+  /// `part-missing` (a file the catalog has is not where it says),
+  /// `put-back-blocked` (a file going back from the trash cannot) or `stopped`
+  /// (the server stopped or the run ran out of time). A `catalog-repair` that a
+  /// catalog hand-off cut short waits too, with `catalog-maintenance`, and
+  /// starts over once the catalog is back. A book merge or split, or CUE split,
+  /// waits at most six hours in a row, then ends safely for how far it went. An
+  /// acquisition or playlist sync waits with `source-retry` (the source failed
+  /// in a way worth retrying), `rate-limited` (the source asked to slow down;
+  /// `retryAt` follows its retry-after, thirty minutes away at most) or
+  /// `stalled` (a download showed no activity for three minutes and was stopped
+  /// to try again), at most three waits in all, after which it fails. A string,
+  /// not a closed enum.
   final String? waitReason;
 
   /// When a waiting task tries again.
@@ -1180,7 +1230,8 @@ class ToolTask {
 
   /// What the task produced once `done`: the merged book or the split pieces
   /// (item pids), or the review entries an acquisition or playlist sync opened
-  /// (entry pids).
+  /// (entry pids), which a `canceled` acquisition or playlist sync lists too,
+  /// and a `failed` acquisition.
   final List<String> resultPids;
 
   /// When the task was queued.
@@ -1189,25 +1240,79 @@ class ToolTask {
   /// When it reached a terminal state.
   final DateTime? finishedAt;
 
-  /// Task-type-specific result detail once the task finishes, for example a
-  /// migration import's match-and-write report. Shapes are documented per task
-  /// type and may grow fields. A `health-fix` task carries `rule` from the
-  /// moment it is queued, and once it has run `attempted`, `filled`, `failed`
-  /// (item counts) and `skipped`, an object counting the items left alone by
-  /// reason (`gone`, `locked`, `no match`, ...); a `path-mismatch` fix also
-  /// carries `moved` (the items it moved), `held` (by hold code) and `jobPids`
-  /// (the organize jobs that moved them). A `catalog-repair` task carries each
-  /// step's count once that step has run, added up over its attempts and absent
-  /// for a step none has reached: `sortKeysRewritten`, `orphansDeleted`
-  /// (entities with no items deleted), `orphansPending` (those its last orphans
-  /// step noted for the next repair), `artSourcesReclaimed`,
-  /// `thumbnailsReclaimed`, `tagProvenanceReclaimed`,
+  /// Task-type-specific detail, documented per type: some keys are there from
+  /// the moment the task is queued, the rest once it has run, for example a
+  /// migration import's match-and-write report. Shapes may grow fields. An
+  /// `acquire` task carries `url` (the link it was given) and `source`
+  /// (`video`, `playlist` or `channel`: how the link was taken) from the moment
+  /// it is queued, and once it has run, `canceled` included, `entries` (the
+  /// titles of the review entries it opened, in order) and `truncated` (true
+  /// when the listing stopped at the two-hundred-item cap). A `genre-normalize`
+  /// task carries `dryRun` from the moment it is queued, and an `import-` task
+  /// `target` (the account it imports into, by display name, else username) and
+  /// `dryRun`. A `health-fix` task carries `rule` from the moment it is queued,
+  /// and once it has run `attempted`, `filled`, `failed` (item counts) and
+  /// `skipped`, an object counting the items left alone by reason (`gone`,
+  /// `locked`, `no match`, ...); a `path-mismatch` fix also carries `moved`
+  /// (the items it moved), `held` (by hold code) and `jobPids` (the organize
+  /// jobs that moved them). A `health-fix` task queued for chosen items also
+  /// carries `scoped`, how many, from the moment it is queued. A
+  /// `catalog-repair` task carries each step's count once that step has run,
+  /// added up over its attempts and absent for a step none has reached:
+  /// `sortKeysRewritten`, `orphansDeleted` (entities with no items deleted),
+  /// `orphansPending` (those its last orphans step noted for the next repair),
+  /// `artSourcesReclaimed`, `thumbnailsReclaimed`, `tagProvenanceReclaimed`,
   /// `strandedTagRowsReclaimed` and `searchRowsRebuilt` (entries written or
   /// dropped); `runs`, what each run of the task did: the steps it finished, in
   /// order, with `error` saying why a run stopped short and `handedOff` marking
   /// one a catalog hand-off cut short; and once it has run, `after`, the
-  /// `CatalogConsistency` its closing check read.
+  /// `CatalogConsistency` its closing check read. A canceled task's counts say
+  /// what it did before it stopped.
   final Map<String, Object?>? summary;
+}
+
+/// What a `running` task is doing right now. Present only while this server
+/// runs the task, so absent on a queued or finished one.
+class ToolTaskActivity {
+  const ToolTaskActivity({
+    required this.phase,
+    required this.at,
+    this.itemsDone,
+    this.itemsTotal,
+    this.itemTitle,
+    this.bytesDone,
+    this.bytesTotal,
+  });
+
+  /// `listing` (reading a playlist or channel), `downloading` (fetching from a
+  /// source), `processing` (working on what it has: converting or cutting what
+  /// it fetched, fetching a streaming-engine result, a playlist sync working
+  /// out what changed, or a genre normalize going through the catalog) or
+  /// `importing` (writing what it fetched or read into the library, an
+  /// account's listening history or the review queue). A wait between attempts
+  /// shows `waitReason` and `retryAt` instead, with no `activity`. A string,
+  /// not a closed enum: a client words a phase it does not know as plain
+  /// activity.
+  final String phase;
+
+  /// Items of the task finished so far.
+  final int? itemsDone;
+
+  /// Items the task has in all, once known.
+  final int? itemsTotal;
+
+  /// The item in hand.
+  final String? itemTitle;
+
+  /// The item in hand's bytes fetched so far.
+  final int? bytesDone;
+
+  /// The item in hand's size, when the source gives it.
+  final int? bytesTotal;
+
+  /// The last activity the server saw, so a client can tell a stall from slow
+  /// progress.
+  final DateTime at;
 }
 
 /// What the transcoder is doing right now, for context beside the limits.

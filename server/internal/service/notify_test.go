@@ -59,7 +59,7 @@ func TestMutedTargetTakesTestsAndNothingElse(t *testing.T) {
 		t.Fatalf("target = %+v, want muted", target)
 	}
 
-	svc.Integrations.EmitNotification(ctx, "review-ready", "Ready", "entry", []string{uc.ID})
+	svc.Integrations.DeliverNotification(ctx, "review-ready", "Ready", "entry", "", []string{uc.ID})
 	if n := takeQueuedNotifies(t, ctx, svc); n != 0 {
 		t.Fatalf("a muted target queued %d deliveries, want none", n)
 	}
@@ -80,7 +80,7 @@ func TestMutedTargetTakesTestsAndNothingElse(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("renaming: %v", err)
 	}
-	svc.Integrations.EmitNotification(ctx, "review-ready", "Ready", "entry", []string{uc.ID})
+	svc.Integrations.DeliverNotification(ctx, "review-ready", "Ready", "entry", "", []string{uc.ID})
 	if n := takeQueuedNotifies(t, ctx, svc); n != 0 {
 		t.Fatalf("a rename woke a muted target: %d deliveries queued", n)
 	}
@@ -94,7 +94,7 @@ func TestMutedTargetTakesTestsAndNothingElse(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("unmuting: %v", err)
 	}
-	svc.Integrations.EmitNotification(ctx, "review-ready", "Ready", "entry", []string{uc.ID})
+	svc.Integrations.DeliverNotification(ctx, "review-ready", "Ready", "entry", "", []string{uc.ID})
 	if n := takeQueuedNotifies(t, ctx, svc); n != 1 {
 		t.Fatalf("after unmuting the emit queued %d deliveries, want one", n)
 	}
@@ -289,5 +289,96 @@ func TestPacedRowPastTheHorizonIsShed(t *testing.T) {
 	}
 	if n := takeQueuedNotifies(t, ctx, svc); n != 0 {
 		t.Fatalf("the shed row is still queued (%d)", n)
+	}
+}
+
+// The inbox folds review-ready into one row, but a delivery target that
+// asked for it still hears of every entry, a new search that lands
+// pending again included.
+func TestReviewReadyStillDeliversOncePerEntry(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin, _ := openServiceAt(t, t.TempDir(), func(cfg *Config) { cfg.Sealer = testSealer(t) })
+	if _, err := svc.Integrations.CreateMyNotificationTarget(ctx, admin, NotificationTargetInput{
+		Kind:          "webhook",
+		Config:        []byte(`{"url":"https://hook.example.com/x"}`),
+		EnabledEvents: []string{"review-ready"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ids := []string{}
+	for _, title := range []string{"One", "Two", "Three"} {
+		ids = append(ids, openAcquired(t, ctx, svc, admin.ID, title))
+	}
+	drainIdentify(t, ctx, svc)
+	if n := takeQueuedNotifies(t, ctx, svc); n != 3 {
+		t.Fatalf("queued %d deliveries, want one per entry", n)
+	}
+	if rows := eventRows(t, ctx, svc, admin, "review-ready"); len(rows) != 1 {
+		t.Fatalf("review rows = %+v, want one", rows)
+	}
+	if _, err := svc.Ingest.ReidentifyEntry(ctx, admin, ids[0], ReviewOverrideDTO{}); err != nil {
+		t.Fatal(err)
+	}
+	drainIdentify(t, ctx, svc)
+	if n := takeQueuedNotifies(t, ctx, svc); n != 1 {
+		t.Fatalf("a new search queued %d deliveries, want one", n)
+	}
+}
+
+// A stall whose entry cannot be read again still tells the delivery
+// targets, from the copy the import held.
+func TestAStallStillDeliversWhenItsEntryCannotBeReadAgain(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin, _ := openServiceAt(t, t.TempDir(), func(cfg *Config) { cfg.Sealer = testSealer(t) })
+	if _, err := svc.Integrations.CreateMyNotificationTarget(ctx, admin, NotificationTargetInput{
+		Kind:          "webhook",
+		Config:        []byte(`{"url":"https://hook.example.com/x"}`),
+		EnabledEvents: []string{"review-ready"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	id, err := svc.Ingest.openReviewEntry(ctx, wdb.ReviewEntry{
+		Kind: reviewKindImport, MediaType: "music", Origin: reviewOriginUpload,
+		UploadedBy: admin.ID, Title: "Stalled", Artist: "Test Artist",
+	}, reviewPayload{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	held, err := svc.db.ReviewEntryByID(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.db.Writer().ExecContext(ctx, `DELETE FROM review_entries WHERE id = ?`, id); err != nil {
+		t.Fatal(err)
+	}
+	svc.Ingest.importStalled(ctx, &held)
+	if n := takeQueuedNotifies(t, ctx, svc); n != 1 {
+		t.Fatalf("queued %d deliveries, want one", n)
+	}
+}
+
+// DeliverNotification leaves the inbox and the stream alone.
+func TestDeliverNotificationIsOutboundOnly(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newAdminFixture(t)
+	if _, err := svc.Integrations.CreateMyNotificationTarget(ctx, uc, NotificationTargetInput{
+		Kind:          "webhook",
+		Config:        []byte(`{"url":"https://hook.example.com/x"}`),
+		EnabledEvents: []string{"review-ready"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	tail := eventTail(t, ctx, svc, uc)
+	svc.Integrations.DeliverNotification(ctx, "review-ready", "Ready", "entry", "", []string{uc.ID, uc.ID})
+	if n := takeQueuedNotifies(t, ctx, svc); n != 1 {
+		t.Fatalf("queued %d deliveries, want one", n)
+	}
+	if page, err := svc.Integrations.Notifications(ctx, uc, "", 10); err != nil || len(page.Notifications) != 0 {
+		t.Fatalf("inbox = %+v (%v), want empty", page.Notifications, err)
+	}
+	for _, e := range eventsAfter(t, ctx, svc, uc, tail) {
+		if e.Kind == eventNotification {
+			t.Fatalf("a delivery marked the stream: %+v", e)
+		}
 	}
 }

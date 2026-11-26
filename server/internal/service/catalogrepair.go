@@ -296,6 +296,13 @@ func (l *Library) runCatalogRepair(ctx context.Context, t *wdb.ToolTask) error {
 		if err == nil {
 			err = step.run()
 		}
+		if err != nil && errors.Is(context.Cause(ctx), errToolCanceled) {
+			// Canceled: the steps it finished are kept, and the run says
+			// why it stopped short.
+			run.Error = "canceled"
+			keep()
+			return errToolCanceled
+		}
 		if err != nil {
 			stop := l.catalogRepairStop(run, step.name, err)
 			keep()
@@ -329,12 +336,19 @@ func (l *Library) catalogRepairStop(run *catalogRepairRun, step string, err erro
 // owes, sending every client back to a snapshot of the catalog, once: the
 // release years that step puts back emit no delta, and the sort keys the
 // step after it rewrites for artists and albums emit only artist and
-// album deltas, which reach no client; both order what clients list.
+// album deltas, which reach no client; both order what clients list. An
+// end already on the record is not told again, so a settle the startup
+// pass redoes tells it once.
 func (l *Library) catalogRepairEnded(ctx context.Context, t *wdb.ToolTask) {
 	if l.catalogRepairEndHook != nil && l.catalogRepairEndHook() {
 		return
 	}
 	ctx = context.WithoutCancel(ctx)
+	if told, err := l.db.AuditNamesTask(ctx, "catalog.repair", t.ID, "state"); err != nil {
+		l.log.Warn("reading whether a repair's end is on the record", "task", t.ID, "err", err)
+	} else if told {
+		return
+	}
 	var sum catalogRepairSummary
 	_ = json.Unmarshal([]byte(t.Summary), &sum)
 	owed, err := l.db.SyncStateGet(ctx, syncKeyCatalogResyncOwed)

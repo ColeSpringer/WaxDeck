@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -120,7 +121,9 @@ type migrationParams struct {
 // summary document. A dry run counts what would be written; a re-import
 // counts only what was new (duplicates are the idempotency working).
 type migrationSummary struct {
-	Source        string `json:"source"`
+	Source string `json:"source"`
+	// Target is the account it imports into, by name, as queued.
+	Target        string `json:"target,omitempty"`
 	DryRun        bool   `json:"dryRun"`
 	Matched       int    `json:"matched"`
 	Unmatched     int    `json:"unmatched"`
@@ -301,7 +304,7 @@ func (l *Migrate) StartMigration(ctx context.Context, uc *UserCtx, req Migration
 	if source == migrateSourceLastfm && l.Integrations.lastfmClient() == nil {
 		return ToolTaskDTO{}, errInvalid("configure the server's Last.fm API key first")
 	}
-	target, err := l.migrationTarget(ctx, uc, req.AccountID)
+	target, targetName, err := l.migrationTarget(ctx, uc, req.AccountID)
 	if err != nil {
 		return ToolTaskDTO{}, err
 	}
@@ -386,12 +389,15 @@ func (l *Migrate) StartMigration(ctx context.Context, uc *UserCtx, req Migration
 		Progress:     req.Progress,
 		DryRun:       req.DryRun,
 	}
+	// The summary names the target, never by account id: the task is
+	// listed to its starter, who reads a name.
 	t := wdb.ToolTask{
 		ID:          "tk-" + ulid.Make().String(),
 		Type:        taskTypeMigratePrefix + source,
 		State:       taskStateQueued,
 		UserID:      uc.ID,
 		Params:      marshalJSON(p),
+		Summary:     marshalJSON(migrationQueued{Target: targetName, DryRun: req.DryRun}),
 		ResultPIDs:  "[]",
 		CreatedAtNS: time.Now().UnixNano(),
 	}
@@ -402,29 +408,40 @@ func (l *Migrate) StartMigration(ctx context.Context, uc *UserCtx, req Migration
 	return toolTaskDTO(t), nil
 }
 
-// migrationTarget resolves the account the writes land on. Empty means
-// the caller, which is the household administrator moving their own
-// library; anything else has to be an account that can actually hold
-// play state, so a disabled one and a signup nobody approved are
+// migrationQueued is what an import's summary says from the moment it is
+// queued.
+type migrationQueued struct {
+	Target string `json:"target"`
+	DryRun bool   `json:"dryRun"`
+}
+
+// migrationTarget resolves the account the writes land on, and its name.
+// Empty means the caller, which is the household administrator moving
+// their own library; anything else has to be an account that can actually
+// hold play state, so a disabled one and a signup nobody approved are
 // refused here rather than at run time.
-func (l *Migrate) migrationTarget(ctx context.Context, uc *UserCtx, accountID string) (string, error) {
+func (l *Migrate) migrationTarget(ctx context.Context, uc *UserCtx, accountID string) (string, string, error) {
 	id := strings.TrimSpace(accountID)
 	if id == "" || id == uc.ID {
-		return uc.ID, nil
+		u, err := l.db.UserByID(ctx, uc.ID)
+		if err != nil {
+			return "", "", &Error{Kind: KindInternal, Err: err}
+		}
+		return uc.ID, cmp.Or(u.DisplayName, u.Username), nil
 	}
 	u, err := l.db.UserByID(ctx, id)
 	if err != nil || u == nil {
 		// Invalid rather than not-found: the account is a field of the
 		// order, and this endpoint's own resource is the task.
-		return "", errInvalid("no account with id " + id)
+		return "", "", errInvalid("no account with id " + id)
 	}
 	if u.Disabled {
-		return "", errInvalid("that account is disabled")
+		return "", "", errInvalid("that account is disabled")
 	}
 	if u.Pending {
-		return "", errInvalid("that signup has not been approved yet")
+		return "", "", errInvalid("that signup has not been approved yet")
 	}
-	return u.ID, nil
+	return u.ID, cmp.Or(u.DisplayName, u.Username), nil
 }
 
 // migrationBase validates the source server URL against what the source
@@ -456,7 +473,7 @@ func (l *Migrate) migrationBase(ctx context.Context, source string, spec migrate
 }
 
 // runMigrationTask executes one leased migration task. It is the
-// dispatch target for every "import-*" task type: runToolTask routes
+// dispatch target for every "import-*" task type: runCanceling routes
 // them here and its shared completion tail records the done state, so
 // on success this only fills in t.Summary. Failures return through the
 // drain machinery like every other runner: permanent ones retire the
@@ -536,6 +553,8 @@ func (l *Migrate) runMigrationTask(ctx context.Context, t *wdb.ToolTask) error {
 			return fmt.Errorf("%w: another import is reading that upload", errToolPermanent)
 		}
 	}
+	var queued migrationQueued
+	_ = json.Unmarshal([]byte(t.Summary), &queued)
 	var sum migrationSummary
 	switch p.Source {
 	case migrateSourceNavidrome, migrateSourceSubsonic:
@@ -553,7 +572,15 @@ func (l *Migrate) runMigrationTask(ctx context.Context, t *wdb.ToolTask) error {
 	default:
 		return fmt.Errorf("%w: unknown migration source %q", errToolPermanent, p.Source)
 	}
+	sum.Target = queued.Target
 	if err != nil {
+		// What the attempt wrote is counted, and kept on the task: a wait
+		// records none of it, and a cancel or a retire of the waiting task
+		// audits what the task holds.
+		t.Summary = marshalJSON(sum)
+		if uerr := l.db.UpdateToolTask(context.WithoutCancel(ctx), *t); uerr != nil && !errors.Is(uerr, wdb.ErrNotFound) {
+			l.log.Warn("recording an import's counts", "task", t.ID, "err", uerr)
+		}
 		return err
 	}
 	t.Summary = marshalJSON(sum)
@@ -769,10 +796,10 @@ func migrationFailureText(msg string) string {
 	return truncateUTF8(hostOnly(msg), migrationFailureMax)
 }
 
-// auditMigrationFailure records an import that failed for good under the
-// account that ordered it, naming the account it was meant to write onto.
-// Attributed by id alone: an account disabled since it ordered the import
-// still ordered it.
+// auditMigrationFailure records an import that failed for good, or was
+// canceled with what it wrote counted, under the account that ordered it,
+// naming the account it was meant to write onto. Attributed by id alone:
+// an account disabled since it ordered the import still ordered it.
 func (l *Migrate) auditMigrationFailure(ctx context.Context, t wdb.ToolTask) {
 	var p migrationParams
 	// Params that cannot be read still belong to an import that failed.
@@ -781,11 +808,25 @@ func (l *Migrate) auditMigrationFailure(ctx context.Context, t wdb.ToolTask) {
 	if account == "" {
 		account = t.UserID
 	}
-	l.Audit.Record(ctx, &UserCtx{ID: t.UserID}, "migration.run", AuditTarget{Kind: "migration", Name: p.Source}, map[string]any{
-		"source": p.Source, "dryRun": p.DryRun, "failed": true,
+	detail := map[string]any{
+		"task": t.ID, "source": p.Source, "dryRun": p.DryRun, "failed": true,
 		"account": l.Audit.usernameOf(ctx, account),
 		"error":   migrationFailureText(t.Error),
-	})
+	}
+	end := "failed"
+	if t.State == taskStateCanceled {
+		end = "canceled"
+		var sum migrationSummary
+		_ = json.Unmarshal([]byte(t.Summary), &sum)
+		detail = map[string]any{
+			"task": t.ID, "source": p.Source, "dryRun": p.DryRun, "canceled": true,
+			"account": l.Audit.usernameOf(ctx, account),
+			"matched": sum.Matched, "unmatched": sum.Unmatched,
+			"stars": sum.Stars, "ratings": sum.Ratings,
+			"listens": sum.Listens, "progress": sum.Progress,
+		}
+	}
+	l.Audit.recordTaskEnd(ctx, &UserCtx{ID: t.UserID}, "migration.run", end, AuditTarget{Kind: "migration", Name: p.Source}, detail)
 }
 
 // settleMigrationExport disposes of the upload an import was reading,
@@ -807,13 +848,13 @@ func (l *Migrate) auditMigrationFailure(ctx context.Context, t wdb.ToolTask) {
 // Every end of a migration comes through here, a returned error and
 // attempts that ran out under the lease alike, on the drain's own
 // context rather than the attempt's deadline. A migration that failed
-// for good is therefore put on the record here, once.
+// for good, or was canceled, is therefore put on the record here, once.
 func (l *Migrate) settleMigrationExport(ctx context.Context, taskID string) {
 	t, err := l.db.ToolTaskByID(ctx, taskID)
 	if err != nil || !strings.HasPrefix(t.Type, taskTypeMigratePrefix) {
 		return
 	}
-	if t.State == taskStateFailed {
+	if t.State == taskStateFailed || t.State == taskStateCanceled {
 		l.auditMigrationFailure(ctx, t)
 	}
 	var p migrationParams

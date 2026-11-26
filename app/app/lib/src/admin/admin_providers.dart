@@ -123,17 +123,21 @@ class BackupsController extends AsyncNotifier<List<Backup>> {
   Future<List<Backup>> build() async {
     // This build's own ref: [ref] answers for whichever build is newest.
     final built = ref;
-    // News is a backup row this read had not seen, by id: the server's
-    // clock is not this device's.
+    // News is a backup row this read had not seen, or one it had that has
+    // since moved: a second backup folds into the same row under the same
+    // id and moves its `updatedAt`. Compared with the server's own stamp,
+    // not this device's clock.
     bool isBackupRow(WaxNotification row) =>
         row.event == 'backup-completed' || row.event == 'backup-failed';
     final known = {
       for (final row in ref.read(notificationsProvider).value?.rows ?? [])
-        if (isBackupRow(row)) row.id,
+        if (isBackupRow(row)) row.id: row.at,
     };
     ref.listen(notificationsProvider, (_, next) {
       final news = next.value?.rows.any(
-        (row) => isBackupRow(row) && !known.contains(row.id),
+        (row) =>
+            isBackupRow(row) &&
+            (!known.containsKey(row.id) || known[row.id] != row.at),
       );
       if ((news ?? false) && built.mounted) built.invalidateSelf();
     });

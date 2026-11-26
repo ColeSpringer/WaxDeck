@@ -41,16 +41,57 @@ type ToolTask struct {
 	// WaitReason says why a running task waits to try again, at
 	// LeaseUntilNS; empty when it does not. See DeferToolTask.
 	WaitReason string
+	// ErrorCode and ErrorParams say what Error says as a client words it:
+	// an API error code and its params, a JSON object; empty for none.
+	ErrorCode   string
+	ErrorParams string
+	// CancelRequested is set once the task was asked to cancel; see
+	// RequestToolTaskCancel.
+	CancelRequested bool
+	// SettlePending is set from a cancel's or a retire's state change, or
+	// a run's own terminal write (FinishToolTask), until what that end
+	// settles beyond the row is done; see EndToolTaskSettle. RunEndPending
+	// says it is a run's own end, whose steps are only its end's, and
+	// ParkEndPending that the run parked its task (ParkToolTask).
+	SettlePending  bool
+	RunEndPending  bool
+	ParkEndPending bool
+}
+
+// settle_pending's values: none, a cancel's or retire's settle, a run's
+// own end, a run's park.
+const (
+	settleNone    = 0
+	settleEnd     = 1
+	settleRunEnd  = 2
+	settleParkEnd = 3
+)
+
+// settleValue is t's settle_pending.
+func settleValue(t ToolTask) int {
+	switch {
+	case t.ParkEndPending:
+		return settleParkEnd
+	case t.RunEndPending:
+		return settleRunEnd
+	case t.SettlePending:
+		return settleEnd
+	}
+	return settleNone
 }
 
 const taskCols = `id, type, state, item_pid, item_title, user_id, params, progress_pct,
-	error, result_pids, summary, attempts, created_at_ns, finished_at_ns, lock_key, resumable, lease_until_ns, wait_reason`
+	error, result_pids, summary, attempts, created_at_ns, finished_at_ns, lock_key, resumable, lease_until_ns, wait_reason,
+	error_code, error_params, cancel_requested, settle_pending`
 
 func scanTask(row interface{ Scan(...any) error }) (ToolTask, error) {
 	var t ToolTask
+	var settle int
 	err := row.Scan(&t.ID, &t.Type, &t.State, &t.ItemPID, &t.ItemTitle, &t.UserID, &t.Params,
 		&t.ProgressPct, &t.Error, &t.ResultPIDs, &t.Summary, &t.Attempts, &t.CreatedAtNS, &t.FinishedAtNS,
-		&t.LockKey, &t.Resumable, &t.LeaseUntilNS, &t.WaitReason)
+		&t.LockKey, &t.Resumable, &t.LeaseUntilNS, &t.WaitReason, &t.ErrorCode, &t.ErrorParams, &t.CancelRequested, &settle)
+	t.SettlePending, t.ParkEndPending = settle != settleNone, settle == settleParkEnd
+	t.RunEndPending = settle == settleRunEnd || t.ParkEndPending
 	return t, err
 }
 
@@ -58,31 +99,31 @@ func scanTask(row interface{ Scan(...any) error }) (ToolTask, error) {
 func taskValues(t ToolTask) []any {
 	return []any{t.ID, t.Type, t.State, t.ItemPID, t.ItemTitle, t.UserID, t.Params, t.ProgressPct,
 		t.Error, t.ResultPIDs, t.Summary, t.Attempts, t.CreatedAtNS, t.FinishedAtNS, t.LockKey, t.Resumable, t.LeaseUntilNS,
-		t.WaitReason}
+		t.WaitReason, t.ErrorCode, t.ErrorParams, t.CancelRequested, settleValue(t)}
 }
 
 // InsertToolTask stores a new task.
 func (d *DB) InsertToolTask(ctx context.Context, t ToolTask) error {
 	_, err := d.w.ExecContext(ctx, `
 		INSERT INTO tool_tasks (`+taskCols+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, taskValues(t)...)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, taskValues(t)...)
 	if err != nil {
 		return fmt.Errorf("db: inserting tool task: %w", err)
 	}
 	return nil
 }
 
-// InsertLockedToolTask stores a new task unless a queued, running or
-// parked one holds its lock key, in one statement, so two requests cannot
+// InsertLockedToolTask stores a new task unless a queued, running,
+// parked or canceled one holds its lock key, in one statement, so two requests cannot
 // both find the key free. It answers the id of the task holding the key, or "" when
 // this one was stored.
 func (d *DB) InsertLockedToolTask(ctx context.Context, t ToolTask) (string, error) {
 	res, err := d.w.ExecContext(ctx, `
 		INSERT INTO tool_tasks (`+taskCols+`)
-		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		WHERE NOT EXISTS (
 			SELECT 1 FROM tool_tasks
-			WHERE lock_key = ? AND lock_key <> '' AND state IN ('queued', 'running', 'parked')
+			WHERE lock_key = ? AND lock_key <> '' AND state IN ('queued', 'running', 'parked', 'canceled')
 		)`, append(taskValues(t), t.LockKey)...)
 	if err != nil {
 		return "", fmt.Errorf("db: inserting tool task: %w", err)
@@ -102,8 +143,8 @@ func (d *DB) InsertLockedToolTask(ctx context.Context, t ToolTask) (string, erro
 	return held, nil
 }
 
-// ToolTaskHolding answers the id of the queued, running or parked task
-// holding lockKey, or "" for none.
+// ToolTaskHolding answers the id of the queued, running, parked or
+// canceled task holding lockKey, or "" for none.
 func (d *DB) ToolTaskHolding(ctx context.Context, lockKey string) (string, error) {
 	if lockKey == "" {
 		return "", nil
@@ -111,7 +152,7 @@ func (d *DB) ToolTaskHolding(ctx context.Context, lockKey string) (string, error
 	var held string
 	err := d.w.QueryRowContext(ctx, `
 		SELECT id FROM tool_tasks
-		WHERE lock_key = ? AND state IN ('queued', 'running', 'parked')
+		WHERE lock_key = ? AND state IN ('queued', 'running', 'parked', 'canceled')
 		ORDER BY created_at_ns LIMIT 1`, lockKey).Scan(&held)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
@@ -123,16 +164,16 @@ func (d *DB) ToolTaskHolding(ctx context.Context, lockKey string) (string, error
 }
 
 // InsertHealthFixTask inserts a health-fix task unless its rule is being
-// fixed already, by a queued or running task or by a pass whose origin
-// stands, and reports whether it did. One statement, so two requests
-// cannot both find the rule free.
+// fixed already, by a queued or running task not winding down from a
+// cancel or by a pass whose origin stands, and reports whether it did.
+// One statement, so two requests cannot both find the rule free.
 func (d *DB) InsertHealthFixTask(ctx context.Context, t ToolTask, rule string) (bool, error) {
 	res, err := d.w.ExecContext(ctx, `
 		INSERT INTO tool_tasks (`+taskCols+`)
-		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		WHERE NOT EXISTS (
 			SELECT 1 FROM tool_tasks WHERE type = ? AND state IN ('queued', 'running')
-				AND json_extract(params, '$.rule') = ?)
+				AND cancel_requested = 0 AND json_extract(params, '$.rule') = ?)
 		AND NOT EXISTS (SELECT 1 FROM job_origins WHERE rule = ?)`,
 		append(taskValues(t), t.Type, rule, rule)...)
 	if err != nil {
@@ -146,12 +187,13 @@ func (d *DB) InsertHealthFixTask(ctx context.Context, t ToolTask, rule string) (
 }
 
 // ActiveToolTask finds a queued or running task of one type over one
-// item; ErrNotFound when none is in flight. It is the dedupe read that
-// keeps a sync-now and the sweeper from queuing the same run twice.
+// item, one winding down from a cancel aside; ErrNotFound when none is in
+// flight. It is the dedupe read that keeps a sync-now and the sweeper from
+// queuing the same run twice.
 func (d *DB) ActiveToolTask(ctx context.Context, typ, itemPID string) (ToolTask, error) {
 	t, err := scanTask(d.r.QueryRowContext(ctx, `
 		SELECT `+taskCols+` FROM tool_tasks
-		WHERE type = ? AND item_pid = ? AND state IN ('queued', 'running')
+		WHERE type = ? AND item_pid = ? AND state IN ('queued', 'running') AND cancel_requested = 0
 		ORDER BY created_at_ns LIMIT 1`, typ, itemPID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return ToolTask{}, ErrNotFound
@@ -175,18 +217,44 @@ func (d *DB) ToolTaskByID(ctx context.Context, id string) (ToolTask, error) {
 	return t, nil
 }
 
-// UpdateToolTask rewrites a task's mutable fields (same id).
+// UpdateToolTask rewrites a task's mutable fields (same id), but never a
+// canceled task's state: a run that ends after its cancel cannot bring
+// the task back. ErrNotFound when no such task, or a canceled one t would
+// change the state of.
 func (d *DB) UpdateToolTask(ctx context.Context, t ToolTask) error {
+	return d.updateToolTask(ctx, t, false)
+}
+
+// FinishToolTask is UpdateToolTask for a run's own terminal write (done or
+// failed), which in the same statement marks the run's end steps pending
+// until EndToolTaskSettle, so a stop between the two leaves them for the
+// startup pass. A settle already pending (a retire's) stays as it is.
+func (d *DB) FinishToolTask(ctx context.Context, t ToolTask) error {
+	return d.updateToolTask(ctx, t, true)
+}
+
+func (d *DB) updateToolTask(ctx context.Context, t ToolTask, runEnd bool) error {
 	res, err := d.w.ExecContext(ctx, `
 		UPDATE tool_tasks SET state = ?, progress_pct = ?, error = ?, result_pids = ?,
-			summary = ?, finished_at_ns = ?
-		WHERE id = ?`,
-		t.State, t.ProgressPct, t.Error, t.ResultPIDs, t.Summary, t.FinishedAtNS, t.ID)
+			summary = ?, finished_at_ns = ?, error_code = ?, error_params = ?,
+			settle_pending = CASE WHEN ? AND settle_pending = 0 THEN ? ELSE settle_pending END
+		WHERE id = ? AND (state <> 'canceled' OR ? = 'canceled')`,
+		t.State, t.ProgressPct, t.Error, t.ResultPIDs, t.Summary, t.FinishedAtNS, t.ErrorCode, t.ErrorParams,
+		runEnd, settleRunEnd, t.ID, t.State)
 	if err != nil {
 		return fmt.Errorf("db: updating tool task: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+// SetToolTaskItemTitle names what an untitled task works on, once its run
+// learns it; a task already named keeps its name.
+func (d *DB) SetToolTaskItemTitle(ctx context.Context, id, title string) error {
+	if _, err := d.w.ExecContext(ctx, `UPDATE tool_tasks SET item_title = ? WHERE id = ? AND item_title = ''`, title, id); err != nil {
+		return fmt.Errorf("db: naming tool task: %w", err)
 	}
 	return nil
 }
@@ -249,22 +317,35 @@ func (t TaskTypes) where() (string, []any) {
 	return cond, args
 }
 
+// leasableTask is the condition on the tool_tasks row alias names that a
+// lease takes the task again once its lease runs out, its one argument
+// the attempts a task may spend: LeaseToolTask's own terms, which
+// ReviewEntriesDeclinedInFlight reads too. A drain narrows it by type
+// alone, so it holds for every drain.
+func leasableTask(alias string) string {
+	return alias + `.state IN ('queued', 'running') AND (` + alias + `.attempts < ? OR ` +
+		alias + `.resumable = 1 OR ` + alias + `.cancel_requested = 1)`
+}
+
 // LeaseToolTask claims the oldest queued task of types; ErrNotFound when
 // idle. A crashed worker's lease expires and the task re-runs, so task
 // execution must tolerate a duplicate attempt. A resumable task is
-// claimed whatever its attempts.
+// claimed whatever its attempts. A wait ends; what it said stays for the
+// retire pass, should this run end with the process. A task asked to
+// cancel is claimed whatever its attempts too, spending none, for the
+// caller to settle rather than run.
 func (d *DB) LeaseToolTask(ctx context.Context, nowNS, leaseNS int64, maxAttempts int, types TaskTypes) (ToolTask, error) {
 	cond, typeArgs := types.where()
 	row := d.w.QueryRowContext(ctx, `
-		UPDATE tool_tasks SET lease_until_ns = ? + ?, attempts = attempts + 1, state = 'running',
-			error = '', wait_reason = ''
+		UPDATE tool_tasks SET lease_until_ns = ? + ?, attempts = attempts + 1 - cancel_requested, state = 'running',
+			wait_reason = ''
 		WHERE id = (
-			SELECT id FROM tool_tasks
-			WHERE state IN ('queued', 'running') AND lease_until_ns < ? AND (attempts < ? OR resumable = 1)`+cond+`
-			ORDER BY created_at_ns, id LIMIT 1
+			SELECT t.id FROM tool_tasks t
+			WHERE `+leasableTask("t")+` AND t.lease_until_ns < ?`+cond+`
+			ORDER BY t.created_at_ns, t.id LIMIT 1
 		)
 		RETURNING `+taskCols,
-		append([]any{nowNS, leaseNS, nowNS, maxAttempts}, typeArgs...)...)
+		append([]any{nowNS, leaseNS, maxAttempts, nowNS}, typeArgs...)...)
 	t, err := scanTask(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ToolTask{}, ErrNotFound
@@ -276,11 +357,12 @@ func (d *DB) LeaseToolTask(ctx context.Context, nowNS, leaseNS int64, maxAttempt
 }
 
 // ActiveToolTaskRules lists the `rule` param of every queued or running
-// task of type typ: the rules a health-fix task is fixing.
+// task of type typ not winding down from a cancel: the rules a health-fix
+// task is fixing.
 func (d *DB) ActiveToolTaskRules(ctx context.Context, typ string) ([]string, error) {
 	rows, err := d.r.QueryContext(ctx, `
 		SELECT DISTINCT json_extract(params, '$.rule') FROM tool_tasks
-		WHERE type = ? AND state IN ('queued', 'running')
+		WHERE type = ? AND state IN ('queued', 'running') AND cancel_requested = 0
 			AND json_extract(params, '$.rule') IS NOT NULL`, typ)
 	if err != nil {
 		return nil, fmt.Errorf("db: listing active task rules: %w", err)
@@ -309,18 +391,21 @@ func (d *DB) RenewToolTaskLease(ctx context.Context, id string, untilNS int64) e
 }
 
 // FailExhaustedToolTasks marks tasks out of attempts as failed and
-// returns their ids for event fan-out. It leaves a resumable task, and
-// every task in held: those a run in this process is working, whatever
-// their leases say.
+// returns their ids for event fan-out, keeping the last failure a task
+// said. It leaves a resumable task, one asked to cancel, which the lease
+// hands over to be settled, and every task in held: those a run in this
+// process is working, whatever their leases say.
 func (d *DB) FailExhaustedToolTasks(ctx context.Context, nowNS int64, maxAttempts int, held []string) ([]string, error) {
 	heldJSON, err := json.Marshal(append([]string{}, held...))
 	if err != nil {
 		return nil, fmt.Errorf("db: failing exhausted tool tasks: %w", err)
 	}
 	rows, err := d.w.QueryContext(ctx, `
-		UPDATE tool_tasks SET state = 'failed', error = 'gave up after repeated attempts', finished_at_ns = ?
+		UPDATE tool_tasks SET state = 'failed', wait_reason = '', finished_at_ns = ?, settle_pending = 1,
+			error = CASE WHEN error = '' THEN 'gave up after repeated attempts' ELSE error END,
+			error_code = CASE WHEN error_code = '' THEN 'internal' ELSE error_code END
 		WHERE state IN ('queued', 'running') AND lease_until_ns < ? AND attempts >= ? AND resumable = 0
-			AND id NOT IN (SELECT value FROM json_each(?))
+			AND cancel_requested = 0 AND id NOT IN (SELECT value FROM json_each(?))
 		RETURNING id`, nowNS, nowNS, maxAttempts, string(heldJSON))
 	if err != nil {
 		return nil, fmt.Errorf("db: failing exhausted tool tasks: %w", err)
@@ -347,7 +432,7 @@ func (d *DB) FailExhaustedToolTasks(ctx context.Context, nowNS int64, maxAttempt
 // account's row. False when nothing went - no such row, not terminal,
 // or not the owner's.
 func (d *DB) DeleteToolTask(ctx context.Context, id, ownerID string) (bool, error) {
-	q := `DELETE FROM tool_tasks WHERE id = ? AND state IN ('done', 'failed', 'parked')`
+	q := `DELETE FROM tool_tasks WHERE id = ? AND state IN ('done', 'failed', 'parked', 'canceled')`
 	args := []any{id}
 	if ownerID != "" {
 		q += ` AND user_id = ?`
@@ -369,7 +454,7 @@ func (d *DB) DeleteToolTask(ctx context.Context, id, ownerID string) (bool, erro
 // that finished before it. An empty userID without everyone answers
 // nothing, so a caller that lost the id cannot sweep the table.
 func (d *DB) FinishedToolTasks(ctx context.Context, userID string, everyone bool, finishedBeforeNS int64) ([]ToolTask, error) {
-	q := `SELECT ` + taskCols + ` FROM tool_tasks WHERE state IN ('done', 'failed', 'parked')`
+	q := `SELECT ` + taskCols + ` FROM tool_tasks WHERE state IN ('done', 'failed', 'parked', 'canceled')`
 	args := []any{}
 	switch {
 	case everyone:
@@ -411,7 +496,7 @@ func (d *DB) DeleteToolTasksByID(ctx context.Context, ids []string) (int, error)
 	}
 	res, err := d.w.ExecContext(ctx, `
 		DELETE FROM tool_tasks
-		WHERE id IN (SELECT value FROM json_each(?)) AND state IN ('done', 'failed', 'parked')`, string(idsJSON))
+		WHERE id IN (SELECT value FROM json_each(?)) AND state IN ('done', 'failed', 'parked', 'canceled')`, string(idsJSON))
 	if err != nil {
 		return 0, fmt.Errorf("db: clearing finished tool tasks: %w", err)
 	}
@@ -422,23 +507,85 @@ func (d *DB) DeleteToolTasksByID(ctx context.Context, ids []string) (int, error)
 	return int(n), nil
 }
 
+// ErrCancelRequested is a task that was asked to cancel before its run
+// could make it resumable.
+var ErrCancelRequested = errors.New("db: the task was asked to cancel")
+
 // MarkToolTaskResumable records that a task's run must be finished
 // whatever its attempts: the lease takes it past the cap and the retire
-// pass leaves it.
+// pass leaves it. A task asked to cancel first answers
+// ErrCancelRequested and stays as it was; once resumable, a cancel is
+// refused (RequestToolTaskCancel), so the one statement decides which.
 func (d *DB) MarkToolTaskResumable(ctx context.Context, id string) error {
-	if _, err := d.w.ExecContext(ctx, `UPDATE tool_tasks SET resumable = 1 WHERE id = ?`, id); err != nil {
+	res, err := d.w.ExecContext(ctx, `UPDATE tool_tasks SET resumable = 1 WHERE id = ? AND cancel_requested = 0`, id)
+	if err != nil {
 		return fmt.Errorf("db: marking tool task resumable: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrCancelRequested
 	}
 	return nil
 }
 
-// DeferToolTask hands a running task back until untilNS without counting
-// the attempt that deferred it, saying why in its error and, by a reason
-// a client words, in its wait reason. The next lease clears both.
-func (d *DB) DeferToolTask(ctx context.Context, id string, untilNS int64, why, reason string) error {
+// RequestToolTaskCancel asks a queued or running task to cancel, and
+// reports whether it was asked: false for a task that finished, or that is
+// resumable, whose run must finish.
+func (d *DB) RequestToolTaskCancel(ctx context.Context, id string) (bool, error) {
+	res, err := d.w.ExecContext(ctx, `
+		UPDATE tool_tasks SET cancel_requested = 1
+		WHERE id = ? AND state IN ('queued', 'running') AND resumable = 0`, id)
+	if err != nil {
+		return false, fmt.Errorf("db: asking a tool task to cancel: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("db: asking a tool task to cancel: %w", err)
+	}
+	return n > 0, nil
+}
+
+// SettleToolTaskCanceled ends a queued or running task canceled at atNS,
+// with the results and summary it keeps, and reports whether it did:
+// false for a task that finished, was canceled already, or is resumable.
+// What a wait said goes with the wait.
+func (d *DB) SettleToolTaskCanceled(ctx context.Context, id string, atNS int64, resultPIDs, summary string) (bool, error) {
+	res, err := d.w.ExecContext(ctx, `
+		UPDATE tool_tasks SET state = 'canceled', finished_at_ns = ?, result_pids = ?, summary = ?,
+			wait_reason = '', error = '', error_code = '', error_params = '', settle_pending = 1
+		WHERE id = ? AND state IN ('queued', 'running') AND resumable = 0`, atNS, resultPIDs, summary, id)
+	if err != nil {
+		return false, fmt.Errorf("db: settling a canceled tool task: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("db: settling a canceled tool task: %w", err)
+	}
+	return n > 0, nil
+}
+
+// ToolTaskWait is a running task's wait: until when, why in the server's
+// words and as a client words it (code and params, a JSON object), the
+// reason it waits, and whether the attempt that waits is spent.
+type ToolTaskWait struct {
+	UntilNS                       int64
+	Error, ErrorCode, ErrorParams string
+	Reason                        string
+	SpendAttempt                  bool
+}
+
+// DeferToolTask hands a running task back until the wait's end, saying
+// why. The attempt that deferred it is given back unless the wait spends
+// it. The next lease ends the wait; what it said stays until the task
+// says something else, so a run that never comes back leaves it.
+func (d *DB) DeferToolTask(ctx context.Context, id string, w ToolTaskWait) error {
+	giveBack := 1
+	if w.SpendAttempt {
+		giveBack = 0
+	}
 	_, err := d.w.ExecContext(ctx, `
-		UPDATE tool_tasks SET lease_until_ns = ?, attempts = MAX(attempts - 1, 0), error = ?, wait_reason = ?
-		WHERE id = ? AND state = 'running'`, untilNS, why, reason, id)
+		UPDATE tool_tasks SET lease_until_ns = ?, attempts = MAX(attempts - ?, 0), error = ?, wait_reason = ?,
+			error_code = ?, error_params = ?
+		WHERE id = ? AND state = 'running'`, w.UntilNS, giveBack, w.Error, w.Reason, w.ErrorCode, w.ErrorParams, id)
 	if err != nil {
 		return fmt.Errorf("db: deferring tool task: %w", err)
 	}
@@ -447,15 +594,23 @@ func (d *DB) DeferToolTask(ctx context.Context, id string, untilNS int64, why, r
 
 // ParkToolTask stops a running task for good, finished at atNS: it is
 // not leased again, says why in its error, and keeps its lock until it is
-// cleared as any finished task is (deleted, swept, or pruned).
-func (d *DB) ParkToolTask(ctx context.Context, id, why string, atNS int64) error {
-	_, err := d.w.ExecContext(ctx, `
-		UPDATE tool_tasks SET state = 'parked', error = ?, wait_reason = '', finished_at_ns = ?
-		WHERE id = ? AND state = 'running'`, why, atNS, id)
+// cleared as any finished task is (deleted, swept, or pruned). It marks
+// the park's end steps pending in the same statement, as FinishToolTask
+// does a run's end, and reports whether it parked: false for a task no
+// longer running.
+func (d *DB) ParkToolTask(ctx context.Context, id, why string, atNS int64) (bool, error) {
+	res, err := d.w.ExecContext(ctx, `
+		UPDATE tool_tasks SET state = 'parked', error = ?, wait_reason = '', error_code = '', error_params = '',
+			finished_at_ns = ?, settle_pending = CASE WHEN settle_pending = 0 THEN ? ELSE settle_pending END
+		WHERE id = ? AND state = 'running'`, why, atNS, settleParkEnd, id)
 	if err != nil {
-		return fmt.Errorf("db: parking tool task: %w", err)
+		return false, fmt.Errorf("db: parking tool task: %w", err)
 	}
-	return nil
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("db: parking tool task: %w", err)
+	}
+	return n > 0, nil
 }
 
 // HoldFinishedToolTask turns a failed task into a parked one, which holds
@@ -466,6 +621,59 @@ func (d *DB) HoldFinishedToolTask(ctx context.Context, id string) error {
 		return fmt.Errorf("db: holding a finished tool task: %w", err)
 	}
 	return nil
+}
+
+// ReleaseToolTaskLock frees the lock a canceled task holds, once its
+// cancel settled what it made; one that left files keeps it until it is
+// deleted.
+func (d *DB) ReleaseToolTaskLock(ctx context.Context, id string) error {
+	if _, err := d.w.ExecContext(ctx, `UPDATE tool_tasks SET lock_key = '' WHERE id = ? AND state = 'canceled'`, id); err != nil {
+		return fmt.Errorf("db: releasing a canceled tool task's lock: %w", err)
+	}
+	return nil
+}
+
+// EndToolTaskSettle records that what a canceled or retired task's end
+// settles beyond its row is done, or a run's own end steps are.
+func (d *DB) EndToolTaskSettle(ctx context.Context, id string) error {
+	if _, err := d.w.ExecContext(ctx, `UPDATE tool_tasks SET settle_pending = 0 WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("db: ending a tool task's settle: %w", err)
+	}
+	return nil
+}
+
+// PendingToolTaskSettles are the finished tasks whose settle, or whose
+// run's own end, a stop cut short.
+func (d *DB) PendingToolTaskSettles(ctx context.Context) ([]ToolTask, error) {
+	rows, err := d.r.QueryContext(ctx, `SELECT `+taskCols+` FROM tool_tasks
+		WHERE settle_pending <> 0 AND state IN ('done', 'failed', 'parked', 'canceled') ORDER BY created_at_ns, id`)
+	if err != nil {
+		return nil, fmt.Errorf("db: listing unsettled tool tasks: %w", err)
+	}
+	defer rows.Close()
+	var out []ToolTask
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			return nil, fmt.Errorf("db: scanning unsettled tool task: %w", err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// UpdateQueuedToolTaskParams rewrites a task's params document while no
+// lease has taken it yet, and reports whether it did.
+func (d *DB) UpdateQueuedToolTaskParams(ctx context.Context, id, params string) (bool, error) {
+	res, err := d.w.ExecContext(ctx, `UPDATE tool_tasks SET params = ? WHERE id = ? AND state = 'queued'`, params, id)
+	if err != nil {
+		return false, fmt.Errorf("db: updating a queued tool task's params: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("db: updating a queued tool task's params: %w", err)
+	}
+	return n > 0, nil
 }
 
 // UpdateToolTaskParams rewrites a task's params document (credential

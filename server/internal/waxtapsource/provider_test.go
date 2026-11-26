@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -50,6 +51,8 @@ type fakeTap struct {
 	downloadErr error
 	downloads   int
 	warnings    []waxtap.Warning // emitted as events, and echoed on a successful Result
+	// events are emitted after the warnings, as the download's stages.
+	events []waxtap.Event
 	// lastReq is the request the provider built, for the tests that are
 	// about the spec rather than about the bytes.
 	lastReq waxtap.Request
@@ -57,12 +60,15 @@ type fakeTap struct {
 	lastEnum waxtap.EnumerateOptions
 	// enumErr, when set, fails every listing.
 	enumErr error
+	// enumURLs is the link each listing was asked for.
+	enumURLs []string
 }
 
 var _ tap = (*fakeTap)(nil)
 
-func (f *fakeTap) Enumerate(ctx context.Context, _ string, opts waxtap.EnumerateOptions) (*waxtap.Playlist, error) {
+func (f *fakeTap) Enumerate(ctx context.Context, url string, opts waxtap.EnumerateOptions) (*waxtap.Playlist, error) {
 	f.lastEnum = opts
+	f.enumURLs = append(f.enumURLs, url)
 	if f.enumErr != nil {
 		return nil, f.enumErr
 	}
@@ -75,6 +81,9 @@ func (f *fakeTap) Enumerate(ctx context.Context, _ string, opts waxtap.Enumerate
 		if opts.MaxItems > 0 && len(out.Entries) >= opts.MaxItems {
 			break
 		}
+	}
+	if opts.OnProgress != nil {
+		opts.OnProgress(len(out.Entries))
 	}
 	if !opts.Enrich {
 		return out, nil
@@ -92,6 +101,9 @@ func (f *fakeTap) Enumerate(ctx context.Context, _ string, opts waxtap.Enumerate
 		}
 		asked++
 		v, err := f.Info(ctx, out.Entries[i].VideoID, waxtap.InfoBasic, opts.EnrichOptions...)
+		if opts.OnEnrichProgress != nil {
+			opts.OnEnrichProgress(asked, min(len(out.Entries), cmp.Or(opts.MaxEnrich, len(out.Entries))))
+		}
 		if err != nil {
 			out.Errors = append(out.Errors, &waxtap.EnrichError{
 				VideoID: out.Entries[i].VideoID,
@@ -133,6 +145,11 @@ func (f *fakeTap) Download(_ context.Context, req waxtap.Request) (*waxtap.Resul
 	for i := range f.warnings {
 		if req.Events != nil {
 			req.Events(waxtap.Event{Stage: waxtap.StageWarning, Warning: &f.warnings[i]})
+		}
+	}
+	for _, e := range f.events {
+		if req.Events != nil {
+			req.Events(e)
 		}
 	}
 	if f.downloadErr != nil {
@@ -1319,7 +1336,7 @@ func TestEnumerateOnceLeavesTheHeldEntriesAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	once, err := p.EnumerateOnce(ctx, source.Request{URL: "u"})
+	once, err := p.EnumerateOnce(ctx, source.Request{URL: "u"}, syncsource.EnumerateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2184,5 +2201,267 @@ func TestWaxBinCatalogsAPremiereAfterItAirs(t *testing.T) {
 	}
 	if held := heldIDs(t, store, clock); len(held) != 0 {
 		t.Errorf("held = %v, want nothing once the catalog had it", held)
+	}
+}
+
+// The link alone decides what it names, as WaxTap's command line reads it:
+// a video id makes a video unless the list it also names is asked for. The
+// check then asks the source about that one thing, and reads its title.
+func TestProbeDecidesTheShapeFromTheLink(t *testing.T) {
+	t.Parallel()
+	const (
+		id   = "dQw4w9WgXcQ"
+		list = "PLexample0123456789"
+	)
+	for _, tc := range []struct {
+		link         string
+		wantPlaylist bool
+		shape        string
+	}{
+		{"https://www.youtube.com/watch?v=" + id, false, syncsource.ShapeVideo},
+		{"https://www.youtube.com/watch?v=" + id + "&list=" + list, false, syncsource.ShapeVideo},
+		{"https://www.youtube.com/watch?v=" + id + "&list=" + list, true, syncsource.ShapePlaylist},
+		{"https://youtu.be/" + id + "?list=" + list, false, syncsource.ShapeVideo},
+		{"https://youtu.be/" + id + "?list=" + list, true, syncsource.ShapePlaylist},
+		{"https://www.youtube.com/shorts/" + id, false, syncsource.ShapeVideo},
+		{"https://www.youtube.com/watch?v=" + id, true, syncsource.ShapeVideo},
+		{"https://www.youtube.com/playlist?list=" + list, false, syncsource.ShapePlaylist},
+		{"https://music.youtube.com/playlist?list=" + list, false, syncsource.ShapePlaylist},
+		{"https://www.youtube.com/@example", false, syncsource.ShapeChannel},
+		{"https://www.youtube.com/@example/videos", true, syncsource.ShapeChannel},
+		{"https://www.youtube.com/channel/UCexample0123456789abcde", false, syncsource.ShapeChannel},
+	} {
+		t.Run(fmt.Sprintf("%s playlist=%v", tc.link, tc.wantPlaylist), func(t *testing.T) {
+			t.Parallel()
+			f := channelFake(1)
+			p := testProvider(t, f, nil)
+			got, err := p.Probe(context.Background(), tc.link, tc.wantPlaylist)
+			if err != nil {
+				t.Fatalf("Probe: %v", err)
+			}
+			if got.Shape != tc.shape {
+				t.Errorf("shape = %q, want %q", got.Shape, tc.shape)
+			}
+			if tc.shape == syncsource.ShapeVideo {
+				if len(f.infoCalls) != 1 || len(f.enumURLs) != 0 || got.Title == "" {
+					t.Errorf("a video asked %d lookups and %d listings, titled %q; want one lookup and its title", len(f.infoCalls), len(f.enumURLs), got.Title)
+				}
+				return
+			}
+			if !slices.Equal(f.enumURLs, []string{tc.link}) || f.lastEnum.MaxItems != 1 || len(f.infoCalls) != 0 {
+				t.Errorf("a list asked %v (max %d) and %d lookups, want one one-entry listing of the link", f.enumURLs, f.lastEnum.MaxItems, len(f.infoCalls))
+			}
+			if got.Title != "Example Uploads" {
+				t.Errorf("title = %q, want the list's", got.Title)
+			}
+		})
+	}
+}
+
+// A link that names no video, playlist or channel is refused in WaxDeck's
+// words before the source is asked anything; a foreign host's list= is not
+// a YouTube playlist.
+func TestProbeRefusesALinkItCannotRead(t *testing.T) {
+	t.Parallel()
+	for _, link := range []string{
+		"https://example.com/watch?v=dQw4w9WgXcQ&list=PLexample0123456789",
+		"https://example.com/some/page",
+		"https://www.youtube.com/feed/history",
+		"https://www.youtube.com/watch?v=short",
+	} {
+		t.Run(link, func(t *testing.T) {
+			t.Parallel()
+			f := channelFake(1)
+			p := testProvider(t, f, nil)
+			_, err := p.Probe(context.Background(), link, true)
+			var refusal *syncsource.Refusal
+			if !errors.As(err, &refusal) || refusal.Reason != syncsource.ReasonUnsupportedURL {
+				t.Fatalf("Probe = %v, want an unsupported-url refusal", err)
+			}
+			if len(f.infoCalls)+len(f.enumURLs) != 0 {
+				t.Errorf("the source was asked %d times about a link it cannot read", len(f.infoCalls)+len(f.enumURLs))
+			}
+		})
+	}
+}
+
+// A check the source fails still says what the link names, so a caller
+// that queues anyway knows the path; the failure keeps WaxTap's cause.
+func TestProbeKeepsTheShapeWhenTheSourceFails(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		link  string
+		err   error
+		shape string
+	}{
+		"a throttled list":  {"https://www.youtube.com/playlist?list=PLexample0123456789", waxtap.ErrRateLimited, syncsource.ShapePlaylist},
+		"a private list":    {"https://www.youtube.com/playlist?list=PLexample0123456789", &waxtap.PlaylistUnavailableError{Reason: "This playlist is private."}, syncsource.ShapePlaylist},
+		"a Shorts shelf":    {"https://www.youtube.com/playlist?list=UUSH0123456789abcdefghijkl", waxtap.ErrShortsPlaylist, syncsource.ShapePlaylist},
+		"a private video":   {"https://www.youtube.com/watch?v=dQw4w9WgXcQ", waxtap.ErrLoginRequired, syncsource.ShapeVideo},
+		"a throttled video": {"https://www.youtube.com/watch?v=dQw4w9WgXcQ", waxtap.ErrRateLimited, syncsource.ShapeVideo},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := channelFake(1)
+			f.enumErr = tc.err
+			f.infoErrs = map[string]error{"dQw4w9WgXcQ": tc.err}
+			p := testProvider(t, f, nil)
+			got, err := p.Probe(context.Background(), tc.link, false)
+			if !errors.Is(err, tc.err) {
+				t.Errorf("Probe = %v, want WaxTap's %v under it", err, tc.err)
+			}
+			if got.Shape != tc.shape {
+				t.Errorf("shape = %q, want %q", got.Shape, tc.shape)
+			}
+		})
+	}
+}
+
+// A fetch handed a link that is no single video says so in WaxDeck's
+// words, not WaxTap's advice to enumerate.
+func TestFetchRefusesALinkThatIsNoVideo(t *testing.T) {
+	t.Parallel()
+	const link = "https://www.youtube.com/playlist?list=PLexample0123456789"
+	f := channelFake(1)
+	f.infoErrs = map[string]error{link: waxtap.ErrIsPlaylist}
+	p := testProvider(t, f, nil)
+	_, err := p.Fetch(context.Background(), source.FetchRequest{URL: link}, io.Discard)
+	var refusal *syncsource.Refusal
+	if !errors.As(err, &refusal) || refusal.Reason != syncsource.ReasonUnsupportedURL {
+		t.Fatalf("Fetch = %v, want an unsupported-url refusal", err)
+	}
+	if strings.Contains(err.Error(), "Enumerate") {
+		t.Errorf("Fetch says %q, WaxTap's words", err)
+	}
+	if f.downloads != 0 {
+		t.Errorf("downloaded %d times", f.downloads)
+	}
+}
+
+// What a download does reaches the fetch's caller in WaxDeck's phases: the
+// client chain and the transfer as downloading, with its bytes, and every
+// stage after the transfer as processing. A warning is activity in the
+// phase at hand, and is still logged.
+func TestFetchReportsWhatTheDownloadIsDoing(t *testing.T) {
+	f := channelFake(1)
+	f.infos[vid(1)].Formats = audioFormats()
+	f.payload = []byte("deterministic bytes")
+	f.warnings = []waxtap.Warning{{Code: waxtap.WarnProceedUncut, Detail: "sponsorblock unreachable"}}
+	f.events = []waxtap.Event{
+		{Stage: waxtap.StageExtracting},
+		{Stage: waxtap.StageResolving},
+		{Stage: waxtap.StageDownloading},
+		{Stage: waxtap.StageDownloading, Bytes: 256 << 10, Total: 1 << 20},
+		{Stage: waxtap.StageDownloading, Bytes: 1 << 20, Total: 1 << 20},
+		{Stage: waxtap.StageStaging},
+		{Stage: waxtap.StageProbing},
+		{Stage: waxtap.StageCutting},
+		{Stage: waxtap.StageTranscoding},
+		{Stage: waxtap.StageFinalizing},
+		{Stage: waxtap.StageDone},
+	}
+	var logs bytes.Buffer
+	p := testProvider(t, f, &logs)
+
+	var got []syncsource.FetchEvent
+	var sink bytes.Buffer
+	_, err := p.FetchWith(context.Background(), source.FetchRequest{URL: "https://www.youtube.com/watch?v=" + vid(1)}, &sink,
+		syncsource.FetchOptions{OnEvent: func(e syncsource.FetchEvent) { got = append(got, e) }})
+	if err != nil {
+		t.Fatalf("FetchWith: %v", err)
+	}
+	dl, pr := syncsource.PhaseDownloading, syncsource.PhaseProcessing
+	want := []syncsource.FetchEvent{
+		{},
+		{Phase: dl}, {Phase: dl}, {Phase: dl},
+		{Phase: dl, Bytes: 256 << 10, Total: 1 << 20},
+		{Phase: dl, Bytes: 1 << 20, Total: 1 << 20},
+		{Phase: pr}, {Phase: pr}, {Phase: pr}, {Phase: pr}, {Phase: pr},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("events = %+v\nwant     %+v", got, want)
+	}
+	if !strings.Contains(logs.String(), "code=proceed-uncut") {
+		t.Errorf("the warning was not logged:\n%s", logs.String())
+	}
+}
+
+// A one-shot listing and a snapshot report their pages and lookups as they
+// read them.
+func TestAListingReportsItsPagesAndLookups(t *testing.T) {
+	type heard struct {
+		pages   []int
+		lookups [][2]int
+	}
+	progress := func(h *heard) syncsource.ListProgress {
+		return syncsource.ListProgress{
+			OnPage:   func(n int) { h.pages = append(h.pages, n) },
+			OnLookup: func(done, total int) { h.lookups = append(h.lookups, [2]int{done, total}) },
+		}
+	}
+	f := channelFake(3)
+	p := testProvider(t, f, nil)
+	var once heard
+	if _, err := p.EnumerateOnce(context.Background(), source.Request{URL: "u"}, syncsource.EnumerateOptions{Progress: progress(&once)}); err != nil {
+		t.Fatal(err)
+	}
+	var snap heard
+	if _, err := p.PlaylistSnapshot(context.Background(), "u", syncsource.SnapshotOptions{Progress: progress(&snap)}); err != nil {
+		t.Fatal(err)
+	}
+	for name, h := range map[string]heard{"listing": once, "snapshot": snap} {
+		if !slices.Equal(h.pages, []int{3}) {
+			t.Errorf("%s pages = %v, want [3]", name, h.pages)
+		}
+		if len(h.lookups) != 3 || h.lookups[2] != [2]int{3, 3} {
+			t.Errorf("%s lookups = %v, want three ending at 3 of 3", name, h.lookups)
+		}
+	}
+}
+
+// A one-shot listing that stops at the provider's cap says so; one that
+// lists everything does not.
+func TestEnumerateOnceSaysWhenItStoppedAtTheCap(t *testing.T) {
+	for _, tc := range []struct {
+		max int
+		cut bool
+	}{{max: 2, cut: true}, {max: 5, cut: false}} {
+		p := testProviderWith(t, channelFake(3), nil, func(c *Config) { c.MaxItems = tc.max })
+		cut := false
+		en, err := p.EnumerateOnce(context.Background(), source.Request{URL: "u"},
+			syncsource.EnumerateOptions{OnCut: func() { cut = true }})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cut != tc.cut || len(en.Feed.Episodes) != min(tc.max, 3) {
+			t.Errorf("cap %d: %d listed, cut %v; want cut %v", tc.max, len(en.Feed.Episodes), cut, tc.cut)
+		}
+	}
+}
+
+// A listing of exactly the cap is whole; one entry more is a cut, for an
+// acquisition's listing and a sync's snapshot alike, which keep the cap.
+func TestAListingOfExactlyTheCapIsNotACut(t *testing.T) {
+	for _, tc := range []struct {
+		n   int
+		cut bool
+	}{{n: defaultMaxItems, cut: false}, {n: defaultMaxItems + 1, cut: true}} {
+		p := testProviderWith(t, channelFake(tc.n), nil, nil)
+		cut := false
+		en, err := p.EnumerateOnce(context.Background(), source.Request{URL: "u"},
+			syncsource.EnumerateOptions{OnCut: func() { cut = true }})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cut != tc.cut || len(en.Feed.Episodes) != defaultMaxItems {
+			t.Errorf("listing of %d: %d listed, cut %v; want %d, cut %v", tc.n, len(en.Feed.Episodes), cut, defaultMaxItems, tc.cut)
+		}
+		snap, err := snapshotProvider(channelFake(tc.n), 0).PlaylistSnapshot(context.Background(), "u", syncsource.SnapshotOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if snap.Truncated != tc.cut || len(snap.Entries) != defaultMaxItems {
+			t.Errorf("snapshot of %d: %d entries, truncated %v; want %d, truncated %v", tc.n, len(snap.Entries), snap.Truncated, defaultMaxItems, tc.cut)
+		}
 	}
 }

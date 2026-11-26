@@ -421,6 +421,7 @@ void main() {
         title: 'Backup finished',
         body: 'waxdeck-ba-2.tar.zst',
         createdAt: DateTime.now().add(const Duration(seconds: 1)),
+        updatedAt: DateTime.now().add(const Duration(seconds: 1)),
       ),
     );
     container.invalidate(notificationsProvider);
@@ -446,6 +447,7 @@ void main() {
         title: 'Backup finished',
         body: 'waxdeck-ba-1.tar.zst',
         createdAt: DateTime.now().subtract(const Duration(hours: 3)),
+        updatedAt: DateTime.now().subtract(const Duration(hours: 3)),
       ),
     );
     repo.backupsById['ba-1'] = _backup('ba-1');
@@ -466,11 +468,50 @@ void main() {
         title: 'Backup finished',
         body: 'waxdeck-ba-2.tar.zst',
         createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+        updatedAt: DateTime.now().subtract(const Duration(hours: 1)),
       ),
     );
     container.invalidate(notificationsProvider);
     await tester.pumpAndSettle();
     expect(repo.backupReads, reads + 1);
+  });
+
+  // The inbox folds backups into one row under one id, so a second
+  // archive is the same row with a later `updatedAt`.
+  testWidgets('a second archive folding into the row reads the list again', (
+    tester,
+  ) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']),
+      ),
+    );
+    final first = DateTime.now().subtract(const Duration(hours: 3));
+    ServerNotification row(DateTime updatedAt, int count) => ServerNotification(
+      id: 'nf-keyed',
+      event: 'backup-completed',
+      title: 'Backup finished',
+      body: 'waxdeck-ba-1.tar.zst',
+      createdAt: first,
+      updatedAt: updatedAt,
+      count: count,
+    );
+    repo.inbox.add(row(first, 1));
+    repo.backupsById['ba-1'] = _backup('ba-1');
+    await _pump(tester, repo);
+    final reads = repo.backupReads;
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(BackupsScreen)),
+    );
+    container.invalidate(notificationsProvider);
+    await tester.pumpAndSettle();
+    expect(repo.backupReads, reads, reason: 'the row it already had');
+
+    repo.inbox = <ServerNotification>[row(DateTime.now(), 2)];
+    container.invalidate(notificationsProvider);
+    await tester.pumpAndSettle();
+    expect(repo.backupReads, reads + 1, reason: 'same id, moved updatedAt');
   });
 
   testWidgets('back up now is busy while an archive is being made', (

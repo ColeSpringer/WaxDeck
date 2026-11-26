@@ -52,6 +52,7 @@ String? _byCode(AppLocalizations l, WaxDeckApiException e) => switch (e.code) {
   'feed-unreachable' =>
     explainFeedReason(l, e.params?['reason']) ?? l.errorFeedUnreachable,
   'source-unavailable' => l.errorSourceUnavailable,
+  'source-refused' => _sourceRefused(l, e),
   'directory-unavailable' => l.errorDirectoryUnavailable,
   'service-unreachable' => l.errorServiceUnreachable,
   'feature-unavailable' => _featureUnavailable(l, e),
@@ -208,6 +209,7 @@ String? _conflict(AppLocalizations l, WaxDeckApiException e) {
       ),
       _ => l.errorBookToolCopyElsewhere(p['copy'] ?? ''),
     },
+    'task-committed' => l.errorToolTaskCommitted,
     'task-running' => l.errorToolTaskRunning,
     'task-parked' => l.errorToolTaskParked,
     'parts-in-trash' => l.errorBookToolPartsInTrash(
@@ -229,13 +231,14 @@ String? _conflict(AppLocalizations l, WaxDeckApiException e) {
 /// server's words.
 ///
 /// A form that shows the address somebody typed keeps the server's
-/// sentence for the three a subscribe refuses as `invalid-request`
-/// instead; see [explainRefusal].
+/// sentence for the four a subscribe or a download refuses as
+/// `invalid-request` instead; see [explainRefusal].
 String? explainFeedReason(AppLocalizations l, String? reason) =>
     switch (reason) {
       'not-a-feed' => l.errorFeedNotAFeed,
       'too-large' => l.errorFeedTooLarge,
       'blocked-address' => l.errorFeedBlockedAddress,
+      'invalid-address' => l.errorInvalidAddress,
       'host-refused' => l.errorFeedRefused,
       'host-missing' => l.errorFeedNotFound,
       'host-error' => l.errorFeedHostError,
@@ -243,19 +246,62 @@ String? explainFeedReason(AppLocalizations l, String? reason) =>
       _ => null,
     };
 
+/// The `reason`s a subscribe or a link check refuses an address with as
+/// an `invalid-request`.
+const _addressReasons = {
+  'not-a-feed',
+  'too-large',
+  'blocked-address',
+  'invalid-address',
+};
+
+/// The server's own refusals of an address it was asked to download from:
+/// not a feed's, which a download link never meets.
+const _downloadAddressReasons = {'blocked-address', 'invalid-address'};
+
+/// Whether an `invalid-request` is about the address that was typed for a
+/// download. The server uses the same code for a library, a media type or
+/// a format it refuses, which say nothing about the address.
+bool refusesAddress(WaxDeckApiException e) =>
+    e.code == 'invalid-request' &&
+    _downloadAddressReasons.contains(e.params?['reason']);
+
 /// The sentence for an address a subscribe refused, for a surface that
 /// words refusals from the table: nothing was typed there for the
 /// server's own sentence to name.
 String? _refusedAddress(AppLocalizations l, WaxDeckApiException e) =>
     switch (e.params?['reason']) {
-      final reason?
-          when const {
-            'not-a-feed',
-            'too-large',
-            'blocked-address',
-          }.contains(reason) =>
-        explainFeedReason(l, reason),
+      final reason? when _addressReasons.contains(reason) => explainFeedReason(
+        l,
+        reason,
+      ),
       _ => null,
+    };
+
+/// The sentence for a `source-refused` by the `reason` it carries; the
+/// general one for a reason this build does not know, or none.
+///
+/// [explainRefusal] reads it from here too: a private playlist is the
+/// source's answer, not a typo in the field the link was typed into.
+String _sourceRefused(AppLocalizations l, WaxDeckApiException e) =>
+    switch (e.params?['reason']) {
+      'playlist-unavailable' => l.errorSourcePlaylistUnavailable,
+      'playlist-empty' => l.errorSourcePlaylistEmpty,
+      'video-private' => l.errorSourceVideoPrivate,
+      'video-unavailable' => l.errorSourceVideoUnavailable,
+      'age-restricted' => l.errorSourceAgeRestricted,
+      'region-blocked' => l.errorSourceRegionBlocked,
+      'members-only' => l.errorSourceMembersOnly,
+      'live' => l.errorSourceLive,
+      'not-started' => l.errorSourceNotStarted,
+      'no-audio' => l.errorSourceNoAudio,
+      'unsupported-url' => l.errorSourceUnsupportedUrl,
+      'rate-limited' => l.errorSourceRateLimited,
+      'source-broken' => l.errorSourceBroken,
+      'timed-out' => l.errorSourceTimedOut,
+      'unreachable' => l.errorSourceUnreachable,
+      'stalled' => l.errorSourceStalled,
+      _ => l.errorSourceRefused,
     };
 
 /// `feature-unavailable` is an umbrella, and its `params` are what say

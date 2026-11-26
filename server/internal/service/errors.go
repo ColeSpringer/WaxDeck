@@ -84,6 +84,9 @@ const (
 	// organize, delete) or the podcast download tree's (409 catalog-busy
 	// at the API). Unlike KindConflict it clears on its own.
 	KindCatalogBusy ErrorKind = "catalog-busy"
+	// KindRefused marks a link or an item the acquisition source refused
+	// (422 source-refused at the API), its reason in Params.
+	KindRefused ErrorKind = "source-refused"
 )
 
 // classifyMutation is classify for a call that takes a shared

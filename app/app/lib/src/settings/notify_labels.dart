@@ -27,6 +27,29 @@ String? notifyEventHelp(AppLocalizations l10n, NotifyEvent event) =>
 String notifyTokenTitle(AppLocalizations l10n, String token, String fallback) =>
     _title(l10n, token) ?? fallback;
 
+/// The heading of an inbox row: its event's title, worded for how many
+/// occurrences it folds and for a queue that has been answered. A count of
+/// one reads as the singular, and an event that does not fold, or one this
+/// build does not know, reads as [notifyTokenTitle] does.
+String notifyRowTitle(
+  AppLocalizations l10n,
+  String token,
+  String fallback, {
+  int count = 1,
+  bool resolved = false,
+}) => switch (token) {
+  'review-ready' =>
+    resolved
+        ? l10n.notifReviewReadyResolvedTitle
+        : l10n.notifReviewReadyRowTitle(count),
+  'signup-requested' when resolved => l10n.notifSignupRequestedResolvedTitle,
+  'import-completed' => l10n.notifImportCompletedRowTitle(count),
+  'backup-completed' => l10n.notifBackupCompletedRowTitle(count),
+  'playlist-synced' => l10n.notifPlaylistSyncedRowTitle(count),
+  'episode-arrived' => l10n.notifEpisodeArrivedRowTitle(count),
+  _ => notifyTokenTitle(l10n, token, fallback),
+};
+
 String notifyTokenHelp(AppLocalizations l10n, String token, String fallback) =>
     _help(l10n, token)?.text ?? fallback;
 

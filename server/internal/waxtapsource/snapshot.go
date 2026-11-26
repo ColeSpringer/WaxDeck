@@ -31,7 +31,9 @@ func (p *Provider) PlaylistSnapshot(ctx context.Context, url string, opts syncso
 	if budget <= 0 {
 		budget = enrichLimit
 	}
-	pl, err := p.tap.Enumerate(ctx, url, enrichedOptions(maxEntries, budget))
+	eopts := enrichedOptions(pastCap(maxEntries), budget)
+	eopts.OnProgress, eopts.OnEnrichProgress = opts.Progress.OnPage, opts.Progress.OnLookup
+	pl, err := p.tap.Enumerate(ctx, url, eopts)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +42,7 @@ func (p *Provider) PlaylistSnapshot(ctx context.Context, url string, opts syncso
 		IdentityKey: identityKey(pl.ID),
 		Title:       pl.Title,
 		Author:      pl.Author,
-		Truncated:   pl.Continuation != "" || (maxEntries > 0 && len(pl.Entries) >= maxEntries),
+		Truncated:   keepCap(pl, maxEntries),
 	}
 	failures, wholesale := p.enrichFailures(pl)
 	for i := range pl.Entries {

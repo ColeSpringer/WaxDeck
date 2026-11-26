@@ -77,12 +77,13 @@ abstract interface class ToolsApi {
 
   /// `POST /tools/tasks/clear-finished`: Clear finished tasks.
   ///
-  /// Deletes finished tasks (`done`, `failed` or `parked`) and answers how many
-  /// went. `scope` `mine` (the default, administrators included) clears the
-  /// caller's own; `all` clears every account's, reports nobody has read
-  /// included, and is for administrators only (`forbidden` otherwise). Running
-  /// and queued tasks are untouched. A parked task cleared frees the book or
-  /// rip it held for another merge or split. Clearing a book merge or split
+  /// Deletes finished tasks (`done`, `failed`, `canceled` or `parked`) and
+  /// answers how many went. `scope` `mine` (the default, administrators
+  /// included) clears the caller's own; `all` clears every account's, reports
+  /// nobody has read included, and is for administrators only (`forbidden`
+  /// otherwise). Running and queued tasks are untouched. A parked task cleared
+  /// frees the book or rip it held for another merge or split, and a canceled
+  /// one that still held its book frees that. Clearing a book merge or split
   /// whose new files still wait under hidden names settles them first, as
   /// deleting the task does, and one whose hidden files could not be named or
   /// removed stays, counted in `kept`. A POST action rather than a filtered
@@ -98,21 +99,55 @@ abstract interface class ToolsApi {
   /// `DELETE /tools/tasks/{taskId}`: Delete a finished tool task.
   ///
   /// Removes one task from the list once it has reached a terminal state
-  /// (`done`, `failed` or `parked`); a queued or running task answers
-  /// `conflict`, because deleting a row out from under a worker leases nothing
-  /// back. Deleting a parked task frees the book or rip it held for another
-  /// merge or split. A book merge or split whose new files still wait under
+  /// (`done`, `failed`, `canceled` or `parked`); a queued or running task
+  /// answers `conflict`, because deleting a row out from under a worker leases
+  /// nothing back. Deleting a parked task frees the book or rip it held for
+  /// another merge or split, and deleting a canceled one that still held its
+  /// book frees that. A book merge or split whose new files still wait under
   /// hidden names leaves none behind: they are removed when every part of the
   /// book is in place, and otherwise take their names (a free one where another
   /// file holds it) for the next scan to catalog; the task's `error` says which
-  /// beforehand, and the audit log records which it did. When a hidden file
-  /// cannot take its name or be removed (its folder refuses the server), the
-  /// task stays, its `error` saying so, and the delete answers `conflict` with
-  /// `params.reason` `outputs-hidden`, `params.folder` and `params.cause`; a
-  /// task kept so holds its book from another merge or split, as a parked one
-  /// does, until it can be cleared. The retention prune settles them the same
-  /// way, leaving such a task for its next pass. Same visibility as reading the
-  /// task: callers delete their own rows, and an administrator may delete any
-  /// row the listing shows them.
+  /// beforehand, and the audit log records which it did. What a canceled or
+  /// failed run gave up and could not remove is removed, never named. When a
+  /// hidden file cannot take its name or be removed (its folder refuses the
+  /// server), the task stays, its `error` saying so, and the delete answers
+  /// `conflict` with `params.reason` `outputs-hidden`, `params.folder` and
+  /// `params.cause`; a task kept so holds its book from another merge or split,
+  /// as a parked one does, until it can be cleared. The retention prune settles
+  /// them the same way, leaving such a task for its next pass. Same visibility
+  /// as reading the task: callers delete their own rows, and an administrator
+  /// may delete any row the listing shows them.
   Future<void> deleteToolTask(String taskId);
+
+  /// `POST /tools/tasks/{taskId}/cancel`: Cancel a tool task.
+  ///
+  /// Asks a task to stop. Same visibility as reading the task: its owner or an
+  /// administrator may cancel it, and anyone else gets `not-found`. A task that
+  /// had not started, or was waiting to try again, answers `canceled` at once.
+  /// A `running` task answers still `running`, with `cancelRequested`, while it
+  /// winds down; it then ends `canceled`, or `done` when it finished first, and
+  /// the `task` marker fires again when it ends. A task that had already
+  /// finished (`done`, `failed`, `canceled` or `parked`) answers unchanged,
+  /// with no error. The one exception is a book merge or split, or a CUE split,
+  /// that has started moving library files: running or waiting, it answers
+  /// `conflict` (see below).
+  ///
+  /// What a cancel keeps: an acquisition or a playlist sync keeps the review
+  /// entries it already opened; a genre normalize, a health fix, a catalog
+  /// repair and an import stop between items and keep what they did, their
+  /// `summary` counting it; a canceled acquisition lists the review entries it
+  /// opened in `resultPids` and `summary.entries`, and a canceled playlist sync
+  /// in `resultPids`, as a done one does. A book merge or split, or a CUE
+  /// split, can be canceled until it starts moving library files; from then on,
+  /// running or waiting, it answers `conflict` with `params.reason`
+  /// `task-committed`, and the task finishes, or puts things back, on its own.
+  /// Canceled before then, it removes what it made. A book merge or split's
+  /// `error` names what it could not remove from the book's folder, and the
+  /// task keeps its book from another merge or split, as a parked one does,
+  /// until it is cleared, which tries the removal again; one that removed
+  /// everything frees the book at once. A canceled CUE split frees its rip at
+  /// once: what it cut waits in the server's own staging, never in the library.
+  /// A cancel whose cleanup the server stopped in the middle of is finished
+  /// when it starts again. A canceled task files no notification.
+  Future<ToolTask> cancelToolTask(String taskId);
 }

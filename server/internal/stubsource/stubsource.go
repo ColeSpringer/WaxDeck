@@ -26,10 +26,13 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/syncsource"
 )
 
-// manifest mirrors sourceserv's playlist document.
+// manifest mirrors sourceserv's playlist document. Refuse, when set, is the
+// source-refused reason the stub answers for the list, as a private one
+// would be refused.
 type manifest struct {
 	ID      string `json:"id"`
 	Title   string `json:"title"`
+	Refuse  string `json:"refuse,omitempty"`
 	Entries []struct {
 		ID    string `json:"id"`
 		Title string `json:"title"`
@@ -78,7 +81,7 @@ func (p *Provider) audioURL(id string) string { return p.base + "/audio/" + id }
 
 func (p *Provider) readManifest(ctx context.Context, rawURL string) (*manifest, error) {
 	if !p.ownsURL(rawURL) {
-		return nil, errors.New("stubsource: not this source's URL")
+		return nil, &syncsource.Refusal{Reason: syncsource.ReasonUnsupportedURL, Err: errors.New("stubsource: not this source's URL")}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
@@ -96,7 +99,39 @@ func (p *Provider) readManifest(ctx context.Context, rawURL string) (*manifest, 
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&m); err != nil {
 		return nil, fmt.Errorf("stubsource: manifest does not parse: %w", err)
 	}
+	if m.Refuse != "" {
+		return nil, &syncsource.Refusal{Reason: m.Refuse, Err: errors.New("stubsource: the manifest refuses this list")}
+	}
 	return &m, nil
+}
+
+// LinkShape decides a link's shape from its path, an /audio/ entry being
+// a video and anything else a list. A link to another host is not this
+// source's.
+func (p *Provider) LinkShape(rawURL string, _ bool) (string, error) {
+	if !p.ownsURL(rawURL) {
+		return "", &syncsource.Refusal{Reason: syncsource.ReasonUnsupportedURL}
+	}
+	if u, err := url.Parse(rawURL); err == nil && strings.HasPrefix(u.Path, "/audio/") {
+		return syncsource.ShapeVideo, nil
+	}
+	return syncsource.ShapePlaylist, nil
+}
+
+// Probe decides a link's shape as LinkShape does and reads a list's
+// manifest.
+func (p *Provider) Probe(ctx context.Context, rawURL string, wantPlaylist bool) (syncsource.AcquireTarget, error) {
+	shape, err := p.LinkShape(rawURL, wantPlaylist)
+	if err != nil || shape == syncsource.ShapeVideo {
+		return syncsource.AcquireTarget{Shape: shape}, err
+	}
+	target := syncsource.AcquireTarget{Shape: shape}
+	m, err := p.readManifest(ctx, rawURL)
+	if err != nil {
+		return target, err
+	}
+	target.Title = m.Title
+	return target, nil
 }
 
 // Resolve probes the playlist identity.
@@ -131,6 +166,16 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 	return &source.Enumeration{Feed: feed, IdentityKey: "stub:" + m.ID, SourceID: m.ID}, nil
 }
 
+// EnumerateOnce is Enumerate, the stub keeping no subscription state,
+// reporting the manifest as its one page.
+func (p *Provider) EnumerateOnce(ctx context.Context, req source.Request, opts syncsource.EnumerateOptions) (*source.Enumeration, error) {
+	en, err := p.Enumerate(ctx, req)
+	if err == nil && opts.Progress.OnPage != nil {
+		opts.Progress.OnPage(len(en.Feed.Episodes))
+	}
+	return en, err
+}
+
 // Fetch streams one entry's audio through the source tags pass.
 func (p *Provider) Fetch(ctx context.Context, freq source.FetchRequest, w io.Writer) (*source.FetchResult, error) {
 	return p.FetchWith(ctx, freq, w, syncsource.FetchOptions{})
@@ -140,10 +185,11 @@ func (p *Provider) Fetch(ctx context.Context, freq source.FetchRequest, w io.Wri
 // tags pass with the file's own ARTIST and TITLE standing for the uploader and
 // the video title (the stub has no description), then streams it to w. The
 // format is ignored: the stub cannot transcode. The provenance timestamp
-// makes each fetch's bytes differ, as the real bridge's do.
+// makes each fetch's bytes differ, as the real bridge's do. The bytes it
+// reads are reported as downloading, and the tag pass as processing.
 func (p *Provider) FetchWith(ctx context.Context, freq source.FetchRequest, w io.Writer, opts syncsource.FetchOptions) (*source.FetchResult, error) {
 	if !p.ownsURL(freq.URL) {
-		return nil, errors.New("stubsource: not this source's URL")
+		return nil, &syncsource.Refusal{Reason: syncsource.ReasonUnsupportedURL, Err: errors.New("stubsource: not this source's URL")}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, freq.URL, nil)
 	if err != nil {
@@ -162,7 +208,13 @@ func (p *Provider) FetchWith(ctx context.Context, freq source.FetchRequest, w io
 	if ctype == "audio/mpeg" {
 		ext = ".mp3"
 	}
-	n, err := sourcetags.Restamp(ctx, "", ext, resp.Body, w, sourcetags.Source{
+	var body io.Reader = resp.Body
+	if opts.OnEvent != nil {
+		total := max(resp.ContentLength, 0)
+		opts.OnEvent(syncsource.FetchEvent{Phase: syncsource.PhaseDownloading, Total: total})
+		body = &eventReader{r: resp.Body, total: total, onEvent: opts.OnEvent}
+	}
+	n, err := sourcetags.Restamp(ctx, "", ext, body, w, sourcetags.Source{
 		URL: freq.URL, ID: path.Base(freq.URL), Music: opts.Music,
 	})
 	if err != nil {
@@ -197,4 +249,27 @@ func (p *Provider) PlaylistSnapshot(ctx context.Context, url string, opts syncso
 		})
 	}
 	return snap, nil
+}
+
+// eventReader reports the bytes read through it as they are read, and
+// processing once the body ends.
+type eventReader struct {
+	r       io.Reader
+	n       int64
+	total   int64
+	ended   bool
+	onEvent func(syncsource.FetchEvent)
+}
+
+func (e *eventReader) Read(b []byte) (int, error) {
+	n, err := e.r.Read(b)
+	if n > 0 {
+		e.n += int64(n)
+		e.onEvent(syncsource.FetchEvent{Phase: syncsource.PhaseDownloading, Bytes: e.n, Total: e.total})
+	}
+	if err == io.EOF && !e.ended {
+		e.ended = true
+		e.onEvent(syncsource.FetchEvent{Phase: syncsource.PhaseProcessing})
+	}
+	return n, err
 }

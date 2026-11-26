@@ -264,6 +264,15 @@ func (b *Bridge) JobStatus(ctx context.Context, jobID string) (state string, pro
 	return job.State, progress, len(job.Outputs), errMsg, nil
 }
 
+// DeleteJob stops a job that is still running and drops it with its
+// outputs.
+func (b *Bridge) DeleteJob(ctx context.Context, jobID string) error {
+	if err := b.client.DeleteJob(ctx, jobID); err != nil {
+		return fmt.Errorf("flow: deleting job %s: %w", jobID, err)
+	}
+	return nil
+}
+
 // DownloadJobResult streams one job output to dst with the repo's
 // crash-safe write discipline: temp name in the target directory, size
 // check against Content-Length when the sidecar declares one, fsync,

@@ -16,12 +16,26 @@ func spendAttempts(t *testing.T, ctx context.Context, svc *Library, taskID strin
 	}
 }
 
+// runToolTask runs one leased task to completion, as the drain does
+// without its arms.
+func (l *Tools) runToolTask(ctx context.Context, t *wdb.ToolTask) error {
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	return l.runCanceling(ctx, cancel, t)
+}
+
 // drainOnce leases and works one task as the worker would now.
 func drainOnce(t *testing.T, ctx context.Context, svc *Library) {
 	t.Helper()
-	if !svc.Tools.drainToolTasksAt(ctx, wdb.TaskTypes{Except: longToolTasks}, time.Now().UnixNano()) {
+	if !drainShortAt(ctx, svc, time.Now().UnixNano()) {
 		t.Fatal("the worker found no task to run")
 	}
+}
+
+// drainShortAt works one task as of now through the worker whose share it
+// is, the tools' or the sources': a test queues one at a time.
+func drainShortAt(ctx context.Context, svc *Library, now int64) bool {
+	return svc.Tools.drainToolTasksAt(ctx, toolDrain, now) || svc.Tools.drainToolTasksAt(ctx, sourceDrain, now)
 }
 
 // A CUE split that cuts its pieces on its last counted attempt is

@@ -25,7 +25,9 @@ abstract interface class NotificationsApi {
   /// reach the account that started the work: a catalog job (a scan, an
   /// analysis, an enrichment or organize run, emptying the trash) finished or
   /// failed, a book merge or split or a CUE split failed or stopped for good
-  /// (parked), or a health fix finished. Work the server started on its own
+  /// (parked), a URL download failed, or a playlist sync asked for with Sync
+  /// now failed (one whose playlist or binding was removed meanwhile files
+  /// nothing), or a health fix finished. Work the server started on its own
   /// schedule notifies nobody. `catalog-reset` says the server built a new
   /// catalog because the old one's schema was another release's; its body
   /// counts the libraries added from the console, which the audit log names.
@@ -210,13 +212,17 @@ abstract interface class NotificationsApi {
 
   /// `GET /users/me/notifications`: List the caller's notification inbox.
   ///
-  /// What happened to this account, newest first, whether or not any delivery
-  /// target was configured for it. The inbox is written on every emit, so it is
-  /// the record a client that was closed at the time can still read; targets
-  /// are how news leaves the server, not where it is kept.
+  /// What happened to this account, by `updatedAt`, newest first, whether or
+  /// not any delivery target was configured for it: a row that folds a new
+  /// occurrence rises to the top under the same id (see `Notification`). The
+  /// inbox is written on every emit, so it is the record a client that was
+  /// closed at the time can still read; targets are how news leaves the server,
+  /// not where it is kept.
   ///
-  /// Rows are pruned by age and by a per-account cap, so the inbox is recent
-  /// history rather than an audit log.
+  /// Rows are pruned by age, read from `updatedAt`, and by a per-account cap,
+  /// so the inbox is recent history rather than an audit log; an unresolved
+  /// `review-ready` or `signup-requested` row is never pruned, since what it
+  /// reports is still open.
   Future<ServerNotificationPage> listMyNotifications({
     String? cursor,
     int? limit,
@@ -224,16 +230,24 @@ abstract interface class NotificationsApi {
 
   /// `DELETE /users/me/notifications`: Empty the caller's notification inbox.
   ///
-  /// Removes every row. Clearing an empty inbox answers 204.
-  Future<void> clearMyNotifications();
+  /// Removes every row, or with `resolved` only the resolved ones (Clear
+  /// completed). Clearing an inbox with nothing to remove answers 204.
+  Future<void> clearMyNotifications({bool resolved = false});
 
   /// `POST /users/me/notifications/read`: Mark inbox rows read.
   ///
-  /// Stamps `readAt` on the named rows, or on every unread row when `ids` is
-  /// absent or empty. Already-read rows keep the stamp they have, and an id
+  /// Stamps `readAt` on the rows `ids` names, or, with `events`, on every
+  /// unread row of those events (only those naming `targetPid`, when it is
+  /// given), so a client can settle rows it never loaded; with neither, on
+  /// every unread row. Already-read rows keep the stamp they have, and an id
   /// that names nothing is ignored: the caller asked for those rows to be read
-  /// and they are.
-  Future<void> markMyNotificationsRead({List<String> ids = const []});
+  /// and they are. Non-empty `ids` and `events` together, or `targetPid`
+  /// without `events`, are refused with `invalid-request`.
+  Future<void> markMyNotificationsRead({
+    List<String> ids = const [],
+    List<String>? events,
+    String? targetPid,
+  });
 
   /// `DELETE /users/me/notifications/{notificationId}`: Delete one inbox row.
   ///

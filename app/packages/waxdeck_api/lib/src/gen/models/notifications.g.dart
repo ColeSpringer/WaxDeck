@@ -10,11 +10,18 @@ class NotificationEventList {
 
 /// Which inbox rows to mark read.
 class NotificationReadRequest {
-  const NotificationReadRequest({this.ids});
+  const NotificationReadRequest({this.ids, this.events, this.targetPid});
 
-  /// The rows to stamp. Absent or empty marks every unread row read, which is
-  /// what the "mark all read" affordance sends.
+  /// The rows to stamp. With `events` also absent or empty, marks every unread
+  /// row read, which is what the "mark all read" affordance sends.
   final List<String>? ids;
+
+  /// Catalog event names: marks every unread row of these events read, loaded
+  /// or not. Refused beside a non-empty `ids`.
+  final List<String>? events;
+
+  /// Narrows `events` to the rows naming this pid. Refused without `events`.
+  final String? targetPid;
 }
 
 /// One notification delivery destination. `config` is a free-form object whose
@@ -248,6 +255,28 @@ class PushRegistrationList {
 /// One thing that happened to this account. `event` is a catalog event name, so
 /// a client words the row itself and stays localized; `title` and `body` are
 /// the server's own English wording, for a client that does not know the event.
+///
+/// Most events add one row per occurrence. A few fold instead, keeping one
+/// unresolved row in each inbox: `review-ready`, `import-completed` and
+/// `backup-completed` one row each, `playlist-synced` one for each playlist
+/// (its per-run synced notice; a notice that the playlist's sync was suspended
+/// adds a row of its own), `episode-arrived` one for each show, and
+/// `signup-requested` one for each pending account. A new occurrence counts the
+/// row up, takes its wording and `targetPid`, moves `updatedAt`, so the row
+/// rises to the top of the listing under the same `id`, and marks it unread,
+/// except an `import-completed` for the account that submitted the upload or
+/// acquisition, which arrives read and folds without changing the row's read
+/// state (an unread row stays unread). `review-ready`'s `count` is recomputed
+/// from the account's review queue as it changes; a fall leaves the read state
+/// and `updatedAt` as they are, and the row resolves when the count reaches
+/// zero. `signup-requested` resolves when the account it names is approved,
+/// rejected or deleted, and deleting a playlist or a podcast subscription
+/// resolves the rows that name it. A resolve also marks an unread row read, so
+/// a resolved row never counts toward `unreadCount`. A resolved row stays as
+/// history until it is deleted, and a later occurrence starts a new row. The
+/// `notification` sync marker fires for the account when a row is added, folds,
+/// is recounted (`review-ready`'s count moving either way) or resolves; marking
+/// rows read and deleting them fire nothing.
 class ServerNotification {
   const ServerNotification({
     required this.id,
@@ -255,7 +284,10 @@ class ServerNotification {
     required this.title,
     required this.body,
     required this.createdAt,
+    required this.updatedAt,
     this.targetPid,
+    this.count = 1,
+    this.resolvedAt,
     this.readAt,
   });
 
@@ -275,17 +307,35 @@ class ServerNotification {
   /// `feed-disabled` and `episode-arrived`, the episode for
   /// `episode-downloaded`, the playlist for `playlist-synced`, the review entry
   /// (`rv-`) for `import-completed`, the catalog job (`jb-`) for `job-finished`
-  /// and `job-failed`, the tool task (`tk-`) for `tool-task-failed`, and the
-  /// job or the tool task that ran the fix for `health-fix-finished`. Absent
-  /// for events that are about the server rather than an item, for
-  /// `subscription-failed`, whose feed never became a show, and for
-  /// `gpodder-device-removed`.
+  /// and `job-failed`, the tool task (`tk-`) for `tool-task-failed` (a book
+  /// merge or split, a CUE split, a URL download or a playlist sync), the job
+  /// or the tool task that ran the fix for `health-fix-finished`, and the
+  /// pending account (`us-`) for `signup-requested`. Absent for other events
+  /// that are about the server rather than an item, for `review-ready`, which
+  /// counts the whole queue, for `subscription-failed`, whose feed never became
+  /// a show, and for `gpodder-device-removed`.
   final String? targetPid;
 
-  /// When the event happened.
+  /// When the event happened, the row's first occurrence.
   final DateTime createdAt;
 
-  /// When the row was marked read. Absent while unread.
+  /// The row's latest occurrence: `createdAt` for a row that never folded one.
+  /// The listing orders by it. A falling `count` and a resolve leave it as it
+  /// is.
+  final DateTime updatedAt;
+
+  /// How many occurrences the row folds; for `review-ready`, how many entries
+  /// wait in the account's review queue while the row stands, a resolved row
+  /// keeping the count it last had.
+  final int count;
+
+  /// When what the row reports was dealt with: the account's review queue
+  /// emptied, the signup decided, the playlist or subscription it names
+  /// deleted. Absent while unresolved.
+  final DateTime? resolvedAt;
+
+  /// When the row was marked read, or resolved while unread. Absent while
+  /// unread.
   final DateTime? readAt;
 }
 
@@ -297,7 +347,7 @@ class ServerNotificationPage {
     this.nextCursor,
   });
 
-  /// Rows newest first.
+  /// Rows by `updatedAt`, newest first.
   final List<ServerNotification> notifications;
 
   /// Opaque cursor for the next page. Absent on the last page.

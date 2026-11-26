@@ -1,17 +1,24 @@
 import 'dart:async';
 
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_es.dart';
 import 'package:waxdeck/src/notifications/notifications_binder.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
+import 'package:waxdeck/src/notifications/notifications_screen.dart';
+import 'package:waxdeck/src/review/review_entry_screen.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/sync/server_event_bus.dart';
 import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'app_host.dart';
 import 'fakes.dart';
@@ -28,20 +35,30 @@ const _user = WaxDeckUser(
 int _nf = 0;
 ServerNotification _inboxRow(
   String event, {
+  String? id,
   String? target,
   DateTime? at,
   DateTime? readAt,
+  DateTime? resolvedAt,
+  int count = 1,
   String title = 'Server title',
   String body = 'Server body',
 }) => ServerNotification(
-  id: 'nf-${_nf++}',
+  id: id ?? 'nf-${_nf++}',
   event: event,
   title: title,
   body: body,
   targetPid: target,
   createdAt: at ?? DateTime.now(),
+  updatedAt: at ?? DateTime.now(),
+  count: count,
+  resolvedAt: resolvedAt,
   readAt: readAt,
 );
+
+/// A time [minutes] ago, so a test can say which row is the newer.
+DateTime _ago(int minutes) =>
+    DateTime.now().subtract(Duration(minutes: minutes));
 
 /// A container whose account is signed in, so the inbox is read.
 ProviderContainer _signedIn(FakeRepository repo) => appContainer(repo: repo);
@@ -52,15 +69,6 @@ void main() {
     // drifted from the event name is a locator matching nothing, which
     // `toBeHidden` would pass.
     test('every kind carries the event name it comes from', () {
-      const hints = <NotificationKind, String>{
-        NotificationKind.review: 'review',
-        NotificationKind.upload: 'upload',
-        NotificationKind.task: 'task',
-      };
-      for (final entry in hints.entries) {
-        expect(entry.key.token, entry.value);
-        expect(NotificationKind.forMarker(entry.value), entry.key);
-      }
       const events = <NotificationKind, String>{
         NotificationKind.signupRequested: 'signup-requested',
         NotificationKind.backupCompleted: 'backup-completed',
@@ -89,20 +97,23 @@ void main() {
       // spec can address its row, and no event on the stream is called
       // that.
       expect(NotificationKind.download.token, 'download');
-      expect(NotificationKind.forMarker('download'), isNull);
       expect(NotificationKind.forEvent('download'), isNull);
+      // The three refetch markers have no row of their own any more.
+      final tokens = NotificationKind.values.map((kind) => kind.token);
+      expect(tokens, isNot(contains('review')));
+      expect(tokens, isNot(contains('upload')));
+      expect(tokens, isNot(contains('task')));
     });
 
     // The announcements ride the same emit as the catalog event of the
     // same name, so a client that drew both would draw each one twice.
-    test('the announcements are the inbox half and not a marker', () {
+    test('the announcements are the inbox half', () {
       for (final token in <String>[
         'feed-disabled',
         'episode-downloaded',
         'import-completed',
         'playlist-synced',
       ]) {
-        expect(NotificationKind.forMarker(token), isNull);
         expect(NotificationKind.forEvent(token), isNotNull);
       }
     });
@@ -136,122 +147,104 @@ void main() {
     });
     tearDown(() => container.dispose());
 
-    test('the hint kinds become rows and the hydrated ones do not', () {
-      local
-        ..recordServerEvent(_marker('review'))
-        ..recordServerEvent(_marker('upload', pid: 'up-1'))
-        ..recordServerEvent(_marker('task', pid: 'tk-1'))
-        // This client's own checkpoint coming back, and a preference it
-        // just wrote. A bell that rang for these would ring constantly.
-        ..recordServerEvent(const ServerSyncEvent(kind: 'play-state'))
-        ..recordServerEvent(const ServerSyncEvent(kind: 'prefs'))
-        // A running scan's progress and the health summary moving: the
-        // surfaces refetch, and the inbox row is where an end is told.
-        ..recordServerEvent(_marker('job', pid: 'jb-1'))
-        ..recordServerEvent(const ServerSyncEvent(kind: 'health'))
-        // A task's progress: its list refetches, and only its start and
-        // end are news.
-        ..recordServerEvent(_marker('task-progress', pid: 'tk-1'))
-        // A kind from a newer server: skipped, never drawn as a row that
-        // goes nowhere. An unknown *catalog event* is drawn from the
-        // inbox instead, which is a different thing entirely.
-        ..recordServerEvent(const ServerSyncEvent(kind: 'invented'));
+    // The markers still refetch their surfaces, and that is all they do:
+    // a row that says "something changed" gave nobody anything to act on.
+    test('the review, upload and task markers mint no rows', () async {
+      final bus = ServerEventBus();
+      addTearDown(bus.dispose);
+      final binderContainer = appContainer(
+        extra: [
+          serverEventBusProvider.overrideWithValue(bus),
+          syncEngineProvider.overrideWithValue(null),
+        ],
+      );
+      final alive = binderContainer.listen(
+        notificationsBinderProvider,
+        (_, _) {},
+      );
+      addTearDown(alive.close);
 
-      final kinds = container
-          .read(localNotificationsProvider)
-          .map((n) => n.kind);
-      expect(kinds, <NotificationKind>[
-        NotificationKind.task,
-        NotificationKind.upload,
-        NotificationKind.review,
-      ], reason: 'newest first, and only the hints');
+      for (final event in <ServerSyncEvent>[
+        _marker('review'),
+        _marker('upload', pid: 'up-1'),
+        _marker('task', pid: 'tk-1'),
+        _marker('task-progress', pid: 'tk-1'),
+        const ServerSyncEvent(kind: 'play-state'),
+        const ServerSyncEvent(kind: 'invented'),
+      ]) {
+        bus.add(event);
+      }
+      await Future<void>.delayed(Duration.zero);
+
+      expect(binderContainer.read(localNotificationsProvider), isEmpty);
+      expect(binderContainer.read(unseenNotificationsProvider), 0);
     });
 
     test('a burst of one kind is one row', () {
-      // A scan opening forty review entries arrives as forty identical
-      // markers, coalesced or not.
+      // A sweep finishing forty downloads arrives as forty identical
+      // completions.
       for (var i = 0; i < 40; i++) {
-        local.recordServerEvent(_marker('review', pid: 'rv-$i'));
+        local.recordDownloadCompleted();
       }
       expect(container.read(localNotificationsProvider), hasLength(1));
     });
 
-    test('the list is capped', () {
-      // Distinct tasks, because a row's identity is its kind and what it
-      // is about: forty markers naming one task are one row by design.
-      for (var i = 0; i < LocalNotifications.cap * 2; i++) {
-        local.record(
-          NotificationKind.task,
-          at: DateTime(2026, 7, 31, 12, i),
-          pid: 'tk-$i',
-        );
-      }
-      expect(
-        container.read(localNotificationsProvider),
-        hasLength(LocalNotifications.cap),
-      );
-    });
-
     test('the badge counts what arrived since the bell was opened', () {
-      local.recordServerEvent(_marker('review'));
+      local.recordDownloadCompleted();
       expect(local.unseen, 1);
 
       local.markSeen(container.read(notificationRowsProvider));
       expect(local.unseen, 0);
 
-      local.record(
-        NotificationKind.upload,
+      local.recordDownloadCompleted(
         at: DateTime.now().add(const Duration(seconds: 1)),
       );
       expect(local.unseen, 1);
     });
 
     test('going where a row points is what clears it', () {
-      local
-        ..recordServerEvent(_marker('review'))
-        ..recordServerEvent(_marker('upload', pid: 'up-1'));
+      local.recordDownloadCompleted(at: DateTime(2026, 8, 12, 9));
 
-      // The queue itself, which is where the review row points.
+      // Somewhere else answers nothing.
       local.dismissUnder(WaxRoute.review);
-      expect(
-        container.read(localNotificationsProvider).map((n) => n.kind),
-        <NotificationKind>[NotificationKind.upload],
-        reason: 'a visit answers its own row and nobody else\'s',
-      );
+      expect(container.read(localNotificationsProvider), hasLength(1));
+
+      local.dismissUnder(WaxRoute.downloads);
+      expect(container.read(localNotificationsProvider), isEmpty);
     });
 
     test('an entry under a surface answers the surface', () {
-      // The review row points at the queue and a reader deals with it by
-      // opening an entry, which is a location under it rather than the
-      // location itself.
-      local.recordServerEvent(_marker('review'));
-      local.dismissUnder('${WaxRoute.review}/rv-1');
+      // A reader deals with a row by opening something in the place it
+      // points at, which is a location under it rather than the location
+      // itself.
+      local.recordDownloadCompleted();
+      local.dismissUnder('${WaxRoute.downloads}/tr-1');
       expect(container.read(localNotificationsProvider), isEmpty);
     });
 
     test('a later event for the same thing is news again', () {
-      local.recordServerEvent(_marker('review'));
-      local.dismissUnder(WaxRoute.review);
+      local.recordDownloadCompleted();
+      local.dismissUnder(WaxRoute.downloads);
       expect(container.read(localNotificationsProvider), isEmpty);
 
       // Somewhere else, and then it happens again: the reader has not
       // seen this one.
       local.dismissUnder(WaxRoute.home);
-      local.recordServerEvent(_marker('review'));
+      local.recordDownloadCompleted();
       expect(container.read(localNotificationsProvider), hasLength(1));
     });
 
     test('news about the screen in front of you never lands', () {
-      local.dismissUnder(WaxRoute.uploads);
-      local.recordServerEvent(_marker('upload', pid: 'up-1'));
+      local.dismissUnder(WaxRoute.downloads);
+      local.recordDownloadCompleted();
       expect(container.read(localNotificationsProvider), isEmpty);
       expect(local.unseen, 0);
     });
 
     test('news about the screen in front of you never lands, whatever query '
         'it carries', () {
-      local.dismissUnder('${WaxRoute.uploads}?view=all');
-      local.recordServerEvent(_marker('upload', pid: 'up-1'));
+      local.dismissUnder('${WaxRoute.downloads}?view=all');
+      local.recordDownloadCompleted();
       expect(container.read(localNotificationsProvider), isEmpty);
     });
 
@@ -391,7 +384,7 @@ void main() {
 
       container
           .read(localNotificationsProvider.notifier)
-          .recordServerEvent(_marker('review'));
+          .recordDownloadCompleted();
       expect(container.read(unseenNotificationsProvider), 2);
     });
 
@@ -421,7 +414,13 @@ void main() {
       expect(rows.rows.where((r) => r.read).map((r) => r.targetPid), <String>[
         'pc-A',
       ]);
-      expect(repo.inboxReadCalls.single, hasLength(1));
+      expect(repo.inboxReadCalls, isEmpty, reason: 'named by event, not id');
+      expect(
+        repo.inboxEventReads.any(
+          (c) => c.pid == 'pc-A' && c.events.contains('feed-disabled'),
+        ),
+        isTrue,
+      );
     });
 
     test('mark all read empties the badge and says so once', () async {
@@ -453,7 +452,7 @@ void main() {
       await view();
       container
           .read(localNotificationsProvider.notifier)
-          .recordServerEvent(_marker('review'));
+          .recordDownloadCompleted();
       await container.read(notificationsProvider.notifier).clear();
 
       expect(container.read(notificationsViewProvider).rows, isEmpty);
@@ -508,9 +507,7 @@ void main() {
       );
       final other = _signedIn(broken);
       await other.read(authControllerProvider.future);
-      other
-          .read(localNotificationsProvider.notifier)
-          .recordServerEvent(_marker('review'));
+      other.read(localNotificationsProvider.notifier).recordDownloadCompleted();
 
       await other.read(notificationsProvider.future);
       final rows = other.read(notificationsViewProvider);
@@ -601,7 +598,7 @@ void main() {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     final local = container.read(localNotificationsProvider.notifier);
-    local.recordServerEvent(_marker('review'));
+    local.recordDownloadCompleted();
     expect(container.read(notificationsViewProvider).rows.single.read, isFalse);
 
     local.markSeen(container.read(notificationRowsProvider));
@@ -625,7 +622,7 @@ void main() {
     await container.read(authControllerProvider.future);
     container
         .read(localNotificationsProvider.notifier)
-        .recordServerEvent(_marker('review'));
+        .recordDownloadCompleted();
     expect(container.read(localNotificationsProvider), hasLength(1));
 
     // Signing out and back in as somebody else: what the previous
@@ -822,6 +819,619 @@ void main() {
     });
   });
 
+  group('a row that counts and resolves', () {
+    late FakeRepository repo;
+    late ProviderContainer container;
+
+    setUp(() async {
+      repo = FakeRepository(
+        sessionState: const SessionState(authenticated: true, user: _user),
+      );
+      container = _signedIn(repo);
+      await container.read(authControllerProvider.future);
+    });
+
+    Future<NotificationsView> view() async {
+      await container.read(notificationsProvider.future);
+      return container.read(notificationsViewProvider);
+    }
+
+    test(
+      'a count words a plural title, and one reads as the singular',
+      () async {
+        repo.inbox = <ServerNotification>[
+          _inboxRow('review-ready', count: 3, at: _ago(1)),
+          _inboxRow('review-ready', count: 1, at: _ago(2)),
+          _inboxRow('import-completed', target: 'rv-1', count: 2, at: _ago(3)),
+          _inboxRow('import-completed', target: 'rv-2', at: _ago(4)),
+        ];
+        final rows = (await view()).rows;
+        final en = AppLocalizationsEn();
+        final es = AppLocalizationsEs();
+        expect(rows.map((r) => r.messageOf(en)), <String>[
+          '3 waiting for review',
+          'Waiting for review',
+          '2 added to the library',
+          'Added to the library',
+        ]);
+        expect(rows.map((r) => r.messageOf(es)), <String>[
+          '3 pendientes de revisión',
+          'Pendiente de revisión',
+          '2 añadidos a la biblioteca',
+          'Añadido a la biblioteca',
+        ]);
+      },
+    );
+
+    test(
+      'a resolved queue row is worded as cleared and wears the check',
+      () async {
+        repo.inbox = <ServerNotification>[
+          _inboxRow(
+            'review-ready',
+            count: 4,
+            resolvedAt: DateTime.now(),
+            at: _ago(1),
+          ),
+          _inboxRow(
+            'signup-requested',
+            resolvedAt: DateTime.now(),
+            at: _ago(2),
+          ),
+          _inboxRow('review-ready', count: 2, at: _ago(3)),
+          _inboxRow('signup-requested', at: _ago(4)),
+        ];
+        final rows = (await view()).rows;
+        final en = AppLocalizationsEn();
+        expect(rows.map((r) => r.messageOf(en)), <String>[
+          'Review queue cleared',
+          'Request decided',
+          '2 waiting for review',
+          'Account request',
+        ]);
+        expect(rows[0].glyph, WaxIcons.check);
+        expect(rows[1].glyph, WaxIcons.check);
+        // The check means done, so the rows still waiting wear another.
+        expect(rows[2].glyph, isNot(WaxIcons.check));
+        expect(rows[3].glyph, isNot(WaxIcons.check));
+      },
+    );
+
+    test('a row resolved because its playlist went keeps its own glyph and '
+        'words', () async {
+      repo.inbox = <ServerNotification>[
+        _inboxRow(
+          'playlist-synced',
+          target: 'pl-1',
+          resolvedAt: DateTime.now(),
+        ),
+      ];
+      final row = (await view()).rows.single;
+      expect(row.resolved, isTrue);
+      expect(row.glyph, NotificationKind.playlistSynced.glyph);
+      expect(row.messageOf(AppLocalizationsEn()), 'Playlist synced');
+    });
+
+    test('a row shows and orders by its latest occurrence', () async {
+      final old = DateTime.now().subtract(const Duration(days: 3));
+      final latest = DateTime.now().subtract(const Duration(minutes: 1));
+      repo.inbox = <ServerNotification>[
+        ServerNotification(
+          id: 'nf-counted',
+          event: 'backup-completed',
+          title: 't',
+          body: 'b',
+          createdAt: old,
+          updatedAt: latest,
+          count: 5,
+        ),
+        _inboxRow(
+          'backup-failed',
+          at: DateTime.now().subtract(const Duration(hours: 1)),
+        ),
+      ];
+      final rows = (await view()).rows;
+      expect(rows.first.id, 'nf-counted');
+      expect(rows.first.at, latest);
+    });
+
+    test('a keyed row that counted up is the same row', () async {
+      final first = _inboxRow('review-ready', id: 'nf-keyed', count: 1);
+      repo.inbox = <ServerNotification>[first];
+      final before = (await view()).rows.single;
+
+      repo.inbox = <ServerNotification>[
+        ServerNotification(
+          id: 'nf-keyed',
+          event: 'review-ready',
+          title: 't',
+          body: 'b',
+          createdAt: first.createdAt,
+          updatedAt: first.updatedAt.add(const Duration(minutes: 5)),
+          count: 3,
+        ),
+      ];
+      container.invalidate(notificationsProvider);
+      final after = (await view()).rows.single;
+
+      expect(after.id, before.id);
+      expect(after.semanticsId, before.semanticsId);
+      expect(after.count, 3);
+      expect(after.at.isAfter(before.at), isTrue);
+    });
+
+    // The bell draws a line a row, so two rows of one event have to say
+    // something different: the count where it folded, the body where it
+    // did not.
+    test('the bell line is the count or the body, so rows differ', () async {
+      repo.inbox = <ServerNotification>[
+        _inboxRow(
+          'review-ready',
+          count: 3,
+          body: 'The newest one',
+          at: _ago(1),
+        ),
+        _inboxRow(
+          'feed-disabled',
+          target: 'pc-A',
+          body: 'Alpha stopped refreshing',
+          at: _ago(2),
+        ),
+        _inboxRow(
+          'feed-disabled',
+          target: 'pc-B',
+          body: 'Beta stopped refreshing',
+          at: _ago(3),
+        ),
+        _inboxRow('backup-failed', body: '', at: _ago(4)),
+      ];
+      final rows = (await view()).rows;
+      final en = AppLocalizationsEn();
+      expect(rows.map((r) => r.bellLineOf(en)), <String>[
+        '3 waiting for review',
+        'Alpha stopped refreshing',
+        'Beta stopped refreshing',
+        'Backup failed',
+      ]);
+    });
+
+    test('Clear completed removes only the resolved rows', () async {
+      repo.inbox = <ServerNotification>[
+        _inboxRow('review-ready', resolvedAt: DateTime.now()),
+        _inboxRow('signup-requested', resolvedAt: DateTime.now()),
+        _inboxRow('backup-completed'),
+        _inboxRow('backup-failed', readAt: DateTime.now()),
+      ];
+      final keep = repo.inbox.skip(2).map((r) => r.id).toSet();
+      await view();
+      await container.read(notificationsProvider.notifier).clearCompleted();
+
+      final held = container.read(notificationsViewProvider);
+      expect(held.rows.map((r) => r.id).toSet(), keep);
+      expect(held.unreadInbox, 1);
+      expect(repo.inboxClearedResolved, 1);
+      expect(repo.inbox.map((r) => r.id).toSet(), keep);
+    });
+
+    // Visiting a destination settles its rows on the server too, which is
+    // what reaches the ones past the page this client holds.
+    test('visiting a destination marks its rows read by event', () async {
+      repo.inbox = <ServerNotification>[
+        _inboxRow('review-ready', count: 2),
+        _inboxRow('backup-completed'),
+      ];
+      await view();
+      container
+          .read(notificationsProvider.notifier)
+          .dismissUnder(WaxRoute.review);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(repo.inboxEventReads, hasLength(1));
+      expect(repo.inboxEventReads.single.events, contains('review-ready'));
+      expect(
+        repo.inboxEventReads.single.events,
+        isNot(contains('backup-completed')),
+      );
+      expect(repo.inboxEventReads.single.pid, isNull);
+      // The loaded row is covered by that call; ids and events never mix.
+      expect(repo.inboxReadCalls, isEmpty);
+      final held = container.read(notificationsViewProvider);
+      expect(held.unreadInbox, 1);
+      expect(
+        held.rows.where((r) => r.read).single.kind,
+        NotificationKind.reviewReady,
+      );
+    });
+
+    test(
+      'an entity a visit is at is named by pid, and only that one',
+      () async {
+        repo.inbox = <ServerNotification>[
+          _inboxRow('feed-disabled', target: 'pc-A'),
+          _inboxRow('feed-disabled', target: 'pc-B'),
+        ];
+        await view();
+        container
+            .read(notificationsProvider.notifier)
+            .dismissUnder(WaxRoute.show('pc-A'));
+        await Future<void>.delayed(Duration.zero);
+
+        // The show's own news is named by its pid, and no call without one
+        // reaches the other show's rows.
+        final byPid = repo.inboxEventReads.where((c) => c.pid != null).single;
+        expect(byPid.pid, 'pc-A');
+        expect(byPid.events, contains('feed-disabled'));
+        for (final call in repo.inboxEventReads.where((c) => c.pid == null)) {
+          expect(call.events, isNot(contains('feed-disabled')));
+        }
+        final rows = container.read(notificationsViewProvider).rows;
+        expect(rows.where((r) => r.read).map((r) => r.targetPid), <String?>[
+          'pc-A',
+        ]);
+      },
+    );
+
+    // The body names the last entry; under "cleared" it would contradict.
+    test('a resolved queue row has no server body under its wording', () async {
+      repo.inbox = <ServerNotification>[
+        _inboxRow(
+          'review-ready',
+          resolvedAt: DateTime.now(),
+          body: 'The last entry',
+          at: _ago(1),
+        ),
+        _inboxRow('review-ready', body: 'The newest entry', at: _ago(2)),
+        _inboxRow(
+          'playlist-synced',
+          target: 'pl-1',
+          resolvedAt: DateTime.now(),
+          body: 'Two tracks moved',
+          at: _ago(3),
+        ),
+      ];
+      final rows = (await view()).rows;
+      final en = AppLocalizationsEn();
+      expect(rows[0].detailOf(en), isEmpty);
+      expect(rows[1].detailOf(en), 'The newest entry');
+      expect(
+        rows[2].detailOf(en),
+        'Two tracks moved',
+        reason: 'only a queue that was answered drops its body',
+      );
+    });
+
+    // A write that fails leaves the list and the badge guessing: the next
+    // read is what puts them right.
+    for (final (name, act)
+        in <(String, Future<void> Function(NotificationsController, String))>[
+          ('Clear completed', (n, _) => n.clearCompleted()),
+          ('Clear', (n, _) => n.clear()),
+          ('delete', (n, id) => n.delete(id)),
+        ]) {
+      test('a failed $name is read back from the server', () async {
+        final failing = _FailingWrites(
+          sessionState: const SessionState(authenticated: true, user: _user),
+        );
+        failing.inbox = <ServerNotification>[
+          _inboxRow('review-ready', resolvedAt: DateTime.now(), at: _ago(1)),
+          _inboxRow('backup-completed', at: _ago(2)),
+        ];
+        final other = _signedIn(failing);
+        await other.read(authControllerProvider.future);
+        await other.read(notificationsProvider.future);
+        final id = failing.inbox.first.id;
+
+        await act(other.read(notificationsProvider.notifier), id);
+        await other.read(notificationsProvider.future);
+
+        expect(failing.listCalls, 2, reason: 'the list was read again');
+        final held = other.read(notificationsViewProvider);
+        expect(held.rows, hasLength(2), reason: 'the server kept them');
+        expect(held.unreadInbox, 2);
+      });
+    }
+
+    // One by-event call settles everything of its events, hidden rows
+    // included, so asking again for the same thing is noise.
+    test(
+      'the reach past the page is made once until the inbox changes',
+      () async {
+        final past = _PagedInbox(
+          hiddenUnread: 120,
+          keepHidden: true,
+          sessionState: const SessionState(authenticated: true, user: _user),
+        );
+        final other = _signedIn(past);
+        await other.read(authControllerProvider.future);
+        await other.read(notificationsProvider.future);
+        final notifier = other.read(notificationsProvider.notifier);
+
+        notifier.dismissUnder(WaxRoute.review);
+        await Future<void>.delayed(Duration.zero);
+        await other.read(notificationsProvider.future);
+        notifier.dismissUnder('${WaxRoute.review}?again=1');
+        notifier.dismissUnder(WaxRoute.review);
+        await Future<void>.delayed(Duration.zero);
+        expect(past.inboxEventReads, hasLength(1));
+
+        // A marker's refetch is the inbox changing.
+        other.invalidate(notificationsProvider);
+        await other.read(notificationsProvider.future);
+        notifier.dismissUnder(WaxRoute.review);
+        await Future<void>.delayed(Duration.zero);
+        expect(past.inboxEventReads, hasLength(2));
+
+        // So is Mark all read.
+        await notifier.markAllRead();
+        past.hiddenUnread = 120;
+        other.invalidate(notificationsProvider);
+        await other.read(notificationsProvider.future);
+        notifier.dismissUnder(WaxRoute.review);
+        await Future<void>.delayed(Duration.zero);
+        expect(past.inboxEventReads, hasLength(3));
+      },
+    );
+
+    // A refused call settled nothing, so the next visit asks again.
+    test(
+      'a refused reach past the page is asked again on the next visit',
+      () async {
+        final past = _PagedInbox(
+          hiddenUnread: 120,
+          keepHidden: true,
+          sessionState: const SessionState(authenticated: true, user: _user),
+        )..refuseEventReads = 1;
+        final other = _signedIn(past);
+        await other.read(authControllerProvider.future);
+        await other.read(notificationsProvider.future);
+        final notifier = other.read(notificationsProvider.notifier);
+
+        notifier.dismissUnder(WaxRoute.review);
+        await Future<void>.delayed(Duration.zero);
+        await other.read(notificationsProvider.future);
+        expect(past.inboxEventReads, isEmpty, reason: 'the call was refused');
+
+        notifier.dismissUnder(WaxRoute.review);
+        await Future<void>.delayed(Duration.zero);
+        expect(past.inboxEventReads, hasLength(1));
+
+        // Made, it is not made again.
+        await other.read(notificationsProvider.future);
+        notifier.dismissUnder(WaxRoute.review);
+        await Future<void>.delayed(Duration.zero);
+        expect(past.inboxEventReads, hasLength(1));
+      },
+    );
+
+    test('a visit with nothing unread to settle sends nothing', () async {
+      repo.inbox = <ServerNotification>[
+        _inboxRow('review-ready', readAt: DateTime.now()),
+      ];
+      await view();
+      container
+          .read(notificationsProvider.notifier)
+          .dismissUnder(WaxRoute.review);
+      await Future<void>.delayed(Duration.zero);
+      expect(repo.inboxEventReads, isEmpty);
+      expect(repo.inboxReadCalls, isEmpty);
+    });
+
+    // The page holds fifty and the rest are unread on the server: the
+    // visit reaches them, and the count is read back rather than guessed.
+    test('rows past the page the client holds settle on a visit', () async {
+      final past = _PagedInbox(
+        hiddenUnread: 120,
+        sessionState: const SessionState(authenticated: true, user: _user),
+      );
+      past.inbox = <ServerNotification>[
+        _inboxRow('backup-completed', readAt: DateTime.now()),
+      ];
+      final other = _signedIn(past);
+      await other.read(authControllerProvider.future);
+      await other.read(notificationsProvider.future);
+      expect(other.read(notificationsViewProvider).unreadInbox, 120);
+
+      other.read(notificationsProvider.notifier).dismissUnder(WaxRoute.review);
+      await Future<void>.delayed(Duration.zero);
+      await other.read(notificationsProvider.future);
+
+      expect(past.inboxEventReads, hasLength(1));
+      expect(past.inboxEventReads.single.events, contains('review-ready'));
+      expect(past.listCalls, 2, reason: 'the count is read back');
+      expect(other.read(notificationsViewProvider).unreadInbox, 0);
+    });
+  });
+
+  group('the notifications screen', () {
+    late FakeRepository repo;
+    late ProviderContainer container;
+
+    Future<void> pump(WidgetTester tester, {Size? size}) async {
+      tester.view.physicalSize = size ?? const Size(1000, 2000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      repo = FakeRepository(
+        sessionState: const SessionState(authenticated: true, user: _user),
+      );
+      container = appContainer(repo: repo);
+    }
+
+    Future<void> mount(WidgetTester tester) async {
+      await pumpApp(tester, const NotificationsScreen(), container: container);
+      await tester.pumpAndSettle();
+    }
+
+    String location(WidgetTester tester) => GoRouter.of(
+      tester.element(find.byType(NotificationsScreen)),
+    ).routerDelegate.currentConfiguration.uri.toString();
+
+    Finder rowOf(ServerNotification row) => find.bySemanticsIdentifier(
+      SemanticsIds.notificationRow(row.event, row.id),
+    );
+
+    testWidgets('a resolved review row does not navigate, and an unresolved '
+        'one does', (tester) async {
+      final handle = tester.ensureSemantics();
+      await pump(tester);
+      final done = _inboxRow('review-ready', resolvedAt: DateTime.now());
+      final waiting = _inboxRow(
+        'review-ready',
+        count: 2,
+        at: DateTime.now().subtract(const Duration(minutes: 1)),
+      );
+      repo.inbox = <ServerNotification>[done, waiting];
+      await mount(tester);
+      final before = location(tester);
+
+      // No tap to answer: the row is not offered as one.
+      final doneNode = tester.getSemantics(rowOf(done));
+      expect(
+        doneNode.getSemanticsData().hasAction(SemanticsAction.tap),
+        isFalse,
+      );
+      await tester.tap(rowOf(done), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(location(tester), before);
+      // Its delete is still there.
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.notificationDelete(done.id)),
+        findsOneWidget,
+      );
+
+      final router = GoRouter.of(
+        tester.element(find.byType(NotificationsScreen)),
+      );
+      await tester.tap(rowOf(waiting));
+      await tester.pumpAndSettle();
+      expect(
+        router.routerDelegate.currentConfiguration.uri.toString(),
+        WaxRoute.review,
+      );
+      handle.dispose();
+    });
+
+    for (final (name, size, narrow) in <(String, Size, bool)>[
+      ('narrow', const Size(500, 1400), true),
+      ('two-pane', const Size(1800, 1400), false),
+    ]) {
+      testWidgets('an import row opens its entry in the $name layout', (
+        tester,
+      ) async {
+        await pump(tester, size: size);
+        final entry = _inboxRow('import-completed', target: 'rv-1');
+        repo.inbox = <ServerNotification>[entry];
+        repo.reviewEntries = <ReviewEntry>[
+          testReviewEntry('rv-1', status: 'approved', origin: 'upload'),
+        ];
+        repo.reviewEntryDetails['rv-1'] = ReviewEntryDetail(
+          id: 'rv-1',
+          kind: 'match',
+          status: 'approved',
+          mediaType: MediaType.music,
+          origin: 'upload',
+          trackCount: 1,
+          createdAt: DateTime.utc(2026, 7, 1),
+          title: 'Neon Meridian',
+          artist: 'The Cardinal Waves',
+        );
+        await mount(tester);
+
+        await tester.tap(
+          find.bySemanticsIdentifier(
+            SemanticsIds.notificationRow('import-completed', entry.id),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(NotificationsScreen), findsNothing);
+        expect(find.byType(ReviewEntryView), findsOneWidget);
+        expect(
+          find.byType(ReviewEntryScreen),
+          narrow ? findsOneWidget : findsNothing,
+          reason: 'one pane is a page of its own; two sit beside the queue',
+        );
+      });
+    }
+
+    testWidgets('Clear completed shows only with a resolved row, and removes '
+        'only those', (tester) async {
+      await pump(tester);
+      final waiting = _inboxRow('backup-completed');
+      repo.inbox = <ServerNotification>[waiting];
+      await mount(tester);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.notificationsClearCompleted),
+        findsNothing,
+      );
+
+      final done = _inboxRow(
+        'review-ready',
+        resolvedAt: DateTime.now(),
+        at: DateTime.now().subtract(const Duration(minutes: 1)),
+      );
+      repo.inbox = <ServerNotification>[waiting, done];
+      container.invalidate(notificationsProvider);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.notificationsClearCompleted),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repo.inboxClearedResolved, 1);
+      expect(rowOf(done), findsNothing);
+      expect(rowOf(waiting), findsOneWidget);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.notificationsClearCompleted),
+        findsNothing,
+      );
+    });
+
+    testWidgets('an unread row is not announced as playing', (tester) async {
+      final handle = tester.ensureSemantics();
+      await pump(tester);
+      final row = _inboxRow('backup-completed');
+      repo.inbox = <ServerNotification>[row];
+      await mount(tester);
+
+      final label = tester.getSemantics(rowOf(row)).label;
+      expect(label, isNot(contains('Playing')));
+      expect(label, contains('Backup finished'));
+      handle.dispose();
+    });
+
+    testWidgets('a row that counted up keeps its widget and says the count', (
+      tester,
+    ) async {
+      await pump(tester);
+      final first = _inboxRow('review-ready', id: 'nf-keyed');
+      repo.inbox = <ServerNotification>[first];
+      await mount(tester);
+      final key = ValueKey(
+        SemanticsIds.notificationRow('review-ready', 'nf-keyed'),
+      );
+      final before = tester.element(find.byKey(key));
+      expect(find.text('Waiting for review'), findsOneWidget);
+
+      repo.inbox = <ServerNotification>[
+        ServerNotification(
+          id: 'nf-keyed',
+          event: 'review-ready',
+          title: 't',
+          body: 'b',
+          createdAt: first.createdAt,
+          updatedAt: first.updatedAt.add(const Duration(minutes: 5)),
+          count: 3,
+        ),
+      ];
+      container.invalidate(notificationsProvider);
+      await tester.pumpAndSettle();
+
+      expect(identical(tester.element(find.byKey(key)), before), isTrue);
+      expect(find.text('3 waiting for review'), findsOneWidget);
+      expect(find.text('Waiting for review'), findsNothing);
+    });
+  });
+
   // Through the real router: it is what reports where the visitor is, and
   // a location carrying a query is what a signup row points at.
   testWidgets('arriving at the signup requests marks a signup row read, and '
@@ -849,13 +1459,13 @@ void main() {
     router.go(WaxRoute.users);
     await tester.pumpAndSettle();
     expect(read(first.id), isFalse);
-    expect(repo.inboxReadCalls, isEmpty);
+    expect(repo.inboxEventReads, isEmpty);
 
     router.go(WaxRoute.userRequests);
     await tester.pumpAndSettle();
     expect(read(first.id), isTrue);
-    expect(repo.inboxReadCalls, <List<String>>[
-      <String>[first.id],
+    expect(repo.inboxEventReads.map((c) => c.events), <List<String>>[
+      <String>['signup-requested'],
     ]);
 
     final next = _inboxRow('signup-requested');
@@ -863,7 +1473,7 @@ void main() {
     container.invalidate(notificationsProvider);
     await tester.pumpAndSettle();
     expect(read(next.id), isTrue);
-    expect(repo.inboxReadCalls.last, <String>[next.id]);
+    expect(repo.inboxEventReads, hasLength(2));
     expect(container.read(unseenNotificationsProvider), 0);
   });
 }
@@ -941,4 +1551,86 @@ class _UnreadableInbox extends FakeRepository {
     code: 'transport',
     message: 'the server is not there',
   );
+}
+
+/// A repository whose inbox holds more unread rows than the page it
+/// answers with, as one past the fifty the client reads does.
+class _PagedInbox extends FakeRepository {
+  _PagedInbox({
+    required this.hiddenUnread,
+    this.keepHidden = false,
+    super.sessionState,
+  });
+
+  /// Unread rows on the server beyond the ones listed; a by-event
+  /// mark-read settles them, unless [keepHidden] holds them there.
+  int hiddenUnread;
+  final bool keepHidden;
+  int listCalls = 0;
+
+  /// By-event calls to refuse before one goes through.
+  int refuseEventReads = 0;
+
+  @override
+  Future<ServerNotificationPage> listMyNotifications({
+    String? cursor,
+    int? limit,
+  }) async {
+    listCalls++;
+    final page = await super.listMyNotifications(cursor: cursor, limit: limit);
+    return ServerNotificationPage(
+      notifications: page.notifications,
+      unreadCount: page.unreadCount + hiddenUnread,
+    );
+  }
+
+  @override
+  Future<void> markMyNotificationsRead({
+    List<String> ids = const <String>[],
+    List<String>? events,
+    String? targetPid,
+  }) async {
+    if (events != null && events.isNotEmpty && refuseEventReads > 0) {
+      refuseEventReads--;
+      throw const WaxDeckApiException(
+        code: 'transport',
+        message: 'the server went away',
+      );
+    }
+    await super.markMyNotificationsRead(
+      ids: ids,
+      events: events,
+      targetPid: targetPid,
+    );
+    if (events != null && events.isNotEmpty && !keepHidden) hiddenUnread = 0;
+  }
+}
+
+/// A repository whose inbox writes are refused, which the server does when
+/// it is unreachable or the row is already gone.
+class _FailingWrites extends FakeRepository {
+  _FailingWrites({super.sessionState});
+
+  int listCalls = 0;
+
+  static const _refused = WaxDeckApiException(
+    code: 'transport',
+    message: 'the server went away',
+  );
+
+  @override
+  Future<ServerNotificationPage> listMyNotifications({
+    String? cursor,
+    int? limit,
+  }) {
+    listCalls++;
+    return super.listMyNotifications(cursor: cursor, limit: limit);
+  }
+
+  @override
+  Future<void> clearMyNotifications({bool resolved = false}) async =>
+      throw _refused;
+
+  @override
+  Future<void> deleteMyNotification(String id) async => throw _refused;
 }

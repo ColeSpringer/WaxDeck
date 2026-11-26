@@ -83,6 +83,7 @@ func (l *Migrate) runABSImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx
 		if ctx.Err() != nil {
 			return sum, ctx.Err()
 		}
+		prog.items(ctx, activityImporting, i, len(me.MediaProgress))
 		prog.report(ctx, float64(i+1)/float64(len(me.MediaProgress))*90)
 		if mp.EpisodeID != "" || mp.LibraryItemID == "" {
 			continue

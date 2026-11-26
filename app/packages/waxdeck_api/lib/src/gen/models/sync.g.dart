@@ -331,15 +331,16 @@ class ServerSyncEvent {
   /// when deleted or replaced under a new pid).
   ///
   /// Markers carry only `pid` and hydrate nothing: `review`, `upload`, `task`
-  /// (a task was queued, started or ended; refetch that surface),
-  /// `task-progress` (a task's progress moved; refetch it, though it is not
-  /// news), `entity-state` (an artist or album was starred or rated), and `job`
-  /// (the `jb-` catalog job ended, or, for a scan, analysis, enrichment,
-  /// organize run, organize undo, library removal or emptying the trash, was
-  /// first seen, crossed another five percent of progress or changed its
-  /// message, a message marked at most every fifteen seconds; refetch
-  /// `GET /jobs` or `GET /jobs/{pid}`). `job` reaches administrators; a
-  /// targeted job's, while it runs, only whoever started it.
+  /// (a task was queued, started, asked to cancel or ended; refetch that
+  /// surface), `task-progress` (a task's progress moved, or its `activity`,
+  /// which marks it about once every two seconds a task and on every change of
+  /// phase; refetch it, though it is not news), `entity-state` (an artist or
+  /// album was starred or rated), and `job` (the `jb-` catalog job ended, or,
+  /// for a scan, analysis, enrichment, organize run, organize undo, library
+  /// removal or emptying the trash, was first seen, crossed another five
+  /// percent of progress or changed its message, a message marked at most every
+  /// fifteen seconds; refetch `GET /jobs` or `GET /jobs/{pid}`). `job` reaches
+  /// administrators; a targeted job's, while it runs, only whoever started it.
   ///
   /// `health` carries no `pid`: the library's health moved (a sweep was queued,
   /// finished or failed, or a fix started or finished), so re-read
@@ -364,9 +365,11 @@ class ServerSyncEvent {
   /// membership, or whose scheduled syncing was suspended after repeated
   /// failures).
   ///
-  /// `notification` (`pid` is the inbox row that was written; refetch
-  /// `GET /users/me/notifications`) rides every emit, whether or not the
-  /// account has a delivery target for the event.
+  /// `notification` (`pid` is the inbox row that changed; refetch
+  /// `GET /users/me/notifications`) fires when a row is added, folds, is
+  /// recounted (`review-ready`'s count moving either way) or resolves, whether
+  /// or not the account has a delivery target for the event; marking rows read
+  /// and deleting them fire nothing.
   ///
   /// `account` carries no `pid`: the caller's own roles or effective
   /// permissions changed, or the server's read-only mode was turned on or off.

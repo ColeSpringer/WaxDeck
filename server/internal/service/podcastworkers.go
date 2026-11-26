@@ -337,8 +337,9 @@ func (l *Podcasts) notifyArrivals(ctx context.Context, pod *model.Podcast, subs 
 	for _, s := range subs {
 		userIDs = append(userIDs, s.UserID)
 	}
+	show := apiPID(PrefixPodcast, pod.PID)
 	l.Integrations.EmitNotificationFor(ctx, "episode-arrived", "New episode: "+cmp.Or(clipFeedTitle(pod.Title), "podcast"), body,
-		apiPID(PrefixPodcast, pod.PID), userIDs)
+		show, userIDs, NotifyKey("episode-arrived:"+show))
 }
 
 // syncWithoutVerdict stamps a sync that says nothing about the feed, so

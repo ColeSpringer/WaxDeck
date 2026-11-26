@@ -242,6 +242,15 @@ export async function clickThrough(
   }).toPass({ timeout: T.nav });
 }
 
+// Click a canvas control until it is gone, as one retried unit: for a
+// confirmation whose press closes it. A click loop, so never inside
+// another `toPass`.
+export async function clickUntilGone(trigger: Locator, press: Press = {}) {
+  await expect(async () => {
+    await clickToward(trigger, { gone: trigger }, press);
+  }).toPass({ timeout: T.nav });
+}
+
 // Click a canvas control once and wait for what it opens, for a control
 // whose first press is the thing under test: a retry would make good a
 // press that did nothing. What it opens must be absent before the press,
@@ -253,6 +262,40 @@ export async function clickOnceThrough(trigger: Locator, appears: Locator) {
   await rectAtRest(trigger);
   await trigger.click({ timeout: T.step, force: true });
   await appears.waitFor({ timeout: T.nav });
+}
+
+// Press a canvas control once, at rest, with nothing to wait for after it:
+// for a control that must not act, where the caller's own settle proves it
+// did not. The press point is the middle of the part of the control inside
+// the viewport (a part-scrolled node's rect is clipped but keeps being
+// published, so its own centre can miss), and what the page has there must
+// be the control: a press that lands on nothing proves nothing.
+export async function pressOnce(trigger: Locator) {
+  await trigger.waitFor({ timeout: T.nav });
+  await rectAtRest(trigger);
+  const at = await trigger.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const left = Math.max(r.left, 0);
+    const top = Math.max(r.top, 0);
+    const right = Math.min(r.right, window.innerWidth);
+    const bottom = Math.min(r.bottom, window.innerHeight);
+    const x = (left + right) / 2;
+    const y = (top + bottom) / 2;
+    const hit = document.elementFromPoint(x, y);
+    return {
+      x,
+      y,
+      origin: { x: r.left, y: r.top },
+      hit: hit !== null && (hit === el || el.contains(hit)),
+      found: hit === null ? 'nothing' : `${hit.tagName.toLowerCase()} ${hit.id}`,
+    };
+  });
+  expect(at.hit, `the press point is on the control, not on ${at.found}`).toBe(true);
+  await trigger.click({
+    timeout: T.step,
+    force: true,
+    position: { x: at.x - at.origin.x, y: at.y - at.origin.y },
+  });
 }
 
 // Two presses of a canvas control [apartMs] apart, each a raw mouse down

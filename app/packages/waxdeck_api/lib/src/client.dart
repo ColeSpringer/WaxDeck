@@ -984,6 +984,7 @@ class WaxDeckClient extends _WaxDeckCalls
   Future<ToolTask> createAcquisition({
     required String url,
     required MediaType mediaType,
+    bool? playlist,
     String? libraryPid,
     String? format,
     bool? identify,
@@ -992,6 +993,7 @@ class WaxDeckClient extends _WaxDeckCalls
     final response = await _createAcquisition(
       body: AcquisitionRequest(
         url: url,
+        playlist: playlist,
         mediaType: _uploadMediaType(mediaType.wireName),
         libraryPid: libraryPid,
         identify: identify,

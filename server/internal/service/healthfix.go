@@ -275,10 +275,14 @@ func (l *Health) StartHealthFix(ctx context.Context, uc *UserCtx, rule string, a
 		}
 		out = HealthFixStartDTO{Queued: queued, JobPID: apiPID(PrefixJob, pid)}
 	} else {
-		// The row carries its rule from the start, so it is labelled at
-		// once; it goes in only while no fix of the rule is under way.
-		t := newToolTask(uc, taskTypeHealthFix, "", toolTaskParams{Rule: rule, ItemPIDs: scope},
-			marshalJSON(map[string]any{"rule": rule}))
+		// The row carries its rule, and how many items it names, from the
+		// start, so it is labelled at once; it goes in only while no fix of
+		// the rule is under way.
+		queuedSum := map[string]any{"rule": rule}
+		if len(scope) > 0 {
+			queuedSum["scoped"] = len(scope)
+		}
+		t := newToolTask(uc, taskTypeHealthFix, "", toolTaskParams{Rule: rule, ItemPIDs: scope}, marshalJSON(queuedSum))
 		inserted, err := l.db.InsertHealthFixTask(ctx, t, rule)
 		if err != nil {
 			return HealthFixStartDTO{}, &Error{Kind: KindInternal, Err: err}
@@ -310,6 +314,8 @@ type healthFixSummary struct {
 	Moved   *int           `json:"moved,omitempty"`
 	Held    map[string]int `json:"held,omitempty"`
 	JobPIDs []string       `json:"jobPids,omitempty"`
+	// Scoped is how many items a fix queued for chosen items names.
+	Scoped int `json:"scoped,omitempty"`
 }
 
 // runHealthFixTask works a health-fix task's items, then re-checks the
@@ -323,16 +329,24 @@ func (l *Health) runHealthFixTask(ctx context.Context, t *wdb.ToolTask, p toolTa
 		}
 		scope = pids
 	}
-	sum := healthFixSummary{Rule: p.Rule, Skipped: map[string]int{}}
+	sum := healthFixSummary{Rule: p.Rule, Skipped: map[string]int{}, Scoped: len(p.ItemPIDs)}
 	prog := newToolProgress(l.Tools, t)
+	// Stopped short, what it did is counted and kept on the task: a wait
+	// records none of it, and a cancel of the waiting task reads it there.
 	if p.Rule == rulePathMismatch {
 		var err error
 		if sum, err = l.fixPathScope(ctx, t, &p, scope, prog, healthFixPathChunk); err != nil {
+			if p.PathFix != nil {
+				// What it moved, the chunk in hand's too.
+				l.Tools.keepAttemptSummary(ctx, t, l.pathFixSoFar(ctx, t, p.PathFix))
+			}
 			return err
 		}
 	} else {
 		for i, pid := range scope {
 			if err := ctx.Err(); err != nil {
+				// Between its items: what it reached.
+				l.Tools.keepAttemptSummary(ctx, t, sum)
 				return err
 			}
 			l.fixHealthItem(ctx, p.Rule, model.PID(pid), &sum)
@@ -344,6 +358,7 @@ func (l *Health) runHealthFixTask(ctx context.Context, t *wdb.ToolTask, p toolTa
 	// sweep's.
 	if _, err := l.recheckHealthRule(ctx, p.Rule, scope); err != nil {
 		if ctx.Err() != nil {
+			l.Tools.keepAttemptSummary(ctx, t, sum)
 			return ctx.Err()
 		}
 		l.log.Warn("health: re-checking a fixed rule", "rule", p.Rule, "err", err)
@@ -360,6 +375,8 @@ type pathFixProgress struct {
 	Done   int              `json:"done"`
 	Sum    healthFixSummary `json:"sum"`
 	Moving []string         `json:"moving,omitempty"`
+	// InHand is how many items the chunk in hand holds, moving or not.
+	InHand int `json:"inHand,omitempty"`
 }
 
 // add counts a finished chunk into the totals.
@@ -386,7 +403,7 @@ func (l *Health) fixPathScope(ctx context.Context, t *wdb.ToolTask, p *toolTaskP
 		pf = &pathFixProgress{}
 		p.PathFix = pf
 	}
-	pf.Sum.Rule = p.Rule
+	pf.Sum.Rule, pf.Sum.Scoped = p.Rule, len(p.ItemPIDs)
 	if pf.Sum.Skipped == nil {
 		pf.Sum.Skipped = map[string]int{}
 	}
@@ -407,12 +424,13 @@ func (l *Health) fixPathScope(ctx context.Context, t *wdb.ToolTask, p *toolTaskP
 		}
 		end := min(pf.Done+chunk, len(scope))
 		sum := healthFixSummary{Skipped: map[string]int{}, Held: map[string]int{}}
+		pf.InHand = end - pf.Done
 		l.fixPaths(ctx, scope[pf.Done:end], &sum, prog, pf, save)
 		if err := ctx.Err(); err != nil {
 			return healthFixSummary{}, err
 		}
 		pf.Sum.add(sum)
-		pf.Done, pf.Moving = end, nil
+		pf.Done, pf.Moving, pf.InHand = end, nil, 0
 		save()
 		prog.report(ctx, 100*float64(end)/float64(len(scope)))
 	}
@@ -432,18 +450,30 @@ func (l *Health) auditPathFix(ctx context.Context, t *wdb.ToolTask, p toolTaskPa
 	var sum healthFixSummary
 	if t.State != taskStateDone || json.Unmarshal([]byte(t.Summary), &sum) != nil {
 		if p.PathFix != nil {
-			sum = p.PathFix.Sum
-			if len(p.PathFix.Moving) > 0 {
-				placed, err := l.itemsInPlace(ctx, p.PathFix.Moving)
-				if err != nil {
-					l.log.Warn("path fix: reading where its last items are", "task", t.ID, "err", err)
-				}
-				sum.Filled += len(placed)
-			}
+			sum = l.pathFixSoFar(ctx, t, p.PathFix)
 		}
 	}
-	l.Audit.Record(ctx, &UserCtx{ID: t.UserID}, "health.fix", AuditTarget{Kind: "health-rule", Name: rulePathMismatch},
+	l.Audit.recordTaskEnd(ctx, &UserCtx{ID: t.UserID}, "health.fix", "moved", AuditTarget{Kind: "health-rule", Name: rulePathMismatch},
 		map[string]any{"task": t.ID, "jobPids": sum.JobPIDs, "moved": sum.Filled, "held": sum.Held, "failed": sum.Failed})
+}
+
+// pathFixSoFar is what a path fix that did not finish did: its finished
+// chunks' totals, and of the chunk in hand every item attempted, as a
+// finished chunk counts them, and those it set out to move counted moved
+// where they are in place now.
+func (l *Health) pathFixSoFar(ctx context.Context, t *wdb.ToolTask, pf *pathFixProgress) healthFixSummary {
+	sum := pf.Sum
+	if len(pf.Moving) > 0 {
+		placed, err := l.itemsInPlace(context.WithoutCancel(ctx), pf.Moving)
+		if err != nil {
+			l.log.Warn("path fix: reading where its last items are", "task", t.ID, "err", err)
+		}
+		sum.Filled += len(placed)
+	}
+	sum.Attempted += max(pf.InHand, len(pf.Moving))
+	moved := sum.Filled
+	sum.Moved = &moved
+	return sum
 }
 
 // itemsInPlace answers which of pids have every file where their library's
@@ -470,7 +500,8 @@ func (l *Health) itemsInPlace(ctx context.Context, pids []string) (map[model.PID
 
 // fixTaskEnded tells every account a fix task's rule is no longer
 // being fixed, once the task's end is recorded, and its starter what it
-// did or why it failed. A path fix is audited here, at its one end.
+// did or why it failed, unless it was canceled. A path fix is audited
+// here, at its one end.
 func (l *Health) fixTaskEnded(ctx context.Context, t *wdb.ToolTask) {
 	var p toolTaskParams
 	_ = json.Unmarshal([]byte(t.Params), &p)
@@ -478,6 +509,10 @@ func (l *Health) fixTaskEnded(ctx context.Context, t *wdb.ToolTask) {
 		l.auditPathFix(ctx, t, p)
 	}
 	l.Jobs.emitEveryoneEvent(ctx, eventHealth)
+	if t.State == taskStateCanceled {
+		// Its starter asked for the stop, which is no news to them.
+		return
+	}
 	body := "The fix failed: " + cmp.Or(t.Error, "no reason was recorded")
 	if t.State == taskStateDone {
 		var sum healthFixSummary
@@ -485,7 +520,7 @@ func (l *Health) fixTaskEnded(ctx context.Context, t *wdb.ToolTask) {
 			body = healthFixBody(sum, l.readOnlyCause())
 		}
 	}
-	l.Integrations.EmitNotificationFor(ctx, "health-fix-finished", healthFixTitle(p.Rule), body, t.ID, []string{t.UserID})
+	l.Integrations.EmitNotificationFor(ctx, "health-fix-finished", healthFixTitle(p.Rule), body, t.ID, []string{t.UserID}, notifyOnce())
 }
 
 // fixHealthItem fixes one item's rule, counting what came of it.
@@ -898,7 +933,7 @@ func (l *Health) finishHealthFixJob(ctx context.Context, o wdb.JobOrigin, j Job)
 
 // fixingRules is every rule a fix is under way for: a pass-backed fix
 // from its start until its re-check lands, a task-backed one while its
-// task is queued or running.
+// task is queued or running and not winding down from a cancel.
 func (l *Health) fixingRules(ctx context.Context) (map[string]bool, error) {
 	jobs, err := l.db.JobOriginRules(ctx)
 	if err != nil {

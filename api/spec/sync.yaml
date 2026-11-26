@@ -374,8 +374,10 @@ components:
 
 
             Markers carry only `pid` and hydrate nothing: `review`, `upload`,
-            `task` (a task was queued, started or ended; refetch that
-            surface), `task-progress` (a task's progress moved; refetch it,
+            `task` (a task was queued, started, asked to cancel or ended;
+            refetch that surface), `task-progress` (a task's progress
+            moved, or its `activity`, which marks it about once every two
+            seconds a task and on every change of phase; refetch it,
             though it is not news), `entity-state` (an artist or album was
             starred or rated), and `job` (the `jb-` catalog job ended, or,
             for a scan, analysis, enrichment, organize run, organize undo,
@@ -417,10 +419,12 @@ components:
             after repeated failures).
 
 
-            `notification` (`pid` is the inbox row that was written;
-            refetch `GET /users/me/notifications`) rides every emit,
-            whether or not the account has a delivery target for the
-            event.
+            `notification` (`pid` is the inbox row that changed;
+            refetch `GET /users/me/notifications`) fires when a row is
+            added, folds, is recounted (`review-ready`'s count moving
+            either way) or resolves, whether or not the account has a
+            delivery target for the event; marking rows read and deleting
+            them fire nothing.
 
 
             `account` carries no `pid`: the caller's own roles or

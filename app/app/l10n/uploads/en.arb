@@ -9,9 +9,35 @@
   "@uploadsAcceptBestTitle": {
     "description": "The switch under Identify that files music under its best MusicBrainz match without review, when that match is clear."
   },
+  "uploadsAcquireChecking": "Checking the link",
+  "@uploadsAcquireChecking": {
+    "description": "Label of the dialog's Download button while the server checks the link before queuing it."
+  },
+  "uploadsAcquirePlaylist": "Download the whole playlist",
+  "@uploadsAcquirePlaylist": {
+    "description": "The switch in the add-from-URL dialog, shown when the link names both a video and a playlist."
+  },
+  "uploadsAcquirePlaylistHelp": "Off downloads only the linked video",
+  "@uploadsAcquirePlaylistHelp": {
+    "description": "Info on the whole-playlist switch: what leaving it off does."
+  },
   "uploadsAcquireQueued": "Downloading; appears in review when ready",
   "@uploadsAcquireQueued": {
     "description": "Snackbar after asking the server to download from a URL."
+  },
+  "uploadsAcquireQueuedTitled": "{source, select, playlist{Downloading playlist {title}; appears in review when ready} channel{Downloading channel {title}; appears in review when ready} other{Downloading {title}; appears in review when ready}}",
+  "@uploadsAcquireQueuedTitled": {
+    "description": "Snackbar after a download from a URL was queued and the server named what it is. {source} is playlist, channel or video; {title} is its name.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "playlist"
+      },
+      "title": {
+        "type": "String",
+        "example": "Night Drive Mix"
+      }
+    }
   },
   "uploadsAcquireTasks": "Tasks",
   "@uploadsAcquireTasks": {

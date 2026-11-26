@@ -29,10 +29,33 @@ type Tools struct {
 	// toolLeaseEvery is how often a run renews its task's lease; zero is
 	// toolLeaseRenew. A test shortens it.
 	toolLeaseEvery time.Duration
-	// toolRuns counts the runs this process holds on each task, which the
-	// retire pass leaves whatever their leases say.
+	// toolRunBound stands in for the bound of every attempt that has one,
+	// in a test; zero keeps each type's. Nothing in the server sets it.
+	toolRunBound time.Duration
+	// toolRuns are the runs this process holds on each task, which the
+	// retire pass leaves whatever their leases say, and what each is doing.
 	toolRunsMu sync.Mutex
-	toolRuns   map[string]int
+	toolRuns   map[string]*taskRun
+	// settleLocks keep two settles of one ended task (its cancel or
+	// retire, the startup pass, a clear) from running side by side, one
+	// lock a task, so no settle waits on another task's.
+	settleLocks sessionLocks
+	// settleHook runs as a settle of a task starts its steps, in a test;
+	// nothing in the server sets it.
+	settleHook func(taskID string)
+	// activityHook sees each activity a run here records, in a test;
+	// nothing in the server sets it.
+	activityHook func(taskID string, a ToolTaskActivity)
+	// drainHook runs as the drain passes a point of a task's run, "leased"
+	// before the run holds it and "ran" once the run let it go, in a test;
+	// nothing in the server sets it.
+	drainHook func(point, taskID string)
+	// markHook runs as a marker scheduled off a source's report is sent,
+	// in a test; nothing in the server sets it.
+	markHook func(taskID string)
+	// markWake wakes the marker worker (RunTaskMarkers) when a marker
+	// waits.
+	markWake chan struct{}
 	// flowJobs is the streaming sidecar's analysis surface, wired after
 	// construction (the bridge needs this service as its resolver).
 	flowJobs FlowJobs
@@ -42,7 +65,7 @@ type Tools struct {
 	markMissingHook func(context.Context, model.PID) (model.MarkMissingOutcome, error)
 }
 
-func newTools(c *core, _ Config) *Tools { return &Tools{core: c} }
+func newTools(c *core, _ Config) *Tools { return &Tools{core: c, markWake: make(chan struct{}, 1)} }
 
 // File tooling: audiobook merge to a chaptered single file, chapter
 // split into per-chapter files, and CUE rip split into real per-track
@@ -65,6 +88,9 @@ const (
 	// ending with the server: finished and failed, it is not run again,
 	// and it holds its book or rip until it is cleared.
 	taskStateParked = "parked"
+	// taskStateCanceled is a task stopped because it was asked to, which
+	// finished as a failed one did.
+	taskStateCanceled = "canceled"
 
 	// toolTaskLease bounds one attempt between renewals; a run renews
 	// it for as long as it holds the task (holdToolTask), so the lease
@@ -75,17 +101,24 @@ const (
 	toolPollInterval    = 2 * time.Second
 	// toolRunTimeout bounds one whole attempt; a wedged engine job
 	// surfaces as a transient failure and the attempts machinery
-	// retries or retires the task.
+	// retries or retires the task. An acquisition's or a sync's listing
+	// takes the same bound.
 	toolRunTimeout = 30 * time.Minute
+	// toolSourceWaits is how often an acquisition or a sync waits on its
+	// source before it fails.
+	toolSourceWaits = 3
 )
 
-// toolRunTimeoutFor is one attempt's bound for a task type.
+// toolRunTimeoutFor is one attempt's bound for a task type; zero for an
+// acquisition or a sync, whose listing and each item are bounded instead.
 func toolRunTimeoutFor(typ string) time.Duration {
 	switch typ {
 	case taskTypeHealthFix:
 		return healthFixTimeout
 	case taskTypeCatalogRepair:
 		return catalogRepairTimeout
+	case taskTypeAcquire, taskTypePlaylistSync:
+		return 0
 	}
 	return toolRunTimeout
 }
@@ -105,6 +138,10 @@ type ToolTaskDTO struct {
 	ItemTitle   string
 	ProgressPct float64
 	Error       string
+	// ErrorCode and ErrorParams say why a failed task failed as a client
+	// words it: an API error code and its params.
+	ErrorCode   string
+	ErrorParams map[string]string
 	ResultPIDs  []string
 	// Summary is the task-type-specific result document once finished.
 	Summary      map[string]any
@@ -117,6 +154,38 @@ type ToolTaskDTO struct {
 	// BookInTrash says a book merge's or split's sources are in the
 	// trash until the task finishes.
 	BookInTrash bool
+	// Activity is what a running task is doing, while this process runs
+	// it; nil otherwise.
+	Activity *ToolTaskActivity
+	// CancelRequested says a running task was asked to cancel and winds
+	// down.
+	CancelRequested bool
+}
+
+// ToolTaskActivity is what a running task is doing right now: its phase,
+// its items done of all it has, the item in hand and that item's bytes,
+// and when it last did anything.
+type ToolTaskActivity struct {
+	Phase      string
+	ItemsDone  int
+	ItemsTotal int
+	ItemTitle  string
+	BytesDone  int64
+	BytesTotal int64
+	AtNS       int64
+	// pctShare is the share of progressPct a run's items fill, for one
+	// whose progress is its items plus the bytes of the item in hand.
+	pctShare float64
+}
+
+// fetchedItem is an item an acquisition or a sync staged: the source's
+// entry id (the item's link when it has none) and its upload session.
+// Dropped is a download the person removed before its entry opened, which
+// no later run fetches again.
+type fetchedItem struct {
+	Key     string `json:"key"`
+	Upload  string `json:"upload"`
+	Dropped bool   `json:"dropped,omitempty"`
 }
 
 // toolTaskParams is the persisted work order, captured at creation so
@@ -164,6 +233,9 @@ type toolTaskParams struct {
 	Created []string `json:"created,omitempty"`
 	MadeDir string   `json:"madeDir,omitempty"`
 	Placed  []string `json:"placed,omitempty"`
+	// Discarded is set once the run gave up what it made: whatever of it
+	// stays (in Created) is removed by a clear, never named.
+	Discarded bool `json:"discarded,omitempty"`
 	// Idents is what the run recorded of each file it wrote, by path, to
 	// know it again before removing it.
 	Idents map[string]fileIdent `json:"idents,omitempty"`
@@ -200,8 +272,28 @@ type toolTaskParams struct {
 	// AcceptBest carries whether those entries take their best match
 	// without review.
 	AcceptBest bool `json:"acceptBest,omitempty"`
+	// Shape is what the check before queuing decided the link names (a
+	// syncsource shape), and the path the run takes; empty for a provider
+	// that cannot check. Playlist is the request's choice of the list over
+	// the video, and SourceTitle the title the check read.
+	Shape       string `json:"shape,omitempty"`
+	Playlist    bool   `json:"playlist,omitempty"`
+	SourceTitle string `json:"sourceTitle,omitempty"`
+	// SourceWaits counts the waits on the source an acquisition or a sync
+	// took; Fetched is what its runs staged, which a later run skips;
+	// Entries are the review entries they opened, and ListTitle the title
+	// of the list they fetched from. Truncated says an acquisition's
+	// listing ran past the cap.
+	SourceWaits int           `json:"sourceWaits,omitempty"`
+	Fetched     []fetchedItem `json:"fetched,omitempty"`
+	Entries     []string      `json:"entries,omitempty"`
+	ListTitle   string        `json:"listTitle,omitempty"`
+	Truncated   bool          `json:"truncated,omitempty"`
 	// Playlist-sync field: the API pid of the bound playlist to sync.
 	PlaylistPID string `json:"playlistPid,omitempty"`
+	// Asked marks a sync the person started (Sync now), not the sweep: only
+	// its failure tells them.
+	Asked bool `json:"asked,omitempty"`
 	// Health-fix fields: the rule, and the bare item pids to fix (none
 	// is every item failing it when the task runs). PathFix is how far a
 	// path fix has gone.

@@ -4,8 +4,6 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // snapshotSince is the change cursor a fresh mirror of the catalog takes
@@ -111,7 +109,7 @@ func TestARepairRetiresCursorsOnlyOnceItHasRun(t *testing.T) {
 	if retired(t, ctx, svc, uc, before) {
 		t.Fatal("a repair a hand-off cut short retired the cursors")
 	}
-	if !svc.Tools.drainToolTasksAt(ctx, wdb.TaskTypes{Only: longToolTasks}, time.Now().Add(time.Hour).UnixNano()) {
+	if !svc.Tools.drainToolTasksAt(ctx, longDrain, time.Now().Add(time.Hour).UnixNano()) {
 		t.Fatal("the waiting repair did not run again")
 	}
 	repairSummary(t, ctx, svc, uc, task.ID)

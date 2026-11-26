@@ -258,24 +258,45 @@ void main() {
     // emptied, so dealing with the thing itself - opening the surface
     // from anywhere else - left a badge standing over work that was
     // done. The router is what sees an arrival, however it was reached.
-    final container = appContainer(repo: _signedIn());
+    final repo = _signedIn();
+    ServerNotification row(String event, int minutesAgo) {
+      final at = DateTime.now().subtract(Duration(minutes: minutesAgo));
+      return ServerNotification(
+        id: 'nf-$event',
+        event: event,
+        title: 't',
+        body: 'b',
+        createdAt: at,
+        updatedAt: at,
+      );
+    }
+
+    repo.inbox = <ServerNotification>[
+      row('review-ready', 1),
+      row('job-finished', 2),
+    ];
+    final container = appContainer(repo: repo);
     await pumpWholeApp(tester, container: container);
-
-    final notifications = container.read(localNotificationsProvider.notifier);
-    notifications
-      ..record(NotificationKind.upload, at: DateTime(2026, 8, 12, 9))
-      ..record(NotificationKind.task, at: DateTime(2026, 8, 12, 10));
+    container.invalidate(notificationsProvider);
     await tester.pumpAndSettle();
-    expect(container.read(localNotificationsProvider), hasLength(2));
+    container
+        .read(localNotificationsProvider.notifier)
+        .recordDownloadCompleted(at: DateTime(2026, 8, 12, 9));
+    await tester.pumpAndSettle();
+    expect(container.read(unseenNotificationsProvider), 3);
 
-    container.read(routerProvider).go(WaxRoute.uploads);
+    container.read(routerProvider).go(WaxRoute.review);
     await tester.pumpAndSettle();
 
-    expect(
-      container.read(localNotificationsProvider).map((n) => n.kind),
-      <NotificationKind>[NotificationKind.task],
-      reason: 'the visit answers its own row and leaves the other',
-    );
+    final rows = container.read(notificationsViewProvider).rows;
+    expect(rows.where((r) => r.read).map((r) => r.kind), <NotificationKind>[
+      NotificationKind.reviewReady,
+    ], reason: 'the visit answers its own row and leaves the others');
+    expect(container.read(unseenNotificationsProvider), 2);
+
+    container.read(routerProvider).go(WaxRoute.downloads);
+    await tester.pumpAndSettle();
+    expect(container.read(localNotificationsProvider), isEmpty);
   });
 
   testWidgets('find-in-library leaves the player for search', (tester) async {

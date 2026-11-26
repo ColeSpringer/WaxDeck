@@ -97,6 +97,7 @@ func (l *Migrate) runLastfmImport(ctx context.Context, t *wdb.ToolTask, uc *User
 					return sum, err
 				}
 			}
+			prog.items(ctx, activityImporting, page, pg.TotalPages)
 			if pg.TotalPages > 0 {
 				prog.report(ctx, float64(page)/float64(pg.TotalPages)*85)
 			} else {

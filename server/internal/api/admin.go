@@ -870,8 +870,10 @@ type taskEventStream struct {
 	started   bool
 	done      bool
 	buf       []byte
-	// checked is when the caller's session and rights were last read.
+	// checked is when the caller's session and rights were last read;
+	// sentAt when the last frame was staged.
 	checked time.Time
+	sentAt  time.Time
 }
 
 func (t *taskEventStream) Read(p []byte) (int, error) {
@@ -915,7 +917,7 @@ func (t *taskEventStream) Read(p []byte) (int, error) {
 		if err != nil {
 			return 0, io.EOF
 		}
-		if taskChanged(t.last, cur) {
+		if t.worthSending(cur, time.Now()) {
 			t.last = cur
 			t.stage(cur)
 		}
@@ -927,6 +929,7 @@ func (t *taskEventStream) Read(p []byte) (int, error) {
 
 // stage buffers one task event frame.
 func (t *taskEventStream) stage(task service.ToolTaskDTO) {
+	t.sentAt = time.Now()
 	payload, err := json.Marshal(toolTaskJSON(task))
 	if err != nil {
 		payload = []byte("{}")
@@ -940,8 +943,34 @@ func terminalTaskState(state string) bool {
 	return service.ToolTaskFinished(state)
 }
 
-func taskChanged(a, b service.ToolTaskDTO) bool {
-	return a.State != b.State || a.ProgressPct != b.ProgressPct || a.Error != b.Error
+// worthSending reports whether the task as it now reads is a frame to
+// send: a change of state, error, wait, phase or cancel request at once,
+// moving progress or activity at most every taskActivityEvery.
+func (t *taskEventStream) worthSending(cur service.ToolTaskDTO, now time.Time) bool {
+	last := t.last
+	if last.State != cur.State || last.Error != cur.Error || last.WaitReason != cur.WaitReason ||
+		activityPhase(last) != activityPhase(cur) || last.CancelRequested != cur.CancelRequested {
+		return true
+	}
+	if last.ProgressPct == cur.ProgressPct && sameActivity(last.Activity, cur.Activity) {
+		return false
+	}
+	return now.Sub(t.sentAt) >= taskActivityEvery
+}
+
+// taskActivityEvery paces a stream's frames for moving activity, as the
+// task-progress markers are paced.
+const taskActivityEvery = 2 * time.Second
+
+func activityPhase(d service.ToolTaskDTO) string {
+	if d.Activity == nil {
+		return ""
+	}
+	return d.Activity.Phase
+}
+
+func sameActivity(a, b *service.ToolTaskActivity) bool {
+	return (a == nil) == (b == nil) && (a == nil || *a == *b)
 }
 
 // --- backups -----------------------------------------------------------------------

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -93,6 +94,11 @@ type reviewTrackDoc struct {
 	// the bytes arrived, not where from.
 	SourceType model.SourceType `json:"sourceType,omitempty"`
 	SourceURL  string           `json:"sourceUrl,omitempty"`
+	// ListPosition and ListTotal are a book part's place in the list an
+	// acquisition fetched the book from as several items, which number
+	// it whichever try staged it; zero otherwise.
+	ListPosition int `json:"listPosition,omitempty"`
+	ListTotal    int `json:"listTotal,omitempty"`
 	// Duplicate is the warning the file's upload arrived with, as the
 	// reader may see it; filled for the read, never stored.
 	Duplicate *DuplicateDTO `json:"-"`
@@ -177,6 +183,10 @@ type reviewPayload struct {
 	// identified, so a reader can tell an empty candidate list that was
 	// never searched from one that was searched and found nothing.
 	IdentifyDeclined bool `json:"identifyDeclined,omitempty"`
+	// ImportStalled records that a declined submission's own import could
+	// not land, so it waits for a person; until then it is in flight and
+	// the inbox counts it toward nothing.
+	ImportStalled bool `json:"importStalled,omitempty"`
 	// AcceptBest records that the submission asked to take its best match
 	// without review; AcceptBestWithheld is why the last identification
 	// did not ("below-floor", "ambiguous", "no-candidates"), empty when it
@@ -368,20 +378,109 @@ const reviewMatchProvider = "musicbrainz"
 
 func newReviewID() string { return "rv-" + ulid.Make().String() }
 
+// reviewChange says what a queue change can do to the inbox's counts.
+type reviewChange int
+
+const (
+	// reviewMayJoin: the entry may now wait for a person, as when
+	// identification ends, an import stalls or an apply's wait ends.
+	reviewMayJoin reviewChange = iota
+	// reviewNoJoin: nothing joined a count, as with a decision, a revert,
+	// a discard, a new search starting, an entry opened to be identified
+	// or a scan's pass.
+	reviewNoJoin
+)
+
 // notifyReview fans a review marker to every administrator plus the
-// entry's uploader.
-func (l *Ingest) notifyReview(ctx context.Context, entryID, uploadedBy string) {
-	seen := map[string]bool{}
-	if admins, err := l.db.EnabledAdminIDs(ctx); err == nil {
-		for _, id := range admins {
-			seen[id] = true
-			l.emitUserEvent(ctx, id, eventReview, entryID)
-		}
-	} else {
-		l.log.Warn("listing admins for review event", "err", err)
+// entry's uploader, and brings the inbox's review rows up to date when
+// the entry's origin is one the inbox counts.
+func (l *Ingest) notifyReview(ctx context.Context, entryID, uploadedBy, origin string, change reviewChange) {
+	recipients := distinctIDs(l.reviewRecipients(ctx, uploadedBy))
+	for _, id := range recipients {
+		l.emitUserEvent(ctx, id, eventReview, entryID)
 	}
-	if uploadedBy != "" && !seen[uploadedBy] {
-		l.emitUserEvent(ctx, uploadedBy, eventReview, entryID)
+	if !slices.Contains(reviewInboxOrigins, origin) {
+		return
+	}
+	joined := false
+	if change == reviewMayJoin {
+		var err error
+		if joined, err = l.db.ReviewEntryWaits(ctx, entryID, reviewInboxOrigins); err != nil {
+			l.log.Warn("reading whether a review entry waits", "entry", entryID, "err", err)
+		}
+	}
+	l.syncReviewInbox(ctx, recipients, joined)
+}
+
+// reviewInboxKey keys the one review-ready row each inbox holds.
+const reviewInboxKey = "review-ready"
+
+// reviewInboxOrigins are the entries an inbox announces: what somebody
+// sent in. A scan's or a rematch's queue is worked from the queue itself.
+var reviewInboxOrigins = []string{reviewOriginUpload, reviewOriginAcquire}
+
+// syncReviewInbox sets the review-ready row of each recipient, and of
+// every account already holding an open one, to how many entries wait for
+// it, recomputed from the queue in the scope the account has now: every
+// one for an administrator, their own uploads for anyone else. Only
+// entries that wait for a person count: one still identifying, a declined
+// import until it stalls and an apply waiting for the catalog are in
+// flight. The row resolves when none wait. An account holding no open row
+// gets one only when joined, an entry having joined its count: a row it
+// deleted stays gone through decisions. Serialized, so the last sync to
+// run reads the last change to the queue.
+func (l *Ingest) syncReviewInbox(ctx context.Context, recipients []string, joined bool) {
+	if len(distinctIDs(recipients)) == 0 {
+		return
+	}
+	// The queue change is committed; a caller gone now must not leave
+	// the count behind it.
+	ctx = context.WithoutCancel(ctx)
+	l.reviewInboxMu.Lock()
+	defer l.reviewInboxMu.Unlock()
+	admins, err := l.db.EnabledAdminIDs(ctx)
+	if err != nil {
+		l.log.Warn("listing admins for the review inbox", "err", err)
+		return
+	}
+	holders, err := l.db.UnresolvedKeyHolders(ctx, reviewInboxKey)
+	if err != nil {
+		l.log.Warn("listing the review inbox's open rows", "err", err)
+	}
+	recipients = distinctIDs(append(recipients, holders...))
+	type tally struct {
+		n      int
+		newest wdb.ReviewEntry
+	}
+	var whole *tally
+	for _, uid := range recipients {
+		scope := uid
+		if slices.Contains(admins, uid) {
+			scope = ""
+		}
+		var t tally
+		if scope == "" && whole != nil {
+			t = *whole
+		} else {
+			if l.reviewTallyHook != nil {
+				l.reviewTallyHook()
+			}
+			n, newest, err := l.db.ReviewInboxTally(ctx, scope, reviewInboxOrigins)
+			if err != nil {
+				l.log.Warn("counting the review inbox", "user", uid, "err", err)
+				continue
+			}
+			t = tally{n, newest}
+			if scope == "" {
+				whole = &t
+			}
+		}
+		body := ""
+		if t.n > 0 {
+			body = l.reviewReadyBody(ctx, &t.newest)
+		}
+		l.Integrations.recountNotification(ctx, uid, "review-ready", reviewInboxKey,
+			fmt.Sprintf("%d waiting for review", t.n), body, t.n, !joined)
 	}
 }
 
@@ -402,16 +501,17 @@ func (l *Ingest) notifyIdentified(ctx context.Context, entryID string) {
 	}
 	recipients := l.reviewRecipients(ctx, entry.UploadedBy)
 	if entry.Status == reviewPending {
-		l.Integrations.EmitNotification(ctx, "review-ready", "Ready for review",
-			entryWhat(entry.Artist, entry.Title, entry.TrackCount)+
-				" finished identification and waits for a decision.", recipients)
+		// Outbound only: notifyReview keeps the inbox's one row.
+		l.Integrations.DeliverNotification(ctx, "review-ready", "Ready for review",
+			l.reviewReadyBody(ctx, &entry), "", recipients)
 		return
 	}
 	// Best* rather than the entry's own tags: an applied entry names what
 	// it was identified *as*, which is what landed in the library.
 	l.Integrations.EmitNotificationFor(ctx, "import-completed", "Import finished",
 		entryWhat(entry.BestArtist, entry.BestTitle, entry.TrackCount)+
-			" was identified and added to the library.", entry.ID, recipients)
+			" was identified and added to the library.", entry.ID, recipients,
+		NotifyKey("import-completed"), NotifyReadFor(entry.UploadedBy))
 	seen := map[string]bool{}
 	for _, uid := range recipients {
 		if uid == "" || seen[uid] {
@@ -439,6 +539,12 @@ func entryWhat(artist, title string, tracks int) string {
 // started: the queue stays the audit trail and one decision imports
 // the files with the tags they arrived with.
 func (l *Ingest) openReviewEntry(ctx context.Context, e wdb.ReviewEntry, payload reviewPayload, identify bool) (string, error) {
+	return l.openLinkedReviewEntry(ctx, e, payload, identify, nil)
+}
+
+// openLinkedReviewEntry is openReviewEntry that links the staged uploads
+// to the entry in the transaction that stores and queues it.
+func (l *Ingest) openLinkedReviewEntry(ctx context.Context, e wdb.ReviewEntry, payload reviewPayload, identify bool, uploadIDs []string) (string, error) {
 	if e.ID == "" {
 		e.ID = newReviewID()
 	}
@@ -452,13 +558,10 @@ func (l *Ingest) openReviewEntry(ctx context.Context, e wdb.ReviewEntry, payload
 	e.Payload = string(raw)
 	e.TrackCount = len(payload.Tracks)
 	e.CreatedAtNS = time.Now().UnixNano()
-	if err := l.db.InsertReviewEntry(ctx, e); err != nil {
+	if err := l.db.InsertReviewEntryLinked(ctx, e, uploadIDs); err != nil {
 		return "", &Error{Kind: KindInternal, Err: err}
 	}
 	if identify {
-		if err := l.db.EnqueueMatch(ctx, e.ID); err != nil {
-			return "", &Error{Kind: KindInternal, Err: err}
-		}
 		l.matchWakeup()
 	}
 	// Only when a person is actually being awaited. An entry that
@@ -475,7 +578,7 @@ func (l *Ingest) openReviewEntry(ctx context.Context, e wdb.ReviewEntry, payload
 	// raises one marker per pass instead, once it knows how many it
 	// opened.
 	if identify && e.Origin != reviewOriginScan {
-		l.notifyReview(ctx, e.ID, e.UploadedBy)
+		l.notifyReview(ctx, e.ID, e.UploadedBy, e.Origin, reviewNoJoin)
 	}
 	return e.ID, nil
 }
@@ -542,7 +645,8 @@ func (l *Ingest) importDeclinedEntry(ctx context.Context, entryID string) {
 		l.applyWaitingEntry(ctx, &entry, &payload)
 		return
 	}
-	if !payload.IdentifyDeclined {
+	// A stalled entry waits for a person's decision, not another try.
+	if !payload.IdentifyDeclined || payload.ImportStalled {
 		return
 	}
 	if payload.WaitingForCatalog {
@@ -554,8 +658,7 @@ func (l *Ingest) importDeclinedEntry(ctx context.Context, entryID string) {
 	// stop being actionable.
 	if l.entryHasFlaggedDuplicate(ctx, entryID) {
 		l.log.Info("a declined submission waits for review: it duplicates something", "entry", entryID)
-		l.notifyReviewReady(ctx, &entry)
-		l.notifyReview(ctx, entry.ID, entry.UploadedBy)
+		l.importStalled(ctx, &entry)
 		return
 	}
 
@@ -567,8 +670,7 @@ func (l *Ingest) importDeclinedEntry(ctx context.Context, entryID string) {
 	}
 	if err := l.Settings.CheckWritable(ctx, bareLib); err != nil {
 		l.log.Info("a declined submission waits for review", "entry", entryID, "err", err)
-		l.notifyReviewReady(ctx, &entry)
-		l.notifyReview(ctx, entry.ID, entry.UploadedBy)
+		l.importStalled(ctx, &entry)
 		return
 	}
 
@@ -587,8 +689,7 @@ func (l *Ingest) importDeclinedEntry(ctx context.Context, entryID string) {
 	if err != nil {
 		l.log.Warn("a declined submission could not import; it waits for review",
 			"entry", entryID, "err", err)
-		l.notifyReviewReady(ctx, &entry)
-		l.notifyReview(ctx, entry.ID, entry.UploadedBy)
+		l.importStalled(ctx, &entry)
 		return
 	}
 	// A field edit takes no file-mutation scope, so the catalog wait the
@@ -614,6 +715,69 @@ func (l *Ingest) importDeclinedEntry(ctx context.Context, entryID string) {
 	l.notifyImported(ctx, &entry)
 }
 
+// importStalled records that a declined entry's import could not land,
+// which is when it starts waiting for a person, and says so. The entry is
+// read again, since an import that failed part-way recorded what landed;
+// held, the copy the caller has, stands in when that read fails.
+func (l *Ingest) importStalled(ctx context.Context, held *wdb.ReviewEntry) {
+	entry := *held
+	if fresh, err := l.db.ReviewEntryByID(ctx, held.ID); err != nil {
+		l.log.Warn("reading a stalled declined submission", "entry", held.ID, "err", err)
+	} else {
+		entry = fresh
+	}
+	var payload reviewPayload
+	if err := json.Unmarshal([]byte(entry.Payload), &payload); err != nil {
+		l.log.Warn("decoding a stalled declined submission", "entry", entry.ID, "err", err)
+	} else if !payload.ImportStalled {
+		payload.ImportStalled = true
+		entry.Payload = marshalJSON(payload)
+		if err := l.db.UpdateReviewEntry(ctx, entry); err != nil {
+			// Unflagged, it counts nowhere until the next start takes it up.
+			l.log.Error("recording a declined submission's stall", "entry", entry.ID, "err", err)
+		}
+	}
+	l.notifyReviewReady(ctx, &entry)
+	l.notifyReview(ctx, entry.ID, entry.UploadedBy, entry.Origin, reviewMayJoin)
+}
+
+// settleStranded takes up the declined entries an earlier process opened
+// and stopped before importing. An upload's entry waits for a person:
+// importing it is not sound, since the duplicate guard and settling read
+// the upload rows a caller links after opening the entry, and a stop can
+// fall before or between those links. A download's entry is opened with
+// its links in one transaction, so it is imported as its submitter chose:
+// by its task's next run while one is owed, else here.
+func (l *Ingest) settleStranded(ctx context.Context) {
+	ids, err := l.db.ReviewEntriesDeclinedInFlight(ctx, l.openedNS, toolTaskMaxAttempts)
+	if err != nil {
+		l.log.Warn("listing declined submissions a stop left", "err", err)
+		return
+	}
+	var acquired []string
+	for _, id := range ids {
+		release, ok := l.claimEntry(id)
+		if !ok {
+			continue
+		}
+		entry, err := l.db.ReviewEntryByID(ctx, id)
+		var payload reviewPayload
+		if err == nil && entry.Status == reviewPending &&
+			json.Unmarshal([]byte(entry.Payload), &payload) == nil && payload.IdentifyDeclined &&
+			!payload.ImportStalled && !payload.WaitingForCatalog && payload.WaitingApply == "" {
+			if entry.Origin == reviewOriginAcquire {
+				l.log.Info("importing a declined download a stop left", "entry", id)
+				acquired = append(acquired, id)
+			} else {
+				l.log.Info("a declined submission a stop left waits for review", "entry", id)
+				l.importStalled(ctx, &entry)
+			}
+		}
+		release()
+	}
+	l.importLater(acquired)
+}
+
 // markWaiting records on a declined entry whether it waits for the
 // catalog, so a restart finds the wait an earlier process owed.
 func (l *Ingest) markWaiting(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload, waiting bool) {
@@ -637,7 +801,8 @@ func (l *Ingest) retryWaitingImports() {
 }
 
 // loadWaitingImports takes up the waits for the catalog an earlier
-// process left on declined entries.
+// process left on declined entries, and the imports it left before they
+// ran.
 func (l *Ingest) loadWaitingImports(ctx context.Context) {
 	ids, err := l.db.ReviewEntriesWaitingForCatalog(ctx)
 	if err != nil {
@@ -647,6 +812,7 @@ func (l *Ingest) loadWaitingImports(ctx context.Context) {
 	for _, id := range ids {
 		l.waitingForCatalog.Store(id, struct{}{})
 	}
+	l.settleStranded(ctx)
 }
 
 // waitingImports reports whether a declined submission waits for the
@@ -691,26 +857,36 @@ func (l *Ingest) entryHasFlaggedDuplicate(ctx context.Context, entryID string) b
 	return false
 }
 
-// notifyReviewReady tells the administrators and the uploader that an
-// entry is waiting for a decision, and how much of it already landed.
+// notifyReviewReady tells the administrators' and the uploader's
+// delivery targets that an entry is waiting for a decision, and how much
+// of it already landed; notifyReview keeps the inbox's one row.
 func (l *Ingest) notifyReviewReady(ctx context.Context, entry *wdb.ReviewEntry) {
-	body := entryWhat(entry.Artist, entry.Title, entry.TrackCount) +
-		" could not be imported on its own and waits for a decision."
+	l.Integrations.DeliverNotification(ctx, "review-ready", "Ready for review",
+		l.reviewReadyBody(ctx, entry), "", l.reviewRecipients(ctx, entry.UploadedBy))
+}
+
+// reviewReadyBody says why one entry waits for a decision: identification
+// finished, or a declined import could not land on its own, and how much
+// of it did.
+func (l *Ingest) reviewReadyBody(ctx context.Context, entry *wdb.ReviewEntry) string {
+	what := entryWhat(entry.Artist, entry.Title, entry.TrackCount)
 	var payload reviewPayload
-	if json.Unmarshal([]byte(entry.Payload), &payload) == nil {
-		if landed := l.landedTracks(ctx, &payload); landed > 0 {
-			verb, rest := "were", "the rest wait"
-			if landed == 1 {
-				verb = "was"
-			}
-			if len(payload.Tracks)-landed == 1 {
-				rest = "the other waits"
-			}
-			body = fmt.Sprintf("%s: %d of its %d files %s added to the library; %s for a decision.",
-				entryWhat(entry.Artist, entry.Title, entry.TrackCount), landed, len(payload.Tracks), verb, rest)
-		}
+	if json.Unmarshal([]byte(entry.Payload), &payload) != nil || !payload.IdentifyDeclined {
+		return what + " finished identification and waits for a decision."
 	}
-	l.Integrations.EmitNotification(ctx, "review-ready", "Ready for review", body, l.reviewRecipients(ctx, entry.UploadedBy))
+	landed := l.landedTracks(ctx, &payload)
+	if landed == 0 {
+		return what + " could not be imported on its own and waits for a decision."
+	}
+	verb, rest := "were", "the rest wait"
+	if landed == 1 {
+		verb = "was"
+	}
+	if len(payload.Tracks)-landed == 1 {
+		rest = "the other waits"
+	}
+	return fmt.Sprintf("%s: %d of its %d files %s added to the library; %s for a decision.",
+		what, landed, len(payload.Tracks), verb, rest)
 }
 
 // notifyImported announces files that reached the library with no
@@ -742,7 +918,8 @@ func (l *Ingest) notifyImported(ctx context.Context, entry *wdb.ReviewEntry) {
 			body += filesAlready(held, ", so nothing was added for it", ", so nothing was added for them")
 		}
 	}
-	l.Integrations.EmitNotificationFor(ctx, "import-completed", "Import finished", body, entry.ID, recipients)
+	l.Integrations.EmitNotificationFor(ctx, "import-completed", "Import finished", body, entry.ID, recipients,
+		NotifyKey("import-completed"), NotifyReadFor(entry.UploadedBy))
 	seen := map[string]bool{}
 	for _, uid := range recipients {
 		if uid == "" || seen[uid] {
@@ -1234,7 +1411,7 @@ func (l *Ingest) finishIdentifyEmpty(ctx context.Context, entryID, note string) 
 	if note != "" {
 		l.log.Info("identification closed without candidates", "entry", entryID, "note", note)
 	}
-	l.notifyReview(ctx, entry.ID, entry.UploadedBy)
+	l.notifyReview(ctx, entry.ID, entry.UploadedBy, entry.Origin, reviewMayJoin)
 	l.notifyIdentified(ctx, entry.ID)
 }
 
@@ -1262,7 +1439,7 @@ func (l *Ingest) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) erro
 		if dropped {
 			l.waitingForCatalog.Delete(entry.ID)
 		}
-		l.notifyReview(ctx, entry.ID, entry.UploadedBy)
+		l.notifyReview(ctx, entry.ID, entry.UploadedBy, entry.Origin, reviewMayJoin)
 		l.notifyIdentified(ctx, entry.ID)
 		return nil
 	}
@@ -1395,7 +1572,7 @@ func (l *Ingest) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) erro
 	case acceptBest:
 		l.autoApplyEntry(ctx, entry, &payload, acceptMBID, true)
 	}
-	l.notifyReview(ctx, entry.ID, entry.UploadedBy)
+	l.notifyReview(ctx, entry.ID, entry.UploadedBy, entry.Origin, reviewMayJoin)
 	l.notifyIdentified(ctx, entry.ID)
 	return nil
 }
@@ -1457,11 +1634,11 @@ func (l *Ingest) applyWaitingEntry(ctx context.Context, entry *wdb.ReviewEntry, 
 	l.markWaiting(ctx, entry, payload, false)
 	if why := l.applyWaitStale(ctx, entry, payload, mbid, asked, digest); why != "" {
 		l.log.Info("auto-apply withheld: "+why, "entry", entry.ID)
-		l.notifyReview(ctx, entry.ID, entry.UploadedBy)
+		l.notifyReview(ctx, entry.ID, entry.UploadedBy, entry.Origin, reviewMayJoin)
 		return
 	}
 	l.applyClaimed(ctx, entry, payload, mbid, asked)
-	l.notifyReview(ctx, entry.ID, entry.UploadedBy)
+	l.notifyReview(ctx, entry.ID, entry.UploadedBy, entry.Origin, reviewMayJoin)
 }
 
 // applyWaitStale says why a waiting apply of mbid no longer stands, ""
@@ -1901,7 +2078,7 @@ func (l *Ingest) revertEntry(ctx context.Context, entry *wdb.ReviewEntry, decide
 		return &Error{Kind: KindInternal, Err: err}
 	}
 	l.dropKeptCovers(entry.ID)
-	l.notifyReview(ctx, entry.ID, entry.UploadedBy)
+	l.notifyReview(ctx, entry.ID, entry.UploadedBy, entry.Origin, reviewNoJoin)
 	return nil
 }
 

@@ -376,6 +376,18 @@ Every entry carries a gate tag saying what actually blocks it:
   carry a listen or a star to the item that took it in (a position
   inside a folded chapter means nothing on the book).
 
+- `[in-repo]` **A review entry cannot leave one part out.** Deciding an
+  entry takes its whole unit, and removing one of its uploads discards
+  the entry, so a downloaded book one of whose parts will not take the
+  book's tags (a fragmented MP4, a write that fails) lands no part at
+  all. Meanwhile the person decides the entry as music where its library
+  takes music, which lands the parts as tracks with no book stamp, or
+  discards it and acquires the list again as `mp3`, `opus` or `flac`,
+  whose files take tags (the WaxBin ask for book placement on
+  `AcquiredMeta` is in upstream-requests.md). Wanted: a way to drop one
+  part from a pending entry, its staged file going with it, so the rest
+  of the book lands. Built when the owner says.
+
 - `[in-repo]` **A recording search keeps a title's guest credit.** A
   download titled "Song (feat. Guest)" is searched for under that whole
   title, which finds nothing where MusicBrainz titles the recording

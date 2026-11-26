@@ -10,6 +10,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -975,8 +976,8 @@ type fakeAcquireSource struct {
 	descriptions map[string]string
 
 	mu sync.Mutex
-	// failOnce names videos whose first fetch fails.
-	failOnce map[string]bool
+	// fails names videos whose first fetches fail, by how many.
+	fails map[string]int
 	// asked is the options each URL's last fetch was given.
 	asked map[string]syncsource.FetchOptions
 }
@@ -995,6 +996,42 @@ func (f *fakeAcquireSource) title() string {
 }
 
 func (f *fakeAcquireSource) SourceType() model.SourceType { return model.SourceYouTube }
+
+func (f *fakeAcquireSource) LinkShape(rawURL string, wantPlaylist bool) (string, error) {
+	return fakeLinkShape(rawURL, wantPlaylist)
+}
+
+func (f *fakeAcquireSource) Probe(_ context.Context, rawURL string, wantPlaylist bool) (syncsource.AcquireTarget, error) {
+	return fakeProbe(rawURL, wantPlaylist)
+}
+
+// fakeLinkShape decides a link's shape from the link alone, as the bridges
+// do: a video id is the video unless the list it also names is asked for,
+// a list id is a playlist, and a handle or channel path a channel.
+func fakeLinkShape(rawURL string, wantPlaylist bool) (string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", &syncsource.Refusal{Reason: syncsource.ReasonUnsupportedURL, Err: err}
+	}
+	video, list := u.Query().Get("v") != "", u.Query().Get("list") != ""
+	switch {
+	case video && list && wantPlaylist:
+		return syncsource.ShapePlaylist, nil
+	case video:
+		return syncsource.ShapeVideo, nil
+	case list:
+		return syncsource.ShapePlaylist, nil
+	case strings.HasPrefix(u.Path, "/@") || strings.HasPrefix(u.Path, "/channel/"):
+		return syncsource.ShapeChannel, nil
+	}
+	return "", &syncsource.Refusal{Reason: syncsource.ReasonUnsupportedURL}
+}
+
+// fakeProbe is a check of a link that finds it as its shape says.
+func fakeProbe(rawURL string, wantPlaylist bool) (syncsource.AcquireTarget, error) {
+	shape, err := fakeLinkShape(rawURL, wantPlaylist)
+	return syncsource.AcquireTarget{Shape: shape}, err
+}
 
 func (f *fakeAcquireSource) Resolve(_ context.Context, req source.Request) (*source.Resolved, error) {
 	if req.URL != f.playlistURL {
@@ -1026,8 +1063,10 @@ func (f *fakeAcquireSource) FetchWith(ctx context.Context, req source.FetchReque
 		f.asked = map[string]syncsource.FetchOptions{}
 	}
 	f.asked[req.URL] = opts
-	failing := f.failOnce[req.URL]
-	delete(f.failOnce, req.URL)
+	failing := f.fails[req.URL] > 0
+	if failing {
+		f.fails[req.URL]--
+	}
 	f.mu.Unlock()
 	if failing {
 		return nil, errors.New("the video did not answer")
@@ -1053,7 +1092,7 @@ func (f *fakeAcquireSource) FetchWith(ctx context.Context, req source.FetchReque
 func drainTools(t *testing.T, h *harness) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
-	for h.svc.Tools.DrainToolTasks(context.Background()) {
+	for h.svc.Tools.DrainToolTasks(context.Background()) || h.svc.Tools.DrainSourceToolTasks(context.Background()) {
 		if time.Now().After(deadline) {
 			t.Fatal("tool worker did not drain")
 		}
@@ -1313,8 +1352,8 @@ func TestAcquireFromURL(t *testing.T) {
 	if lone.TrackCount != 1 || lone.Tracks[0].Title != "Warehouse Set (Unreleased)" {
 		t.Fatalf("single acquire entry = %+v", lone)
 	}
-	if got, want := src.askedFor("https://tube.example/watch?v=lone"), (syncsource.FetchOptions{Format: "mp3", Music: true}); got != want {
-		t.Errorf("fetch options = %+v, want %+v", got, want)
+	if got := src.askedFor("https://tube.example/watch?v=lone"); got.Format != "mp3" || !got.Music {
+		t.Errorf("fetch options = %+v, want mp3 for music", got)
 	}
 	resp = post(digger, "/api/v1/review/queue/"+lone.Id+"/decide", map[string]any{"action": "as-is"})
 	if resp.StatusCode != 200 {

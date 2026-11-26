@@ -285,6 +285,7 @@ mixin FakeUploads on FakeRepositoryState implements UploadsApi {
     ({
       String url,
       MediaType mediaType,
+      bool? playlist,
       String? format,
       bool? identify,
       bool? acceptBestMatch,
@@ -295,21 +296,33 @@ mixin FakeUploads on FakeRepositoryState implements UploadsApi {
   /// Holds every createAcquisition until completed, when set.
   Completer<void>? createAcquisitionGate;
 
+  /// What the queued task names, when set: its title, and whether the
+  /// link was a `video`, `playlist` or `channel`.
+  String? acquireItemTitle;
+  String? acquireSource;
+
+  /// Thrown by createAcquisition ahead of everything else, when set: a
+  /// failure that is not the server's answer.
+  Object? acquireFailure;
+
   @override
   Future<ToolTask> createAcquisition({
     required String url,
     required MediaType mediaType,
+    bool? playlist,
     String? libraryPid,
     String? format,
     bool? identify,
     bool? acceptBestMatch,
   }) async {
     await createAcquisitionGate?.future;
+    if (acquireFailure case final failure?) throw failure;
     final error = uploadError;
     if (error != null) throw error;
     acquisitionCalls.add((
       url: url,
       mediaType: mediaType,
+      playlist: playlist,
       format: format,
       identify: identify,
       acceptBestMatch: acceptBestMatch,
@@ -318,6 +331,11 @@ mixin FakeUploads on FakeRepositoryState implements UploadsApi {
       id: 'tt-FAKE${toolTaskSeq++}',
       type: 'acquire',
       state: 'queued',
+      itemTitle: acquireItemTitle,
+      summary: switch (acquireSource) {
+        final source? => {'url': url, 'source': source},
+        null => null,
+      },
       createdAt: DateTime.utc(2026, 7, 1),
     );
     toolTasksById[task.id] = task;

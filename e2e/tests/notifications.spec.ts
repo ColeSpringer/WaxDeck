@@ -1,5 +1,5 @@
 import { test, expect, type SpecPage } from './fixtures';
-import { T } from './driver';
+import { App, T, pressOnce, retryCatalogBusy } from './driver';
 import { SemanticsIds } from './semantics-ids';
 import { startJsonSink } from './support/json-sink';
 import type { components } from './api-types';
@@ -83,24 +83,53 @@ test('a server-scope webhook target delivers a test end to end', async ({ app })
 // The bell: the in-app half of the same news. Web has no sync engine, so
 // this exercises notifications_binder's puller end to end.
 
-/// The client walking its server stream past upload [id]'s marker. Armed
-/// before the POST that emits it, because the walk can outrun the POST's
-/// own answer; the id arrives with that answer.
-function walkedPast(page: SpecPage, id: Promise<string>) {
+/// The client walking its server stream past a `notification` marker. Armed
+/// before the change that emits one, because the walk can outrun the
+/// request's own answer.
+function walkedPastNotification(page: SpecPage) {
   const walked = page.waitForResponse(
     async (r) => {
       if (!r.url().includes('/sync/server') || !r.url().includes('since=')) return false;
       const body = (await r.json().catch(() => undefined)) as ServerSyncPage | undefined;
-      const pid = await id;
-      return (body?.events ?? []).some((e) => e.kind === 'upload' && e.pid === pid);
+      return (body?.events ?? []).some((e) => e.kind === 'notification');
     },
     { timeout: T.fetch },
   );
   // Marked handled, so a run that has already failed is not reported
   // twice; the caller's own awaits still throw.
-  id.catch(() => {});
   walked.catch(() => {});
   return walked;
+}
+
+type InboxRow = components['schemas']['Notification'];
+
+/// This account's row for [event] that took an occurrence after [since]. A
+/// folding event keeps one row, so a second occurrence is the same id with
+/// a later `updatedAt`, and `createdAt` says nothing about it.
+async function rowSince(app: App, event: string, since: string): Promise<InboxRow | undefined> {
+  const page = await app.api.tryGet('/users/me/notifications', { query: { limit: 200 } });
+  // As instants: the server trims trailing zeros, so two stamps in one
+  // second do not order as strings.
+  return (page?.notifications ?? []).find(
+    (n) => n.event === event && Date.parse(n.updatedAt) > Date.parse(since),
+  );
+}
+
+/// One backup, started and waited into this account's inbox: the cheapest
+/// event that files an announcement the bell draws. A sibling's backup may
+/// hold the slot (409); its occurrence reaches this account's row all the
+/// same.
+async function backedUp(app: App): Promise<InboxRow> {
+  const since = new Date().toISOString();
+  const started = await app.api.raw.post('/admin/backups');
+  expect([202, 409]).toContain(started.status());
+  await expect
+    .poll(async () => (await rowSince(app, 'backup-completed', since)) !== undefined, {
+      timeout: T.fetch,
+      message: 'the finished backup should file itself in the inbox',
+    })
+    .toBe(true);
+  return (await rowSince(app, 'backup-completed', since))!;
 }
 
 test('the bell reports what happened while the app was open', async ({
@@ -118,64 +147,47 @@ test('the bell reports what happened while the app was open', async ({
   await expect(app.shell.notificationsBell()).toBeVisible();
   await minted;
 
-  // The cheapest change that emits a marker: no bytes move.
-  const posting = app.api.post('/uploads', {
-    data: { fileName: 'bell.mp3', sizeBytes: 1024, mediaType: 'music' },
-  });
-  const walked = walkedPast(page, posting.then((s) => s.id));
-  const session = await posting;
-  expect(session.id).toMatch(/^up-/);
+  const walked = walkedPastNotification(page);
+  const first = await backedUp(app);
+  // The walk, not the badge, which a sibling's backup can light first: a
+  // bell opened before the walk lacks this news, and the soak's re-opens
+  // then collided two clicks on a menu that stamped it seen as it opened.
+  await walked;
+  await app.shell.notificationsBadged();
+  const mine = await app.shell.openNotificationsUntil('backup-completed', first.id);
 
-  let second = '';
-  try {
-    // The walk, not the badge, which a sibling's backup can light first: a
-    // bell opened before the walk lacks this news, and the soak's re-opens
-    // then collided two clicks on a menu that stamped it seen as it opened.
-    await walked;
-    await app.shell.notificationsBadged();
-    const mine = await app.shell.openNotificationsUntil('upload');
+  // And the row is a link, not a label.
+  await mine.click();
+  await app.nav.expectAt('adminBackups');
 
-    // And the row is a link, not a label.
-    await mine.click();
-    await app.nav.expectAt('uploads');
+  // Arriving is what deals with it: the router marks it read by event, so
+  // a badge does not stand over work that has been looked at. Read back
+  // from home, which is the one app bar the bell hangs in. Walked rather
+  // than re-entered, here and below: a real page load would empty the
+  // list this client saw while it ran and prove nothing.
+  await app.nav.to('home');
+  await app.shell.openNotificationsPanel();
+  await expect(app.shell.notificationRow('backup-completed', first.id)).toBeHidden();
+  await app.shell.closeNotifications();
 
-    // Arriving is what deals with it. The bell held its rows until one
-    // was tapped or the whole list was emptied, so a badge stood over
-    // work that had already been done.
-    //
-    // Read back from home, which is the one app bar the bell hangs in:
-    // every screen draws its own chrome, so a row always sends you
-    // somewhere that has none. Walked rather than re-entered, here and
-    // below: the list is what this client saw while it was running, so
-    // a real page load would empty it first and prove nothing.
-    await app.nav.to('home');
-    await app.shell.openNotificationsPanel();
-    await expect(app.shell.notificationRow('upload')).toBeHidden();
-    await app.shell.closeNotifications();
-
-    // Reading still empties the bell, on a second piece of news this
-    // test never opens.
-    const again = app.api.post('/uploads', {
-      data: { fileName: 'bell-2.mp3', sizeBytes: 1024, mediaType: 'music' },
-    });
-    const walkedAgain = walkedPast(page, again.then((s) => s.id));
-    second = (await again).id;
-    await walkedAgain;
-    await app.shell.notificationsBadged();
-    await app.shell.openNotificationsUntil('upload');
-    // The bell's last row reads everything rather than deleting it: the
-    // same gesture against a durable inbox would throw away ninety days
-    // of history from a dropdown. The peek empties either way.
-    await app.shell.notificationsPeekRead().click();
-    // Reopened, because the click closes the menu whatever it read.
-    await app.shell.openNotificationsPanel();
-    await expect(app.shell.notificationRow('upload')).toBeHidden();
-    await app.shell.closeNotifications();
-  } finally {
-    for (const id of [session.id, second]) {
-      if (id) await app.api.delete('/uploads/{uploadId}', { path: { uploadId: id } });
-    }
-  }
+  // A second backup folds into the same row: one id, unread again, risen
+  // to the top. Reading still empties the bell, on news this test never
+  // opens.
+  const walkedAgain = walkedPastNotification(page);
+  const second = await backedUp(app);
+  expect(second.id, 'a folding event keeps one row').toBe(first.id);
+  expect(Date.parse(second.updatedAt)).toBeGreaterThan(Date.parse(first.updatedAt));
+  await walkedAgain;
+  await app.shell.notificationsBadged();
+  await app.shell.openNotificationsUntil('backup-completed', first.id);
+  // The bell's last row reads everything rather than deleting it: the
+  // same gesture against a durable inbox would throw away ninety days
+  // of history from a dropdown. The peek empties either way.
+  await app.shell.notificationsPeekRead().click();
+  // Reopened, because the click closes the menu whatever it read.
+  await app.shell.openNotificationsPanel();
+  await expect(app.shell.notificationRow('backup-completed', first.id)).toBeHidden();
+  await app.shell.closeNotifications();
 });
 
 // The durable half: what happened to this account, kept server-side, so
@@ -183,18 +195,15 @@ test('the bell reports what happened while the app was open', async ({
 test('the inbox keeps what happened, and reading it is a state', async ({ app }) => {
   // A backup is the cheapest server-scope event to cause, and every
   // enabled administrator gets a row for it - siblings included, which
-  // is why nothing here counts rows. The subject is this test's own.
+  // is why nothing here counts rows. The subject is this test's own: the
+  // row this occurrence landed in.
   const before = new Date().toISOString();
   const started = await app.api.raw.post('/admin/backups');
   expect([202, 409]).toContain(started.status());
 
-  type Row = { id: string; event: string; createdAt: string; readAt?: string };
-  const mine = async (): Promise<Row | undefined> => {
-    const page = await app.api.tryGet('/users/me/notifications', { query: { limit: 200 } });
-    return (page?.notifications ?? []).find(
-      (n) => n.event === 'backup-completed' && n.createdAt > before,
-    );
-  };
+  // By `updatedAt`: backups fold into one row per account, so a row that
+  // already existed takes this occurrence under its old `createdAt`.
+  const mine = (): Promise<InboxRow | undefined> => rowSince(app, 'backup-completed', before);
 
   await expect
     .poll(async () => (await mine()) !== undefined, {
@@ -203,8 +212,14 @@ test('the inbox keeps what happened, and reading it is a state', async ({ app })
     })
     .toBe(true);
   const row = (await mine())!;
+  // The row itself from here on: a later backup folds into it, or opens a
+  // new one once this is gone, and neither is this row.
+  const same = async (): Promise<InboxRow | undefined> =>
+    (
+      (await app.api.tryGet('/users/me/notifications', { query: { limit: 200 } }))?.notifications ?? []
+    ).find((n) => n.id === row.id);
   expect(row.id).toMatch(/^nf-/);
-  expect(row.readAt, 'a row nobody has looked at is unread').toBeUndefined();
+  expect(row.readAt, 'an occurrence nobody has looked at is unread').toBeUndefined();
 
   const unread = await app.api.get('/users/me/notifications');
   expect(unread.unreadCount).toBeGreaterThanOrEqual(1);
@@ -214,14 +229,13 @@ test('the inbox keeps what happened, and reading it is a state', async ({ app })
   await app.nav.enter('home');
   await app.shell.notificationsBadged();
   await app.nav.enter('notifications');
-  // By the row's own id: the inbox keeps ninety days, so two backups
-  // are two rows and the event alone names neither.
+  // By the row's own id, which a folded occurrence keeps.
   await expect(app.shell.notificationRow('backup-completed', row.id)).toBeVisible();
 
   // Reading is a state, not a disappearance: the row stays listed.
   await app.settings.control(SemanticsIds.notificationsMarkAllRead).click();
   await expect
-    .poll(async () => (await mine())?.readAt !== undefined, {
+    .poll(async () => (await same())?.readAt !== undefined, {
       timeout: T.assert,
       message: 'mark all read should reach the server',
     })
@@ -231,13 +245,141 @@ test('the inbox keeps what happened, and reading it is a state', async ({ app })
   // Delete is what removes it, and it stays removed across a reload.
   await app.settings.control(SemanticsIds.notificationDelete(row.id)).click();
   await expect
-    .poll(async () => (await mine()) === undefined, {
+    .poll(async () => (await same()) === undefined, {
       timeout: T.assert,
       message: 'the deleted row should be gone from the server',
     })
     .toBe(true);
   await app.nav.enter('notifications');
   await expect(app.shell.notificationRow('backup-completed', row.id)).toBeHidden();
+});
+
+// One URL is one thing to tell the account about, however many entries it
+// enumerates, and a queue that has been answered is not a door any more.
+//
+// An uploader rather than an administrator: an administrator's review scope
+// is the whole shared queue, so nothing exact could be said about its count
+// or about when it empties. An uploader's is its own entries. The account
+// outlives a run on a reused stack, so the case starts by emptying what an
+// earlier one left (entries waiting, an inbox with a resolved row) and then
+// counts whatever the stub's entries come to rather than a fixed number: how
+// many of them reach review depends on what the library already holds.
+test('one URL acquisition leaves one review row, and an answered queue stops opening', async ({
+  app,
+  otherAccount,
+  device,
+}) => {
+  const uploader = await otherAccount('uploader');
+  const theirApi = app.api.as(uploader.token);
+  const me = await theirApi.get('/auth/session');
+  await app.api.patch('/users/{userId}', {
+    path: { userId: me.user!.id },
+    data: { uploadEnabled: true },
+  });
+
+  const pending = async () =>
+    (await theirApi.get('/review/queue', { query: { status: 'pending', limit: 200 } })).entries ?? [];
+  const decideAll = async () => {
+    for (const entry of await pending()) {
+      await retryCatalogBusy(() =>
+        theirApi.post('/review/queue/{entryId}/decide', {
+          path: { entryId: entry.id },
+          data: { action: 'as-is' },
+        }),
+      );
+    }
+  };
+  const inboxRows = async (): Promise<InboxRow[]> =>
+    (await theirApi.get('/users/me/notifications', { query: { limit: 200 } })).notifications ?? [];
+  const reviewRows = async (): Promise<InboxRow[]> =>
+    (await inboxRows()).filter((n) => n.event === 'review-ready');
+
+  // A clean start: nothing identifying, nothing waiting, no row.
+  await expect
+    .poll(async () => (await pending()).some((e) => e.identifying), {
+      timeout: T.fetch,
+      message: 'an earlier run left entries still identifying',
+    })
+    .toBe(false);
+  await decideAll();
+  await expect
+    .poll(async () => (await pending()).length, {
+      timeout: T.fetch,
+      message: 'the leftover entries should all be decided',
+    })
+    .toBe(0);
+  await theirApi.delete('/users/me/notifications');
+  await expect
+    .poll(async () => (await inboxRows()).length, {
+      timeout: T.fetch,
+      message: 'the inbox should be empty before the acquisition',
+    })
+    .toBe(0);
+
+  const task = await theirApi.post('/acquisitions', {
+    data: { url: 'http://127.0.0.1:4422/playlist', mediaType: 'music' },
+  });
+  expect(task.id).toMatch(/^tk-/);
+  await expect
+    .poll(async () => (await theirApi.get('/tools/tasks/{taskId}', { path: { taskId: task.id } })).state, {
+      timeout: T.fetch,
+      message: 'the acquisition should run to done',
+    })
+    .toBe('done');
+
+  // However many entries it enumerates, one row in the whole inbox, whatever
+  // its kind, counting the ones waiting: recomputed from the queue, so it
+  // settles once none is still identifying.
+  await expect
+    .poll(
+      async () => {
+        const waiting = await pending();
+        if (waiting.some((e) => e.identifying)) return 'entries still identifying';
+        if (waiting.length === 0) return 'no entry reached review';
+        const all = await inboxRows();
+        if (all.length !== 1) return `${all.length} inbox rows: ${all.map((n) => n.event).join(', ')}`;
+        const rows = await reviewRows();
+        if (rows.length !== 1) return `${rows.length} review rows`;
+        if (rows[0].resolvedAt !== undefined) return 'the row resolved with entries waiting';
+        return rows[0].count === waiting.length
+          ? 'one row, counted'
+          : `row counts ${rows[0].count}, ${waiting.length} waiting`;
+      },
+      {
+        timeout: T.fetch,
+        message: 'the entries should reach the inbox as one row that counts the ones waiting',
+      },
+    )
+    .toBe('one row, counted');
+  const row = (await reviewRows())[0];
+
+  const theirs = await device({ as: uploader });
+  await theirs.nav.enter('notifications');
+  const door = theirs.shell.notificationRow('review-ready', row.id);
+  await expect(door).toBeVisible({ timeout: T.fetch });
+  // The control: while entries wait the row is a door.
+  await door.click();
+  await theirs.nav.expectAt('review');
+
+  // Decided, the queue is answered and the row resolves.
+  await decideAll();
+  await expect
+    .poll(async () => (await reviewRows())[0]?.resolvedAt !== undefined, {
+      timeout: T.fetch,
+      message: 'the row should resolve once nothing waits',
+    })
+    .toBe(true);
+  expect(await reviewRows(), 'still the one row').toHaveLength(1);
+
+  // Resolved, the row is listed and can be deleted, and it opens nowhere.
+  // The address is held for a second before it is read, so a navigation
+  // that lands late is not missed by a check made at once.
+  await theirs.nav.enter('notifications');
+  const resolved = theirs.shell.notificationRow('review-ready', row.id);
+  await expect(resolved).toBeVisible({ timeout: T.fetch });
+  await pressOnce(resolved);
+  await theirs.nav.settledAt('notifications');
+  await expect(theirs.settings.control(SemanticsIds.notificationDelete(row.id))).toBeVisible();
 });
 
 // The two ways a destination is turned down without being deleted, and

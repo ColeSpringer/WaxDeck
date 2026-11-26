@@ -172,8 +172,18 @@ func (l *Identity) Signup(ctx context.Context, username, password, displayName, 
 func (l *Identity) notifyAdminsOfSignup(ctx context.Context, acct *Account) {
 	l.Integrations.EmitServerNotification(ctx, "signup-requested",
 		"New account request",
-		acct.User.Username+" requested an account and is waiting for approval.")
+		acct.User.Username+" requested an account and is waiting for approval.",
+		NotifyKey(signupNotifyKey(acct.User.ID)), NotifyTarget(acct.User.ID))
 	l.Audit.Record(ctx, &UserCtx{ID: acct.User.ID}, "user.request", AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username}, nil)
+}
+
+// signupNotifyKey keys the request's row in each administrator's inbox,
+// which resolves once the request is decided.
+func signupNotifyKey(userID string) string { return "signup-requested:" + userID }
+
+// resolveSignupNotice settles every administrator's row for the request.
+func (l *Identity) resolveSignupNotice(ctx context.Context, userID string) {
+	l.Integrations.resolveNotifications(ctx, wdb.NotificationResolve{Key: signupNotifyKey(userID)})
 }
 
 // PendingAccounts pages pending registrations, oldest first. The cursor
@@ -258,6 +268,7 @@ func (l *Identity) ApproveSignup(ctx context.Context, actor *UserCtx, userID str
 		detail = AccountGrants(acct)
 	}
 	l.Audit.Record(ctx, actor, "user.approve", AuditTarget{Kind: "user", PID: u.ID, Name: u.Username}, detail)
+	l.resolveSignupNotice(ctx, u.ID)
 	return acct, err
 }
 
@@ -278,6 +289,7 @@ func (l *Identity) RejectSignup(ctx context.Context, actor *UserCtx, userID stri
 		return &Error{Kind: KindInternal, Err: err}
 	}
 	l.Audit.Record(ctx, actor, "user.reject", AuditTarget{Kind: "user", PID: u.ID, Name: u.Username}, nil)
+	l.resolveSignupNotice(ctx, u.ID)
 	return nil
 }
 

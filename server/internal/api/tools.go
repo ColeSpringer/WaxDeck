@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"time"
 
@@ -34,6 +35,12 @@ func toolTaskJSON(d service.ToolTaskDTO) ToolTask {
 	if d.Error != "" {
 		out.Error = ptr(d.Error)
 	}
+	if d.ErrorCode != "" {
+		out.ErrorCode = ptr(d.ErrorCode)
+		if len(d.ErrorParams) > 0 {
+			out.ErrorParams = ptr(maps.Clone(d.ErrorParams))
+		}
+	}
 	if len(d.ResultPIDs) > 0 {
 		out.ResultPids = ptr(append([]string{}, d.ResultPIDs...))
 	}
@@ -46,6 +53,34 @@ func toolTaskJSON(d service.ToolTaskDTO) ToolTask {
 	}
 	if d.BookInTrash {
 		out.BookInTrash = ptr(true)
+	}
+	if d.CancelRequested {
+		out.CancelRequested = ptr(true)
+	}
+	if a := d.Activity; a != nil {
+		out.Activity = toolTaskActivityJSON(*a)
+	}
+	return out
+}
+
+// toolTaskActivityJSON is what a running task is doing; a count it does
+// not know, and bytes for no download, stay out.
+func toolTaskActivityJSON(a service.ToolTaskActivity) *ToolTaskActivity {
+	out := &ToolTaskActivity{Phase: a.Phase, At: time.Unix(0, a.AtNS).UTC()}
+	if a.ItemsTotal > 0 || a.ItemsDone > 0 {
+		out.ItemsDone = ptr(a.ItemsDone)
+	}
+	if a.ItemsTotal > 0 {
+		out.ItemsTotal = ptr(a.ItemsTotal)
+	}
+	if a.ItemTitle != "" {
+		out.ItemTitle = ptr(a.ItemTitle)
+	}
+	if a.BytesDone > 0 || a.BytesTotal > 0 {
+		out.BytesDone = ptr(a.BytesDone)
+	}
+	if a.BytesTotal > 0 {
+		out.BytesTotal = ptr(a.BytesTotal)
 	}
 	return out
 }
@@ -142,6 +177,18 @@ func (s *Server) GetToolTask(ctx context.Context, req GetToolTaskRequestObject) 
 		return nil, err
 	}
 	return GetToolTask200JSONResponse(toolTaskJSON(task)), nil
+}
+
+// CancelToolTask asks a task to stop and answers it as it then stands; a
+// refusal (a stranger's not-found, a committed file tool's conflict) is
+// the service's.
+func (s *Server) CancelToolTask(ctx context.Context, req CancelToolTaskRequestObject) (CancelToolTaskResponseObject, error) {
+	uc := userCtx(ctx)
+	task, err := s.svc.Tools.CancelToolTaskFor(ctx, uc, string(req.TaskId))
+	if err != nil {
+		return nil, err
+	}
+	return CancelToolTask200JSONResponse(toolTaskJSON(task)), nil
 }
 
 func (s *Server) DeleteToolTask(ctx context.Context, req DeleteToolTaskRequestObject) (DeleteToolTaskResponseObject, error) {

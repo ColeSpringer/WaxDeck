@@ -33,6 +33,21 @@ func (d *DB) AppendAudit(ctx context.Context, e AuditEvent) error {
 	return nil
 }
 
+// AuditNamesTask reports whether the log holds an event of action whose
+// detail names the task taskID and holds key, which tells one entry of
+// the task's from another (its start from its end).
+func (d *DB) AuditNamesTask(ctx context.Context, action, taskID, key string) (bool, error) {
+	var found bool
+	if err := d.r.QueryRowContext(ctx, `
+		SELECT EXISTS (SELECT 1 FROM audit_log
+			WHERE action = ? AND json_valid(detail) AND json_extract(detail, '$.task') = ?
+				AND json_type(detail, '$.' || ?) IS NOT NULL)`,
+		action, taskID, key).Scan(&found); err != nil {
+		return false, fmt.Errorf("db: reading whether the audit log names a task: %w", err)
+	}
+	return found, nil
+}
+
 // AuditFilter narrows a page of audit events. Action ending in a dot
 // matches as a prefix (`playlist.` selects every playlist action).
 type AuditFilter struct {

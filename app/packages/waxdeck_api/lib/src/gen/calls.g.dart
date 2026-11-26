@@ -2974,13 +2974,17 @@ mixin _NotificationsCalls on _WaxDeckTransport implements NotificationsApi {
     );
   });
 
-  Future<Response<Object?>> _clearMyNotifications() =>
-      _send('DELETE', '/users/me/notifications');
+  Future<Response<Object?>> _clearMyNotifications({bool? resolved}) => _send(
+    'DELETE',
+    '/users/me/notifications',
+    query: {'resolved': ?resolved},
+  );
 
   @override
-  Future<void> clearMyNotifications() => _guard(() async {
-    await _clearMyNotifications();
-  });
+  Future<void> clearMyNotifications({bool resolved = false}) =>
+      _guard(() async {
+        await _clearMyNotifications(resolved: resolved ? true : null);
+      });
 
   Future<Response<Object?>> _markMyNotificationsRead({
     NotificationReadRequest? body,
@@ -2992,10 +2996,19 @@ mixin _NotificationsCalls on _WaxDeckTransport implements NotificationsApi {
   );
 
   @override
-  Future<void> markMyNotificationsRead({List<String> ids = const []}) =>
-      _guard(() async {
-        await _markMyNotificationsRead(body: NotificationReadRequest(ids: ids));
-      });
+  Future<void> markMyNotificationsRead({
+    List<String> ids = const [],
+    List<String>? events,
+    String? targetPid,
+  }) => _guard(() async {
+    await _markMyNotificationsRead(
+      body: NotificationReadRequest(
+        ids: ids,
+        events: events,
+        targetPid: targetPid,
+      ),
+    );
+  });
 
   Future<Response<Object?>> _deleteMyNotification(String notificationId) =>
       _send(
@@ -5363,6 +5376,19 @@ mixin _ToolsCalls on _WaxDeckTransport implements ToolsApi {
   @override
   Future<void> deleteToolTask(String taskId) => _guard(() async {
     await _deleteToolTask(taskId);
+  });
+
+  Future<Response<Object?>> _cancelToolTask(String taskId) =>
+      _send('POST', '/tools/tasks/${Uri.encodeComponent(taskId)}/cancel');
+
+  @override
+  Future<ToolTask> cancelToolTask(String taskId) => _guard(() async {
+    final response = await _cancelToolTask(taskId);
+    return _decode(
+      response,
+      'cancelToolTask',
+      (v, at) => decodeToolTask(wireObject(v, at), _wire),
+    );
   });
 }
 

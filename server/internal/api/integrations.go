@@ -938,11 +938,17 @@ func (s *Server) ListMyNotifications(ctx context.Context, req ListMyNotification
 
 func (s *Server) MarkMyNotificationsRead(ctx context.Context, req MarkMyNotificationsReadRequestObject) (MarkMyNotificationsReadResponseObject, error) {
 	uc := userCtx(ctx)
-	var ids []string
-	if req.Body != nil && req.Body.Ids != nil {
-		ids = *req.Body.Ids
+	var r service.InboxRead
+	if req.Body != nil {
+		if req.Body.Ids != nil {
+			r.IDs = *req.Body.Ids
+		}
+		if req.Body.Events != nil {
+			r.Events = *req.Body.Events
+		}
+		r.TargetPID = deref(req.Body.TargetPid)
 	}
-	if err := s.svc.Integrations.MarkNotificationsRead(ctx, uc, ids); err != nil {
+	if err := s.svc.Integrations.MarkInboxRead(ctx, uc, r); err != nil {
 		return nil, err
 	}
 	return MarkMyNotificationsRead204Response{}, nil
@@ -956,8 +962,14 @@ func (s *Server) DeleteMyNotification(ctx context.Context, req DeleteMyNotificat
 	return DeleteMyNotification204Response{}, nil
 }
 
-func (s *Server) ClearMyNotifications(ctx context.Context, _ ClearMyNotificationsRequestObject) (ClearMyNotificationsResponseObject, error) {
+func (s *Server) ClearMyNotifications(ctx context.Context, req ClearMyNotificationsRequestObject) (ClearMyNotificationsResponseObject, error) {
 	uc := userCtx(ctx)
+	if derefBool(req.Params.Resolved) {
+		if err := s.svc.Integrations.ClearResolvedNotifications(ctx, uc); err != nil {
+			return nil, err
+		}
+		return ClearMyNotifications204Response{}, nil
+	}
 	if err := s.svc.Integrations.ClearNotifications(ctx, uc); err != nil {
 		return nil, err
 	}
@@ -970,10 +982,15 @@ func notificationJSON(n service.InboxNotification) Notification {
 		Event:     n.Event,
 		Title:     n.Title,
 		Body:      n.Body,
+		Count:     ptr(n.Count),
 		CreatedAt: n.CreatedAt,
+		UpdatedAt: n.UpdatedAt,
 	}
 	if n.TargetPID != "" {
 		out.TargetPid = ptr(n.TargetPID)
+	}
+	if !n.ResolvedAt.IsZero() {
+		out.ResolvedAt = ptr(n.ResolvedAt)
 	}
 	if !n.ReadAt.IsZero() {
 		out.ReadAt = ptr(n.ReadAt)

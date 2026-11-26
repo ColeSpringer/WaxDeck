@@ -304,18 +304,43 @@ UserAccount _account(String id, String username) => UserAccount(
   libraryAccess: const LibraryAccess(mode: 'all'),
 );
 
+/// Files [row] in the fake inbox and reads it, as the notifications screen
+/// does on arrival.
+Future<void> _fileInInbox(
+  WidgetTester tester,
+  ProviderContainer container,
+  ServerNotification row,
+) async {
+  (container.read(repositoryProvider) as FakeRepository).inbox =
+      <ServerNotification>[row];
+  container.invalidate(notificationsProvider);
+  await tester.pumpAndSettle();
+}
+
+ServerNotification _notice(String event, {String? id, String? target}) =>
+    ServerNotification(
+      id: id ?? 'nf-$event',
+      event: event,
+      title: 'Server title',
+      body: 'Server body',
+      targetPid: target,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
 void main() {
   testWidgets('the arrow is the browser back, and forward returns to the '
       'visit it left', (tester) async {
     final (container, browser) = await _pumpTab(tester);
     await _go(tester, container, WaxRoute.notifications);
-    container
-        .read(localNotificationsProvider.notifier)
-        .record(NotificationKind.task, at: DateTime.now());
-    await tester.pumpAndSettle();
+    await _fileInInbox(
+      tester,
+      container,
+      _notice('job-finished', id: 'nf-job'),
+    );
     await tester.tap(
       find.bySemanticsIdentifier(
-        SemanticsIds.notificationRowPlain(NotificationKind.task.token),
+        SemanticsIds.notificationRow('job-finished', 'nf-job'),
       ),
     );
     await tester.pumpAndSettle();
@@ -1495,20 +1520,14 @@ void main() {
         tester,
         WaxRoute.notifications,
       );
-      container
-          .read(localNotificationsProvider.notifier)
-          .record(
-            NotificationKind.importCompleted,
-            at: DateTime.now(),
-            pid: 'rv-1',
-          );
-      await tester.pumpAndSettle();
+      await _fileInInbox(
+        tester,
+        container,
+        _notice('import-completed', id: 'nf-import', target: 'rv-1'),
+      );
       await tester.tap(
         find.bySemanticsIdentifier(
-          SemanticsIds.notificationRow(
-            NotificationKind.importCompleted.token,
-            'rv-1',
-          ),
+          SemanticsIds.notificationRow('import-completed', 'nf-import'),
         ),
       );
       await tester.pumpAndSettle();

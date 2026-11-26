@@ -13,26 +13,27 @@ import '../shell/semantics_ids.dart';
 
 /// What a notification is about, and where it goes.
 ///
-/// Two families under one enum. The first four are the sync stream's
-/// refetch hints: markers this client turns into a row for as long as
-/// the session lasts, because nothing on the server keeps them. The rest
-/// are the notification catalog's own events, which the server files in
-/// an inbox and which word themselves from the same table the per-target
-/// checklist reads.
+/// Two families under one enum. The first is this device's own finished
+/// transfer, a row for as long as the session lasts because nothing on
+/// the server keeps it. The rest are the notification catalog's own
+/// events, which the server files in an inbox and which word themselves
+/// from the same table the per-target checklist reads. The sync stream's
+/// review, upload and task markers refetch their surfaces and mint no row.
 ///
 /// A closed set rather than free text, so the destination is decided in
 /// one place. A catalog event this build does not know still draws, in
 /// the server's own words, with nowhere better to go than this screen.
 enum NotificationKind {
-  review('review', WaxIcons.check, WaxRoute.review),
-  upload('upload', WaxIcons.add, WaxRoute.uploads),
-  task('task', WaxIcons.refresh, WaxRoute.tasks),
   download('download', WaxIcons.downloads, WaxRoute.downloads),
-  signupRequested('signup-requested', WaxIcons.add, WaxRoute.userRequests),
+  signupRequested(
+    'signup-requested',
+    WaxIcons.hourglass,
+    WaxRoute.userRequests,
+  ),
   backupCompleted('backup-completed', WaxIcons.success, WaxRoute.backups),
   backupFailed('backup-failed', WaxIcons.warning, WaxRoute.backups),
   catalogReset('catalog-reset', WaxIcons.warning, WaxRoute.libraries),
-  reviewReady('review-ready', WaxIcons.check, WaxRoute.review),
+  reviewReady('review-ready', WaxIcons.hourglass, WaxRoute.review),
   feedDisabled('feed-disabled', WaxIcons.warning, WaxRoute.podcasts),
   subscriptionFailed(
     'subscription-failed',
@@ -65,14 +66,17 @@ enum NotificationKind {
   /// Where tapping the row goes when the row names nowhere better.
   final String location;
 
-  /// Whether this kind is a session-local refetch hint rather than a
-  /// catalog event. The hints word themselves from the bell's own copy;
-  /// the catalog events word themselves from the notify table.
-  bool get isHint =>
-      this == NotificationKind.review ||
-      this == NotificationKind.upload ||
-      this == NotificationKind.task ||
-      this == NotificationKind.download;
+  /// Whether this kind is a session-local row rather than a catalog
+  /// event. It words itself from the bell's own copy; the catalog events
+  /// word themselves from the notify table.
+  bool get isHint => this == NotificationKind.download;
+
+  /// Whether the row is a queue of work somebody answers, which is
+  /// what a resolve means for it: the check glyph marks the queue as
+  /// done, where another kind resolved by a deletion keeps its own.
+  bool get isQueue =>
+      this == NotificationKind.reviewReady ||
+      this == NotificationKind.signupRequested;
 
   /// Whether news of this kind is about one entity rather than about a
   /// surface - which is what makes a pid worth recording, what
@@ -83,22 +87,6 @@ enum NotificationKind {
       this == NotificationKind.episodeDownloaded ||
       this == NotificationKind.playlistSynced ||
       this == NotificationKind.importCompleted;
-
-  /// The kind one sync marker means, or null where it means nothing
-  /// worth telling anybody about.
-  ///
-  /// Hints only. The four announcement markers ride the same emit as the
-  /// catalog event of the same name, and the inbox is where that lands:
-  /// recording both would draw every one of them twice.
-  static NotificationKind? forMarker(String event) {
-    for (final kind in NotificationKind.values) {
-      // Not the client's own: a future server marker called that would
-      // otherwise mint a row worded as a finished download.
-      if (kind == NotificationKind.download) continue;
-      if (kind.isHint && kind.token == event) return kind;
-    }
-    return null;
-  }
 
   /// The kind one catalog event means, or null for an event this build
   /// does not know.
@@ -111,10 +99,7 @@ enum NotificationKind {
 
   /// What the row's overline says: the surface, not the change.
   String labelOf(AppLocalizations l10n) => switch (this) {
-    NotificationKind.review ||
     NotificationKind.reviewReady => l10n.bellSurfaceReview,
-    NotificationKind.upload => l10n.bellSurfaceUploads,
-    NotificationKind.task => l10n.bellSurfaceTasks,
     NotificationKind.download => l10n.bellSurfaceDownloads,
     NotificationKind.signupRequested => l10n.bellSurfaceAccounts,
     NotificationKind.backupCompleted ||
@@ -135,15 +120,11 @@ enum NotificationKind {
 
   /// The one sentence a hint row says, or null for a catalog event.
   ///
-  /// The kind's own rather than the recorder's: the markers carry no
-  /// detail, so holding it here lets a controller record a row with no
-  /// table to word it. Null rather than a fallback, because a catalog
-  /// event has better words waiting in the notify table and a wire
-  /// token is not a sentence.
+  /// The kind's own rather than the recorder's, so a controller can
+  /// record a row with no table to word it. Null rather than a fallback,
+  /// because a catalog event has better words waiting in the notify
+  /// table and a wire token is not a sentence.
   String? hintMessageOf(AppLocalizations l10n) => switch (this) {
-    NotificationKind.review => l10n.bellReviewChanged,
-    NotificationKind.upload => l10n.bellUploadChanged,
-    NotificationKind.task => l10n.bellTaskChanged,
     NotificationKind.download => l10n.bellDownloadFinished,
     _ => null,
   };
@@ -163,6 +144,20 @@ enum NotificationKind {
     ),
     _ => location,
   };
+
+  /// The entity a visit at [location] is at or under, for the kinds whose
+  /// rows point at one; null for every other kind and for a location
+  /// outside the entity's own. What lets a visit settle a row this client
+  /// never loaded, by the pid the address names.
+  String? entityAt(String location) {
+    if (!namesEntity) return null;
+    const probe = '\u0000';
+    final parts = locationFor(probe).split(probe);
+    final path = Uri.parse(location).path;
+    if (parts.length != 2 || !path.startsWith(parts.first)) return null;
+    final pid = path.substring(parts.first.length).split('/').first;
+    return pid.isEmpty ? null : pid;
+  }
 }
 
 /// One thing worth telling somebody about.
@@ -180,6 +175,8 @@ class WaxNotification {
     this.serverBody = '',
     this.targetPid,
     this.read = false,
+    this.count = 1,
+    this.resolved = false,
   });
 
   /// The inbox row this is, or null for a session-local hint.
@@ -196,7 +193,18 @@ class WaxNotification {
   final String serverTitle;
   final String serverBody;
 
+  /// The row's latest occurrence, which is when it is drawn and what the
+  /// merge orders by: a keyed row that folds a new occurrence rises under
+  /// the same id.
   final DateTime at;
+
+  /// How many occurrences the row folds.
+  final int count;
+
+  /// Whether what the row reports has been dealt with: a queue emptied, a
+  /// signup decided, the playlist or subscription it names deleted. A
+  /// resolved row never navigates.
+  final bool resolved;
 
   /// The entity the row named, where it named one: the show whose feed
   /// was disabled, the episode that arrived. Null where the kind's own
@@ -211,13 +219,35 @@ class WaxNotification {
 
   String get location => kind?.locationFor(targetPid) ?? WaxRoute.notifications;
 
-  WaxGlyph get glyph => kind?.glyph ?? WaxIcons.bell;
+  /// The check means done, so only a queue that was answered wears it.
+  WaxGlyph get glyph => resolved && (kind?.isQueue ?? false)
+      ? WaxIcons.check
+      : kind?.glyph ?? WaxIcons.bell;
 
   /// What the row says. A hint says the bell's own sentence; a catalog
   /// event says what the per-target checklist calls it, and an event
   /// this build does not know says what the server called it.
   String messageOf(AppLocalizations l10n) =>
-      kind?.hintMessageOf(l10n) ?? notifyTokenTitle(l10n, event, serverTitle);
+      kind?.hintMessageOf(l10n) ??
+      notifyRowTitle(
+        l10n,
+        event,
+        serverTitle,
+        count: count,
+        resolved: resolved,
+      );
+
+  /// What the bell's line says after the surface: the count where the row
+  /// folded, the server's detail where it did not, so two rows of one
+  /// event read differently.
+  String bellLineOf(AppLocalizations l10n) =>
+      kind == null ||
+          kind!.isHint ||
+          resolved ||
+          count > 1 ||
+          serverBody.isEmpty
+      ? messageOf(l10n)
+      : serverBody;
 
   /// The line under the message: what happened, in the server's own
   /// words.
@@ -230,8 +260,14 @@ class WaxNotification {
   /// would render five episodes from five shows as five identical rows.
   /// Empty for a row the server sent no body for, and the catalogue's
   /// help is what fills that in.
-  String detailOf(AppLocalizations l10n) =>
-      serverBody.isNotEmpty ? serverBody : notifyTokenHelp(l10n, event, '');
+  String detailOf(AppLocalizations l10n) {
+    // A queue that was answered says so in its heading; the body names the
+    // last entry that waited in it, which would contradict "cleared".
+    if (resolved && (kind?.isQueue ?? false)) return '';
+    return serverBody.isNotEmpty
+        ? serverBody
+        : notifyTokenHelp(l10n, event, '');
+  }
 
   /// The overline: which surface this is about, or the raw token for an
   /// event with no surface this build knows.
@@ -246,6 +282,8 @@ class WaxNotification {
     serverBody: serverBody,
     targetPid: targetPid,
     read: true,
+    count: count,
+    resolved: resolved,
   );
 
   /// What this row is about rather than where it sits. Two templates,
@@ -271,21 +309,16 @@ class WaxNotification {
   }
 }
 
-/// The sync stream's refetch hints, for as long as the session lasts.
+/// What only this device knows, for as long as the session lasts: its own
+/// finished transfer.
 ///
-/// Session-scoped by design and not by omission: a marker says a surface
-/// moved and nothing more, so there is nothing for the server to keep
-/// and nothing a second device would want told to it. The catalog events
-/// are the durable half and live in the inbox.
+/// Session-scoped by design and not by omission: nothing on the server
+/// describes it, and nothing a second device would want told to it. The
+/// catalog events are the durable half and live in the inbox.
 ///
-/// Newest first, capped, and deduplicated on the kind: the sync stream
-/// coalesces changes into markers, so a scan opening forty review entries
-/// arrives as a burst of identical markers. Forty rows saying the same
-/// thing is a worse answer than one row saying it most recently.
+/// One row, the latest: a sweep finishing forty downloads is one thing to
+/// say, most recently.
 class LocalNotifications extends Notifier<List<WaxNotification>> {
-  /// How many rows the session list holds. A glance, not a log.
-  static const int cap = 20;
-
   @override
   List<WaxNotification> build() {
     // Rebuilt when the account changes, which is what empties the list:
@@ -370,28 +403,6 @@ class LocalNotifications extends Notifier<List<WaxNotification>> {
     return state.where((n) => n.at.isAfter(seen)).length;
   }
 
-  void record(NotificationKind kind, {required DateTime at, String? pid}) {
-    final row = WaxNotification(
-      kind: kind,
-      event: kind.token,
-      at: at,
-      targetPid: pid,
-    );
-    // News about the screen in front of you is not news. Recording it
-    // would badge the bell with a row whose only instruction is "go
-    // where you already are", and there is nothing the reader could do
-    // to make it go away.
-    if (_dealtWith(row.location)) return;
-    // Deduplicated on the target too: two shows whose feeds both failed
-    // say the same sentence and must stay two rows.
-    final kept = <WaxNotification>[
-      row,
-      for (final existing in state)
-        if (existing.kind != kind || existing.targetPid != pid) existing,
-    ];
-    state = kept.length <= cap ? kept : kept.sublist(0, cap);
-  }
-
   /// Marks seen exactly the news the bell drew, once its menu has been
   /// read. Stamped from the newest drawn row rather than the clock, so
   /// a hint landing after the build stays unseen; inbox rows have their own.
@@ -442,23 +453,20 @@ class LocalNotifications extends Notifier<List<WaxNotification>> {
     state = kept;
   }
 
-  /// Records what one sync marker means, or nothing: the hydrated kinds
-  /// are this client's own writes coming back, and the announcements are
-  /// the inbox's news, not a second copy of it.
-  void recordServerEvent(ServerSyncEvent event, {DateTime? at}) {
-    final kind = NotificationKind.forMarker(event.kind);
-    if (kind == null) return;
-    record(
-      kind,
-      at: at ?? DateTime.now(),
-      pid: kind.namesEntity ? event.pid : null,
-    );
-  }
-
   /// Native only: web has no local download manager, so no transfer of
   /// its own to announce. Server-side fetches ride the stream above.
   void recordDownloadCompleted({DateTime? at}) {
-    record(NotificationKind.download, at: at ?? DateTime.now());
+    final row = WaxNotification(
+      kind: NotificationKind.download,
+      event: NotificationKind.download.token,
+      at: at ?? DateTime.now(),
+    );
+    // News about the screen in front of you is not news. Recording it
+    // would badge the bell with a row whose only instruction is "go
+    // where you already are", and there is nothing the reader could do
+    // to make it go away.
+    if (_dealtWith(row.location)) return;
+    state = <WaxNotification>[row];
   }
 }
 
@@ -506,6 +514,16 @@ class NotificationsController extends AsyncNotifier<InboxState> {
   /// read - so it discards its page and keeps what the writer left.
   int _writes = 0;
 
+  /// The by-event writes that reached past the held page since the inbox
+  /// last changed. One call settles every unread row of its events, hidden
+  /// ones included, so asking again is noise until a marker's refetch or
+  /// Mark all read changes what the server holds.
+  final Set<String> _reached = <String>{};
+
+  /// Set by this controller's own read-back, which is not the inbox
+  /// changing.
+  bool _readingBack = false;
+
   @override
   Future<InboxState> build() async {
     // No account, no inbox: signing out rebuilds this, and asking would
@@ -515,6 +533,8 @@ class NotificationsController extends AsyncNotifier<InboxState> {
       return _held;
     }
     final repository = ref.watch(repositoryProvider);
+    if (!_readingBack) _reached.clear();
+    _readingBack = false;
     final epoch = _writes;
     final ServerNotificationPage page;
     try {
@@ -534,7 +554,7 @@ class NotificationsController extends AsyncNotifier<InboxState> {
     // router announces an arrival once, and a cold start into a deep
     // link announces it while this is still loading - so without this
     // the one arrival every session has would leave its row unread.
-    _dismiss(ref.read(localNotificationsProvider.notifier).here);
+    _dismiss(ref.read(localNotificationsProvider.notifier).here, visit: false);
     return _held;
   }
 
@@ -544,9 +564,11 @@ class NotificationsController extends AsyncNotifier<InboxState> {
     event: row.event,
     serverTitle: row.title,
     serverBody: row.body,
-    at: row.createdAt,
+    at: row.updatedAt,
     targetPid: row.targetPid,
     read: row.read,
+    count: row.count,
+    resolved: row.resolvedAt != null,
   );
 
   /// Publishes without a refetch, so an optimistic write shows at once
@@ -563,6 +585,7 @@ class NotificationsController extends AsyncNotifier<InboxState> {
   /// Marks every unread inbox row read, and the session's hints seen.
   Future<void> markAllRead() async {
     ref.read(localNotificationsProvider.notifier).markAllSeen();
+    _reached.clear();
     if (_held.unread == 0) return;
     _publish(<WaxNotification>[for (final row in _held.rows) row.asRead()], 0);
     await _quietly(
@@ -576,7 +599,27 @@ class NotificationsController extends AsyncNotifier<InboxState> {
   Future<void> clear() async {
     ref.read(localNotificationsProvider.notifier).clear();
     _publish(const <WaxNotification>[], 0);
-    await _quietly(() => ref.read(repositoryProvider).clearMyNotifications());
+    await _quietly(
+      () => ref.read(repositoryProvider).clearMyNotifications(),
+      readBack: true,
+    );
+  }
+
+  /// Removes the resolved rows, which carry no news nobody has acted on.
+  Future<void> clearCompleted() async {
+    final gone = <WaxNotification>[
+      for (final row in _held.rows)
+        if (row.resolved) row,
+    ];
+    if (gone.isEmpty) return;
+    _publish(<WaxNotification>[
+      for (final row in _held.rows)
+        if (!row.resolved) row,
+    ], _held.unread - gone.where((row) => !row.read).length);
+    await _quietly(
+      () => ref.read(repositoryProvider).clearMyNotifications(resolved: true),
+      readBack: true,
+    );
   }
 
   /// Removes one inbox row for good.
@@ -586,7 +629,10 @@ class NotificationsController extends AsyncNotifier<InboxState> {
       for (final row in _held.rows)
         if (row.id != id) row,
     ], _held.unread - (wasUnread ? 1 : 0));
-    await _quietly(() => ref.read(repositoryProvider).deleteMyNotification(id));
+    await _quietly(
+      () => ref.read(repositoryProvider).deleteMyNotification(id),
+      readBack: true,
+    );
   }
 
   /// Deals with the rows [location] answers: the hints it drops, the
@@ -597,40 +643,146 @@ class NotificationsController extends AsyncNotifier<InboxState> {
   /// to stop badging it rather than to forget it happened.
   void dismissUnder(String location) {
     ref.read(localNotificationsProvider.notifier).dismissUnder(location);
-    _dismiss(location);
+    _dismiss(location, visit: true);
   }
 
   /// The inbox half of [dismissUnder], which the build also runs so an
   /// arrival that happened before the first read is not lost.
-  void _dismiss(String? location) {
+  ///
+  /// The loaded rows the visit answers read at once; the server is told
+  /// by event, so a row past the page held here settles too, and the
+  /// count is read back when such a row may have been among them. Only a
+  /// visit reaches past the page: a refetch re-applying where the visitor
+  /// already is would otherwise ask again on every read.
+  void _dismiss(String? location, {required bool visit}) {
     if (location == null) return;
-    final read = <String>[
+    final answered = <WaxNotification>[
       for (final row in _held.rows)
-        if (!row.read && LocalNotifications.under(location, row.location))
-          row.id!,
+        if (!row.read && LocalNotifications.under(location, row.location)) row,
     ];
-    if (read.isEmpty) return;
-    _publish(<WaxNotification>[
-      for (final row in _held.rows)
-        if (read.contains(row.id)) row.asRead() else row,
-    ], _held.unread - read.length);
-    unawaited(
-      _quietly(
-        () => ref.read(repositoryProvider).markMyNotificationsRead(ids: read),
-      ),
-    );
+    final loadedUnread = _held.rows.where((row) => !row.read).length;
+    final unloaded = visit && _held.unread > loadedUnread;
+    final all = _readsByEvent(location);
+    // What is sent: the calls that settle a row held here, and, past the
+    // page, each call not yet made since the inbox last changed.
+    final reads = <_EventRead>[
+      for (final read in all)
+        if (answered.any(read.covers) ||
+            (unloaded && !_reached.contains(read.key)))
+          read,
+    ];
+    if (answered.isEmpty && reads.isEmpty) return;
+    final reachedPast = unloaded && reads.any((r) => !_reached.contains(r.key));
+    _reached.addAll(reads.map((read) => read.key));
+    if (answered.isNotEmpty) {
+      final read = answered.map((row) => row.id).toSet();
+      _publish(<WaxNotification>[
+        for (final row in _held.rows)
+          if (read.contains(row.id)) row.asRead() else row,
+      ], _held.unread - read.length);
+    }
+    // Rows the by-event calls do not name still go by id: the ones that
+    // point at a surface the kind's own address does not reach.
+    final covered = <String>{
+      for (final row in answered)
+        if (reads.any((read) => read.covers(row))) row.id!,
+    };
+    final byId = <String>[
+      for (final row in answered)
+        if (!covered.contains(row.id)) row.id!,
+    ];
+    unawaited(_settle(reads, byId, refetch: reachedPast));
+  }
+
+  /// The by-event writes a visit at [location] calls for: one for every
+  /// kind that points at a surface the visit is at or under, and one per
+  /// entity the visit is at, for the kinds whose rows point at one.
+  List<_EventRead> _readsByEvent(String location) {
+    final surface = <String>[];
+    final entities = <String, List<String>>{};
+    for (final kind in NotificationKind.values) {
+      if (kind.isHint) continue;
+      if (kind.namesEntity) {
+        final pid = kind.entityAt(location);
+        if (pid != null) {
+          entities.putIfAbsent(pid, () => <String>[]).add(kind.token);
+        }
+      } else if (LocalNotifications.under(location, kind.location)) {
+        surface.add(kind.token);
+      }
+    }
+    return <_EventRead>[
+      if (surface.isNotEmpty) _EventRead(surface),
+      for (final entry in entities.entries) _EventRead(entry.value, entry.key),
+    ];
+  }
+
+  Future<void> _settle(
+    List<_EventRead> reads,
+    List<String> ids, {
+    required bool refetch,
+  }) async {
+    final repository = ref.read(repositoryProvider);
+    for (final read in reads) {
+      final sent = await _quietly(
+        () => repository.markMyNotificationsRead(
+          events: read.events,
+          targetPid: read.pid,
+        ),
+      );
+      // Marked on asking so a second visit does not repeat a call in
+      // flight; a refused one is asked again on the next visit.
+      if (!sent) _reached.remove(read.key);
+    }
+    if (ids.isNotEmpty) {
+      await _quietly(() => repository.markMyNotificationsRead(ids: ids));
+    }
+    if (refetch && ref.mounted) {
+      _readingBack = true;
+      ref.invalidateSelf();
+    }
   }
 
   /// Runs a write whose failure is not worth a message: the optimistic
   /// state already published is what the reader sees, and the next read
   /// of the inbox is what corrects it.
-  Future<void> _quietly(Future<void> Function() write) async {
+  ///
+  /// [readBack] reads the inbox again when the write fails, for the
+  /// writes that took rows out of the list and the badge on a guess: a
+  /// refused clear would otherwise leave both wrong until the next marker.
+  ///
+  /// Answers whether the write went through.
+  Future<bool> _quietly(
+    Future<void> Function() write, {
+    bool readBack = false,
+  }) async {
     try {
       await write();
+      return true;
     } on WaxDeckApiException {
-      // Left to the next refetch.
+      if (readBack && ref.mounted) {
+        _readingBack = true;
+        ref.invalidateSelf();
+      }
+      return false;
     }
   }
+}
+
+/// One by-event mark-read: the events, and the entity they are narrowed to
+/// where the visit was at one.
+class _EventRead {
+  const _EventRead(this.events, [this.pid]);
+
+  final List<String> events;
+  final String? pid;
+
+  /// Whether the server settles [row] by this call.
+  bool covers(WaxNotification row) =>
+      events.contains(row.event) && (pid == null || row.targetPid == pid);
+
+  /// What makes two calls the same call.
+  String get key => '${events.join(',')}|${pid ?? ''}';
 }
 
 final notificationsProvider =

@@ -113,7 +113,10 @@ info:
       something other than audio or video), `source-unavailable`
       (the request
       needs an acquisition source integration, such as the YouTube bridge,
-      that this server is not running), `directory-unavailable` (an
+      that this server is not running), `source-refused` (422: the source
+      refused the link or the item: a check of a link before anything is
+      queued or bound answers it, and a task whose run the source refused
+      fails with it as its `errorCode`), `directory-unavailable` (an
       external directory service, such as the radio station directory,
       could not be reached; try again later), `service-unreachable`
       (an external service this request depends on, such as a
@@ -196,7 +199,8 @@ info:
       refused before it is queued carries the `reason` its operation
       names (`task-running`, with `task`, the one at work on the same
       book or rip; `task-parked`, with `task`, the one that stopped part
-      way on it and is parked until it is cleared in Tasks;
+      way on it and is parked, or was canceled and left files it could
+      not remove, and holds it until it is cleared in Tasks;
       `name-taken`, with `name` and `folder`;
       `copy-elsewhere`, with `copy` and `library`; `parts-in-trash`, with
       `count`, the files a merge or split that did not finish left in
@@ -207,7 +211,21 @@ info:
       running carries `reason: task-running`, with `task`; a
       tool task whose clear could not name or remove its hidden files
       carries `reason: outputs-hidden`, with `folder` and `cause`, and
-      stays. Under `unsupported-format`,
+      stays; and a cancel of a book merge or split, or a CUE split, that
+      has started moving library files carries `reason: task-committed`:
+      it can no longer be canceled, and finishes, or puts things back, on
+      its own. Under `source-refused`, `reason` says why, one of
+      `playlist-unavailable` (private or deleted), `playlist-empty`,
+      `video-private` (sign-in required), `video-unavailable` (removed),
+      `age-restricted`, `region-blocked`, `members-only`, `live`,
+      `not-started` (a premiere or a scheduled stream), `no-audio`,
+      `unsupported-url` (not a video, playlist or channel the source can
+      read, a Shorts shelf included), `rate-limited`, `source-broken`
+      (the bridge to the source needs maintenance), `timed-out`,
+      `unreachable` (the source could not be reached, or the
+      connection broke off) or `stalled`; a client treats a reason it
+      does not know as the code's general case. Under
+      `unsupported-format`,
       `reason: unreadable` marks a completed upload whose bytes do not
       read as audio at all, a damaged file rather than a format the
       server refuses. Under `invalid-request`, `reason` names
@@ -217,7 +235,12 @@ info:
       `tracks`: every track of the rips it named some of, comma-separated
       in the order they play, for the client to offer them together) and
       `recording-id-held` (an unlock of a track's recording id whose
-      file carries none); a
+      file carries none); a URL download, a playlist source's link
+      and an import's server address refused for the address itself
+      also name why: `invalid-address` (a URL download's or playlist
+      source's link that is not an `http` or `https` address, or any
+      of them whose host does not resolve) or `blocked-address` (on a
+      private or local network, as for a feed below); a
       subscribe also
       names the feed address it will not take, in a message that is
       already a sentence for a person (an import names it per entry, in
@@ -6201,7 +6224,10 @@ paths:
         reach the account that started the work: a catalog job (a scan,
         an analysis, an enrichment or organize run, emptying the
         trash) finished or failed, a book merge or split or a CUE split
-        failed or stopped for good (parked), or a health fix finished.
+        failed or stopped for good (parked), a URL download failed, or
+        a playlist sync asked for with Sync now failed (one whose
+        playlist or binding was removed meanwhile files nothing), or a
+        health fix finished.
         Work the server started on its own schedule notifies nobody.
         `catalog-reset` says the server built a new catalog because the
         old one's schema was another release's; its body counts the
@@ -6608,15 +6634,19 @@ paths:
       operationId: listMyNotifications
       summary: List the caller's notification inbox
       description: >
-        What happened to this account, newest first, whether or not any
-        delivery target was configured for it. The inbox is written on
-        every emit, so it is the record a client that was closed at the
-        time can still read; targets are how news leaves the server, not
-        where it is kept.
+        What happened to this account, by `updatedAt`, newest first,
+        whether or not any delivery target was configured for it: a row
+        that folds a new occurrence rises to the top under the same id
+        (see `Notification`). The inbox is written on every emit, so it
+        is the record a client that was closed at the time can still
+        read; targets are how news leaves the server, not where it is
+        kept.
 
 
-        Rows are pruned by age and by a per-account cap, so the inbox is
-        recent history rather than an audit log.
+        Rows are pruned by age, read from `updatedAt`, and by a
+        per-account cap, so the inbox is recent history rather than an
+        audit log; an unresolved `review-ready` or `signup-requested`
+        row is never pruned, since what it reports is still open.
       tags: [notifications]
       parameters:
         - name: cursor
@@ -6648,8 +6678,19 @@ paths:
     delete:
       operationId: clearMyNotifications
       summary: Empty the caller's notification inbox
-      description: Removes every row. Clearing an empty inbox answers 204.
+      description: >
+        Removes every row, or with `resolved` only the resolved ones
+        (Clear completed). Clearing an inbox with nothing to remove
+        answers 204.
       tags: [notifications]
+      parameters:
+        - name: resolved
+          in: query
+          description: >
+            True removes only rows with `resolvedAt`; absent or false
+            removes every row.
+          schema:
+            type: boolean
       responses:
         "204":
           description: Inbox emptied.
@@ -6661,10 +6702,14 @@ paths:
       operationId: markMyNotificationsRead
       summary: Mark inbox rows read
       description: >
-        Stamps `readAt` on the named rows, or on every unread row when
-        `ids` is absent or empty. Already-read rows keep the stamp they
-        have, and an id that names nothing is ignored: the caller asked
-        for those rows to be read and they are.
+        Stamps `readAt` on the rows `ids` names, or, with `events`, on
+        every unread row of those events (only those naming `targetPid`,
+        when it is given), so a client can settle rows it never loaded;
+        with neither, on every unread row. Already-read rows keep the
+        stamp they have, and an id that names nothing is ignored: the
+        caller asked for those rows to be read and they are. Non-empty
+        `ids` and `events` together, or `targetPid` without `events`, are
+        refused with `invalid-request`.
       tags: [notifications]
       requestBody:
         required: false
@@ -9305,9 +9350,18 @@ paths:
         never changes by itself. Owner only; static playlists only (a
         smart playlist's membership is its rule). Live sources need a
         running acquisition bridge (`source-unavailable` without
-        one). Binding does not sync by itself: the first scheduled
-        run comes one interval after the bind, and the sync endpoint
-        runs one now.
+        one). A live link the source refuses answers 422
+        `source-refused`, with `params.reason` saying why, and nothing
+        is bound: a verdict on the link (a private, deleted or empty
+        playlist, a link the source cannot read), which only another
+        link changes, or the source's trouble at the time
+        (`rate-limited`, `source-broken`, `timed-out`, `unreachable`,
+        or `video-private` for a sign-in wall), which the same link can
+        pass later. A link to a single video answers 400
+        `invalid-request`, since a synced playlist needs a playlist or
+        channel link, and nothing is bound either. Binding does not sync by itself: the first
+        scheduled run comes one interval after the bind, and the sync
+        endpoint runs one now.
       tags: [playlists]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -9332,6 +9386,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/SourceRefused"
         "501":
           $ref: "#/components/responses/SourceUnavailable"
         "503":
@@ -9387,7 +9443,10 @@ paths:
 
         A live source is enumerated either way: that network read is
         what a dry run *is*, so unlike the save, a settings-only
-        preview does not avoid it.
+        preview does not avoid it. A live link the source refuses
+        answers 422 `source-refused`, for any of the reasons the save
+        names, and a link to a single video 400 `invalid-request`, as
+        the save does.
       tags: [playlists]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -9412,6 +9471,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/SourceRefused"
         "501":
           $ref: "#/components/responses/SourceUnavailable"
         "503":
@@ -9431,7 +9492,13 @@ paths:
         binding's health; a successful run re-enables a binding that
         repeated failures had suspended. A run already queued or
         running for this playlist is answered with that task rather
-        than a second one. Owner only.
+        than a second one; one winding down from a cancel is not, and
+        a fresh run queues behind it. The run this call queues, and a scheduled
+        run still waiting to start that it answers, files
+        `tool-task-failed` for the owner if it fails, unless the
+        playlist or its binding was removed meanwhile; a scheduled
+        run's failures otherwise file none, and repeated ones suspend
+        the binding, which says so once. Owner only.
       tags: [playlists]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -12299,8 +12366,9 @@ paths:
             `keepOriginals` is not refused for it), `task-running` (a
             merge or split of the book is queued or running;
             `params.task` names it), `task-parked` (one stopped part way
-            and is parked until it is cleared in Tasks; `params.task`
-            names it) or
+            and is parked, or was canceled and left files it could not
+            remove, and holds the book until it is cleared in Tasks;
+            `params.task` names it) or
             `parts-in-trash` (a merge or split of the book that did not
             finish left some of its files in the trash, and none of its
             new files holds them, so a merge of what remains would leave
@@ -12494,18 +12562,19 @@ paths:
       operationId: clearFinishedToolTasks
       summary: Clear finished tasks
       description: >
-        Deletes finished tasks (`done`, `failed` or `parked`) and
-        answers how many went. `scope` `mine` (the default,
-        administrators included) clears the caller's own; `all` clears
-        every account's, reports nobody has read included, and is for
-        administrators only (`forbidden` otherwise). Running and queued
-        tasks are untouched. A parked task cleared frees the book or rip
-        it held for another merge or split. Clearing a book merge or
-        split whose new files still wait under hidden names settles them
-        first, as deleting the task does, and one whose hidden files
-        could not be named or removed stays, counted in `kept`. A POST
-        action rather than a filtered DELETE, matching the library's
-        bulk-delete idiom.
+        Deletes finished tasks (`done`, `failed`, `canceled` or
+        `parked`) and answers how many went. `scope` `mine` (the
+        default, administrators included) clears the caller's own; `all`
+        clears every account's, reports nobody has read included, and is
+        for administrators only (`forbidden` otherwise). Running and
+        queued tasks are untouched. A parked task cleared frees the book
+        or rip it held for another merge or split, and a canceled one
+        that still held its book frees that. Clearing a book merge
+        or split whose new files still wait under hidden names settles
+        them first, as deleting the task does, and one whose hidden
+        files could not be named or removed stays, counted in `kept`. A
+        POST action rather than a filtered DELETE, matching the
+        library's bulk-delete idiom.
       tags: [tools]
       requestBody:
         required: false
@@ -12553,26 +12622,28 @@ paths:
       operationId: deleteToolTask
       summary: Delete a finished tool task
       description: >
-        Removes one task from the list once it has reached a
-        terminal state (`done`, `failed` or `parked`); a queued or
-        running task answers `conflict`, because deleting a row out
-        from under a worker leases nothing back. Deleting a parked
-        task frees the book or rip it held for another merge or
-        split. A book merge or split whose new files still wait under
-        hidden names leaves none behind: they are removed when every
-        part of the book is in place, and otherwise take their names (a
-        free one where another file holds it) for the next scan to
-        catalog; the task's `error` says which beforehand, and the
-        audit log records which it did. When a hidden file cannot take
-        its name or be removed (its folder refuses the server), the
-        task stays, its `error` saying so, and the delete answers
-        `conflict` with `params.reason` `outputs-hidden`,
-        `params.folder` and `params.cause`; a task kept so holds its
-        book from another merge or split, as a parked one does, until
-        it can be cleared. The retention prune settles them the same
-        way, leaving such a task for its next pass. Same visibility as
-        reading the task: callers delete their own rows, and an
-        administrator may delete any row the listing shows them.
+        Removes one task from the list once it has reached a terminal
+        state (`done`, `failed`, `canceled` or `parked`); a queued or
+        running task answers `conflict`, because deleting a row out from
+        under a worker leases nothing back. Deleting a parked task frees
+        the book or rip it held for another merge or split, and deleting
+        a canceled one that still held its book frees that. A book merge
+        or split whose new files still wait under hidden names leaves
+        none behind: they are removed when every part of the book is in
+        place, and otherwise take their names (a free one where another
+        file holds it) for the next scan to catalog; the task's `error`
+        says which beforehand, and the audit log records which it did.
+        What a canceled or failed run gave up and could not remove is
+        removed, never named.
+        When a hidden file cannot take its name or be removed (its
+        folder refuses the server), the task stays, its `error` saying
+        so, and the delete answers `conflict` with `params.reason`
+        `outputs-hidden`, `params.folder` and `params.cause`; a task
+        kept so holds its book from another merge or split, as a parked
+        one does, until it can be cleared. The retention prune settles
+        them the same way, leaving such a task for its next pass. Same
+        visibility as reading the task: callers delete their own rows,
+        and an administrator may delete any row the listing shows them.
       tags: [tools]
       responses:
         "204":
@@ -12584,25 +12655,91 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /tools/tasks/{taskId}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      operationId: cancelToolTask
+      summary: Cancel a tool task
+      description: >
+        Asks a task to stop. Same visibility as reading the task: its
+        owner or an administrator may cancel it, and anyone else gets
+        `not-found`. A task that had not started, or was waiting to try
+        again, answers `canceled` at once. A `running` task answers
+        still `running`, with `cancelRequested`, while it winds down; it
+        then ends `canceled`, or `done` when it finished first, and the
+        `task` marker fires again when it ends. A task that had already
+        finished (`done`, `failed`, `canceled` or `parked`) answers
+        unchanged, with no error. The one exception is a book merge or
+        split, or a CUE split, that has started moving library files:
+        running or waiting, it answers `conflict` (see below).
+
+
+        What a cancel keeps: an acquisition or a playlist sync keeps the
+        review entries it already opened; a genre normalize, a health
+        fix, a catalog repair and an import stop between items and keep
+        what they did, their `summary` counting it; a canceled
+        acquisition lists the review entries it opened in `resultPids`
+        and `summary.entries`, and a canceled playlist sync in
+        `resultPids`, as a done one does. A book
+        merge or split, or a CUE split, can be canceled until it starts
+        moving library files; from then on, running or waiting, it
+        answers `conflict` with `params.reason` `task-committed`, and the
+        task finishes, or puts things back, on its own. Canceled before
+        then, it removes what it made. A book merge or split's `error`
+        names what it could not remove from the book's folder, and the
+        task keeps its book from another merge or split, as a parked one
+        does, until it is cleared, which tries the removal again; one
+        that removed everything frees the book at once. A canceled CUE
+        split frees its rip at once: what it cut waits in the server's
+        own staging, never in the library. A cancel whose cleanup the
+        server stopped in the middle of is finished when it starts
+        again. A canceled task files no notification.
+      tags: [tools]
+      responses:
+        "200":
+          description: >
+            The task after the request: `canceled`, `running` with
+            `cancelRequested`, or unchanged when it had already finished.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            `conflict` with `params.reason` `task-committed`: a book merge
+            or split, or a CUE split, has started moving library files,
+            so it can no longer be canceled, whether it is running or
+            waiting to try again.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /tools/tasks/{taskId}/events:
     get:
       operationId: streamToolTaskEvents
       summary: Stream a tool task's progress
       description: >
         Server-sent events for one task: an event named `task` whose
-        data is the `ToolTask` JSON, emitted immediately on connect
-        and again on every state or progress change (streaming-engine
-        job progress is relayed onto the task as it runs), then a
-        final event named `done` after the task reaches a terminal
-        state, after which the stream closes. Reconnecting is always
-        safe: the first event replays current state. Same visibility
-        as reading the task, and the stream keeps checking it: within
-        a few seconds of the caller's session ending, or of the caller
-        losing the right to read the task, the stream closes with no
-        `done` event, and a reconnect answers that refusal. The
-        WebSocket channel carries the same
-        lifecycle as invalidations; this stream exists for consumers
-        that want the payloads pushed.
+        data is the `ToolTask` JSON, emitted immediately on connect and
+        again on every state or progress change (streaming-engine job
+        progress is relayed onto the task as it runs; `activity` moving
+        emits it about once every two seconds a task, and on every
+        change of phase), then a final event named `done` after the task
+        reaches a terminal state, after which the stream closes.
+        Reconnecting is always safe: the first event replays current
+        state. Same visibility as reading the task, and the stream keeps
+        checking it: within a few seconds of the caller's session
+        ending, or of the caller losing the right to read the task, the
+        stream closes with no `done` event, and a reconnect answers that
+        refusal. The WebSocket channel carries the same lifecycle as
+        invalidations; this stream exists for consumers that want the
+        payloads pushed.
       tags: [tools]
       parameters:
         - $ref: "#/components/parameters/TaskId"
@@ -13002,7 +13139,34 @@ paths:
         Downloads audio from a source URL through the acquisition
         bridge as a background task: a single video, or every entry
         of a playlist or channel (bounded to the first two hundred
-        entries; the response task reports progress per item).
+        entries; the task reports progress per item, and what it is
+        doing right now in its `activity`). A link naming both a video
+        and a playlist downloads the video unless `playlist` asks for
+        the list.
+
+
+        A link that is not an `http` or `https` address answers 400
+        `invalid-request` with `params.reason` `invalid-address`. Unless
+        the server is set to fetch from private hosts, so does one whose
+        host does not resolve, and one on a private or local network
+        answers it with `blocked-address`.
+
+
+        Before queuing, the server checks the link with the source,
+        bounded to a few seconds, and refuses it only on the source's
+        verdict on the link (such as an unavailable, private or deleted
+        video or playlist, an empty playlist, or a link the source
+        cannot read): that answers 422 `source-refused`, with
+        `params.reason` naming the verdict, and nothing is queued. A
+        check that gets no verdict queues the task anyway, and its run
+        checks again: one that cannot finish in time, and one that
+        meets the source's trouble at the time (`rate-limited`,
+        `source-broken`, `timed-out`, `unreachable`, or `video-private`
+        for a sign-in wall). The queued task carries the title the
+        check read as `itemTitle`, and `summary.url` and
+        `summary.source` from the start.
+
+
         Downloaded files stage exactly like uploads, appear as
         upload sessions, and flow through the same identify and
         review pipeline, grouped into album units. Each file carries
@@ -13061,6 +13225,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/ReadOnly"
+        "422":
+          $ref: "#/components/responses/SourceRefused"
         "429":
           $ref: "#/components/responses/RateLimited"
         "501":
@@ -13925,6 +14091,17 @@ components:
         The catalog is temporarily handed to a maintenance operation (code
         `catalog-maintenance`). Retry shortly; already-playing streams are
         unaffected.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    SourceRefused:
+      description: >
+        The source refused the link (code `source-refused`, with
+        `params.reason` saying why; see the API-level error list). Each
+        operation that answers it says for which reasons. Nothing was
+        queued or stored.
       content:
         application/json:
           schema:
@@ -17687,8 +17864,9 @@ components:
           description: >
             True while a fix for the rule is under way: a pass-backed
             fix from its start until its re-check lands, a task-backed
-            one while its task is queued or running. Another fix for
-            the rule answers `conflict` meanwhile.
+            one while its task is queued or running and not winding
+            down from a cancel. Another fix for the rule answers
+            `conflict` meanwhile.
         fixBlocked:
           type: string
           description: >
@@ -20772,7 +20950,35 @@ components:
         event name, so a client words the row itself and stays
         localized; `title` and `body` are the server's own English
         wording, for a client that does not know the event.
-      required: [id, event, title, body, createdAt]
+
+
+        Most events add one row per occurrence. A few fold instead,
+        keeping one unresolved row in each inbox: `review-ready`,
+        `import-completed` and `backup-completed` one row each,
+        `playlist-synced` one for each playlist (its per-run synced
+        notice; a notice that the playlist's sync was suspended adds a
+        row of its own), `episode-arrived` one for each show, and
+        `signup-requested` one for each pending account. A new
+        occurrence counts the row up, takes its wording and
+        `targetPid`, moves `updatedAt`, so the row rises to the top of
+        the listing under the same `id`, and marks it unread, except
+        an `import-completed` for the account that submitted the upload
+        or acquisition, which arrives read and folds without changing
+        the row's read state (an unread row stays unread).
+        `review-ready`'s `count` is recomputed from the account's review
+        queue as it changes; a fall leaves the read state and
+        `updatedAt` as they are, and the row resolves when the count
+        reaches zero. `signup-requested` resolves when the account it
+        names is approved, rejected or deleted, and deleting a playlist
+        or a podcast subscription resolves the rows that name it. A
+        resolve also marks an unread row read, so a resolved row never
+        counts toward `unreadCount`. A resolved row stays as history
+        until it is deleted, and a later occurrence starts a new row.
+        The `notification` sync marker fires for the account when a row
+        is added, folds, is recounted (`review-ready`'s count moving
+        either way) or resolves; marking rows read and deleting them
+        fire nothing.
+      required: [id, event, title, body, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -20796,19 +21002,47 @@ components:
             for `episode-downloaded`, the playlist for `playlist-synced`,
             the review entry (`rv-`) for `import-completed`, the catalog
             job (`jb-`) for `job-finished` and `job-failed`, the tool task
-            (`tk-`) for `tool-task-failed`, and the job or the tool task
-            that ran the fix for `health-fix-finished`. Absent for events that are about the
-            server rather than an item, for `subscription-failed`, whose
-            feed never became a show, and for `gpodder-device-removed`.
+            (`tk-`) for `tool-task-failed` (a book merge or split, a CUE
+            split, a URL download or a playlist sync), the job or the
+            tool task that ran the fix for `health-fix-finished`, and the
+            pending account (`us-`) for `signup-requested`. Absent for
+            other events that are about the server rather than an item,
+            for `review-ready`, which counts the whole queue, for
+            `subscription-failed`, whose feed never became a show, and
+            for `gpodder-device-removed`.
           example: pc-01JZX5N8QW3F4V9T2B7KD3M9R6
         createdAt:
           type: string
           format: date-time
-          description: When the event happened.
+          description: When the event happened, the row's first occurrence.
+        updatedAt:
+          type: string
+          format: date-time
+          description: >
+            The row's latest occurrence: `createdAt` for a row that never
+            folded one. The listing orders by it. A falling `count` and a
+            resolve leave it as it is.
+        count:
+          type: integer
+          minimum: 1
+          default: 1
+          description: >
+            How many occurrences the row folds; for `review-ready`, how
+            many entries wait in the account's review queue while the row
+            stands, a resolved row keeping the count it last had.
+        resolvedAt:
+          type: string
+          format: date-time
+          description: >
+            When what the row reports was dealt with: the account's review
+            queue emptied, the signup decided, the playlist or
+            subscription it names deleted. Absent while unresolved.
         readAt:
           type: string
           format: date-time
-          description: When the row was marked read. Absent while unread.
+          description: >
+            When the row was marked read, or resolved while unread.
+            Absent while unread.
 
     NotificationPage:
       type: object
@@ -20817,7 +21051,7 @@ components:
       properties:
         notifications:
           type: array
-          description: Rows newest first.
+          description: Rows by `updatedAt`, newest first.
           items:
             $ref: "#/components/schemas/Notification"
         nextCursor:
@@ -20836,12 +21070,28 @@ components:
         ids:
           type: array
           description: >
-            The rows to stamp. Absent or empty marks every unread row
-            read, which is what the "mark all read" affordance sends.
+            The rows to stamp. With `events` also absent or empty, marks
+            every unread row read, which is what the "mark all read"
+            affordance sends.
           maxItems: 200
           items:
             type: string
             example: nf-01JZX5N8QW3F4V9T2B7KD3M9R6
+        events:
+          type: array
+          description: >
+            Catalog event names: marks every unread row of these events
+            read, loaded or not. Refused beside a non-empty `ids`.
+          maxItems: 200
+          items:
+            type: string
+            example: review-ready
+        targetPid:
+          type: string
+          description: >
+            Narrows `events` to the rows naming this pid. Refused without
+            `events`.
+          example: pl-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     NotificationTarget:
       type: object
@@ -26505,8 +26755,10 @@ components:
 
 
             Markers carry only `pid` and hydrate nothing: `review`, `upload`,
-            `task` (a task was queued, started or ended; refetch that
-            surface), `task-progress` (a task's progress moved; refetch it,
+            `task` (a task was queued, started, asked to cancel or ended;
+            refetch that surface), `task-progress` (a task's progress
+            moved, or its `activity`, which marks it about once every two
+            seconds a task and on every change of phase; refetch it,
             though it is not news), `entity-state` (an artist or album was
             starred or rated), and `job` (the `jb-` catalog job ended, or,
             for a scan, analysis, enrichment, organize run, organize undo,
@@ -26548,10 +26800,12 @@ components:
             after repeated failures).
 
 
-            `notification` (`pid` is the inbox row that was written;
-            refetch `GET /users/me/notifications`) rides every emit,
-            whether or not the account has a delivery target for the
-            event.
+            `notification` (`pid` is the inbox row that changed;
+            refetch `GET /users/me/notifications`) fires when a row is
+            added, folds, is recounted (`review-ready`'s count moving
+            either way) or resolves, whether or not the account has a
+            delivery target for the event; marking rows read and deleting
+            them fire nothing.
 
 
             `account` carries no `pid`: the caller's own roles or
@@ -26713,55 +26967,113 @@ components:
         state:
           type: string
           description: >
-            `queued`, `running`, `done`, `failed`, or `parked`: a book
+            `queued`, `running`, `done`, `failed`, `canceled` (stopped
+            because `cancelToolTask` asked it to), or `parked`: a book
             merge or split, or a CUE split, whose runs kept ending with
-            the server. Parked is terminal and counts as failed: the task
-            is not run again, the delete, Clear finished and the retention
-            prune take it as they take a failed task, and until one does
-            it keeps the book or rip it works on from another merge or
-            split. A string, not a closed enum.
+            the server, or a book merge or split that failed leaving
+            files it could not remove, which its `error` names. Canceled and parked are terminal. Parked counts
+            as failed: the task is not run again, the delete, Clear
+            finished and the retention prune take it as they take a
+            failed task, and until one does it keeps the book or rip it
+            works on from another merge or split. The delete, Clear
+            finished and the retention prune take a canceled task as
+            they take a failed one too; a book merge or split canceled
+            leaving files it could not remove keeps its book until one
+            does, as a parked one does. A `queued` task waits for its
+            worker, which runs one task at a time, oldest first: URL
+            downloads and playlist syncs have one, health fixes and
+            catalog repairs another, and every other kind shares a
+            third, so a task stays `queued`, with no `activity`, while an
+            earlier one of its worker runs. A string, not a closed enum.
+        cancelRequested:
+          type: boolean
+          default: false
+          description: >
+            True while a `running` task that was asked to cancel winds
+            down. It then ends `canceled`, or `done` when it finished
+            first.
         itemPid:
           type: string
           description: >
-            The book, track, or playlist the task was started from.
+            The book, track, or playlist the task was started from, when
+            it was started from one.
         itemTitle:
           type: string
           description: >
-            What `itemPid` was called when the task was queued: a book
-            merge's or split's book, a CUE split's album. Absent for
-            other tasks.
+            What the task works on, by name: for a book merge or split,
+            the book, and for a CUE split, the album, as `itemPid` was
+            called when the task was queued; for an acquisition, the
+            video or playlist as the source names it, read when the link
+            was checked, else from the listing once the run reads it;
+            for a playlist sync, the playlist's name. Absent for other
+            tasks, and for an acquisition whose source has not named it
+            yet.
         progressPct:
           type: number
           format: double
-          description: Progress in percent when the engine reports it.
+          description: >
+            Progress in percent, when known: a file tool's as the
+            streaming engine reports it; an acquisition's or playlist
+            sync's as the items done plus the current item's byte
+            fraction, over the items in all; other kinds' as their items
+            or steps finish.
+        activity:
+          $ref: "#/components/schemas/ToolTaskActivity"
         error:
           type: string
           description: >
-            Why the task failed, when `failed`, or stopped, when
-            `parked`, where it also says where each file the run made or
-            moved is (new files waiting beside the book, originals in the
-            trash) and what clearing the task does with new files still
-            hidden.
-            While a book merge or split, a CUE split, or a catalog repair
-            is `running` it can say what the task waits out instead, in
-            the server's words beside `waitReason`.
+            Why the task failed, when `failed`, in the server's words
+            (`errorCode` says the same for a client to word), or stopped,
+            when `parked`, where it also says where each file the run
+            made or moved is (new files waiting beside the book,
+            originals in the trash) and what clearing the task does with
+            new files still hidden, or, when `canceled` or after a
+            failure, what the run made and could not remove, and where.
+            While a task is `running` it can say what the task waits out
+            instead, in the server's words beside `waitReason`.
+        errorCode:
+          type: string
+          description: >
+            Why a `failed` task failed, as a code from the API-level
+            error list, so a client words it itself: `source-refused`,
+            with `errorParams.reason`, for an acquisition or a playlist
+            sync the source refused, for example. `error` keeps the
+            server's sentence. Every failed task carries one: `internal`
+            when no more specific code applies, `error` then saying what
+            happened. A client shows `error` for a code it does not know.
+        errorParams:
+          type: object
+          additionalProperties:
+            type: string
+          description: >
+            The detail `errorCode` names, as `Error.params` carries it:
+            values are strings, best-effort, and a client ignores keys it
+            does not know.
         waitReason:
           type: string
           description: >
-            Set while a `running` book merge or split, or CUE split,
-            waits to try again on its own, at `retryAt`: `catalog-busy`
-            (another job holds the catalog), `catalog-maintenance`,
-            `read-only` (a library it works in is flagged read-only),
-            `storage-unwritable` (a folder refuses the server),
-            `engine-unavailable`, `part-missing` (a file the catalog has
-            is not where it says), `put-back-blocked` (a file going back
-            from the trash cannot), `stopped` (the server stopped or the
-            run ran out of time), or `other`. A `catalog-repair` that a
-            catalog hand-off cut short waits too, with
+            Set while a `running` task waits to try again on its own, at
+            `retryAt`. Any task can wait with `other`: a failure the
+            server could not classify, `error` saying what it was; it
+            still ends `failed` once its attempts run out, keeping that
+            error. A book merge or split, or CUE split, waits with
+            `catalog-busy` (another job holds the catalog),
+            `catalog-maintenance`, `read-only` (a library it works in is
+            flagged read-only), `storage-unwritable` (a folder refuses
+            the server), `engine-unavailable`, `part-missing` (a file the
+            catalog has is not where it says), `put-back-blocked` (a file
+            going back from the trash cannot) or `stopped` (the server
+            stopped or the run ran out of time). A `catalog-repair` that
+            a catalog hand-off cut short waits too, with
             `catalog-maintenance`, and starts over once the catalog is
             back. A book merge or split, or CUE split, waits at most six
-            hours in a row, then ends safely for how far it went. A
-            string, not a closed enum.
+            hours in a row, then ends safely for how far it went. An
+            acquisition or playlist sync waits with `source-retry` (the
+            source failed in a way worth retrying), `rate-limited` (the
+            source asked to slow down; `retryAt` follows its retry-after,
+            thirty minutes away at most) or `stalled` (a download showed no activity for three minutes
+            and was stopped to try again), at most three waits in all,
+            after which it fails. A string, not a closed enum.
         retryAt:
           type: string
           format: date-time
@@ -26779,7 +27091,9 @@ components:
           description: >
             What the task produced once `done`: the merged book or
             the split pieces (item pids), or the review entries an
-            acquisition or playlist sync opened (entry pids).
+            acquisition or playlist sync opened (entry pids), which a
+            `canceled` acquisition or playlist sync lists too, and a
+            `failed` acquisition.
           items:
             type: string
         createdAt:
@@ -26794,28 +27108,88 @@ components:
           type: object
           additionalProperties: true
           description: >
-            Task-type-specific result detail once the task finishes,
-            for example a migration import's match-and-write report.
-            Shapes are documented per task type and may grow fields. A
-            `health-fix` task carries `rule` from the moment it is
-            queued, and once it has run `attempted`, `filled`, `failed`
-            (item counts) and `skipped`, an object counting the items
-            left alone by reason (`gone`, `locked`, `no match`, ...); a
-            `path-mismatch` fix also carries `moved` (the items it
-            moved), `held` (by hold code) and `jobPids` (the organize
-            jobs that moved them). A `catalog-repair` task carries each
-            step's count once that step has run, added up over its
-            attempts and absent for a step none has reached:
-            `sortKeysRewritten`, `orphansDeleted` (entities with no items
-            deleted), `orphansPending` (those its last orphans step noted
-            for the next repair), `artSourcesReclaimed`,
-            `thumbnailsReclaimed`, `tagProvenanceReclaimed`,
-            `strandedTagRowsReclaimed` and `searchRowsRebuilt` (entries
-            written or dropped); `runs`, what each run of the task did:
-            the steps it finished, in order, with `error` saying why a run
-            stopped short and `handedOff` marking one a catalog hand-off
-            cut short; and once it has run, `after`, the
-            `CatalogConsistency` its closing check read.
+            Task-type-specific detail, documented per type: some keys
+            are there from the moment the task is queued, the rest once
+            it has run, for example a migration import's match-and-write
+            report. Shapes may grow fields. An `acquire` task carries
+            `url` (the link it was given) and `source` (`video`,
+            `playlist` or `channel`: how the link was taken) from the
+            moment it is queued, and once it has run, `canceled`
+            included, `entries` (the titles of the review entries it
+            opened, in order) and `truncated` (true when the listing
+            stopped at the two-hundred-item cap). A `genre-normalize`
+            task carries `dryRun` from the moment it is queued, and an
+            `import-` task `target` (the account it imports into, by
+            display name, else username) and `dryRun`. A `health-fix`
+            task carries `rule` from the moment it is queued, and once
+            it has run `attempted`, `filled`, `failed` (item counts) and
+            `skipped`,
+            an object counting the items left alone by reason (`gone`,
+            `locked`, `no match`, ...); a `path-mismatch` fix also
+            carries `moved` (the items it moved), `held` (by hold code)
+            and `jobPids` (the organize jobs that moved them). A
+            `health-fix` task queued for chosen items also carries
+            `scoped`, how many, from the moment it is queued. A
+            `catalog-repair` task carries each step's count once that
+            step has run, added up over its attempts and absent for a
+            step none has reached: `sortKeysRewritten`, `orphansDeleted`
+            (entities with no items deleted), `orphansPending` (those
+            its last orphans step noted for the next repair),
+            `artSourcesReclaimed`, `thumbnailsReclaimed`,
+            `tagProvenanceReclaimed`, `strandedTagRowsReclaimed` and
+            `searchRowsRebuilt` (entries written or dropped); `runs`,
+            what each run of the task did: the steps it finished, in
+            order, with `error` saying why a run stopped short and
+            `handedOff` marking one a catalog hand-off cut short; and
+            once it has run, `after`, the `CatalogConsistency` its
+            closing check read. A canceled task's counts say what it did
+            before it stopped.
+
+    ToolTaskActivity:
+      type: object
+      description: >
+        What a `running` task is doing right now. Present only while
+        this server runs the task, so absent on a queued or finished
+        one.
+      required: [phase, at]
+      properties:
+        phase:
+          type: string
+          description: >
+            `listing` (reading a playlist or channel), `downloading`
+            (fetching from a source), `processing` (working on what it
+            has: converting or cutting what it fetched, fetching a
+            streaming-engine result, a playlist sync working out what
+            changed, or a genre normalize going through the catalog) or
+            `importing` (writing what it fetched or read into the
+            library, an account's listening history or the review
+            queue). A wait between attempts shows `waitReason` and
+            `retryAt` instead, with no `activity`. A string, not a closed
+            enum: a client words a phase it does not know as plain
+            activity.
+        itemsDone:
+          type: integer
+          description: Items of the task finished so far.
+        itemsTotal:
+          type: integer
+          description: Items the task has in all, once known.
+        itemTitle:
+          type: string
+          description: The item in hand.
+        bytesDone:
+          type: integer
+          format: int64
+          description: The item in hand's bytes fetched so far.
+        bytesTotal:
+          type: integer
+          format: int64
+          description: The item in hand's size, when the source gives it.
+        at:
+          type: string
+          format: date-time
+          description: >
+            The last activity the server saw, so a client can tell a
+            stall from slow progress.
 
     ClearFinishedTasksRequest:
       type: object
@@ -27336,6 +27710,14 @@ components:
           description: >
             The source URL: a single video, a playlist, or a channel
             the acquisition bridge understands.
+        playlist:
+          type: boolean
+          description: >
+            For a link naming both a video and a playlist (a
+            `watch?v=...&list=...` link): true downloads the playlist,
+            absent or false the video. A link naming only a video
+            downloads the video, and one naming only a playlist or a
+            channel downloads the list, whatever this says.
         mediaType:
           $ref: "#/components/schemas/UploadMediaType"
         libraryPid:

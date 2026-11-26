@@ -23,6 +23,8 @@ import (
 	"github.com/colespringer/waxbin/source"
 	"github.com/colespringer/waxbin/waxerr"
 	waxtap "github.com/colespringer/waxtap/v3"
+
+	"github.com/colespringer/waxdeck/server/internal/syncsource"
 )
 
 // enrichLimit caps the per-video metadata lookups made during one enumeration.
@@ -225,26 +227,34 @@ func (p *Provider) Resolve(ctx context.Context, req source.Request) (*source.Res
 // at most enrichLimit new entries. The ETag is the cursor plus the token of
 // any second-look hand-over, which the catalog returns only once stored.
 func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.Enumeration, error) {
-	return p.enumerate(ctx, req, p.cfg.Pending)
+	return p.enumerate(ctx, req, p.cfg.Pending, syncsource.EnumerateOptions{})
 }
 
 // EnumerateOnce is Enumerate for a one-shot read such as an acquisition.
 // It leaves the second look's held entries alone: a lookup there would
 // hand an aired premiere to the one-shot reader and forget it before the
-// subscription saw it.
-func (p *Provider) EnumerateOnce(ctx context.Context, req source.Request) (*source.Enumeration, error) {
-	return p.enumerate(ctx, req, nil)
+// subscription saw it. The listing reports its pages and lookups to
+// opts.Progress, and to opts.OnCut that it stopped at the cap.
+func (p *Provider) EnumerateOnce(ctx context.Context, req source.Request, opts syncsource.EnumerateOptions) (*source.Enumeration, error) {
+	return p.enumerate(ctx, req, nil, opts)
 }
 
-func (p *Provider) enumerate(ctx context.Context, req source.Request, pending PendingLive) (*source.Enumeration, error) {
+func (p *Provider) enumerate(ctx context.Context, req source.Request, pending PendingLive, eo syncsource.EnumerateOptions) (*source.Enumeration, error) {
 	lastSeen, receipt := splitETag(req.ETag)
-	opts := enrichedOptions(p.cfg.MaxItems, enrichLimit)
+	opts := enrichedOptions(pastCap(p.cfg.MaxItems), enrichLimit)
+	opts.OnProgress, opts.OnEnrichProgress = eo.Progress.OnPage, eo.Progress.OnLookup
 	if lastSeen != "" {
 		opts.Stop = func(id string) bool { return id == lastSeen }
 	}
 	pl, err := p.tap.Enumerate(ctx, req.URL, opts)
 	if err != nil {
 		return nil, sourceErr(ctx, "waxtapsource.Enumerate", err)
+	}
+	// Counted before the live and undeliverable entries drop out, as the
+	// playlist snapshot counts its cut; a poll that met its last-seen
+	// entry stopped there, which is no cap.
+	if keepCap(pl, p.cfg.MaxItems) && eo.OnCut != nil && lastSeen == "" {
+		eo.OnCut()
 	}
 
 	feed := &model.Feed{Title: pl.Title, Author: pl.Author}
@@ -545,6 +555,26 @@ func (p *Provider) secondLook(ctx context.Context, pending PendingLive, sourceID
 // fullMetadata is the read the listing's enrichment and the second
 // look's lookups both ask with: the watch-page pass that dates a video.
 var fullMetadata = []waxtap.ReadOption{waxtap.WithFullMetadata()}
+
+// pastCap is what a listing capped at maxItems asks for: one entry more,
+// so a listing of exactly maxItems is not taken for a cut.
+func pastCap(maxItems int) int {
+	if maxItems <= 0 {
+		return 0
+	}
+	return maxItems + 1
+}
+
+// keepCap trims a listing asked for with pastCap back to maxItems and
+// reports whether the cap cut it: the entry past it exists, or the source
+// has more to list.
+func keepCap(pl *waxtap.Playlist, maxItems int) bool {
+	if maxItems > 0 && len(pl.Entries) > maxItems {
+		pl.Entries = pl.Entries[:maxItems]
+		return true
+	}
+	return pl.Continuation != ""
+}
 
 // enrichedOptions builds the enumeration options both listing paths share: a
 // listing capped at maxItems whose leading budget entries are refreshed with

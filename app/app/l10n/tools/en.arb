@@ -1,9 +1,147 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
+  "toolsAcquireTruncated": "Only the first 200 were taken",
+  "@toolsAcquireTruncated": {
+    "description": "Note under a finished playlist download: the listing stopped at its 200-item cap, so the rest was not taken."
+  },
+  "toolsActivityBytes": "{activity} ({done} of {total})",
+  "@toolsActivityBytes": {
+    "description": "A running download's caption with the size of the item in hand: what it is doing, then the bytes fetched of the bytes in all, each already written with its unit.",
+    "placeholders": {
+      "activity": {
+        "type": "String",
+        "example": "Downloading 3 of 37: Long Division"
+      },
+      "done": {
+        "type": "String",
+        "example": "4.2 MB"
+      },
+      "total": {
+        "type": "String",
+        "example": "9.8 MB"
+      }
+    }
+  },
+  "toolsActivityDownloading": "Downloading",
+  "@toolsActivityDownloading": {
+    "description": "Caption of a running task that is fetching audio, when it names no item."
+  },
+  "toolsActivityDownloadingCount": "Downloading {done} of {total}",
+  "@toolsActivityDownloadingCount": {
+    "description": "Caption of a running task fetching one of several items, with no title for it yet. {done} is the place of the item in hand.",
+    "placeholders": {
+      "done": {
+        "type": "int",
+        "example": "3"
+      },
+      "total": {
+        "type": "int",
+        "example": "37"
+      }
+    }
+  },
+  "toolsActivityDownloadingCountTitled": "Downloading {done} of {total}: {title}",
+  "@toolsActivityDownloadingCountTitled": {
+    "description": "Caption of a running task fetching one of several items. {done} is the place of the item in hand, {title} its title.",
+    "placeholders": {
+      "done": {
+        "type": "int",
+        "example": "3"
+      },
+      "total": {
+        "type": "int",
+        "example": "37"
+      },
+      "title": {
+        "type": "String",
+        "example": "Long Division"
+      }
+    }
+  },
+  "toolsActivityDownloadingTitled": "Downloading {title}",
+  "@toolsActivityDownloadingTitled": {
+    "description": "Caption of a running task fetching a single item, by its title.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Division"
+      }
+    }
+  },
+  "toolsActivityImporting": "Opening review entries",
+  "@toolsActivityImporting": {
+    "description": "Caption of a running download that is writing what it fetched into the review queue."
+  },
+  "toolsActivityImportingLibrary": "Adding to the library",
+  "@toolsActivityImportingLibrary": {
+    "description": "Caption of a running book merge or split or CUE split that is writing the files it produced into the library, in place of the review entries a download opens."
+  },
+  "toolsActivityImportingPlain": "Importing",
+  "@toolsActivityImportingPlain": {
+    "description": "Caption of a running import from another server or a listening service that is writing what it read into the library or a listening history."
+  },
+  "toolsActivityListing": "Listing the playlist",
+  "@toolsActivityListing": {
+    "description": "Caption of a running playlist download or playlist sync that is reading the playlist to see what it holds."
+  },
+  "toolsActivityListingChannel": "Listing the channel",
+  "@toolsActivityListingChannel": {
+    "description": "Caption of a running channel download that is reading the channel to see what it holds."
+  },
+  "toolsActivityProcessing": "Processing",
+  "@toolsActivityProcessing": {
+    "description": "Caption of a running task that is converting or cutting what it fetched, when it names no item."
+  },
+  "toolsActivityProcessingTitled": "Processing {title}",
+  "@toolsActivityProcessingTitled": {
+    "description": "Caption of a running task that is converting or cutting what it fetched, by the item title.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Division"
+      }
+    }
+  },
+  "toolsActivityStalled": "No activity for {minutes} min",
+  "@toolsActivityStalled": {
+    "description": "Caption on a running task whose last sign of work is more than two minutes old; {minutes} is how long. Min is the unit abbreviation.",
+    "placeholders": {
+      "minutes": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
   "toolsBookInTrash": "The book's files are in the trash until this finishes.",
   "@toolsBookInTrash": {
     "description": "Line on a book merge or split task whose sources are in the trash and whose new files are not yet the book: the book is missing from the library until the task finishes."
+  },
+  "toolsCancelAction": "Cancel task",
+  "@toolsCancelAction": {
+    "description": "Confirm button of the dialog that asks before stopping a download or playlist sync that has already opened review entries."
+  },
+  "toolsCancelBody": "Entries it has already opened stay in the review queue.",
+  "@toolsCancelBody": {
+    "description": "Body of the dialog that asks before canceling a download or playlist sync that has already opened review entries: what a cancel keeps."
+  },
+  "toolsCancelKeep": "Keep running",
+  "@toolsCancelKeep": {
+    "description": "Dismiss button of the dialog that asks before canceling a task: leaves the task running."
+  },
+  "toolsCancelTask": "Cancel {task}",
+  "@toolsCancelTask": {
+    "description": "Accessible name of the control that asks one unfinished task to stop, naming the task by its row title so rows are told apart.",
+    "placeholders": {
+      "task": {
+        "type": "String",
+        "example": "URL download: Long Division"
+      }
+    }
+  },
+  "toolsCancelTitle": "Cancel this task?",
+  "@toolsCancelTitle": {
+    "description": "Title of the dialog that asks before canceling a download or playlist sync that has already opened review entries."
   },
   "toolsClearAllAction": "Clear",
   "@toolsClearAllAction": {
@@ -322,6 +460,54 @@
   "@toolsEmptyTitle": {
     "description": "Empty state of the tool task list."
   },
+  "toolsEntriesMore": "{count, plural, =1{and 1 more} other{and {count} more}}",
+  "@toolsEntriesMore": {
+    "description": "Last line of a finished download's entry titles, after the first three: how many more it opened.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "toolsHealthScoped": "{count, plural, =1{For 1 chosen item} other{For {count} chosen items}}",
+  "@toolsHealthScoped": {
+    "description": "Line on a health fix queued for chosen items rather than every one: how many.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "toolsHideDetails": "Hide details",
+  "@toolsHideDetails": {
+    "description": "Folds away the server's own words under a failed task's sentence."
+  },
+  "toolsImportDryRun": "Dry run",
+  "@toolsImportDryRun": {
+    "description": "Line on an import task that was queued as a dry run and has no named account."
+  },
+  "toolsImportTarget": "Into {target}",
+  "@toolsImportTarget": {
+    "description": "Line on an import task: the account it imports into, by display name.",
+    "placeholders": {
+      "target": {
+        "type": "String",
+        "example": "Alice"
+      }
+    }
+  },
+  "toolsImportTargetDryRun": "Dry run into {target}",
+  "@toolsImportTargetDryRun": {
+    "description": "Line on an import task queued as a dry run: the account it would import into, by display name.",
+    "placeholders": {
+      "target": {
+        "type": "String",
+        "example": "Alice"
+      }
+    }
+  },
   "toolsItemsProduced": "{count, plural, =1{1 item} other{{count} items}}",
   "@toolsItemsProduced": {
     "description": "Line under a finished task: how many items it produced.",
@@ -485,6 +671,10 @@
   "@toolsShowAll": {
     "description": "Opens a task's account (why it failed or stopped, and where its files are) past its first lines."
   },
+  "toolsShowDetails": "Show details",
+  "@toolsShowDetails": {
+    "description": "Opens the server's own words under a failed task's sentence, which the sentence above translates."
+  },
   "toolsShowLess": "Show less",
   "@toolsShowLess": {
     "description": "Folds a task's opened account back to its first lines."
@@ -492,6 +682,10 @@
   "toolsStateCanceled": "Stopped",
   "@toolsStateCanceled": {
     "description": "State of a job the server stopped before it finished, as it shut down or restarted. Agrees with the word for a task in this language."
+  },
+  "toolsStateCanceling": "Canceling",
+  "@toolsStateCanceling": {
+    "description": "State of a running task that was asked to cancel and is winding down. It then ends canceled, or done when it finished first."
   },
   "toolsStateCrashed": "Crashed",
   "@toolsStateCrashed": {
@@ -526,6 +720,10 @@
         "example": "42"
       }
     }
+  },
+  "toolsStateTaskCanceled": "Canceled",
+  "@toolsStateTaskCanceled": {
+    "description": "State of a task that stopped because someone canceled it. Terminal, and it counts as finished: it is dismissed and cleared like a done task. Agrees with the word for a task in this language."
   },
   "toolsStateWaiting": "Waiting",
   "@toolsStateWaiting": {
@@ -623,6 +821,10 @@
   "@toolsTaskGenreNormalize": {
     "description": "Name of a task that folds genre spellings onto the canonical genre tree."
   },
+  "toolsTaskGenreNormalizePreview": "Genre clean-up (preview)",
+  "@toolsTaskGenreNormalizePreview": {
+    "description": "Name of the genre clean-up task when it was queued as a dry run that changes nothing."
+  },
   "toolsTaskHealthFix": "Fix: {rule}",
   "@toolsTaskHealthFix": {
     "description": "Name of a task fixing one library health rule. {rule} is the rule's own name.",
@@ -685,6 +887,36 @@
   "@toolsTasksSection": {
     "description": "Heading over the tool tasks list when the catalog's jobs are listed above it."
   },
+  "toolsTimeFinished": "finished {when}",
+  "@toolsTimeFinished": {
+    "description": "Line on a tool task or job that has ended: when, as a relative phrase such as '2 h ago'.",
+    "placeholders": {
+      "when": {
+        "type": "String",
+        "example": "2 h ago"
+      }
+    }
+  },
+  "toolsTimeQueued": "queued {when}",
+  "@toolsTimeQueued": {
+    "description": "Line on a tool task that is queued or running: when it was queued, as a relative phrase such as '5 min ago'.",
+    "placeholders": {
+      "when": {
+        "type": "String",
+        "example": "5 min ago"
+      }
+    }
+  },
+  "toolsTimeStarted": "started {when}",
+  "@toolsTimeStarted": {
+    "description": "Line on a library job that is running: when it started, as a relative phrase such as '5 min ago'.",
+    "placeholders": {
+      "when": {
+        "type": "String",
+        "example": "5 min ago"
+      }
+    }
+  },
   "toolsTitle": "Tool tasks",
   "@toolsTitle": {
     "description": "Title of the screen following long-running library work: merges, splits, downloads, imports."
@@ -723,9 +955,21 @@
   "@toolsWaitPutBackBlocked": {
     "description": "Why a book merge or split waits: undoing, it cannot put a file back from the trash."
   },
+  "toolsWaitRateLimited": "The source asked it to slow down.",
+  "@toolsWaitRateLimited": {
+    "description": "Why a waiting download waits: the source asked it to slow down, and it tries again after the pause the source named."
+  },
   "toolsWaitReadOnly": "A library it works in is read-only. Turn that off for it or the server.",
   "@toolsWaitReadOnly": {
     "description": "Why a waiting task waits: a library it works in, or the whole server, is in read-only mode."
+  },
+  "toolsWaitSourceRetry": "The source had a problem. It will try again.",
+  "@toolsWaitSourceRetry": {
+    "description": "Why a waiting download waits: the source failed in a way that may pass."
+  },
+  "toolsWaitStalled": "The download stalled. It will start again.",
+  "@toolsWaitStalled": {
+    "description": "Why a waiting download waits: it showed no activity for a while and was stopped to start over."
   },
   "toolsWaitStopped": "Cut short by a server stop or a time limit.",
   "@toolsWaitStopped": {

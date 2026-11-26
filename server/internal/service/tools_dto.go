@@ -1,7 +1,9 @@
 package service
 
 import (
+	"cmp"
 	"encoding/json"
+	"errors"
 	"regexp"
 	"strings"
 
@@ -47,16 +49,45 @@ func opName(p string) bool {
 	return !scan.IsAudio(p) && !namedEnds[strings.ToLower(p[strings.LastIndexByte(p, '.')+1:])]
 }
 
-// taskFailureText is what a failed task records: the failure's own
-// words, without the operation names a library threads onto it or the
-// permanence marker. The server's paths stay for an administrator to
-// read; taskFor cuts them for anyone else.
+// taskFailureText is what a failed task records: a source refusal in the
+// server's sentence for its reason, else the failure's own words, without
+// the operation names a library threads onto it or the permanence marker.
+// The server's paths stay for an administrator to read; taskFor cuts them
+// for anyone else.
 func taskFailureText(cause error) string {
+	if s := refusalSentence(cause); s != "" {
+		return s
+	}
 	s := waxDetail(cause)
 	if s == "" {
 		s = strings.TrimPrefix(cause.Error(), errToolPermanent.Error()+": ")
 	}
 	return withoutOpNames(s)
+}
+
+// refusalSentence is what the server says of a source's refusal: its
+// sentence for the reason, or what a run said of it (how far a list got);
+// the source's own words stay in the log. "" for any other failure.
+func refusalSentence(cause error) string {
+	var se *Error
+	if !errors.As(cause, &se) || se.Kind != KindRefused {
+		return ""
+	}
+	r, known := sourceReasons[se.Params["reason"]]
+	if !known {
+		return ""
+	}
+	return cmp.Or(se.Msg, r.sentence)
+}
+
+// taskFailureCode is a failure as a client words it: the API error code
+// its classification answers, as an HTTP error's does, and the params it
+// carries as a JSON object ("" for none).
+func taskFailureCode(cause error) (code, params string) {
+	if p := RefusalParams(cause); len(p) > 0 {
+		params = marshalJSON(p)
+	}
+	return string(KindOf(cause)), params
 }
 
 // withoutOpNames drops the operation names leading s or any part of it
@@ -78,7 +109,7 @@ func withoutOpNames(s string) string {
 // taskFor is a task as the caller may read it: its recorded failure
 // names the server's paths, which only an administrator reads.
 func (l *Tools) taskFor(uc *UserCtx, t wdb.ToolTask) ToolTaskDTO {
-	dto := toolTaskDTO(t)
+	dto := l.withActivity(toolTaskDTO(t))
 	if !uc.Admin {
 		dto.Error = l.Ingest.failureWords(dto.Error)
 	}
@@ -100,8 +131,20 @@ func toolTaskDTO(t wdb.ToolTask) ToolTaskDTO {
 		Summary:     summary,
 		CreatedAtNS: t.CreatedAtNS, FinishedAtNS: t.FinishedAtNS,
 	}
-	if t.State == taskStateRunning && t.WaitReason != "" {
+	switch {
+	case t.State == taskStateRunning && t.WaitReason != "":
 		dto.WaitReason, dto.RetryAtNS = t.WaitReason, t.LeaseUntilNS
+		dto.CancelRequested = t.CancelRequested
+	case t.State == taskStateRunning:
+		// What a wait said, kept for a run that never comes back, is no
+		// news while the task runs.
+		dto.Error = ""
+		dto.CancelRequested = t.CancelRequested
+	case t.State == taskStateFailed && t.ErrorCode != "":
+		dto.ErrorCode = t.ErrorCode
+		if t.ErrorParams != "" {
+			_ = json.Unmarshal([]byte(t.ErrorParams), &dto.ErrorParams)
+		}
 	}
 	if (t.Type == taskTypeBookMerge || t.Type == taskTypeBookSplit) && (t.State == taskStateRunning || t.State == taskStateParked) {
 		// While the run's trash holds the book: from its trash to its new

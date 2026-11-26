@@ -125,6 +125,15 @@ void main() {
         en.relativeSpaced(now.add(const Duration(minutes: 5)), now: now),
         'just now',
       );
+      // Under a minute is not "0 min ago".
+      expect(
+        en.relativeSpaced(ago(const Duration(seconds: 40)), now: now),
+        'just now',
+      );
+      expect(
+        en.relativeSpaced(ago(const Duration(seconds: 61)), now: now),
+        '1 min ago',
+      );
     });
 
     test('the forward family, as a schedule draws it', () {

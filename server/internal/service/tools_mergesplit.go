@@ -53,13 +53,16 @@ func (l *Tools) runBookMerge(ctx context.Context, t *wdb.ToolTask, p toolTaskPar
 		if err != nil {
 			return nil, err
 		}
+		defer l.dropCanceledJob(ctx, jobID)
 		if _, err := l.pollToolJob(ctx, t, jobID, 1); err != nil {
 			return nil, err
 		}
 		merged := filepath.Join(ws, b.names[0])
+		l.noteJobOutput(ctx, t.ID, 0, 1)
 		if err := l.flowJobs.DownloadJobResult(ctx, jobID, 0, merged, b.mode); err != nil {
 			return nil, err
 		}
+		l.noteToolImport(ctx, t.ID)
 		// The engine deliberately carries no source tags, so the book's
 		// richer identity and its cover are stamped in a post-pass.
 		if err := l.tagToolBookFile(ctx, merged, bd, b.label, b.label, 0); err != nil {
@@ -93,6 +96,7 @@ func (l *Tools) runBookSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskPar
 		if err != nil {
 			return nil, err
 		}
+		defer l.dropCanceledJob(ctx, jobID)
 		outs, err := l.pollToolJob(ctx, t, jobID, len(b.names))
 		if err != nil {
 			return nil, err
@@ -100,6 +104,7 @@ func (l *Tools) runBookSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskPar
 		pieces := make([]string, 0, outs)
 		for i := range outs {
 			dst := filepath.Join(ws, b.names[i])
+			l.noteJobOutput(ctx, t.ID, i, outs)
 			if err := l.flowJobs.DownloadJobResult(ctx, jobID, i, dst, b.mode); err != nil {
 				return nil, err
 			}
@@ -108,19 +113,40 @@ func (l *Tools) runBookSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskPar
 			}
 			pieces = append(pieces, dst)
 		}
+		l.noteToolImport(ctx, t.ID)
 		return pieces, nil
 	})
 }
 
+// dropCanceledJob has the engine drop a job its run leaves for a cancel,
+// which would otherwise render on for nobody.
+func (l *Tools) dropCanceledJob(ctx context.Context, jobID string) {
+	if !errors.Is(context.Cause(ctx), errToolCanceled) {
+		return
+	}
+	if err := l.flowJobs.DeleteJob(context.WithoutCancel(ctx), jobID); err != nil {
+		l.log.Warn("dropping a canceled task's engine job", "job", jobID, "err", err)
+	}
+}
+
 // pollToolJob polls one engine job to completion, mirroring the
-// task's progress and renewing the lease as it goes. wantOutputs > 0
-// asserts the finished output count.
+// task's progress and renewing the lease as it goes, and marks the
+// task's activity whenever the job's status moved; fetching the outputs
+// is its caller's to say. wantOutputs > 0 asserts the finished output
+// count.
 func (l *Tools) pollToolJob(ctx context.Context, t *wdb.ToolTask, jobID string, wantOutputs int) (int, error) {
 	lastPct := -1.0
+	lastState, lastJobPct := "", -1.0
 	for {
 		state, pct, outs, errMsg, err := l.flowJobs.JobStatus(ctx, jobID)
 		if err != nil {
 			return 0, err
+		}
+		if state != lastState || pct != lastJobPct {
+			lastState, lastJobPct = state, pct
+			if state != "done" {
+				l.noteActivity(ctx, t.ID, func(a *ToolTaskActivity) { a.Phase = activityProcessing })
+			}
 		}
 		switch state {
 		case "done":

@@ -94,7 +94,7 @@ extension WaxFormats on AppLocalizations {
   /// rather than as a time in the future.
   String relativeSpaced(DateTime at, {DateTime? now}) {
     final delta = (now ?? DateTime.now()).difference(at);
-    if (delta.isNegative) return relJustNow;
+    if (delta.isNegative || delta.inMinutes < 1) return relJustNow;
     if (delta.inHours < 1) return relMinutesAgo(delta.inMinutes);
     if (delta.inHours < 24) return relHoursAgo(delta.inHours);
     return relDaysAgo(delta.inDays);

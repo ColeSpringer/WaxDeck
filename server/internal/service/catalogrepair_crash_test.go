@@ -4,8 +4,6 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // The reset a repair owes every client survives the process stopping
@@ -76,7 +74,7 @@ func TestARepairCutShortGivesItsResetAtItsEnd(t *testing.T) {
 	if retired(t, ctx, svc, uc, before) {
 		t.Fatal("the next start gave the reset of a repair still to finish")
 	}
-	if !svc.Tools.drainToolTasksAt(ctx, wdb.TaskTypes{Only: longToolTasks}, time.Now().Add(time.Hour).UnixNano()) {
+	if !svc.Tools.drainToolTasksAt(ctx, longDrain, time.Now().Add(time.Hour).UnixNano()) {
 		t.Fatal("the cut repair did not run again")
 	}
 	if row, err := svc.db.ToolTaskByID(ctx, task.ID); err != nil || row.State != taskStateDone {

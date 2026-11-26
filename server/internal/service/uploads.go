@@ -643,11 +643,13 @@ func (l *Ingest) ListUploadsPage(ctx context.Context, uc *UserCtx, cursor string
 	return out, next, quota, nil
 }
 
-// sessionLocks serializes work per upload session. An entry lives only
-// while a holder, waiter or seal references it, so nothing leaks, and a
-// session never has two live locks. Keying by session confines a stalled client to
-// its own session's later appends, and the API's idle bound on a chunk's
-// body read ends the stall itself. A waiter leaves when its context ends.
+// sessionLocks serializes work per key: an upload session's appends and
+// seals, and a tool task's end steps (Tools.settleLocks). An entry lives
+// only while a holder, waiter or seal references it, so nothing leaks, and
+// a key never has two live locks. Keying by session confines a stalled
+// client to its own session's later appends, and the API's idle bound on a
+// chunk's body read ends the stall itself. A waiter leaves when its
+// context ends.
 type sessionLocks struct {
 	mu      sync.Mutex
 	entries map[string]*sessionLock
@@ -1374,13 +1376,16 @@ func isBookMedia(mt string) bool {
 // stampBookUnit gives the staged parts of a book one identity before any
 // is planned. Each part reaches the catalog alone, and the catalog keys a
 // book by its album else its title, so parts that name only their
-// chapters, or disagree on their album, would land as a book each. A tag
-// is written only where it is missing or differs from the unit's; a part
+// chapters, or disagree on their album, would land as a book each. Parts
+// of a book acquired as a list are numbered by their place in it, and
+// stamped even alone: a later try's entry can hold one part. A tag is
+// written only where it is missing or differs from the unit's; a part
 // that cannot take it refuses the unit, undoing what was written. It
 // answers how to undo the stamp, for a unit refused before any part lands.
 func (l *Ingest) stampBookUnit(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload) (func(), error) {
 	docs := payload.Tracks
-	if len(docs) < 2 {
+	listed := len(docs) > 0 && !slices.ContainsFunc(docs, func(d reviewTrackDoc) bool { return d.ListPosition == 0 })
+	if len(docs) < 2 && !listed {
 		return nil, nil
 	}
 	title := l.importBookTitle(ctx, entry, payload)
@@ -1431,7 +1436,12 @@ func (l *Ingest) stampBookUnit(ctx context.Context, entry *wdb.ReviewEntry, payl
 			setAlbumArtist = ""
 		}
 		position, total := 0, 0
-		if !numbered && doc.TrackNo != i+1 {
+		switch {
+		case listed:
+			if doc.TrackNo != doc.ListPosition {
+				position, total = doc.ListPosition, doc.ListTotal
+			}
+		case !numbered && doc.TrackNo != i+1:
 			position, total = i+1, len(docs)
 		}
 		if album == "" && setArtist == "" && setAlbumArtist == "" && position == 0 {
@@ -2004,7 +2014,7 @@ func (l *Ingest) discardPendingEntry(ctx context.Context, reviewEntryID, decided
 	entry.DecidedAtNS = time.Now().UnixNano()
 	entry.DecidedBy = decidedBy
 	if err := l.db.UpdateReviewEntry(ctx, entry); err == nil {
-		l.notifyReview(ctx, entry.ID, entry.UploadedBy)
+		l.notifyReview(ctx, entry.ID, entry.UploadedBy, entry.Origin, reviewNoJoin)
 	}
 }
 

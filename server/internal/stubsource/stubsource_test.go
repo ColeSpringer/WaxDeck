@@ -3,6 +3,7 @@ package stubsource
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -88,5 +89,121 @@ func TestAnUnreadableManifestIsTheSources(t *testing.T) {
 	}
 	if _, err := p.Resolve(context.Background(), source.Request{URL: srv.URL + "/playlist/x"}); waxerr.CodeOf(err) != waxerr.CodeIO {
 		t.Errorf("resolve failed with %v (class %q), want io", err, waxerr.CodeOf(err))
+	}
+}
+
+// manifestServer serves doc as every manifest.
+func manifestServer(t *testing.T, doc string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(doc))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// A manifest's refuse flag is the stub's private list: the check before
+// queuing, the listing and the snapshot all refuse it with that reason.
+func TestARefusingManifestRefusesEverywhere(t *testing.T) {
+	t.Parallel()
+	srv := manifestServer(t, `{"id":"PLprivate","title":"Stub Private","refuse":"playlist-unavailable","entries":[{"id":"vid-private","title":"Hidden"}]}`)
+	p := New(srv.URL)
+	ctx := context.Background()
+	link := srv.URL + "/playlist-private"
+	refused := func(what string, err error) {
+		t.Helper()
+		var r *syncsource.Refusal
+		if !errors.As(err, &r) || r.Reason != "playlist-unavailable" {
+			t.Errorf("%s = %v, want the manifest's refusal", what, err)
+		}
+	}
+	target, err := p.Probe(ctx, link, false)
+	refused("probe", err)
+	if target.Shape != syncsource.ShapePlaylist {
+		t.Errorf("probe shape = %q, want a playlist", target.Shape)
+	}
+	_, err = p.Enumerate(ctx, source.Request{URL: link})
+	refused("enumerate", err)
+	_, err = p.PlaylistSnapshot(ctx, link, syncsource.SnapshotOptions{})
+	refused("snapshot", err)
+}
+
+// The stub reads its own shapes off the path, and a link to another host
+// is not its to read.
+func TestProbeShapes(t *testing.T) {
+	t.Parallel()
+	srv := manifestServer(t, `{"id":"PLstub","title":"Stub Tapes","entries":[]}`)
+	p := New(srv.URL)
+	ctx := context.Background()
+	if got, err := p.Probe(ctx, srv.URL+"/playlist", false); err != nil || got != (syncsource.AcquireTarget{Shape: syncsource.ShapePlaylist, Title: "Stub Tapes"}) {
+		t.Errorf("a list = %+v, %v; want the playlist titled from its manifest", got, err)
+	}
+	if got, err := p.Probe(ctx, srv.URL+"/audio/vid-1", true); err != nil || got.Shape != syncsource.ShapeVideo {
+		t.Errorf("an entry = %+v, %v; want a video", got, err)
+	}
+	var r *syncsource.Refusal
+	if _, err := p.Probe(ctx, "https://example.com/playlist", false); !errors.As(err, &r) || r.Reason != syncsource.ReasonUnsupportedURL {
+		t.Errorf("a foreign link = %v, want an unsupported-url refusal", err)
+	}
+}
+
+// The stub reports the bytes it serves as it reads them, against the size
+// the server gave, then the tag pass as processing; a listing reports its
+// one page.
+func TestTheStubReportsWhatItServes(t *testing.T) {
+	t.Parallel()
+	paths, err := fixtures.Generate(t.TempDir(), fixtures.Spec{Codec: fixtures.CodecMP3, Duration: 200 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/audio/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "audio/mpeg")
+		http.ServeContent(w, r, "a.mp3", time.Time{}, bytes.NewReader(raw))
+	})
+	mux.HandleFunc("/playlist", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id":"pl","title":"List","entries":[{"id":"a","title":"A"},{"id":"b","title":"B"}]}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	p := New(srv.URL)
+
+	var events []syncsource.FetchEvent
+	var out bytes.Buffer
+	if _, err := p.FetchWith(context.Background(), source.FetchRequest{URL: srv.URL + "/audio/a"}, &out,
+		syncsource.FetchOptions{OnEvent: func(e syncsource.FetchEvent) { events = append(events, e) }}); err != nil {
+		t.Fatalf("FetchWith: %v", err)
+	}
+	size := int64(len(raw))
+	var last syncsource.FetchEvent
+	downloads := 0
+	for _, e := range events {
+		if e.Phase == syncsource.PhaseDownloading {
+			downloads++
+			if e.Total != size || e.Bytes < last.Bytes {
+				t.Errorf("download event %+v after %+v, want bytes rising against %d", e, last, size)
+			}
+			last = e
+		}
+	}
+	if downloads == 0 || last.Bytes != size {
+		t.Fatalf("download events %+v, want them to reach all %d bytes", events, size)
+	}
+	if events[len(events)-1].Phase != syncsource.PhaseProcessing {
+		t.Errorf("last event %+v, want the tag pass as processing", events[len(events)-1])
+	}
+
+	var pages []int
+	if _, err := p.EnumerateOnce(context.Background(), source.Request{URL: srv.URL + "/playlist"},
+		syncsource.EnumerateOptions{Progress: syncsource.ListProgress{OnPage: func(n int) { pages = append(pages, n) }}}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(pages, []int{2}) {
+		t.Errorf("pages = %v, want the one page of two", pages)
 	}
 }

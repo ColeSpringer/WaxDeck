@@ -462,6 +462,7 @@ func (l *Migrate) runSubsonicImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 				note(s)
 			}
 		}
+		prog.items(ctx, activityImporting, i+1, len(albums))
 		prog.report(ctx, float64(i+1)/float64(len(albums))*90)
 	}
 

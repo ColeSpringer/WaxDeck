@@ -671,20 +671,31 @@ const baselineSchema = `
 	-- target existed to carry it anywhere. Written on every emit and
 	-- pruned by age and per-account cap, so it is recent history rather
 	-- than an audit log (the audit log is its own table).
+	-- A keyed event folds into the account's one unresolved row for its
+	-- dedupe_key, which keeps its id, counts and moves bumped_at_ns.
 	CREATE TABLE notifications (
-		id            TEXT    PRIMARY KEY,
-		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-		event         TEXT    NOT NULL,
-		title         TEXT    NOT NULL DEFAULT '',
-		body          TEXT    NOT NULL DEFAULT '',
-		target_pid    TEXT,
-		created_at_ns INTEGER NOT NULL,
-		read_at_ns    INTEGER
+		id             TEXT    PRIMARY KEY,
+		user_id        TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		event          TEXT    NOT NULL,
+		title          TEXT    NOT NULL DEFAULT '',
+		body           TEXT    NOT NULL DEFAULT '',
+		target_pid     TEXT,
+		dedupe_key     TEXT,
+		count          INTEGER NOT NULL DEFAULT 1,
+		created_at_ns  INTEGER NOT NULL,
+		bumped_at_ns   INTEGER NOT NULL,
+		read_at_ns     INTEGER,
+		resolved_at_ns INTEGER
 	);
-	-- Ids are ULIDs, so id DESC is newest first and the keyset cursor is
-	-- the id itself.
-	CREATE INDEX notifications_owner ON notifications (user_id, id DESC);
+	-- The listing's order and keyset: latest occurrence first, the id
+	-- breaking ties.
+	CREATE INDEX notifications_owner ON notifications (user_id, bumped_at_ns DESC, id DESC);
 	CREATE INDEX notifications_unread ON notifications (user_id) WHERE read_at_ns IS NULL;
+	-- Key first, so a resolve by key across accounts reads it too.
+	CREATE UNIQUE INDEX notifications_keyed ON notifications (dedupe_key, user_id)
+		WHERE dedupe_key IS NOT NULL AND resolved_at_ns IS NULL;
+	CREATE INDEX notifications_target ON notifications (target_pid)
+		WHERE target_pid IS NOT NULL AND resolved_at_ns IS NULL;
 	CREATE TABLE settings (
 		key        TEXT PRIMARY KEY,
 		value      TEXT NOT NULL,
@@ -948,18 +959,31 @@ const baselineSchema = `
 		created_at_ns  INTEGER NOT NULL,
 		finished_at_ns INTEGER NOT NULL DEFAULT 0,
 		-- What one live task may hold at a time (a book, a rip): a second
-		-- task with the key is refused while the first is queued or running.
+		-- task with the key is refused while the first is queued, running,
+		-- parked, or canceled keeping it (see ReleaseToolTaskLock).
 		lock_key       TEXT    NOT NULL DEFAULT '',
 		-- Set once a run has put work into the library that only finishing
 		-- the run settles: the task is then leased past its attempts and
 		-- never retired for running out of them.
 		resumable      INTEGER NOT NULL DEFAULT 0,
 		-- Why a running task waits to try again, '' when it does not.
-		wait_reason    TEXT    NOT NULL DEFAULT ''
+		wait_reason    TEXT    NOT NULL DEFAULT '',
+		-- Why it failed or waits as a client words it: an API error code
+		-- and its params (a JSON object), '' for none.
+		error_code     TEXT    NOT NULL DEFAULT '',
+		error_params   TEXT    NOT NULL DEFAULT '',
+		-- Set once the task was asked to cancel: a run it reaches stops,
+		-- and the task ends canceled unless it finished first.
+		cancel_requested INTEGER NOT NULL DEFAULT 0,
+		-- Set by a cancel's or a retire's state change (1) until what that
+		-- end settles beyond the row (entries, discards, the lock) is done,
+		-- and by a run's own terminal write (2, or 3 for a park) until its
+		-- end steps are: a startup pass finishes one a stop cut short.
+		settle_pending INTEGER NOT NULL DEFAULT 0
 	);
 	CREATE INDEX tool_tasks_user ON tool_tasks (user_id, created_at_ns DESC, id);
 	CREATE INDEX tool_tasks_state ON tool_tasks (state, lease_until_ns);
-	CREATE INDEX tool_tasks_lock ON tool_tasks (lock_key) WHERE lock_key <> '' AND state IN ('queued', 'running', 'parked');
+	CREATE INDEX tool_tasks_lock ON tool_tasks (lock_key) WHERE lock_key <> '' AND state IN ('queued', 'running', 'parked', 'canceled');
 	-- The files a book merge or split's trash took, by book and the path
 	-- they were taken from, until the run that took them finished (its new
 	-- files hold them) or put them back. It outlives the task's row: while

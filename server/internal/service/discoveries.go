@@ -302,7 +302,7 @@ func (l *Similarity) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport
 	// One marker for the whole pass, whatever it opened. openReviewEntry
 	// deliberately raises none for scan-origin entries.
 	if lastOpened != "" {
-		l.Ingest.notifyReview(ctx, lastOpened, "")
+		l.Ingest.notifyReview(ctx, lastOpened, "", reviewOriginScan, reviewNoJoin)
 	}
 
 	if capped {

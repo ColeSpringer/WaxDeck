@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -577,15 +578,15 @@ func TestAMusicUnitDecidedAsAnAudiobookLandsOneBook(t *testing.T) {
 	wantOneBook(t, h, "The Untitled Hours", "Wren Hollis", "Chapter 1", "Chapter 2")
 }
 
-// An audiobook list whose middle fetch failed, acquired again, ends as
-// one book holding each chapter once, in the list's order.
-func TestAnAudiobookListRetriedAfterAFailedFetchIsOneBook(t *testing.T) {
-	t.Parallel()
+// audiobookList is a server reading a four-chapter audiobook list whose
+// failing chapter's first fetches fail, times of them.
+func audiobookList(t *testing.T, failing, times int) (*harness, *fakeAcquireSource) {
+	t.Helper()
 	dir := t.TempDir()
 	src := &fakeAcquireSource{
 		playlistURL: "https://tube.example/playlist?list=PLretry",
 		files:       map[string]string{},
-		failOnce:    map[string]bool{"https://tube.example/watch?v=ch3": true},
+		fails:       map[string]int{fmt.Sprintf("https://tube.example/watch?v=ch%d", failing): times},
 	}
 	for i := range 4 {
 		paths, err := fixtures.Generate(dir, fixtures.Spec{
@@ -607,28 +608,23 @@ func TestAnAudiobookListRetriedAfterAFailedFetchIsOneBook(t *testing.T) {
 		}
 		cfg.AllowPrivateFeedHosts = true
 	})
-	acquire := func() ToolTask {
-		task := decodeStatus[ToolTask](t, h.postJSON(t, "/api/v1/acquisitions",
-			map[string]any{"url": src.playlistURL, "mediaType": "audiobook"}), 202, "acquisition")
-		drainTools(t, h)
-		return decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+task.Id, h.token))
-	}
-	if got := acquire(); got.State != "failed" {
-		t.Fatalf("first acquisition = %+v, want it failed at the third video", got)
-	}
-	if got := acquire(); got.State != "done" {
-		t.Fatalf("second acquisition = %+v, want it done", got)
-	}
+	return h, src
+}
+
+// decideAudiobookEntries takes every pending entry as it is, oldest first,
+// after checking they hold the files counts says, and wants one book
+// holding each chapter once, in the list's order.
+func decideAudiobookEntries(t *testing.T, h *harness, counts ...int) {
+	t.Helper()
 	drainMatches(t, h)
 	page := decode[ReviewEntryPage](t, get(t, h.ts, "/api/v1/review/queue?status=pending", h.token))
-	if len(page.Entries) != 2 {
-		t.Fatalf("pending entries = %d, want one per acquisition", len(page.Entries))
-	}
 	slices.SortFunc(page.Entries, func(a, b ReviewEntry) int { return a.CreatedAt.Compare(b.CreatedAt) })
-	// The second acquisition fetches the whole list again: its entry
-	// holds every chapter, numbered from the list's first.
-	if a, b := page.Entries[0].TrackCount, page.Entries[1].TrackCount; a != 2 || b != 4 {
-		t.Fatalf("entries hold %d and %d files, want the first two and then all four", a, b)
+	var got []int
+	for _, e := range page.Entries {
+		got = append(got, e.TrackCount)
+	}
+	if !slices.Equal(got, counts) {
+		t.Fatalf("pending entries hold %v files, want %v", got, counts)
 	}
 	for _, e := range page.Entries {
 		decideAs(t, h, h.token, e.Id, map[string]any{"action": "as-is"})
@@ -643,4 +639,69 @@ func TestAnAudiobookListRetriedAfterAFailedFetchIsOneBook(t *testing.T) {
 	if want := []int64{3, 4, 5, 6}; !slices.Equal(lengths, want) {
 		t.Errorf("book %s parts last %v seconds, want each chapter once in list order %v", pid, lengths, want)
 	}
+}
+
+// expireToolWait ends a task's wait, as its retryAt passing would.
+func expireToolWait(t *testing.T, h *harness, taskID string) {
+	t.Helper()
+	if _, err := h.store.Writer().ExecContext(context.Background(), `UPDATE tool_tasks SET lease_until_ns = 0 WHERE id = ?`, taskID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// An audiobook list whose fetch failed waits and tries again, fetching
+// only what is left, and ends as one book holding each chapter once, in
+// the list's order, however few chapters the next try stages.
+func TestAnAudiobookListRetriedAfterAFailedFetchIsOneBook(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		failing int
+		counts  []int
+	}{
+		{3, []int{2, 2}},
+		{4, []int{3, 1}},
+	} {
+		t.Run(fmt.Sprintf("chapter %d", tc.failing), func(t *testing.T) {
+			t.Parallel()
+			h, src := audiobookList(t, tc.failing, 1)
+			task := decodeStatus[ToolTask](t, h.postJSON(t, "/api/v1/acquisitions",
+				map[string]any{"url": src.playlistURL, "mediaType": "audiobook"}), 202, "acquisition")
+			drainTools(t, h)
+			if got := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+task.Id, h.token)); got.WaitReason == nil || *got.WaitReason != "source-retry" {
+				t.Fatalf("first try = %+v, want it waiting to try the failed chapter again", got)
+			}
+			expireToolWait(t, h, task.Id)
+			drainTools(t, h)
+			if got := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+task.Id, h.token)); got.State != "done" {
+				t.Fatalf("the next try = %+v, want it done", got)
+			}
+			// The next try fetched only what the first did not stage.
+			decideAudiobookEntries(t, h, tc.counts...)
+		})
+	}
+}
+
+// An audiobook list acquired again after its first acquisition finally
+// failed fetches the whole list again; the two entries overlap, and the
+// book still holds each chapter once, in the list's order.
+func TestAnAudiobookListAcquiredAgainAfterItFailedIsOneBook(t *testing.T) {
+	t.Parallel()
+	h, src := audiobookList(t, 3, 4)
+	first := decodeStatus[ToolTask](t, h.postJSON(t, "/api/v1/acquisitions",
+		map[string]any{"url": src.playlistURL, "mediaType": "audiobook"}), 202, "first acquisition")
+	drainTools(t, h)
+	for range 3 {
+		expireToolWait(t, h, first.Id)
+		drainTools(t, h)
+	}
+	if got := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+first.Id, h.token)); got.State != "failed" {
+		t.Fatalf("first acquisition = %+v, want it failed at the third chapter after its waits", got)
+	}
+	second := decodeStatus[ToolTask](t, h.postJSON(t, "/api/v1/acquisitions",
+		map[string]any{"url": src.playlistURL, "mediaType": "audiobook"}), 202, "second acquisition")
+	drainTools(t, h)
+	if got := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+second.Id, h.token)); got.State != "done" {
+		t.Fatalf("second acquisition = %+v, want it done", got)
+	}
+	decideAudiobookEntries(t, h, 2, 4)
 }

@@ -392,6 +392,7 @@ export const SemanticsIds = {
   notificationRowPlain: (kind: string | number) => `notification-row-${kind}-none`,
   notificationsBell: 'notifications-bell',
   notificationsClear: 'notifications-clear',
+  notificationsClearCompleted: 'notifications-clear-completed',
   notificationsClearConfirm: 'notifications-clear-confirm',
   notificationsEmpty: 'notifications-empty',
   notificationsMarkAllRead: 'notifications-mark-all-read',
@@ -982,7 +983,10 @@ export const SemanticsIds = {
   // tools: Long-running tools and their progress rows.
   jobRow: (pid: string | number) => `job-row-${pid}`,
   openTasks: 'open-tasks',
+  taskCancel: (id: string | number) => `task-cancel-${id}`,
+  taskCancelConfirm: 'task-cancel-confirm',
   taskDismiss: (id: string | number) => `task-dismiss-${id}`,
+  taskErrorDetails: (id: string | number) => `task-error-details-${id}`,
   taskRow: (id: string | number) => `task-row-${id}`,
   tasksClearFinished: 'tasks-clear-finished',
   tasksClearFinishedAll: 'tasks-clear-finished-all',
@@ -994,6 +998,7 @@ export const SemanticsIds = {
   acquireAcceptBest: 'acquire-accept-best',
   acquireFormat: 'acquire-format',
   acquireIdentify: 'acquire-identify',
+  acquirePlaylist: 'acquire-playlist',
   acquireSubmit: 'acquire-submit',
   acquireTasks: 'acquire-tasks',
   acquireUrl: 'acquire-url',
@@ -1346,7 +1351,9 @@ export const SemanticsIdPrefixes = {
 
   // tools: Long-running tools and their progress rows.
   jobRow: 'job-row-',
+  taskCancel: 'task-cancel-',
   taskDismiss: 'task-dismiss-',
+  taskErrorDetails: 'task-error-details-',
   taskRow: 'task-row-',
 
   // uploads: Uploads: batches, rows, duplicates, and the add-to-library flow.

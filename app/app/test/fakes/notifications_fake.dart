@@ -275,8 +275,15 @@ mixin FakeNotifications on FakeRepositoryState implements NotificationsApi {
   /// Every id list `markMyNotificationsRead` was called with; an empty
   /// list is the mark-everything call.
   final List<List<String>> inboxReadCalls = <List<String>>[];
+
+  /// Every by-event mark-read the client sent, in order.
+  final List<({List<String> events, String? pid})> inboxEventReads =
+      <({List<String> events, String? pid})>[];
   final List<String> inboxDeleted = <String>[];
   int inboxCleared = 0;
+
+  /// How many of those clears were Clear completed (`resolved=true`).
+  int inboxClearedResolved = 0;
 
   /// Thrown by the next inbox read, for the offline peek.
   WaxDeckApiException? inboxError;
@@ -302,12 +309,41 @@ mixin FakeNotifications on FakeRepositoryState implements NotificationsApi {
   @override
   Future<void> markMyNotificationsRead({
     List<String> ids = const <String>[],
+    List<String>? events,
+    String? targetPid,
   }) async {
-    inboxReadCalls.add(List<String>.of(ids));
+    final byEvent = events != null && events.isNotEmpty;
+    if (byEvent && ids.isNotEmpty) {
+      throw const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'ids and events together',
+        statusCode: 400,
+      );
+    }
+    if (targetPid != null && !byEvent) {
+      throw const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'targetPid needs events',
+        statusCode: 400,
+      );
+    }
+    if (byEvent) {
+      inboxEventReads.add((events: List<String>.of(events), pid: targetPid));
+    } else {
+      inboxReadCalls.add(List<String>.of(ids));
+    }
     final at = DateTime.now();
+    bool selected(ServerNotification row) {
+      if (byEvent) {
+        return events.contains(row.event) &&
+            (targetPid == null || row.targetPid == targetPid);
+      }
+      return ids.isEmpty || ids.contains(row.id);
+    }
+
     inbox = <ServerNotification>[
       for (final row in inbox)
-        if (row.read || (ids.isNotEmpty && !ids.contains(row.id)))
+        if (row.read || !selected(row))
           row
         else
           ServerNotification(
@@ -317,6 +353,9 @@ mixin FakeNotifications on FakeRepositoryState implements NotificationsApi {
             body: row.body,
             targetPid: row.targetPid,
             createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+            count: row.count,
+            resolvedAt: row.resolvedAt,
             readAt: at,
           ),
     ];
@@ -332,8 +371,13 @@ mixin FakeNotifications on FakeRepositoryState implements NotificationsApi {
   }
 
   @override
-  Future<void> clearMyNotifications() async {
+  Future<void> clearMyNotifications({bool resolved = false}) async {
     inboxCleared++;
-    inbox = <ServerNotification>[];
+    if (resolved) inboxClearedResolved++;
+    inbox = <ServerNotification>[
+      if (resolved)
+        for (final row in inbox)
+          if (row.resolvedAt == null) row,
+    ];
   }
 }

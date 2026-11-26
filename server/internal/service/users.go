@@ -587,6 +587,7 @@ func (l *Identity) DeleteAccount(ctx context.Context, actor *UserCtx, id string,
 		return settled, &Error{Kind: KindInternal, Err: err}
 	}
 	settled.LinksEnded = ended
+	l.resolveSignupNotice(ctx, id)
 	if err := l.db.DeletePlaylistHandoversOf(ctx, id); err != nil {
 		l.log.Warn("clearing a deleted account's playlist handover records", "user", id, "err", err)
 	}

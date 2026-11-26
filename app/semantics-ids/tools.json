@@ -3,7 +3,10 @@
   "ids": {
     "jobRow": "job-row-{pid}",
     "openTasks": "open-tasks",
+    "taskCancel": "task-cancel-{id}",
+    "taskCancelConfirm": "task-cancel-confirm",
     "taskDismiss": "task-dismiss-{id}",
+    "taskErrorDetails": "task-error-details-{id}",
     "taskRow": "task-row-{id}",
     "tasksClearFinished": "tasks-clear-finished",
     "tasksClearFinishedAll": "tasks-clear-finished-all",

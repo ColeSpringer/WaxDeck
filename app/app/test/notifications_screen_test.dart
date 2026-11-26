@@ -46,11 +46,11 @@ void main() {
     final container = await _pump(tester);
     container
         .read(localNotificationsProvider.notifier)
-        .record(NotificationKind.upload, at: DateTime.now());
+        .recordDownloadCompleted(at: DateTime.now());
     await tester.pumpAndSettle();
 
     expect(_byId(SemanticsIds.notificationsScreen), findsOneWidget);
-    expect(find.text('An upload changed.'), findsOneWidget);
+    expect(find.text('A download finished.'), findsOneWidget);
     // The second half of the topic, and the reason this is a destination
     // rather than the bell drawn larger: the delivery targets were a row
     // inside a settings section nobody looking for "stop telling me
@@ -60,23 +60,28 @@ void main() {
 
   testWidgets('a row is a link to the surface it is about', (tester) async {
     final container = await _pump(tester);
+    final repo = container.read(repositoryProvider) as FakeRepository;
     final router = _router(tester);
-    container
-        .read(localNotificationsProvider.notifier)
-        .record(NotificationKind.feedDisabled, at: DateTime.now(), pid: 'pc-1');
+    repo.inbox = <ServerNotification>[
+      ServerNotification(
+        id: 'nf-show',
+        event: 'feed-disabled',
+        title: 'A show kept failing',
+        body: 'Alpha stopped refreshing',
+        targetPid: 'pc-1',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    ];
+    container.invalidate(notificationsProvider);
     await tester.pumpAndSettle();
 
     await tester.tap(
-      _byId(
-        SemanticsIds.notificationRow(
-          NotificationKind.feedDisabled.token,
-          'pc-1',
-        ),
-      ),
+      _byId(SemanticsIds.notificationRow('feed-disabled', 'nf-show')),
     );
     await tester.pumpAndSettle();
 
-    // The entity the marker named, not the kind's own surface.
+    // The entity the row named, not the kind's own surface.
     expect(_location(router), WaxRoute.show('pc-1'));
   });
 
@@ -89,7 +94,7 @@ void main() {
     // thing a badge over an open list could mean was noise. An inbox
     // outlives it, and rows on it are work; the affordance is what says
     // the work is done.
-    notifications.record(NotificationKind.task, at: DateTime.now());
+    notifications.recordDownloadCompleted(at: DateTime.now());
     await tester.pumpAndSettle();
     expect(container.read(unseenNotificationsProvider), 1);
 
@@ -111,6 +116,7 @@ void main() {
         title: 'A backup completed',
         body: 'All of it',
         createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
       ),
     ];
     container.invalidate(notificationsProvider);
@@ -137,7 +143,7 @@ void main() {
     final container = await _pump(tester);
     container
         .read(localNotificationsProvider.notifier)
-        .record(NotificationKind.task, at: DateTime.now());
+        .recordDownloadCompleted(at: DateTime.now());
     await tester.pumpAndSettle();
 
     // Cancelled, the list stands: this deletes durable history on every

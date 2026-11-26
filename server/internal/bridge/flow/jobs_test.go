@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"sync"
 	"testing"
 
 	"github.com/colespringer/waxflow/waxerr"
@@ -41,6 +43,37 @@ func TestAJobResultLandsInTheModeItsCallerNames(t *testing.T) {
 	}
 	if raw, err := os.ReadFile(dst); err != nil || string(raw) != "merged audio" {
 		t.Fatalf("result = %q (%v), want the job's bytes", raw, err)
+	}
+}
+
+// Deleting a job asks the engine to stop it and drop it, by its id.
+func TestDeletingAJobAsksTheEngineToDropIt(t *testing.T) {
+	t.Parallel()
+	var (
+		mu    sync.Mutex
+		asked []string
+	)
+	b := newTestBridge(t, func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		asked = append(asked, r.Method+" "+r.URL.Path)
+		mu.Unlock()
+		if r.Method != http.MethodDelete || r.URL.Path != "/jobs/jb-merge" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}, Source{Path: t.TempDir()})
+	if err := b.DeleteJob(context.Background(), "jb-merge"); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	got := slices.Clone(asked)
+	mu.Unlock()
+	if len(got) != 1 || got[0] != "DELETE /jobs/jb-merge" {
+		t.Fatalf("the engine was asked %v, want the job's delete", got)
+	}
+	if err := b.DeleteJob(context.Background(), "jb-other"); err == nil {
+		t.Fatal("a delete the engine refused answered no error")
 	}
 }
 

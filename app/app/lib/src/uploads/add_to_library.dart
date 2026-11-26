@@ -213,36 +213,14 @@ Future<void> acquireFromUrl(
   // their round trips end to end doubles the wait before the sheet.
   final (seed, targets, remembered) = await _dialogSeeds(ref);
   if (!context.mounted) return;
-  final request =
-      await showDialog<
-        ({
-          String url,
-          MediaType mediaType,
-          String format,
-          bool? identify,
-          bool? acceptBestMatch,
-          String libraryPid,
-        })
-      >(
-        context: context,
-        builder: (_) => AcquireDialog(
-          initial: initial,
-          kindFixed: kindFixed,
-          initialUrl: initialUrl,
-          initialIdentify: seed.identify,
-          initialAcceptBest: seed.acceptBest,
-          targets: targets,
-          rememberedTarget: remembered,
-        ),
-      );
-  if (request == null) return;
-  _rememberUploadTarget(container, request.libraryPid);
-  try {
-    await container
+  Future<ToolTask> send(AcquireRequest request) async {
+    _rememberUploadTarget(container, request.libraryPid);
+    final task = await container
         .read(repositoryProvider)
         .createAcquisition(
           url: request.url,
           mediaType: request.mediaType,
+          playlist: request.playlist,
           format: request.format,
           identify: request.identify,
           acceptBestMatch: request.acceptBestMatch,
@@ -251,19 +229,49 @@ Future<void> acquireFromUrl(
     container
       ..invalidate(uploadsProvider)
       ..invalidate(toolTasksProvider);
+    return task;
+  }
+
+  void queued(ToolTask task) => messenger.show(
     // It runs in the background and lands in review rather than the
     // library, so the message says where to look.
-    messenger.show(
-      l10n.uploadsAcquireQueued,
-      actionLabel: l10n.uploadsAcquireTasks,
-      actionSemanticsId: SemanticsIds.acquireTasks,
-      onAction: () => router.go(WaxRoute.tasks),
-    );
-  } on WaxDeckApiException catch (e) {
-    // A refusal of the URL somebody just pasted keeps the server's own
-    // words: only it can say what was wrong with that address.
-    messenger.show(explainRefusal(l10n, e));
-  }
+    _queuedMessage(l10n, task),
+    actionLabel: l10n.uploadsAcquireTasks,
+    actionSemanticsId: SemanticsIds.acquireTasks,
+    onAction: () => router.go(WaxRoute.tasks),
+  );
+
+  final task = await showDialog<ToolTask>(
+    context: context,
+    builder: (_) => AcquireDialog(
+      initial: initial,
+      kindFixed: kindFixed,
+      initialUrl: initialUrl,
+      initialIdentify: seed.identify,
+      initialAcceptBest: seed.acceptBest,
+      targets: targets,
+      rememberedTarget: remembered,
+      send: send,
+      // The dialog closed before the answer: the message is the only
+      // place left to say it.
+      onUnseen: (outcome) => switch (outcome) {
+        final ToolTask task => queued(task),
+        final WaxDeckApiException error => messenger.show(
+          explainRefusal(l10n, error),
+        ),
+        _ => null,
+      },
+    ),
+  );
+  if (task != null) queued(task);
+}
+
+/// What was queued, by name when the answer carries one.
+String _queuedMessage(AppLocalizations l10n, ToolTask task) {
+  final title = task.itemTitle?.trim() ?? '';
+  if (title.isEmpty) return l10n.uploadsAcquireQueued;
+  final source = task.summary?['source'];
+  return l10n.uploadsAcquireQueuedTitled(source is String ? source : '', title);
 }
 
 /// Picks files and hands them to the shared upload flow.
@@ -674,8 +682,22 @@ Future<_PrefsSeed> _prefsSeed(WidgetRef ref) async {
 /// without it.
 const _prefsSeedWait = Duration(seconds: 5);
 
-/// The URL entry dialog, returning the URL, media type, format, and
-/// identification choice, or null.
+/// What a submitted dialog asks the server to acquire.
+typedef AcquireRequest = ({
+  String url,
+  MediaType mediaType,
+  bool? playlist,
+  String format,
+  bool? identify,
+  bool? acceptBestMatch,
+  String libraryPid,
+});
+
+/// The URL entry dialog.
+///
+/// It sends the request itself and stays open while the server checks
+/// the link, so a refusal is worded under the field for the person to
+/// correct; it pops the queued task on success.
 class AcquireDialog extends StatefulWidget {
   const AcquireDialog({
     super.key,
@@ -684,6 +706,8 @@ class AcquireDialog extends StatefulWidget {
     this.initialUrl,
     required this.initialIdentify,
     required this.initialAcceptBest,
+    required this.send,
+    required this.onUnseen,
     this.targets = const [],
     this.rememberedTarget = '',
   });
@@ -703,6 +727,13 @@ class AcquireDialog extends StatefulWidget {
 
   /// What the accept-best switch opens on, under the same rule.
   final bool? initialAcceptBest;
+
+  /// Sends the request; throws [WaxDeckApiException] for a refusal.
+  final Future<ToolTask> Function(AcquireRequest request) send;
+
+  /// Takes the outcome (a [ToolTask] or a [WaxDeckApiException]) when the
+  /// dialog is no longer there to show it.
+  final void Function(Object outcome) onUnseen;
 
   /// Every library this account may file under, unfiltered: the medium
   /// is chosen inside the dialog, so the narrowing is too.
@@ -738,15 +769,113 @@ class _AcquireDialogState extends State<AcquireDialog> {
   /// ahead of the typing, and a caret moving is not an edit.
   String? _refused;
 
+  /// Whether a request is out: the server is checking the link.
+  var _busy = false;
+
+  /// What the source said about [_refusalFor], worded for the field.
+  String? _refusal;
+  String? _refusalFor;
+
+  /// What went wrong that is not about the link (a full disk, a timeout):
+  /// said above the form rather than under the field, until the next send
+  /// or an edit of the link it was said about.
+  String? _failure;
+  String? _failureFor;
+
+  /// The playlist switch; only ever true while the link names both a
+  /// video and a playlist.
+  var _playlist = false;
+
   @override
   void initState() {
     super.initState();
     _urlController.addListener(
       () => setState(() {
         if (_urlController.text != _refused) _refused = null;
+        if (_urlController.text.trim() != _refusalFor) _refusal = null;
+        if (_urlController.text.trim() != _failureFor) _failure = null;
+        if (!namesVideoAndPlaylist(_urlController.text)) _playlist = false;
       }),
     );
   }
+
+  Future<void> _send(AcquireRequest request) async {
+    final navigator = Navigator.of(context);
+    final route = ModalRoute.of(context);
+    final l10n = context.l10n;
+    // Whether this dialog is still on screen to take an answer: closing
+    // it keeps it mounted through its exit transition, and a pop then
+    // would take the page beneath it.
+    bool showing() => mounted && (route?.isActive ?? false);
+    setState(() {
+      _busy = true;
+      _refusal = null;
+      _failure = null;
+    });
+    final Object outcome;
+    try {
+      outcome = await widget.send(request);
+    } on WaxDeckApiException catch (error) {
+      if (!showing()) {
+        if (mounted) setState(() => _busy = false);
+        widget.onUnseen(error);
+        return;
+      }
+      if (!_aboutLink(error)) {
+        setState(() {
+          _busy = false;
+          _failure = explainRefusal(l10n, error);
+          _failureFor = request.url;
+        });
+        return;
+      }
+      // A link edited while the check ran has moved on from the answer;
+      // it is said as a message rather than lost.
+      if (_urlController.text.trim() != request.url) {
+        setState(() => _busy = false);
+        widget.onUnseen(error);
+        return;
+      }
+      setState(() {
+        _busy = false;
+        _refusalFor = request.url;
+        _refusal = explainRefusal(l10n, error);
+      });
+      return;
+    } catch (error, stack) {
+      // Not the server's answer: a defect for the log, and the dialog is
+      // not left silent and stuck behind it.
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stack,
+          library: 'waxdeck uploads',
+        ),
+      );
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _failure = explainError(l10n, error);
+          _failureFor = request.url;
+        });
+      }
+      return;
+    }
+    if (showing()) {
+      navigator.pop(outcome);
+    } else {
+      widget.onUnseen(outcome);
+    }
+  }
+
+  /// Whether a refusal is the source's or the server's word on the link
+  /// itself, which belongs under the field: the source's refusal, and an
+  /// `invalid-request` whose params name the address. The server sends
+  /// that code for a library, media type or format it refuses too, and
+  /// anything else, a bridge that is not running included, says nothing
+  /// about the link: the dialog's general line takes it.
+  static bool _aboutLink(WaxDeckApiException error) =>
+      error.code == 'source-refused' || refusesAddress(error);
 
   @override
   void dispose() {
@@ -775,14 +904,34 @@ class _AcquireDialogState extends State<AcquireDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
+            if (_failure case final failure?) ...<Widget>[
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  failure,
+                  style: WaxType.caption.copyWith(color: colors.error),
+                ),
+              ),
+              const SizedBox(height: WaxSpace.s12),
+            ],
             WaxTextField(
               label: l10n.uploadsSourceUrl,
               hint: l10n.uploadsSourceUrlHint,
               controller: _urlController,
               autofocus: true,
               semanticsId: SemanticsIds.acquireUrl,
-              errorText: _refused != null ? l10n.uploadsSourceUrlInvalid : null,
+              errorText: _refused != null
+                  ? l10n.uploadsSourceUrlInvalid
+                  : _refusal,
             ),
+            if (namesVideoAndPlaylist(url))
+              AcquirePlaylistSwitch(
+                value: _playlist,
+                onChanged: (value) => setState(() {
+                  _playlist = value;
+                  _refusal = null;
+                }),
+              ),
             const SizedBox(height: WaxSpace.s12),
             if (!widget.kindFixed)
               MediaTypeSelector(
@@ -823,15 +972,20 @@ class _AcquireDialogState extends State<AcquireDialog> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         WaxButton(
-          label: l10n.uploadsDownload,
+          label: _busy ? l10n.uploadsAcquireChecking : l10n.uploadsDownload,
           semanticsId: SemanticsIds.acquireSubmit,
-          onPressed: url.isEmpty
+          busy: _busy,
+          onPressed: url.isEmpty || _busy
               ? null
               : !isWebLink(url)
               ? () => setState(() => _refused = _urlController.text)
-              : () => Navigator.of(context).pop((
+              : () => _send((
                   url: url,
                   mediaType: _mediaType,
+                  // Only while the switch is drawn, and only when on.
+                  playlist: _playlist && namesVideoAndPlaylist(url)
+                      ? true
+                      : null,
                   format: _format,
                   identify: _identify,
                   acceptBestMatch: _sendsAcceptBest(
@@ -858,6 +1012,25 @@ bool isWebLink(String text) {
   return uri != null &&
       (uri.scheme == 'http' || uri.scheme == 'https') &&
       uri.host.isNotEmpty;
+}
+
+/// Whether [text] is a link that names a video and the playlist it sits
+/// in: a `v` and a `list` together, or a `youtu.be/<id>` with a `list`.
+/// Such a link downloads the video unless the person asks for the list.
+bool namesVideoAndPlaylist(String text) {
+  final trimmed = text.trim();
+  if (!isWebLink(trimmed)) return false;
+  final uri = Uri.parse(trimmed);
+  final Map<String, String> query;
+  try {
+    query = uri.queryParameters;
+  } on FormatException {
+    return false;
+  }
+  if ((query['list'] ?? '').isEmpty) return false;
+  if ((query['v'] ?? '').isNotEmpty) return true;
+  return uri.host.toLowerCase() == 'youtu.be' &&
+      uri.pathSegments.any((s) => s.isNotEmpty);
 }
 
 /// The media-type prompt, plus the grouping intent for several files:
@@ -1248,6 +1421,34 @@ class IdentifySwitch extends StatelessWidget {
         value: value ?? true,
         label: _title(l10n),
         semanticsId: semanticsId,
+        onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+/// Whether a link naming both a video and a playlist takes the whole
+/// playlist; off takes the video alone.
+class AcquirePlaylistSwitch extends StatelessWidget {
+  const AcquirePlaylistSwitch({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return WaxSettingRow(
+      title: l10n.uploadsAcquirePlaylist,
+      info: l10n.uploadsAcquirePlaylistHelp,
+      control: WaxSwitch(
+        value: value,
+        label: l10n.uploadsAcquirePlaylist,
+        semanticsId: SemanticsIds.acquirePlaylist,
         onChanged: onChanged,
       ),
     );

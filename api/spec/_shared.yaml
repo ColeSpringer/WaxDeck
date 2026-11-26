@@ -59,6 +59,17 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
 
+    SourceRefused:
+      description: >
+        The source refused the link (code `source-refused`, with
+        `params.reason` saying why; see the API-level error list). Each
+        operation that answers it says for which reasons. Nothing was
+        queued or stored.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
     SourceUnavailable:
       description: >
         The request needs an integration this server is not running

@@ -13,6 +13,10 @@
   "@bellClear": {
     "description": "Empties the list: the last row of the open bell, and the action on the notifications screen."
   },
+  "bellClearCompleted": "Clear completed",
+  "@bellClearCompleted": {
+    "description": "Deletes the resolved rows of the inbox (a queue that emptied, a request that was decided); beside Mark all read on the notifications screen. Asks nothing: a resolved row carries no unactioned news."
+  },
   "bellClearConfirm": "Delete all notifications on every device? This cannot be undone.",
   "@bellClearConfirm": {
     "description": "Body of the confirmation before emptying the notification inbox, which is durable and shared across the account's devices."
@@ -65,21 +69,17 @@
   "@bellReadOverline": {
     "description": "Overline on a notification row somebody has already dealt with."
   },
-  "bellReviewChanged": "The review queue changed.",
-  "@bellReviewChanged": {
-    "description": "What a bell row says. Generic because the marker it comes from carries no detail; the surface it opens has it."
-  },
   "bellRow": "{surface}: {what}",
   "@bellRow": {
     "description": "One row of the bell: which surface moved, then what happened there.",
     "placeholders": {
       "surface": {
         "type": "String",
-        "example": "Uploads"
+        "example": "Backups"
       },
       "what": {
         "type": "String",
-        "example": "An upload changed."
+        "example": "Backup finished"
       }
     }
   },
@@ -89,7 +89,7 @@
     "placeholders": {
       "surface": {
         "type": "String",
-        "example": "Uploads"
+        "example": "Downloads"
       },
       "when": {
         "type": "String",
@@ -137,14 +137,6 @@
   "@bellSurfaceTasks": {
     "description": "Which surface a bell row is about."
   },
-  "bellSurfaceUploads": "Uploads",
-  "@bellSurfaceUploads": {
-    "description": "Which surface a bell row is about."
-  },
-  "bellTaskChanged": "A background task changed.",
-  "@bellTaskChanged": {
-    "description": "What a bell row says. Generic because the marker carries no detail."
-  },
   "bellTitle": "Notifications",
   "@bellTitle": {
     "description": "The word for notifications: the accessible name of the bell in the top app bar with nothing unread, and the title of the screen that holds the same list."
@@ -162,9 +154,5 @@
   "bellUnreadOverline": "Unread",
   "@bellUnreadOverline": {
     "description": "Overline on a notification row nobody has dealt with yet. Words rather than colour alone, so the state reads out."
-  },
-  "bellUploadChanged": "An upload changed.",
-  "@bellUploadChanged": {
-    "description": "What a bell row says. Generic because the marker carries no detail."
   }
 }

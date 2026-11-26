@@ -69,6 +69,23 @@ func (l *Audit) Record(ctx context.Context, actor *UserCtx, action string, targe
 	}
 }
 
+// recordTaskEnd records a task's end, which detail["task"] names and key
+// tells from the task's other entries, unless the log holds it already: a
+// settle the startup pass redoes records it once. A read that fails
+// records it.
+func (l *Audit) recordTaskEnd(ctx context.Context, actor *UserCtx, action, key string, target AuditTarget, detail map[string]any) {
+	if id, _ := detail["task"].(string); id != "" {
+		found, err := l.db.AuditNamesTask(ctx, action, id, key)
+		if err != nil {
+			l.log.Warn("reading whether a task's end is on the record", "action", action, "task", id, "err", err)
+		}
+		if found {
+			return
+		}
+	}
+	l.Record(ctx, actor, action, target, detail)
+}
+
 // actorName renders an actor for denormalized storage fields.
 func actorName(actor *UserCtx) string {
 	if actor == nil {

@@ -162,6 +162,7 @@ AcquisitionRequest decodeAcquisitionRequest(
   const type = 'AcquisitionRequest';
   return AcquisitionRequest(
     url: readRequired(json, 'url', type, wireString),
+    playlist: readOptional(json, 'playlist', type, wireBool),
     mediaType: readRequired(json, 'mediaType', type, wireString),
     libraryPid: readOptional(json, 'libraryPid', type, wireString),
     format: readOptional(json, 'format', type, wireString),
@@ -172,6 +173,7 @@ AcquisitionRequest decodeAcquisitionRequest(
 
 Map<String, Object?> encodeAcquisitionRequest(AcquisitionRequest value) => {
   'url': value.url,
+  'playlist': ?value.playlist,
   'mediaType': value.mediaType,
   'libraryPid': ?value.libraryPid,
   'format': ?value.format,
@@ -5378,12 +5380,23 @@ NotificationReadRequest decodeNotificationReadRequest(
       type,
       (v, at) => wireList(v, at, wireString),
     ),
+    events: readOptional(
+      json,
+      'events',
+      type,
+      (v, at) => wireList(v, at, wireString),
+    ),
+    targetPid: readOptional(json, 'targetPid', type, wireString),
   );
 }
 
 Map<String, Object?> encodeNotificationReadRequest(
   NotificationReadRequest value,
-) => {'ids': ?value.ids};
+) => {
+  'ids': ?value.ids,
+  'events': ?value.events,
+  'targetPid': ?value.targetPid,
+};
 
 NotificationTarget decodeNotificationTarget(
   Map<String, Object?> json,
@@ -8587,6 +8600,9 @@ ServerNotification decodeServerNotification(
     body: readRequired(json, 'body', type, wireString),
     targetPid: readOptional(json, 'targetPid', type, wireString),
     createdAt: readRequired(json, 'createdAt', type, wireDateTime),
+    updatedAt: readRequired(json, 'updatedAt', type, wireDateTime),
+    count: readOptional(json, 'count', type, wireInt) ?? 1,
+    resolvedAt: readOptional(json, 'resolvedAt', type, wireDateTime),
     readAt: readOptional(json, 'readAt', type, wireDateTime),
   );
 }
@@ -8598,6 +8614,9 @@ Map<String, Object?> encodeServerNotification(ServerNotification value) => {
   'body': value.body,
   'targetPid': ?value.targetPid,
   'createdAt': value.createdAt.toUtc().toIso8601String(),
+  'updatedAt': value.updatedAt.toUtc().toIso8601String(),
+  'count': value.count,
+  if (value.resolvedAt case final v?) 'resolvedAt': v.toUtc().toIso8601String(),
   if (value.readAt case final v?) 'readAt': v.toUtc().toIso8601String(),
 };
 
@@ -9550,10 +9569,25 @@ ToolTask decodeToolTask(Map<String, Object?> json, WireContext ctx) {
     id: readRequired(json, 'id', type, wireString),
     type: readRequired(json, 'type', type, wireString),
     state: readRequired(json, 'state', type, wireString),
+    cancelRequested:
+        readOptional(json, 'cancelRequested', type, wireBool) ?? false,
     itemPid: readOptional(json, 'itemPid', type, wireString),
     itemTitle: readOptional(json, 'itemTitle', type, wireString),
     progressPct: readOptional(json, 'progressPct', type, wireDouble),
+    activity: readOptional(
+      json,
+      'activity',
+      type,
+      (v, at) => decodeToolTaskActivity(wireObject(v, at), ctx),
+    ),
     error: readOptional(json, 'error', type, wireString),
+    errorCode: readOptional(json, 'errorCode', type, wireString),
+    errorParams: readOptional(
+      json,
+      'errorParams',
+      type,
+      (v, at) => wireMap(v, at, wireString),
+    ),
     waitReason: readOptional(json, 'waitReason', type, wireString),
     retryAt: readOptional(json, 'retryAt', type, wireDateTime),
     bookInTrash: readOptional(json, 'bookInTrash', type, wireBool) ?? false,
@@ -9575,10 +9609,14 @@ Map<String, Object?> encodeToolTask(ToolTask value) => {
   'id': value.id,
   'type': value.type,
   'state': value.state,
+  'cancelRequested': value.cancelRequested,
   'itemPid': ?value.itemPid,
   'itemTitle': ?value.itemTitle,
   'progressPct': ?value.progressPct,
+  if (value.activity case final v?) 'activity': encodeToolTaskActivity(v),
   'error': ?value.error,
+  'errorCode': ?value.errorCode,
+  'errorParams': ?value.errorParams,
   'waitReason': ?value.waitReason,
   if (value.retryAt case final v?) 'retryAt': v.toUtc().toIso8601String(),
   'bookInTrash': value.bookInTrash,
@@ -9586,6 +9624,32 @@ Map<String, Object?> encodeToolTask(ToolTask value) => {
   'createdAt': value.createdAt.toUtc().toIso8601String(),
   if (value.finishedAt case final v?) 'finishedAt': v.toUtc().toIso8601String(),
   'summary': ?value.summary,
+};
+
+ToolTaskActivity decodeToolTaskActivity(
+  Map<String, Object?> json,
+  WireContext ctx,
+) {
+  const type = 'ToolTaskActivity';
+  return ToolTaskActivity(
+    phase: readRequired(json, 'phase', type, wireString),
+    itemsDone: readOptional(json, 'itemsDone', type, wireInt),
+    itemsTotal: readOptional(json, 'itemsTotal', type, wireInt),
+    itemTitle: readOptional(json, 'itemTitle', type, wireString),
+    bytesDone: readOptional(json, 'bytesDone', type, wireInt),
+    bytesTotal: readOptional(json, 'bytesTotal', type, wireInt),
+    at: readRequired(json, 'at', type, wireDateTime),
+  );
+}
+
+Map<String, Object?> encodeToolTaskActivity(ToolTaskActivity value) => {
+  'phase': value.phase,
+  'itemsDone': ?value.itemsDone,
+  'itemsTotal': ?value.itemsTotal,
+  'itemTitle': ?value.itemTitle,
+  'bytesDone': ?value.bytesDone,
+  'bytesTotal': ?value.bytesTotal,
+  'at': value.at.toUtc().toIso8601String(),
 };
 
 ToolTaskPage decodeToolTaskPage(Map<String, Object?> json, WireContext ctx) {

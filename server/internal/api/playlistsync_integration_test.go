@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -63,6 +65,14 @@ type fakeSyncSource struct {
 func syncWatchURL(id string) string { return "https://tube.example/watch?v=" + id }
 
 func (f *fakeSyncSource) SourceType() model.SourceType { return model.SourceYouTube }
+
+func (f *fakeSyncSource) LinkShape(rawURL string, wantPlaylist bool) (string, error) {
+	return fakeLinkShape(rawURL, wantPlaylist)
+}
+
+func (f *fakeSyncSource) Probe(_ context.Context, rawURL string, wantPlaylist bool) (syncsource.AcquireTarget, error) {
+	return fakeProbe(rawURL, wantPlaylist)
+}
 
 func (f *fakeSyncSource) setEntries(entries ...fakeSyncEntry) {
 	f.mu.Lock()
@@ -1297,8 +1307,8 @@ func TestPlaylistSyncRechecksTheDeleteRight(t *testing.T) {
 
 	src.setEntries(entries[0])
 	task := syncAs(t, h, owner, created.Pid, "revoked sync")
-	if task.State != "failed" {
-		t.Fatalf("revoked-right sync = %+v", task)
+	if task.State != "failed" || task.ErrorCode == nil || *task.ErrorCode != "forbidden" {
+		t.Fatalf("revoked-right sync = %+v, want it failed as forbidden", task)
 	}
 	items := h.items(t, "")
 	found := false
@@ -1361,8 +1371,8 @@ func TestPlaylistSyncRechecksTheUploadRight(t *testing.T) {
 				src.mu.Unlock()
 			}
 
-			if task := syncAs(t, h, owner, created.Pid, "revoked sync"); task.State != "failed" {
-				t.Fatalf("revoked-right sync = %+v", task)
+			if task := syncAs(t, h, owner, created.Pid, "revoked sync"); task.State != "failed" || task.ErrorCode == nil || *task.ErrorCode != "forbidden" {
+				t.Fatalf("revoked-right sync = %+v, want it failed as forbidden", task)
 			}
 			if n := src.fetchCount(); n != 0 {
 				t.Fatalf("a revoked upload right still fetched %d files", n)
@@ -1371,10 +1381,35 @@ func TestPlaylistSyncRechecksTheUploadRight(t *testing.T) {
 	}
 }
 
-// TestPlaylistSyncPreviewAnswers400ForABadURL pins preview as the
-// validate-before-save affordance: a URL no provider enumerates is the
-// caller's to fix, not a 500.
-func TestPlaylistSyncPreviewAnswers400ForABadURL(t *testing.T) {
+// A sync with new entries to download and no managed library to put them
+// in fails saying so, as a request it cannot carry out.
+func TestPlaylistSyncWithNowhereToPutItsDownloadsSaysWhy(t *testing.T) {
+	t.Parallel()
+	src := &fakeSyncSource{playlistURL: "https://tube.example/playlist?list=PLsync", title: "Sync Tapes"}
+	src.setEntries(syncFixtureEntries(t, t.TempDir(), 1)...)
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.SourceProviders = append(cfg.SourceProviders, src)
+		cfg.AllowPrivateFeedHosts = true
+	})
+	created := decodeStatus[Playlist](t, h.postJSON(t, "/api/v1/playlists", map[string]any{"name": "Unplaced", "kind": "static"}), 201, "playlist")
+	wantStatus(t, h.putJSON(t, "/api/v1/playlists/"+created.Pid+"/source", map[string]any{
+		"url": src.playlistURL, "mode": "append", "intervalHours": 6,
+	}), 200, "bind")
+	task := decodeStatus[ToolTask](t, h.postJSON(t, "/api/v1/playlists/"+created.Pid+"/source/sync", nil), 202, "sync")
+	drainTools(t, h)
+	got := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+task.Id, h.token))
+	if got.State != "failed" || got.ErrorCode == nil || *got.ErrorCode != "invalid-request" {
+		t.Fatalf("sync = %+v, want it failed as invalid-request", got)
+	}
+	if n := src.fetchCount(); n != 0 {
+		t.Errorf("fetched %d files with nowhere to put them", n)
+	}
+}
+
+// TestPlaylistSyncPreviewRefusesALinkNoSourceReads pins preview as the
+// validate-before-save affordance: a link no source reads is the caller's
+// to fix, refused with its reason, not a 500.
+func TestPlaylistSyncPreviewRefusesALinkNoSourceReads(t *testing.T) {
 	t.Parallel()
 	media := t.TempDir()
 	src := &fakeSyncSource{playlistURL: "https://tube.example/playlist?list=PLsync", title: "Sync Tapes"}
@@ -1385,7 +1420,30 @@ func TestPlaylistSyncPreviewAnswers400ForABadURL(t *testing.T) {
 	resp := h.postJSON(t, "/api/v1/playlists/"+pl.Pid+"/source/preview", map[string]any{
 		"url": "https://tube.example/not-a-playlist", "mode": "mirror", "intervalHours": 6,
 	})
-	wantStatus(t, resp, 400, "preview of a URL nothing enumerates")
+	body := decodeStatus[Error](t, resp, 422, "preview of a link no source reads")
+	if body.Code != "source-refused" || body.Params == nil || (*body.Params)["reason"] != "unsupported-url" {
+		t.Errorf("refusal = %+v, want source-refused for unsupported-url", body)
+	}
+}
+
+// TestPlaylistSyncPreviewOfASourceThatDropsTheConnection: a source that
+// broke off is a refusal the same link can pass later, not a 500.
+func TestPlaylistSyncPreviewOfASourceThatDropsTheConnection(t *testing.T) {
+	t.Parallel()
+	media := t.TempDir()
+	src := &fakeSyncSource{playlistURL: "https://tube.example/playlist?list=PLsync", title: "Sync Tapes"}
+	src.setEntries(syncFixtureEntries(t, media, 1)...)
+	src.enumerateErr = &net.OpError{Op: "read", Net: "tcp", Err: os.NewSyscallError("read", syscall.ECONNRESET)}
+	h := syncHarness(t, src)
+
+	pl := createStaticPlaylist(t, h, "Dropped")
+	resp := h.postJSON(t, "/api/v1/playlists/"+pl.Pid+"/source/preview", map[string]any{
+		"url": src.playlistURL, "mode": "mirror", "intervalHours": 6,
+	})
+	body := decodeStatus[Error](t, resp, 422, "preview of a source that dropped the connection")
+	if body.Code != "source-refused" || body.Params == nil || (*body.Params)["reason"] != "unreachable" {
+		t.Errorf("refusal = %+v, want source-refused for unreachable", body)
+	}
 }
 
 // TestUnbindHandsTheSourceCoverBack pins that removing the binding

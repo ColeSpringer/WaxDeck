@@ -177,6 +177,10 @@
   "@errorInternal": {
     "description": "Error sentence for the spec code `internal`."
   },
+  "errorInvalidAddress": "That address is not one the server can fetch from: it has to be an http or https link whose host exists.",
+  "@errorInvalidAddress": {
+    "description": "Error sentence for the reason invalid-address, under `invalid-request`: a link whose scheme is not http or https, or whose host does not resolve."
+  },
   "errorInvalidRequest": "That request was not something the server could act on.",
   "@errorInvalidRequest": {
     "description": "Error sentence for the spec code `invalid-request`."
@@ -237,9 +241,77 @@
   "@errorServiceUnreachable": {
     "description": "Error sentence for the spec code `service-unreachable`, such as a scrobbling provider."
   },
+  "errorSourceAgeRestricted": "That video is age-restricted, so it cannot be downloaded.",
+  "@errorSourceAgeRestricted": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is age-restricted: the video is age-restricted."
+  },
+  "errorSourceBroken": "The bridge to that source needs maintenance. Ask whoever runs this server.",
+  "@errorSourceBroken": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is source-broken: the bridge to the source needs maintenance."
+  },
+  "errorSourceLive": "That is a live video. Try again once it has ended.",
+  "@errorSourceLive": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is live: the link is a live broadcast that has not ended."
+  },
+  "errorSourceMembersOnly": "That video is for channel members only.",
+  "@errorSourceMembersOnly": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is members-only: the video is limited to members of its channel."
+  },
+  "errorSourceNoAudio": "That link has no audio to download.",
+  "@errorSourceNoAudio": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is no-audio: the item carries no audio stream."
+  },
+  "errorSourceNotStarted": "That video has not started yet. Try again after it airs.",
+  "@errorSourceNotStarted": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is not-started: the link is a premiere or scheduled stream that has not begun."
+  },
+  "errorSourcePlaylistEmpty": "That playlist has no videos in it.",
+  "@errorSourcePlaylistEmpty": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is playlist-empty: the playlist exists and holds nothing to download."
+  },
+  "errorSourcePlaylistUnavailable": "That playlist is private or has been removed.",
+  "@errorSourcePlaylistUnavailable": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is playlist-unavailable: the playlist is private or deleted, so nothing can be read from it."
+  },
+  "errorSourceRateLimited": "The source is limiting requests right now. Try again later.",
+  "@errorSourceRateLimited": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is rate-limited: the source is rate-limiting this server."
+  },
+  "errorSourceRefused": "The source refused this link or one of its items.",
+  "@errorSourceRefused": {
+    "description": "Error sentence for the spec code `source-refused`, its general case: the source (such as YouTube) would not give the link or an item of it, for example a private playlist or a removed video."
+  },
+  "errorSourceRegionBlocked": "That video is not available where this server is.",
+  "@errorSourceRegionBlocked": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is region-blocked: the video is blocked in the server's region."
+  },
+  "errorSourceStalled": "The download stalled and was stopped. Try again.",
+  "@errorSourceStalled": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is stalled: the download made no progress and was stopped."
+  },
+  "errorSourceTimedOut": "The source took too long to answer. Try again.",
+  "@errorSourceTimedOut": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is timed-out: the source did not answer in time."
+  },
   "errorSourceUnavailable": "This server is not running the source that request needs.",
   "@errorSourceUnavailable": {
     "description": "Error sentence for the spec code `source-unavailable`: an acquisition integration this server does not run."
+  },
+  "errorSourceUnreachable": "The source could not be reached, or the connection broke off. Try again later.",
+  "@errorSourceUnreachable": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is unreachable: the server could not connect to the source, or the connection dropped partway."
+  },
+  "errorSourceUnsupportedUrl": "That is not a video, playlist or channel the source can read.",
+  "@errorSourceUnsupportedUrl": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is unsupported-url: the link is not a video, playlist or channel the source can read, a Shorts shelf included."
+  },
+  "errorSourceVideoPrivate": "That video needs a sign-in, so it cannot be downloaded.",
+  "@errorSourceVideoPrivate": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is video-private: the video is private or asks the viewer to sign in."
+  },
+  "errorSourceVideoUnavailable": "That video has been removed.",
+  "@errorSourceVideoUnavailable": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is video-unavailable: the video was removed or no longer exists."
   },
   "errorStationDirectoryUnavailable": "The station directory did not answer; add a station by its stream URL in Radio.",
   "@errorStationDirectoryUnavailable": {
@@ -282,6 +354,10 @@
         "example": "permission denied"
       }
     }
+  },
+  "errorToolTaskCommitted": "It has started moving files, so it can no longer be canceled. It finishes, or puts them back, on its own.",
+  "@errorToolTaskCommitted": {
+    "description": "Error sentence for a cancel refused with `conflict` and the params' reason task-committed: a book merge or split, or a CUE split, has started moving library files, so it runs to its end or puts them back by itself."
   },
   "errorToolTaskParked": "An earlier merge or split of this stopped and needs attention. Clear it in Tasks, then try again.",
   "@errorToolTaskParked": {

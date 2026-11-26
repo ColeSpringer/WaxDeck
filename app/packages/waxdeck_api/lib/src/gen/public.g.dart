@@ -42,6 +42,7 @@ export 'models/admin.g.dart'
         ThumbnailPruneResult,
         ThumbnailRung,
         ToolTask,
+        ToolTaskActivity,
         TranscodingActivity,
         TranscodingLimits,
         TrashEmptyResult,

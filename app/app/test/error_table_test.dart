@@ -196,6 +196,76 @@ void main() {
       expect(explainRefusal(en, later), _serverMessage);
     });
 
+    test('source-refused is worded by its reason, refusal or not', () {
+      WaxDeckApiException refused(String? reason) => WaxDeckApiException(
+        code: 'source-refused',
+        statusCode: 422,
+        message: _serverMessage,
+        params: reason == null ? null : <String, String>{'reason': reason},
+      );
+      final words = <String, (String, String)>{
+        'playlist-unavailable': (
+          en.errorSourcePlaylistUnavailable,
+          es.errorSourcePlaylistUnavailable,
+        ),
+        'playlist-empty': (
+          en.errorSourcePlaylistEmpty,
+          es.errorSourcePlaylistEmpty,
+        ),
+        'video-private': (
+          en.errorSourceVideoPrivate,
+          es.errorSourceVideoPrivate,
+        ),
+        'video-unavailable': (
+          en.errorSourceVideoUnavailable,
+          es.errorSourceVideoUnavailable,
+        ),
+        'age-restricted': (
+          en.errorSourceAgeRestricted,
+          es.errorSourceAgeRestricted,
+        ),
+        'region-blocked': (
+          en.errorSourceRegionBlocked,
+          es.errorSourceRegionBlocked,
+        ),
+        'members-only': (en.errorSourceMembersOnly, es.errorSourceMembersOnly),
+        'live': (en.errorSourceLive, es.errorSourceLive),
+        'not-started': (en.errorSourceNotStarted, es.errorSourceNotStarted),
+        'no-audio': (en.errorSourceNoAudio, es.errorSourceNoAudio),
+        'unsupported-url': (
+          en.errorSourceUnsupportedUrl,
+          es.errorSourceUnsupportedUrl,
+        ),
+        'rate-limited': (en.errorSourceRateLimited, es.errorSourceRateLimited),
+        'source-broken': (en.errorSourceBroken, es.errorSourceBroken),
+        'timed-out': (en.errorSourceTimedOut, es.errorSourceTimedOut),
+        'unreachable': (en.errorSourceUnreachable, es.errorSourceUnreachable),
+        'stalled': (en.errorSourceStalled, es.errorSourceStalled),
+      };
+      // The closed set the contract lists: a reason added there asks for
+      // a sentence here.
+      expect(words.keys.toSet(), _specSourceRefusedReasons());
+      for (final MapEntry(key: reason, value: (inEn, inEs)) in words.entries) {
+        expect(explainError(en, refused(reason)), inEn, reason: reason);
+        expect(explainError(es, refused(reason)), inEs, reason: reason);
+        // A private playlist is not a field typo: the table's words, not
+        // the server's.
+        expect(explainRefusal(en, refused(reason)), inEn, reason: reason);
+        expect(explainRefusal(es, refused(reason)), inEs, reason: reason);
+      }
+      expect(
+        words.values.map((w) => w.$1).toSet(),
+        hasLength(words.length),
+        reason: 'each reason has a sentence of its own',
+      );
+
+      for (final unknown in <String?>['holo-projection', null]) {
+        expect(explainError(en, refused(unknown)), en.errorSourceRefused);
+        expect(explainError(es, refused(unknown)), es.errorSourceRefused);
+        expect(explainRefusal(en, refused(unknown)), en.errorSourceRefused);
+      }
+    });
+
     test('conflict is refined by a file tool refusal\'s reason', () {
       WaxDeckApiException refusal(Map<String, String> params) =>
           WaxDeckApiException(
@@ -420,6 +490,7 @@ void main() {
         'not-a-feed': (l) => l.errorFeedNotAFeed,
         'too-large': (l) => l.errorFeedTooLarge,
         'blocked-address': (l) => l.errorFeedBlockedAddress,
+        'invalid-address': (l) => l.errorInvalidAddress,
       };
       for (final MapEntry(key: reason, value: sentence) in byReason.entries) {
         for (final l10n in <AppLocalizations>[en, es]) {
@@ -440,7 +511,7 @@ void main() {
       expect({
         for (final s in byReason.values) s(en),
         en.errorInvalidRequest,
-      }, hasLength(4));
+      }, hasLength(5));
     });
 
     test('an address refused as invalid keeps the server sentence on a '
@@ -451,6 +522,7 @@ void main() {
         'not-a-feed',
         'too-large',
         'blocked-address',
+        'invalid-address',
       ]) {
         expect(
           explainRefusal(en, failed('invalid-request', reason)),
@@ -617,6 +689,34 @@ Set<String> _specCodes() {
   return RegExp(
     r'`([a-z][a-z-]*)`',
   ).allMatches(outside.toString()).map((m) => m.group(1)!).toSet();
+}
+
+/// The reasons the committed bundle lists under `source-refused`, read out
+/// of its prose like the codes are.
+Set<String> _specSourceRefusedReasons() {
+  final spec = File(_repoFile('api/openapi.yaml')).readAsStringSync();
+  const opening = 'Under `source-refused`, `reason` says why, one of';
+  const closing = 'a client treats a reason it does not know';
+  final start = spec.indexOf(opening);
+  expect(start, isNonNegative, reason: 'the spec no longer says "$opening"');
+  final end = spec.indexOf(closing, start);
+  expect(end, isNonNegative, reason: 'the spec no longer says "$closing"');
+  final outside = StringBuffer();
+  var depth = 0;
+  for (final char in spec.substring(start, end).split('')) {
+    if (char == '(') {
+      depth++;
+    } else if (char == ')') {
+      depth--;
+    } else if (depth == 0) {
+      outside.write(char);
+    }
+  }
+  return RegExp(
+      r'`([a-z][a-z-]*)`',
+    ).allMatches(outside.toString()).map((m) => m.group(1)!).toSet()
+    ..remove('reason')
+    ..remove('source-refused');
 }
 
 /// The health rules the committed bundle documents, read out of its

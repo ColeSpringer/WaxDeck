@@ -105,6 +105,33 @@ class ToolTasksController extends AsyncNotifier<ToolTasksState> {
     );
   }
 
+  /// Asks one unfinished task to stop and puts the server's answer in its
+  /// row, in place: `canceled` for one that had not started, still
+  /// `running` with `cancelRequested` while a run winds down, or the task
+  /// as it had already ended. A task the server no longer has leaves the
+  /// list. Other refusals propagate; the row's control answers for them.
+  Future<void> cancel(String taskId) async {
+    ToolTask? answered;
+    try {
+      answered = await ref.read(repositoryProvider).cancelToolTask(taskId);
+    } on WaxDeckApiException catch (e) {
+      if (e.statusCode != 404) rethrow;
+    }
+    if (!ref.mounted) return;
+    final current = state.value;
+    if (current == null) return;
+    state = AsyncData(
+      ToolTasksState(
+        tasks: [
+          for (final task in current.tasks)
+            if (task.id != taskId) task else ?answered,
+        ],
+        nextCursor: current.nextCursor,
+        loadingMore: current.loadingMore,
+      ),
+    );
+  }
+
   /// Sweeps the caller's own finished rows, or with [all] everyone's
   /// (an administrator's choice), and answers how many went and how many
   /// stayed, for the toolbar's toast. Refetched rather than filtered

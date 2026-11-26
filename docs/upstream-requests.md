@@ -855,6 +855,34 @@ note.
   caller must not write: each such edit leaves an info-level
   `tag_write_owed` row for `mbid` on the file, which the diagnostics
   dashboard lists for good.
+- **A catalog job cannot be canceled.** A job the facade starts
+  (`StartScan`, `StartAnalyze`, `StartEnrich`, `StartSetItemKind`,
+  `StartRemoveRoot`) runs under the server's own lifetime context
+  (`startJob`), and the facade has no call that stops one job:
+  `jobs.Run` ends a job canceled only when that context is, which is
+  the server stopping. A long scan or enrich pass started by mistake
+  runs to its end. Wanted: `CancelJob(ctx, pid)`, which
+  cancels the job's context so it ends `canceled` with what it finished
+  kept, as a shutdown leaves it. Shipped workaround: WaxDeck's own tool
+  tasks cancel (`POST /tools/tasks/{taskId}/cancel`); the catalog's jobs
+  under `/jobs` offer no cancel.
+- **A book part lands in its book only by its file's tags.**
+  `AcquiredMeta`'s track and book placement carries a profile, copy and
+  duplicate policy, and no album, book or part number, so
+  `ImportAcquired` files a part under whatever its own tags say. A part
+  whose file takes no tags (a fragmented MP4, or a write that fails)
+  cannot be stamped with its book's title and number, and would land as
+  a book of its own. Wanted: book and part placement on `AcquiredMeta`
+  (the book's title and author, the part's number of how many) that the
+  import keys the book by, over the file's tags. Shipped workaround:
+  WaxDeck stamps each part's tags before the import and refuses the
+  whole unit as `conflict` when a part will not take them, naming the
+  part (`<file>: the book's details could not be written to it`). One
+  part cannot be taken out of an entry, so the rest of the book does not
+  land either: the person can decide the entry as music where its
+  library takes music, which lands the parts as tracks with no book
+  stamp, or discard it and acquire the list again with a transcoded
+  format (`mp3`, `opus`, `flac`), whose files take tags.
 
 ## WaxTap
 
@@ -867,7 +895,12 @@ note.
   takes the same 10 minutes to be retried. Wanted: an idle timeout for
   a chunk that has stopped receiving bytes, so a slow link finishes and
   a hung connection fails fast. Shipped workaround: the 10-minute
-  chunk deadline.
+  chunk deadline, and WaxDeck's own stall watchdog over the download's
+  events (`stallWatch` in `server/internal/service/tools_activity.go`):
+  an acquisition or playlist sync whose download reports no activity
+  for three minutes is stopped and the task waits as `stalled` to try
+  again. It watches the whole download, not one chunk, so a chunk that
+  hangs while the others still move goes on to the chunk deadline.
 - **`EmbedMetadata` writes the channel as ARTIST verbatim.** For an Art
   Track upload that channel is YouTube's auto-generated "<Artist> -
   Topic", and the video's description states the real artists, album
@@ -877,6 +910,27 @@ note.
   ALBUM and the date. Shipped workaround: WaxDeck's own tag pass after
   every download (`server/internal/sourcetags`) rewrites them in the
   same WaxLabel write as its provenance tags.
+- **`PlaylistUnavailableError` does not say private from deleted.** A
+  private list carries only YouTube's alert text, in YouTube's language,
+  and a deleted one is `ErrPlaylistUnavailable` over an HTTP 404, so a
+  caller can tell the two apart only by reading prose. Wanted: a
+  structured kind on the error (private, deleted, unknown). Shipped
+  workaround: WaxDeck refuses both under one reason,
+  `playlist-unavailable` ("private or deleted").
+- **No stable classifier for a link.** Telling a video from a playlist
+  from a channel before any request means calling
+  `youtube.ExtractVideoID`, `ExtractPlaylistID` and `ExtractChannelRef`
+  from a package documented as unstable, and the foreign-host check
+  lives only inside them. Wanted: a top-level `Classify(url)` answering
+  the kind and its video, playlist and channel ids. Shipped workaround:
+  `waxtapsource`'s probe calls the three extractors the way WaxTap's own
+  command line does.
+- **A playlist's video count.** `Playlist` carries entries and a
+  continuation but not the header's total, so the check of a link
+  before it is queued cannot say how many videos a list holds, nor warn
+  that one runs past the 200-entry cap. Wanted: the header's video count
+  on `Playlist`, a one-item `Enumerate` included. Shipped workaround:
+  none; a list is named without a count.
 
 ## WaxSeal
 

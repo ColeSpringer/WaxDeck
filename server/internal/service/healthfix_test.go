@@ -267,6 +267,33 @@ func TestAFixWhileTheRuleIsFixingIsAConflict(t *testing.T) {
 	}
 }
 
+// A fix winding down from its cancel no longer holds its rule: the rule
+// reads as not fixing, and another fix of it queues.
+func TestAFixWindingDownFromACancelLetsAnotherQueue(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, _ := openLyricsFixture(t, &lyricist{name: "a"})
+	if err := svc.Health.RunHealthSweep(ctx); err != nil {
+		t.Fatal(err)
+	}
+	first, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.db.Writer().ExecContext(ctx, `UPDATE tool_tasks SET state = 'running', cancel_requested = 1 WHERE id = ?`, first.TaskID); err != nil {
+		t.Fatal(err)
+	}
+	if ruleFixing(t, ctx, svc, ruleWriteUnsynced) {
+		t.Error("a rule whose fix is winding down from a cancel reads as fixing")
+	}
+	again, err := svc.Health.StartHealthFix(ctx, uc, ruleWriteUnsynced, nil)
+	if err != nil {
+		t.Fatalf("a fix while the last one winds down = %v, want it queued", err)
+	}
+	if again.TaskID == "" || again.TaskID == first.TaskID {
+		t.Errorf("the second fix = %+v, want a task of its own", again)
+	}
+}
+
 // A fix whose end a stopped process took in hand is told by this one:
 // the origin outlives the claim until the re-check and the notification.
 func TestAFixSettleCutShortIsTakenOver(t *testing.T) {

@@ -1,11 +1,16 @@
 package api
 
 import (
+	"context"
+	"strings"
 	"testing"
 	"time"
 
+	waxtap "github.com/colespringer/waxtap/v3"
+
 	"github.com/colespringer/waxdeck/fixtures"
 	"github.com/colespringer/waxdeck/server/internal/service"
+	"github.com/colespringer/waxdeck/server/internal/syncsource"
 )
 
 // uploadTargets reads the destination picker's list for one token.
@@ -162,4 +167,38 @@ func TestAcquisitionRefusesAReadOnlyLibrary(t *testing.T) {
 
 	resp = h.postJSON(t, "/api/v1/acquisitions", body)
 	wantStatus(t, resp, 409, "acquire into a read-only library")
+}
+
+// probingAcquireSource is fakeAcquireSource that checks a link first and
+// finds every one a private list.
+type probingAcquireSource struct{ *fakeAcquireSource }
+
+func (probingAcquireSource) Probe(context.Context, string, bool) (syncsource.AcquireTarget, error) {
+	return syncsource.AcquireTarget{Shape: syncsource.ShapePlaylist}, &waxtap.PlaylistUnavailableError{Reason: "This playlist is private."}
+}
+
+// A link the source refuses answers 422 with the reason a client words,
+// and queues nothing.
+func TestARefusedLinkAnswersWithItsReason(t *testing.T) {
+	t.Parallel()
+	src := probingAcquireSource{&fakeAcquireSource{playlistURL: "https://tube.example/playlist?list=PLprivate"}}
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.SourceProviders = append(cfg.SourceProviders, src)
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+		cfg.AllowPrivateFeedHosts = true
+	})
+	resp := h.postJSON(t, "/api/v1/acquisitions", map[string]any{"url": src.playlistURL, "mediaType": "music", "playlist": true})
+	body := decodeStatus[Error](t, resp, 422, "a refused link")
+	if body.Code != "source-refused" || body.Params == nil || (*body.Params)["reason"] != "playlist-unavailable" {
+		t.Errorf("refusal = %+v, want source-refused for playlist-unavailable", body)
+	}
+	if strings.Contains(body.Message, "waxtap") || strings.Contains(body.Message, "This playlist is private.") {
+		t.Errorf("refusal says %q, the source's words", body.Message)
+	}
+	tasks := decode[ToolTaskPage](t, get(t, h.ts, "/api/v1/tools/tasks", h.token))
+	if len(tasks.Tasks) != 0 {
+		t.Errorf("a refused link queued %d tasks", len(tasks.Tasks))
+	}
 }

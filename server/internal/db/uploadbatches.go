@@ -193,7 +193,11 @@ func (d *DB) ExpiredUploadBatches(ctx context.Context, nowNS int64, limit int) (
 // narrow claim never clobbers concurrent state changes the way a
 // whole-row rewrite from a stale gather would.
 func (d *DB) LinkUploadReviewEntry(ctx context.Context, uploadID, entryID string) (bool, error) {
-	res, err := d.w.ExecContext(ctx, `
+	return linkUploadReviewEntry(ctx, d.w, uploadID, entryID)
+}
+
+func linkUploadReviewEntry(ctx context.Context, x execer, uploadID, entryID string) (bool, error) {
+	res, err := x.ExecContext(ctx, `
 		UPDATE uploads SET review_entry_id = ?
 		WHERE id = ? AND review_entry_id = '' AND state = 'staged'`,
 		entryID, uploadID)

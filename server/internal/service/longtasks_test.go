@@ -95,3 +95,40 @@ func TestAHealthFixAndARepairRunOneAtATime(t *testing.T) {
 		t.Fatalf("after the long-task worker's next turn: fix %s, want done", fixed)
 	}
 }
+
+// URL downloads and playlist syncs run on a worker of their own, one at a
+// time: the shared tool worker and the long-task worker never take one,
+// and a genre normalize queued behind a running download runs to its end
+// while the download does.
+func TestANormalizeRunsWhileADownloadDoes(t *testing.T) {
+	t.Parallel()
+	src := &stagingSource{}
+	ctx, svc, uc := acquireFixture(t, src)
+	download, err := svc.Ingest.StartAcquisition(ctx, uc, "https://tube.example/playlist?list=PLthree", false, "music", "", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if svc.Tools.DrainToolTasks(ctx) || svc.Tools.DrainLongToolTasks(ctx) {
+		t.Fatal("a worker other than the source worker took the download")
+	}
+	norm, err := svc.Reads.StartGenreNormalize(ctx, uc, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var meanwhile []string
+	src.answerThree(func(context.Context) error {
+		for svc.Tools.DrainToolTasks(ctx) {
+		}
+		meanwhile = []string{taskState(t, ctx, svc, uc, download.ID), taskState(t, ctx, svc, uc, norm.ID)}
+		return nil
+	})
+	if !svc.Tools.DrainSourceToolTasks(ctx) {
+		t.Fatal("the source worker did not take the download")
+	}
+	if len(meanwhile) != 2 || meanwhile[0] != taskStateRunning || meanwhile[1] != taskStateDone {
+		t.Fatalf("while the download ran: download and normalize %v, want the download running and the normalize done", meanwhile)
+	}
+	if got := taskState(t, ctx, svc, uc, download.ID); got != taskStateDone {
+		t.Fatalf("the download = %s, want done", got)
+	}
+}

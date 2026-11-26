@@ -1078,6 +1078,8 @@ func (l *Podcasts) releaseHold(ctx context.Context, uc *UserCtx, show, device st
 	if !gone {
 		return false, nil
 	}
+	// The subscription went as an unsubscribe's does, so its rows settle.
+	l.Integrations.resolveNotificationsFor(ctx, apiPID(PrefixPodcast, model.PID(show)), uc.ID)
 	if pod, err := l.lib.Podcasts().Get(ctx, model.PID(show)); err == nil {
 		feedURL = gpodderEventURL(pod, feedURL)
 	}

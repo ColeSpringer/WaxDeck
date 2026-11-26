@@ -347,7 +347,8 @@ class HealthRuleCount {
 
   /// True while a fix for the rule is under way: a pass-backed fix from its
   /// start until its re-check lands, a task-backed one while its task is queued
-  /// or running. Another fix for the rule answers `conflict` meanwhile.
+  /// or running and not winding down from a cancel. Another fix for the rule
+  /// answers `conflict` meanwhile.
   final bool fixing;
 
   /// Why a rule that has a fix cannot be fixed on this install; absent when

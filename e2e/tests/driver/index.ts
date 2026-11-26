@@ -193,6 +193,7 @@ export {
   clickThrough,
   clickUntil,
   clickOnceForAnswer,
+  pressOnce,
   clickUntilRequested,
   chooseFromMenu,
   typeInto,

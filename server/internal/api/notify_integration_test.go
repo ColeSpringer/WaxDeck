@@ -344,7 +344,7 @@ func TestNotificationDeliveryRouting(t *testing.T) {
 	// A user event reaches only the named user's targets, and only
 	// those enabled for it: kit's target selects feed-disabled, so the
 	// same emit to both users delivers once.
-	h.svc.Integrations.EmitNotification(ctx, "episode-downloaded", "New episode: Show", "Ep 1",
+	h.svc.Integrations.EmitNotificationFor(ctx, "episode-downloaded", "New episode: Show", "Ep 1", "",
 		[]string{samUser.Id, kitUser.Id})
 	drainNotify(t, h)
 	if got := samSink.deliveries(); len(got) != 1 || got[0]["event"] != "episode-downloaded" || got[0]["title"] != "New episode: Show" {
@@ -428,7 +428,7 @@ func TestNotificationUnifiedPushGatingRegression(t *testing.T) {
 	// The deselected event enqueues nothing: the outbox stays empty
 	// (nothing dials the unreachable endpoint) and the target's health
 	// fields stay untouched.
-	h.svc.Integrations.EmitNotification(ctx, "episode-downloaded", "New episode", "Body", []string{samUser.Id})
+	h.svc.Integrations.EmitNotificationFor(ctx, "episode-downloaded", "New episode", "Body", "", []string{samUser.Id})
 	if h.svc.Integrations.DrainNotifyOutbox(ctx) {
 		t.Fatal("a deselected event reached the outbox")
 	}
@@ -661,5 +661,104 @@ func TestPushRegistrationCompat(t *testing.T) {
 	targets := decode[NotificationTargetList](t, get(t, h.ts, "/api/v1/users/me/notification-targets", h.token))
 	if len(targets.Targets) != 1 || targets.Targets[0].Kind != "webhook" {
 		t.Fatalf("targets after delete-all = %+v, want the webhook untouched", targets.Targets)
+	}
+}
+
+// The inbox listing orders by updatedAt and carries count and
+// resolvedAt; Clear completed removes only resolved rows; mark-read takes
+// ids or events, and refuses the two together or a target alone.
+func TestNotificationInboxFoldsResolvesAndMarks(t *testing.T) {
+	t.Parallel()
+	h := notifyHarness(t)
+	ctx := context.Background()
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{"username": "sam", "password": testPassword})
+	sam := decode[UserAccount](t, resp)
+	token := loginAs(t, h.ts, "sam", testPassword).Token
+	resp = reqAs(t, h, "POST", "/api/v1/playlists", token, map[string]any{"name": "Synced", "kind": "static"})
+	pl := decodeStatus[Playlist](t, resp, 201, "create playlist")
+
+	inbox := func(path string) NotificationPage {
+		t.Helper()
+		return decodeStatus[NotificationPage](t, reqAs(t, h, "GET", path, token, nil), 200, "list inbox")
+	}
+	synced := func(body string) {
+		h.svc.Integrations.EmitNotificationFor(ctx, "playlist-synced", "Playlist synced", body,
+			pl.Pid, []string{sam.Id}, service.NotifyKey("playlist-synced:"+pl.Pid))
+	}
+	h.svc.Integrations.EmitNotificationFor(ctx, "job-finished", "Scan finished", "a", "", []string{sam.Id})
+	synced("first")
+	h.svc.Integrations.EmitNotificationFor(ctx, "episode-downloaded", "Episode fetched", "c", "", []string{sam.Id})
+	synced("second")
+
+	page := inbox("/api/v1/users/me/notifications?limit=100")
+	if len(page.Notifications) != 3 {
+		t.Fatalf("rows = %+v, want three", page.Notifications)
+	}
+	top, mid, low := page.Notifications[0], page.Notifications[1], page.Notifications[2]
+	if top.Event != "playlist-synced" || top.Body != "second" || derefIntOr(top.Count) != 2 ||
+		!top.UpdatedAt.After(top.CreatedAt) || top.TargetPid == nil || *top.TargetPid != pl.Pid {
+		t.Fatalf("top = %+v, want the folded playlist row, counting 2, risen", top)
+	}
+	if mid.Event != "episode-downloaded" || low.Event != "job-finished" ||
+		derefIntOr(low.Count) != 1 || !low.UpdatedAt.Equal(low.CreatedAt) || low.ResolvedAt != nil {
+		t.Fatalf("below = %+v, %+v, want the unfolded rows in order", mid, low)
+	}
+
+	// Paged one at a time, the same rows in the same order.
+	var walked []string
+	for path := "/api/v1/users/me/notifications?limit=1"; ; {
+		p := inbox(path)
+		for _, n := range p.Notifications {
+			walked = append(walked, n.Id)
+		}
+		if p.NextCursor == nil {
+			break
+		}
+		path = "/api/v1/users/me/notifications?limit=1&cursor=" + *p.NextCursor
+	}
+	if len(walked) != 3 || walked[0] != top.Id || walked[1] != mid.Id || walked[2] != low.Id {
+		t.Fatalf("walked %v, want %s %s %s", walked, top.Id, mid.Id, low.Id)
+	}
+	wantStatus(t, reqAs(t, h, "GET", "/api/v1/users/me/notifications?cursor=bogus", token, nil), 400, "a bad cursor")
+
+	// Deleting the playlist resolves its row.
+	wantStatus(t, reqAs(t, h, "DELETE", "/api/v1/playlists/"+pl.Pid, token, nil), 204, "delete playlist")
+	page = inbox("/api/v1/users/me/notifications?limit=100")
+	if page.Notifications[0].Id != top.Id || page.Notifications[0].ResolvedAt == nil ||
+		derefIntOr(page.Notifications[0].Count) != 2 {
+		t.Fatalf("top = %+v, want the playlist row resolved in place", page.Notifications[0])
+	}
+
+	for _, bad := range []map[string]any{
+		{"ids": []string{low.Id}, "events": []string{"job-finished"}},
+		{"targetPid": pl.Pid},
+	} {
+		resp := reqAs(t, h, "POST", "/api/v1/users/me/notifications/read", token, bad)
+		if resp.StatusCode != 400 {
+			t.Fatalf("read %v status = %d, want 400", bad, resp.StatusCode)
+		}
+		if code := decode[Error](t, resp).Code; code != "invalid-request" {
+			t.Fatalf("read %v code = %q", bad, code)
+		}
+	}
+	wantStatus(t, reqAs(t, h, "POST", "/api/v1/users/me/notifications/read", token,
+		map[string]any{"events": []string{"playlist-synced"}, "targetPid": pl.Pid}), 204, "read by event")
+	page = inbox("/api/v1/users/me/notifications?limit=100")
+	if page.UnreadCount != 2 || page.Notifications[0].ReadAt == nil {
+		t.Fatalf("unread = %d, top = %+v, want the playlist row read and two left", page.UnreadCount, page.Notifications[0])
+	}
+	wantStatus(t, reqAs(t, h, "POST", "/api/v1/users/me/notifications/read", token, map[string]any{}), 204, "read all")
+	if page = inbox("/api/v1/users/me/notifications?limit=100"); page.UnreadCount != 0 {
+		t.Fatalf("unread = %d, want none", page.UnreadCount)
+	}
+
+	wantStatus(t, reqAs(t, h, "DELETE", "/api/v1/users/me/notifications?resolved=true", token, nil), 204, "clear completed")
+	page = inbox("/api/v1/users/me/notifications?limit=100")
+	if len(page.Notifications) != 2 || page.Notifications[0].Id != mid.Id || page.Notifications[1].Id != low.Id {
+		t.Fatalf("after clearing completed = %+v, want the two open rows", page.Notifications)
+	}
+	wantStatus(t, reqAs(t, h, "DELETE", "/api/v1/users/me/notifications?resolved=false", token, nil), 204, "clear all")
+	if page = inbox("/api/v1/users/me/notifications?limit=100"); len(page.Notifications) != 0 {
+		t.Fatalf("after clearing = %+v, want none", page.Notifications)
 	}
 }

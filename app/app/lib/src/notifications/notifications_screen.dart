@@ -89,6 +89,15 @@ class NotificationsScreen extends ConsumerWidget {
             semanticsId: SemanticsIds.notificationsMarkAllRead,
             onPressed: () => unawaited(notifier.markAllRead()),
           ),
+        if (rows.any((row) => row.resolved))
+          WaxIconButton(
+            glyph: WaxIcons.archive,
+            label: l10n.bellClearCompleted,
+            semanticsId: SemanticsIds.notificationsClearCompleted,
+            // No confirm: a resolved row says what was done and carries
+            // nothing anybody has yet to act on.
+            onPressed: () => unawaited(notifier.clearCompleted()),
+          ),
         if (rows.isNotEmpty)
           WaxIconButton(
             glyph: WaxIcons.close,
@@ -149,6 +158,9 @@ class NotificationsScreen extends ConsumerWidget {
                   // reaches neither a screen reader nor everybody
                   // looking at it.
                   active: !row.read,
+                  // The subtitle already says Unread; the house word for
+                  // an active row is Playing.
+                  activeLabel: null,
                   trailing: row.fromInbox
                       ? WaxIconButton(
                           glyph: WaxIcons.close,
@@ -157,7 +169,9 @@ class NotificationsScreen extends ConsumerWidget {
                           onPressed: () => unawaited(notifier.delete(row.id!)),
                         )
                       : const WaxIcon(WaxIcons.forward, size: 16),
-                  onTap: () => context.go(row.location),
+                  // A resolved row has nowhere left to go: what it
+                  // pointed at is done, or gone.
+                  onTap: row.resolved ? null : () => context.go(row.location),
                 ),
             const SizedBox(height: WaxSpace.s24),
             const PersonalNotificationTargetsSection(),

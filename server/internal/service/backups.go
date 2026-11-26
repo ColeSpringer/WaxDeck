@@ -69,7 +69,7 @@ type backupAuditor interface {
 // backupNotifier announces backup outcomes on the server notification
 // scope; *Integrations satisfies it.
 type backupNotifier interface {
-	EmitServerNotification(ctx context.Context, event, title, body string)
+	EmitServerNotification(ctx context.Context, event, title, body string, opts ...NotifyOption)
 }
 
 // SealedCasualty is one sealed credential a restore onto a different
@@ -303,7 +303,8 @@ func (b *Backups) Run(ctx context.Context, id string) error {
 		return &Error{Kind: KindInternal, Err: buildErr}
 	}
 	b.notify.EmitServerNotification(ctx, "backup-completed",
-		"Backup completed", fmt.Sprintf("%s, %.1f MB.", row.FileName, float64(row.SizeBytes)/1e6))
+		"Backup completed", fmt.Sprintf("%s, %.1f MB.", row.FileName, float64(row.SizeBytes)/1e6),
+		NotifyKey("backup-completed"))
 	if err := b.applyRetention(ctx); err != nil {
 		// Retention failing must not fail the backup that just landed.
 		b.log.Warn("applying backup retention", "err", err)

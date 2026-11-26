@@ -311,11 +311,14 @@ extension OrganizeBatchX on OrganizeBatch {
 }
 
 extension ToolTaskX on ToolTask {
-  /// Whether the task has ended: done, failed, or parked. A finished task
-  /// is dismissed and swept like any other, and a parked one holds its
-  /// book or rip from another merge or split until it is.
+  /// Whether the task has ended: done, failed, canceled, or parked. A
+  /// finished task is dismissed and swept like any other, and a parked one
+  /// holds its book or rip from another merge or split until it is.
   bool get finished =>
-      state == 'done' || state == 'failed' || state == 'parked';
+      state == 'done' ||
+      state == 'failed' ||
+      state == 'canceled' ||
+      state == 'parked';
 }
 
 extension SignupResultX on SignupResult {

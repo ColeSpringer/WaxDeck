@@ -576,6 +576,12 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	// effect at a start.
 	group.GoOnce(ctx, "starter-playlists", l.Playlists.reconcileStarterPlaylists)
 
+	// Tool workspaces whose task was cleared while they would not go.
+	group.GoOnce(ctx, "tool-workspaces", l.Tools.sweepToolWorkspaces)
+	// Task ends a stop cut short: a cancel's or retire's settle, or a
+	// run's own end (done, failed or parked).
+	group.GoOnce(ctx, "tool-settles", l.Tools.finishToolTaskSettles)
+
 	if cfg.ScanOnStart {
 		group.GoOnce(ctx, "startup-scan", func(ctx context.Context) error {
 			pid, err := l.lib.StartScan(ctx, waxbin.ScanRequest{})

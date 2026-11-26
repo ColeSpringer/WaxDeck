@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,20 +21,37 @@ import (
 // uses.
 
 // longToolTasks are the task types one run of which can take hours, a
-// health fix and a catalog repair: they get a worker of their own, which
-// runs them one at a time, since an acquisition or a sync queued behind
-// one would wait as long.
-var longToolTasks = []string{taskTypeHealthFix, taskTypeCatalogRepair}
+// health fix and a catalog repair, and sourceToolTasks those whose run
+// lasts as long as their downloads, an acquisition and a playlist sync.
+// Each set gets a worker of its own, which runs its tasks one at a time,
+// so neither holds the other tools, nor they it.
+var (
+	longToolTasks   = []string{taskTypeHealthFix, taskTypeCatalogRepair}
+	sourceToolTasks = []string{taskTypeAcquire, taskTypePlaylistSync}
+)
+
+// The three workers' shares of the queue, which partition every type.
+var (
+	toolDrain   = wdb.TaskTypes{Except: slices.Concat(longToolTasks, sourceToolTasks)}
+	longDrain   = wdb.TaskTypes{Only: longToolTasks}
+	sourceDrain = wdb.TaskTypes{Only: sourceToolTasks}
+)
 
 // DrainToolTasks retires exhausted tasks and works one leased task other
-// than a long one; false means the queue is idle so the caller can sleep.
+// than a long or a source one; false means the queue is idle so the caller
+// can sleep.
 func (l *Tools) DrainToolTasks(ctx context.Context) bool {
-	return l.drainToolTasks(ctx, wdb.TaskTypes{Except: longToolTasks})
+	return l.drainToolTasks(ctx, toolDrain)
 }
 
 // DrainLongToolTasks is DrainToolTasks for the long tasks.
 func (l *Tools) DrainLongToolTasks(ctx context.Context) bool {
-	return l.drainToolTasks(ctx, wdb.TaskTypes{Only: longToolTasks})
+	return l.drainToolTasks(ctx, longDrain)
+}
+
+// DrainSourceToolTasks is DrainToolTasks for the source tasks.
+func (l *Tools) DrainSourceToolTasks(ctx context.Context) bool {
+	return l.drainToolTasks(ctx, sourceDrain)
 }
 
 func (l *Tools) drainToolTasks(ctx context.Context, types wdb.TaskTypes) bool {
@@ -55,6 +73,13 @@ func (l *Tools) drainToolTasksAt(ctx context.Context, types wdb.TaskTypes, now i
 		}
 		return false
 	}
+	if row.CancelRequested && !row.Resumable {
+		// Asked to cancel while no run here held it: settled, not run. A
+		// commit and a cancel exclude each other, so a resumable task's
+		// run must finish whatever the row says.
+		l.cancelToolTask(ctx, &row)
+		return true
+	}
 	// Only the first lease is a state change (queued -> running); a re-lease
 	// after a transient failure leaves the task running, so re-notifying would
 	// make every curation client refetch on each retry for no change. Terminal
@@ -62,16 +87,29 @@ func (l *Tools) drainToolTasksAt(ctx context.Context, types wdb.TaskTypes, now i
 	if row.Attempts <= 1 {
 		l.notifyToolTask(ctx, row.ID)
 	}
-	runCtx, cancel := context.WithTimeout(ctx, toolRunTimeoutFor(row.Type))
-	err = l.runToolTask(runCtx, &row)
-	cancel()
+	l.passDrainPoint("leased", row.ID)
+	runCtx, cancelRun := context.WithCancelCause(ctx)
+	bounded, stop := runCtx, context.CancelFunc(func() {})
+	if bound := toolRunTimeoutFor(row.Type); bound > 0 {
+		bounded, stop = context.WithTimeout(runCtx, cmp.Or(l.toolRunBound, bound))
+	}
+	err = l.runCanceling(bounded, cancelRun, &row)
+	stop()
+	// Read before the context is let go, which would name its own cause.
+	canceled := errors.Is(context.Cause(runCtx), errToolCanceled)
+	cancelRun(nil)
+	l.passDrainPoint("ran", row.ID)
 	if err != nil {
 		var wait *toolRetry
 		switch {
+		case canceled:
+			// First, before any arm that would wait or fail: a canceled
+			// run's error is the cancel's, and the process is alive.
+			l.cancelToolTask(ctx, &row)
 		case errors.Is(err, errToolParked):
 			// The run parked its task, which says why; nothing to record.
 		case errors.As(err, &wait):
-			l.deferToolTask(ctx, &row, wait)
+			l.deferToolTask(ctx, &row, wait, false)
 		case permanentToolErr(err):
 			l.failToolTask(ctx, &row, err)
 		case ctx.Err() != nil:
@@ -83,12 +121,13 @@ func (l *Tools) drainToolTasksAt(ctx context.Context, types wdb.TaskTypes, now i
 			// and it runs again, as the lease and the retire pass allow.
 			l.failToolTask(ctx, &row, err)
 		default:
-			// Transient (a timeout, an engine request cut off): the row
-			// stays leased and untouched; the lease expires and the
-			// attempts machinery re-runs it, or FailExhaustedToolTasks
-			// retires it.
+			// A failure no run classified (a timeout, an engine request
+			// cut off, the database): the task waits in view, saying what
+			// it was, the attempt spent, so the attempts still end a task
+			// that keeps failing.
 			l.log.Warn("tool task attempt failed", "task", row.ID, "type", row.Type,
 				"attempt", row.Attempts, "err", err)
+			l.deferToolTask(ctx, &row, &toolRetry{after: toolBackoff(row.Attempts), err: err, reason: "other"}, true)
 		}
 	}
 	return true
@@ -106,33 +145,57 @@ type toolRetry struct {
 // errToolParked is a run that parked its task rather than run again.
 var errToolParked = errors.New("the task is parked")
 
+// errToolCanceled is the cause a canceled task's run is stopped with, and
+// what a run that finds its task canceled answers.
+var errToolCanceled = errors.New("the task was canceled")
+
+// passDrainPoint runs the test's drain hook at point.
+func (l *Tools) passDrainPoint(point, taskID string) {
+	if l.drainHook != nil {
+		l.drainHook(point, taskID)
+	}
+}
+
 // ToolTaskFinished reports whether a task state is terminal: done,
-// failed, or parked, which counts as failed. A finished task is never
-// run again, and only a finished one may be deleted, swept or pruned.
+// failed, canceled, or parked, which counts as failed. A finished task is
+// never run again, and only a finished one may be deleted, swept or
+// pruned.
 func ToolTaskFinished(state string) bool {
-	return state == taskStateDone || state == taskStateFailed || state == taskStateParked
+	switch state {
+	case taskStateDone, taskStateFailed, taskStateCanceled, taskStateParked:
+		return true
+	}
+	return false
 }
 
 func (r *toolRetry) Error() string { return r.err.Error() }
 func (r *toolRetry) Unwrap() error { return r.err }
 
+// toolBackoffMax is the longest a run waits between tries.
+const toolBackoffMax = 30 * time.Minute
+
 // toolBackoff is how long a run waits after its nth wait in a row: a
-// quarter minute, doubling, at most half an hour.
+// quarter minute, doubling, at most toolBackoffMax.
 func toolBackoff(n int) time.Duration {
 	d := 15 * time.Second
-	for i := 1; i < n && d < 30*time.Minute; i++ {
+	for i := 1; i < n && d < toolBackoffMax; i++ {
 		d *= 2
 	}
-	return min(d, 30*time.Minute)
+	return min(d, toolBackoffMax)
 }
 
 // deferToolTask hands a waiting task back until its delay is out, counted
 // from when the run ended, saying why it waits, and tells its watchers.
-func (l *Tools) deferToolTask(ctx context.Context, t *wdb.ToolTask, wait *toolRetry) {
+// The attempt is given back unless spend says the wait spends it.
+func (l *Tools) deferToolTask(ctx context.Context, t *wdb.ToolTask, wait *toolRetry, spend bool) {
 	ctx = context.WithoutCancel(ctx)
 	l.log.Info("tool task waits", "task", t.ID, "type", t.Type, "for", wait.after, "err", wait.err)
-	until := time.Now().Add(wait.after).UnixNano()
-	if err := l.db.DeferToolTask(ctx, t.ID, until, toolFailure(wait.err).Msg, cmp.Or(wait.reason, "other")); err != nil {
+	code, params := taskFailureCode(wait.err)
+	if err := l.db.DeferToolTask(ctx, t.ID, wdb.ToolTaskWait{
+		UntilNS: time.Now().Add(wait.after).UnixNano(),
+		Error:   toolFailure(wait.err).Msg, ErrorCode: code, ErrorParams: params,
+		Reason: cmp.Or(wait.reason, "other"), SpendAttempt: spend,
+	}); err != nil {
 		l.log.Warn("deferring tool task", "task", t.ID, "err", err)
 	}
 	l.notifyToolTaskProgress(ctx, t.ID)
@@ -140,13 +203,22 @@ func (l *Tools) deferToolTask(ctx context.Context, t *wdb.ToolTask, wait *toolRe
 
 // holdToolTask marks a task as one a run in this process holds, which the
 // retire pass leaves, and renews its lease until the returned release:
-// the lease covers the whole run, every step and every wait in it.
-func (l *Tools) holdToolTask(taskID string) func() {
+// the lease covers the whole run, every step and every wait in it. cancel,
+// when set, is what stops the run should the task be canceled meanwhile.
+func (l *Tools) holdToolTask(taskID string, cancel context.CancelCauseFunc) func() {
 	l.toolRunsMu.Lock()
 	if l.toolRuns == nil {
-		l.toolRuns = map[string]int{}
+		l.toolRuns = map[string]*taskRun{}
 	}
-	l.toolRuns[taskID]++
+	run := l.toolRuns[taskID]
+	if run == nil {
+		run = &taskRun{}
+		l.toolRuns[taskID] = run
+	}
+	run.holds++
+	if run.cancel == nil {
+		run.cancel = cancel
+	}
 	l.toolRunsMu.Unlock()
 	every := l.toolLeaseEvery
 	if every <= 0 {
@@ -177,7 +249,7 @@ func (l *Tools) holdToolTask(taskID string) func() {
 			<-done
 		}
 		l.toolRunsMu.Lock()
-		if l.toolRuns[taskID]--; l.toolRuns[taskID] <= 0 {
+		if run.holds--; run.holds <= 0 {
 			delete(l.toolRuns, taskID)
 		}
 		l.toolRunsMu.Unlock()
@@ -205,31 +277,54 @@ func (l *Tools) retireExhaustedToolTasks(ctx context.Context, now int64) {
 		return
 	}
 	for _, id := range ids {
-		t, err := l.db.ToolTaskByID(ctx, id)
-		if err == nil {
-			l.settleRetired(ctx, &t)
-		}
-		l.Migrate.settleMigrationExport(ctx, id)
-		l.scrubTaskSecrets(ctx, id)
+		l.finishSettle(ctx, id)
 		l.notifyToolTask(ctx, id)
-		if err == nil {
-			l.notifyFileToolEnd(ctx, &t)
-			l.taskEnded(ctx, &t)
-		}
 	}
 }
 
-// runToolTask executes one leased task to completion.
-func (l *Tools) runToolTask(ctx context.Context, t *wdb.ToolTask) error {
-	defer l.holdToolTask(t.ID)()
+// finishToolTaskSettles finishes, at a start, what a stop cut short of a
+// task's end: a canceled or retired task's settle, or the end steps of a
+// run that finished, failed or parked its task. It tells each task's
+// watchers.
+func (l *Tools) finishToolTaskSettles(ctx context.Context) error {
+	rows, err := l.db.PendingToolTaskSettles(ctx)
+	if err != nil {
+		return err
+	}
+	for _, r := range rows {
+		if ctx.Err() != nil {
+			// Shutting down: the next start finishes the rest.
+			return nil
+		}
+		l.log.Info("finishing a tool task's settle", "task", r.ID, "type", r.Type, "state", r.State)
+		l.finishSettle(ctx, r.ID)
+		l.notifyToolTask(ctx, r.ID)
+	}
+	return nil
+}
+
+// runCanceling executes one leased task to completion under ctx, which
+// cancel stops with errToolCanceled should the task be canceled.
+func (l *Tools) runCanceling(ctx context.Context, cancel context.CancelCauseFunc, t *wdb.ToolTask) error {
+	defer l.holdToolTask(t.ID, cancel)()
+	// A cancel asked after the lease and before the hold found no run to
+	// stop: read once the hold is in place, it stops this one before it
+	// starts.
+	now, err := l.db.ToolTaskByID(context.WithoutCancel(ctx), t.ID)
+	if err != nil {
+		return &Error{Kind: KindInternal, Err: err}
+	}
+	if (now.CancelRequested && !now.Resumable) || now.State == taskStateCanceled {
+		cancel(errToolCanceled)
+		return errToolCanceled
+	}
 	// What a wait said is old news once the task runs again.
-	t.Error = ""
+	t.Error, t.ErrorCode, t.ErrorParams = "", "", ""
 	var p toolTaskParams
 	if err := json.Unmarshal([]byte(t.Params), &p); err != nil {
 		return fmt.Errorf("%w: bad task params: %v", errToolPermanent, err)
 	}
 	var results []string
-	var err error
 	switch {
 	case t.Type == taskTypeBookMerge:
 		results, err = l.runBookMerge(ctx, t, p)
@@ -253,17 +348,24 @@ func (l *Tools) runToolTask(ctx context.Context, t *wdb.ToolTask) error {
 		err = fmt.Errorf("%w: unknown task type %q", errToolPermanent, t.Type)
 	}
 	if err != nil {
+		if errors.Is(err, errToolCanceled) {
+			// The run found its task canceled itself.
+			cancel(errToolCanceled)
+		}
 		return err
 	}
 	// Recorded whatever happens to the attempt now: the work is done.
 	ctx = context.WithoutCancel(ctx)
-	l.recordToolTaskDone(ctx, t, results)
-	// Before the scrub, which drops an export id once the upload it
-	// names is gone: settling is what makes that true.
-	l.Migrate.settleMigrationExport(ctx, t.ID)
-	l.scrubTaskSecrets(ctx, t.ID)
-	l.notifyToolTask(ctx, t.ID)
-	l.taskEnded(ctx, t)
+	release, err := l.settleLocks.acquire(ctx, t.ID)
+	if err != nil {
+		return nil
+	}
+	defer release()
+	if !l.recordToolTaskDone(ctx, t, results) {
+		// Canceled meanwhile, which told the task's audience itself.
+		return nil
+	}
+	l.runEnded(ctx, t, false)
 	return nil
 }
 
@@ -332,4 +434,39 @@ func permanentToolErr(err error) bool {
 		return true
 	}
 	return false
+}
+
+// sweepToolWorkspaces removes the staging workspaces no task names any
+// more: a clear that could not remove one leaves it behind. Only a task
+// definitely gone orphans its workspace; a failed read keeps it.
+func (l *Tools) sweepToolWorkspaces(ctx context.Context) error {
+	dir := filepath.Join(l.Ingest.stagingDir, "tools")
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if ctx.Err() != nil {
+			// Shutting down: the next start sweeps the rest.
+			return nil
+		}
+		if !e.IsDir() {
+			continue
+		}
+		if _, err := l.db.ToolTaskByID(ctx, e.Name()); !errors.Is(err, wdb.ErrNotFound) {
+			if err != nil && ctx.Err() == nil {
+				l.log.Warn("reading a tool workspace's task", "task", e.Name(), "err", err)
+			}
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(dir, e.Name())); err != nil {
+			l.log.Warn("removing an orphaned tool workspace", "task", e.Name(), "err", err)
+			continue
+		}
+		l.log.Info("removed an orphaned tool workspace", "task", e.Name())
+	}
+	return nil
 }

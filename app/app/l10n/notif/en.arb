@@ -5,6 +5,16 @@
   "@notifBackupCompletedHelp": {
     "description": "What the `backup-completed` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
   },
+  "notifBackupCompletedRowTitle": "{count, plural, =1{Backup finished} other{{count} backups finished}}",
+  "@notifBackupCompletedRowTitle": {
+    "description": "Heading of an inbox row for finished backups: the count where several folded into the row.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "notifBackupCompletedTitle": "Backup finished",
   "@notifBackupCompletedTitle": {
     "description": "Switch label for the `backup-completed` notification."
@@ -28,6 +38,16 @@
   "notifEpisodeArrivedHelp": "A subscribed show published a new episode",
   "@notifEpisodeArrivedHelp": {
     "description": "What the new-episode notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
+  },
+  "notifEpisodeArrivedRowTitle": "{count, plural, =1{New episode} other{{count} episode updates}}",
+  "@notifEpisodeArrivedRowTitle": {
+    "description": "Heading of an inbox row for new episodes of one show: the count where several arrivals folded into the row.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
   },
   "notifEpisodeArrivedTitle": "New episode",
   "@notifEpisodeArrivedTitle": {
@@ -65,11 +85,21 @@
   "@notifHealthFixFinishedTitle": {
     "description": "Heading of the notification that a library health fix the reader started finished. The line under it says what it filled."
   },
-  "notifImportCompletedHelp": "An import was filed without review",
+  "notifImportCompletedHelp": "An upload or acquisition was added to the library",
   "@notifImportCompletedHelp": {
     "description": "What the `import-completed` notification is about, drawn under its switch."
   },
-  "notifImportCompletedTitle": "Filed without review",
+  "notifImportCompletedRowTitle": "{count, plural, =1{Added to the library} other{{count} added to the library}}",
+  "@notifImportCompletedRowTitle": {
+    "description": "Heading of an inbox row for finished imports, true whether or not they were identified: the count where several folded into the row.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "notifImportCompletedTitle": "Added to the library",
   "@notifImportCompletedTitle": {
     "description": "Switch label for the `import-completed` notification."
   },
@@ -93,6 +123,16 @@
   "@notifPlaylistSyncedHelp": {
     "description": "Help under the playlist-synced row in the notification-events checklist."
   },
+  "notifPlaylistSyncedRowTitle": "{count, plural, =1{Playlist synced} other{Synced {count} times}}",
+  "@notifPlaylistSyncedRowTitle": {
+    "description": "Heading of an inbox row for one synced playlist: the count where several syncs folded into the row.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "notifPlaylistSyncedTitle": "Playlist synced",
   "@notifPlaylistSyncedTitle": {
     "description": "Title of the playlist-synced row in the notification-events checklist."
@@ -101,6 +141,20 @@
   "@notifReviewReadyHelp": {
     "description": "What the `review-ready` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
   },
+  "notifReviewReadyResolvedTitle": "Review queue cleared",
+  "@notifReviewReadyResolvedTitle": {
+    "description": "Heading of the review-ready inbox row once the review queue has emptied."
+  },
+  "notifReviewReadyRowTitle": "{count, plural, =1{Waiting for review} other{{count} waiting for review}}",
+  "@notifReviewReadyRowTitle": {
+    "description": "Heading of the review-ready inbox row: how many entries wait in the review queue.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "notifReviewReadyTitle": "Waiting for review",
   "@notifReviewReadyTitle": {
     "description": "Switch label for the `review-ready` notification."
@@ -108,6 +162,10 @@
   "notifSignupRequestedHelp": "A new account request is waiting for approval",
   "@notifSignupRequestedHelp": {
     "description": "What the `signup-requested` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
+  },
+  "notifSignupRequestedResolvedTitle": "Request decided",
+  "@notifSignupRequestedResolvedTitle": {
+    "description": "Heading of a signup-requested inbox row once the account was approved, rejected or deleted."
   },
   "notifSignupRequestedTitle": "Account request",
   "@notifSignupRequestedTitle": {

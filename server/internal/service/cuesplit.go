@@ -215,6 +215,7 @@ func (c *cueSplit) cutPieces(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	defer c.l.dropCanceledJob(ctx, jobID)
 	outs, err := c.l.pollToolJob(ctx, c.t, jobID, 0)
 	if err != nil {
 		return err
@@ -249,6 +250,7 @@ func (c *cueSplit) cutPieces(ctx context.Context) error {
 		}
 		name := filepath.Join(album, fmt.Sprintf("%02d - %s.%s", i+1, safeFileName(title), toolSplitExt(c.p.Format, false)))
 		dst := filepath.Join(ws, name)
+		c.l.noteJobOutput(ctx, c.t.ID, i, outs)
 		if err := c.l.flowJobs.DownloadJobResult(ctx, jobID, i, dst, mode); err != nil {
 			return err
 		}
@@ -257,8 +259,13 @@ func (c *cueSplit) cutPieces(ctx context.Context) error {
 		}
 		names = append(names, name)
 	}
+	c.l.noteToolImport(ctx, c.t.ID)
 	c.p.PieceNames = names
 	if err := c.l.db.MarkToolTaskResumable(context.WithoutCancel(ctx), c.t.ID); err != nil {
+		if errors.Is(err, wdb.ErrCancelRequested) {
+			// Canceled before the import: the cancel takes the workspace.
+			return errToolCanceled
+		}
 		return &Error{Kind: KindInternal, Err: err}
 	}
 	// The drain decides from the task it leased, not the row.
@@ -467,6 +474,7 @@ func (c *cueSplit) landed(ctx context.Context, i int) (model.PID, error) {
 		if lib, err := c.l.Grants.libraryForPath(ctx, dest); err == nil && lib != "" {
 			req.LibraryPID = model.PID(lib)
 		}
+		c.l.noteToolImport(ctx, c.t.ID)
 		if err := c.l.scan(ctx, req); err != nil {
 			return "", classifyMutation(err)
 		}

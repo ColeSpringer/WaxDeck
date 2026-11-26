@@ -114,7 +114,10 @@ info:
       something other than audio or video), `source-unavailable`
       (the request
       needs an acquisition source integration, such as the YouTube bridge,
-      that this server is not running), `directory-unavailable` (an
+      that this server is not running), `source-refused` (422: the source
+      refused the link or the item: a check of a link before anything is
+      queued or bound answers it, and a task whose run the source refused
+      fails with it as its `errorCode`), `directory-unavailable` (an
       external directory service, such as the radio station directory,
       could not be reached; try again later), `service-unreachable`
       (an external service this request depends on, such as a
@@ -197,7 +200,8 @@ info:
       refused before it is queued carries the `reason` its operation
       names (`task-running`, with `task`, the one at work on the same
       book or rip; `task-parked`, with `task`, the one that stopped part
-      way on it and is parked until it is cleared in Tasks;
+      way on it and is parked, or was canceled and left files it could
+      not remove, and holds it until it is cleared in Tasks;
       `name-taken`, with `name` and `folder`;
       `copy-elsewhere`, with `copy` and `library`; `parts-in-trash`, with
       `count`, the files a merge or split that did not finish left in
@@ -208,7 +212,21 @@ info:
       running carries `reason: task-running`, with `task`; a
       tool task whose clear could not name or remove its hidden files
       carries `reason: outputs-hidden`, with `folder` and `cause`, and
-      stays. Under `unsupported-format`,
+      stays; and a cancel of a book merge or split, or a CUE split, that
+      has started moving library files carries `reason: task-committed`:
+      it can no longer be canceled, and finishes, or puts things back, on
+      its own. Under `source-refused`, `reason` says why, one of
+      `playlist-unavailable` (private or deleted), `playlist-empty`,
+      `video-private` (sign-in required), `video-unavailable` (removed),
+      `age-restricted`, `region-blocked`, `members-only`, `live`,
+      `not-started` (a premiere or a scheduled stream), `no-audio`,
+      `unsupported-url` (not a video, playlist or channel the source can
+      read, a Shorts shelf included), `rate-limited`, `source-broken`
+      (the bridge to the source needs maintenance), `timed-out`,
+      `unreachable` (the source could not be reached, or the
+      connection broke off) or `stalled`; a client treats a reason it
+      does not know as the code's general case. Under
+      `unsupported-format`,
       `reason: unreadable` marks a completed upload whose bytes do not
       read as audio at all, a damaged file rather than a format the
       server refuses. Under `invalid-request`, `reason` names
@@ -218,7 +236,12 @@ info:
       `tracks`: every track of the rips it named some of, comma-separated
       in the order they play, for the client to offer them together) and
       `recording-id-held` (an unlock of a track's recording id whose
-      file carries none); a
+      file carries none); a URL download, a playlist source's link
+      and an import's server address refused for the address itself
+      also name why: `invalid-address` (a URL download's or playlist
+      source's link that is not an `http` or `https` address, or any
+      of them whose host does not resolve) or `blocked-address` (on a
+      private or local network, as for a feed below); a
       subscribe also
       names the feed address it will not take, in a message that is
       already a sentence for a person (an import names it per entry, in

@@ -262,9 +262,7 @@ func (l *Tools) pathsNow(ctx context.Context, pids, paths []string) []string {
 func (b *bookTool) runOnce(ctx context.Context, produce func(ctx context.Context, ws string) ([]string, error)) ([]string, error) {
 	if err := b.begin(ctx, b.whereEnded); err != nil {
 		if errors.Is(err, errToolParked) {
-			// Parked is failed: a run whose trash took the book is on the
-			// record, as a failed one is, before the task can be cleared.
-			b.auditFailed(ctx, err)
+			// Its end, the audit included, is the park's (parkEnded).
 			return nil, err
 		}
 		if b.t.Resumable || b.p.Step != "" {
@@ -315,6 +313,10 @@ func (b *bookTool) produceOutputs(ctx context.Context, produce func(context.Cont
 		}
 	}
 	if err := b.l.db.MarkToolTaskResumable(context.WithoutCancel(ctx), b.t.ID); err != nil {
+		if errors.Is(err, wdb.ErrCancelRequested) {
+			// Canceled with nothing moved: the cancel takes the outputs back.
+			return errToolCanceled
+		}
 		return b.wait(ctx, &Error{Kind: KindInternal, Err: err})
 	}
 	// The drain decides from the task it leased, not the row.
@@ -464,13 +466,23 @@ func (b *bookTool) refused(ctx context.Context, err error) error {
 		}
 		return b.waitIfStaged(ctx, err)
 	}
-	b.discard()
+	left := b.discardLeft()
 	if merr := b.mark(ctx, ""); merr != nil {
 		b.l.log.Warn("recording a book tool's stop", "task", b.t.ID, "err", merr)
 	}
 	e := toolFailure(err)
-	e.Msg += ", so nothing was written"
+	e.Msg = nothingWritten(e.Msg, left)
 	return e
+}
+
+// nothingWritten ends a failure's words for a run that put nothing into
+// the library: nothing was written, or what of the run could not be
+// removed, and where.
+func nothingWritten(msg, left string) string {
+	if left == "" {
+		return msg + ", so nothing was written"
+	}
+	return msg + "; " + left
 }
 
 // waitIfStaged waits out a passing failure once an output is staged, so
@@ -515,12 +527,12 @@ func (b *bookTool) endWaits(ctx context.Context, cause error) error {
 	}
 	if back, berr := b.backInPlace(ctx); err == nil && len(ours) == 0 && berr == nil && back {
 		moved := b.moved(ctx)
-		e := &Error{Kind: KindInternal, Err: errToolPermanent, Msg: why + ", so nothing was written"}
+		left := b.discardLeft()
+		e := &Error{Kind: KindInternal, Err: errToolPermanent, Msg: nothingWritten(why, left)}
 		if moved {
-			e.Msg = why + "; what went to the trash was put back, so nothing was written"
+			e.Msg = nothingWritten(why+"; what went to the trash was put back", left)
 			b.auditFailed(ctx, e)
 		}
-		b.discard()
 		b.settleTrashOrLog(ctx)
 		if merr := b.mark(ctx, ""); merr != nil {
 			b.l.log.Warn("recording a book tool's stop", "task", b.t.ID, "err", merr)
@@ -869,12 +881,12 @@ func (e *strandErr) Error() string { return e.msg }
 func (b *bookTool) fail(ctx context.Context, cause error) error {
 	ctx = context.WithoutCancel(ctx)
 	if b.p.TrashFromNS == 0 {
-		b.discard()
+		left := b.discardLeft()
 		if err := b.mark(ctx, ""); err != nil {
 			b.l.log.Warn("recording a book tool's stop", "task", b.t.ID, "err", err)
 		}
 		e := toolFailure(cause)
-		e.Msg += ", so nothing was written"
+		e.Msg = nothingWritten(e.Msg, left)
 		return e
 	}
 	b.p.Failure = toolFailure(cause).Msg
@@ -908,12 +920,12 @@ func (b *bookTool) undo(ctx context.Context) error {
 		}
 		return nil
 	}
-	e := &Error{Kind: KindInternal, Err: errToolPermanent, Msg: b.p.Failure + ", so nothing was written"}
+	left := b.discardLeft()
+	e := &Error{Kind: KindInternal, Err: errToolPermanent, Msg: nothingWritten(b.p.Failure, left)}
 	if b.moved(ctx) {
-		e.Msg = b.p.Failure + "; what went to the trash was put back, so nothing was written"
+		e.Msg = nothingWritten(b.p.Failure+"; what went to the trash was put back", left)
 	}
 	b.auditFailed(ctx, e)
-	b.discard()
 	b.settleTrashOrLog(ctx)
 	if err := b.mark(ctx, ""); err != nil {
 		b.l.log.Warn("recording a book tool's undo", "task", b.t.ID, "err", err)
@@ -1259,6 +1271,7 @@ func (b *bookTool) place(ctx context.Context) error {
 	for i := range b.names {
 		placed[i] = b.placedPath(i)
 	}
+	b.l.noteToolImport(ctx, b.t.ID)
 	pid, err := b.l.scanToolOutputs(ctx, b.dir, placed, b.book, b.label)
 	if err != nil {
 		if !permanentToolErr(err) {
@@ -1346,19 +1359,49 @@ func (r *toolRun) begin(ctx context.Context, whereLeft func(context.Context) str
 			why += "; " + where
 		}
 		ctx = context.WithoutCancel(ctx)
-		if err := r.l.db.ParkToolTask(ctx, r.t.ID, why, time.Now().UnixNano()); err != nil {
+		release, err := r.l.settleLocks.acquire(ctx, r.t.ID)
+		if err != nil {
 			return &Error{Kind: KindInternal, Err: err}
 		}
+		defer release()
+		parked, err := r.l.db.ParkToolTask(ctx, r.t.ID, why, time.Now().UnixNano())
+		if err != nil {
+			return &Error{Kind: KindInternal, Err: err}
+		}
+		if !parked {
+			// The task left running meanwhile: what ended it ends it.
+			return parkedErr(why)
+		}
 		r.l.log.Warn("a tool task is parked", "task", r.t.ID, "type", r.t.Type, "runs", crashed)
-		// Nothing more comes of its workspace, outside the library.
-		os.RemoveAll(filepath.Join(r.l.Ingest.stagingDir, "tools", r.t.ID))
-		r.l.notifyToolTask(ctx, r.t.ID)
 		r.t.State, r.t.Error = taskStateParked, why
-		r.l.notifyFileToolEnd(ctx, r.t)
-		return fmt.Errorf("%w: %s", errToolParked, why)
+		r.t.SettlePending, r.t.RunEndPending, r.t.ParkEndPending = true, true, true
+		r.l.runEnded(ctx, r.t, true)
+		return parkedErr(why)
 	}
 	r.p.RunsStarted++
 	return r.save(ctx)
+}
+
+// parkedErr is the failure of a run that parked its task, saying why.
+func parkedErr(why string) error {
+	return fmt.Errorf("%w: %s", errToolParked, why)
+}
+
+// parkEnded takes what a run's park ends beyond the run's end steps: its
+// workspace goes, outside the library, and a book tool's run whose trash
+// took the book is on the record, as a failed one is, before the task can
+// be cleared. Each is safe to take again.
+func (l *Tools) parkEnded(ctx context.Context, t *wdb.ToolTask) {
+	os.RemoveAll(filepath.Join(l.Ingest.stagingDir, "tools", t.ID))
+	if t.Type != taskTypeBookMerge && t.Type != taskTypeBookSplit {
+		return
+	}
+	p := taskParamsOf(t)
+	b, err := l.bookToolFor(ctx, t, &p)
+	if err != nil {
+		b = l.recordedBookTool(t, &p)
+	}
+	b.auditFailed(ctx, parkedErr(t.Error))
 }
 
 // end counts a run that came back.
@@ -1428,6 +1471,11 @@ func (r *toolRun) mark(ctx context.Context, step string) error {
 		r.p.Waits, r.p.WaitFromNS, r.p.StrandWaits = 0, 0, 0
 	}
 	r.p.Step = step
+	if step != "" {
+		// A run past its start again is no longer the one that gave up
+		// what it made: its clear may not remove what this one makes.
+		r.p.Discarded = false
+	}
 	if step == "" {
 		r.p.TrashFromNS, r.p.Names, r.p.ResultPID, r.p.Failure = 0, nil, "", ""
 		r.p.TrashedFrom, r.p.Placed, r.p.Forward = nil, nil, false
@@ -1542,8 +1590,19 @@ type clearOutcome struct {
 // own files only); otherwise each takes its name, a free one where
 // another file holds it, for the next scan to catalog, so nothing is lost,
 // and then holds what the trash took. Incomplete copies go either way. A
-// file that cannot take its name stays hidden, which the outcome says.
+// file that cannot take its name stays hidden, which the outcome says. A
+// run that gave up what it made has what stays of it removed.
 func (b *bookTool) settleCleared(ctx context.Context) clearOutcome {
+	if b.p.Discarded || b.t.State == taskStateCanceled {
+		// The run gave up what it made, or was canceled before it moved
+		// the book, its discard recorded or not: what stays of it goes,
+		// never taking a name in the book's folder.
+		if len(b.p.Created) == 0 {
+			return clearOutcome{}
+		}
+		stuck, cause := b.discard()
+		return clearOutcome{outputs: "removed", stuck: stuck, cause: cause}
+	}
 	hidden := b.hiddenOutputs()
 	for i := range b.names {
 		_ = b.removeOwn(b.stagedPath(i) + ".part")
@@ -1582,23 +1641,47 @@ func (b *bookTool) settleCleared(ctx context.Context) clearOutcome {
 	return out
 }
 
+// discardLeft discards what the run made, answering what could not go
+// in the words the task's error keeps, "" when nothing stays.
+func (b *bookTool) discardLeft() string {
+	stuck, cause := b.discard()
+	if len(stuck) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s could not be removed from %s (%s); clearing the task tries again",
+		strings.Join(stuck, ", "), b.l.Ingest.scrubStoragePaths(b.dir), cause)
+}
+
 // discard removes the files the run recorded making, and nothing else:
 // its staged outputs and their temporaries, the outputs that took their
 // names, the folder it made when that is left empty, and its workspace.
-func (b *bookTool) discard() {
-	// A file the folder will not let go stays where it is; the run's
-	// account of where its files are names it.
-	for _, p := range b.p.Created {
-		_ = b.removeOwn(p)
+// A file the folder will not let go stays recorded in Created, for a
+// clear to remove, and is answered with why.
+func (b *bookTool) discard() (stuck []string, cause string) {
+	b.p.Discarded = true
+	keep := func(paths []string) []string {
+		var kept []string
+		for _, p := range paths {
+			if err := b.removeOwn(p); err != nil {
+				kept = append(kept, p)
+				stuck = append(stuck, filepath.Base(p))
+				cause = cmp.Or(cause, b.l.failureCause(err.Error()))
+			}
+		}
+		return kept
 	}
-	for _, p := range b.p.Placed {
-		_ = b.removeOwn(p)
-	}
+	b.p.Created, b.p.Placed = append(keep(b.p.Created), keep(b.p.Placed)...), nil
 	if b.p.MadeDir != "" && !samePath(b.p.MadeDir, b.l.storageRootFor(b.p.MadeDir)) {
 		os.Remove(b.p.MadeDir)
 	}
+	if !onDisk(b.p.MadeDir) {
+		b.p.MadeDir = ""
+	}
 	os.RemoveAll(b.workspace())
-	b.p.Created, b.p.Placed, b.p.MadeDir, b.p.Idents = nil, nil, "", nil
+	if len(stuck) == 0 {
+		b.p.Idents = nil
+	}
+	return stuck, cause
 }
 
 // workspace is where the engine's outputs are made, outside the library.
@@ -1672,35 +1755,79 @@ func toolFailure(cause error) *Error {
 	return &Error{Kind: KindOf(cause), Err: cause, Msg: taskFailureText(cause)}
 }
 
-// settleRetired settles a file tool its attempts ran out on before it
-// put anything into the library that only finishing settles: what it
-// made goes. A run past that is resumable, and the retire pass never
-// takes it.
-func (l *Tools) settleRetired(ctx context.Context, t *wdb.ToolTask) {
+// settleRetired settles a file tool its attempts ran out on, or that was
+// canceled, before it put anything into the library that only finishing
+// settles: what it made goes. It answers what could not go, in the words
+// the task's error keeps, "" when nothing stays. A run past that is
+// resumable, and neither the retire pass nor a cancel takes it.
+func (l *Tools) settleRetired(ctx context.Context, t *wdb.ToolTask) string {
 	var p toolTaskParams
 	if err := json.Unmarshal([]byte(t.Params), &p); err != nil || p.Step != "" {
-		return
+		return ""
 	}
 	switch t.Type {
 	case taskTypeBookMerge, taskTypeBookSplit:
-		if b, err := l.bookToolFor(ctx, t, &p); err == nil {
-			b.discard()
+		b, err := l.bookToolFor(ctx, t, &p)
+		if err != nil {
+			b = l.recordedBookTool(t, &p)
 		}
+		left := b.discardLeft()
+		// Kept, so a clear removes what stays rather than naming it.
+		if err := b.save(ctx); err != nil {
+			l.log.Warn("recording a book tool's discard", "task", t.ID, "err", err)
+		}
+		return left
 	case taskTypeCueSplit:
-		os.RemoveAll(filepath.Join(l.Ingest.stagingDir, "tools", t.ID))
+		// Its workspace is the server's scratch, which holds nothing back.
+		l.removeCueWorkspace(t.ID)
+	}
+	return ""
+}
+
+// recordedBookTool is a book tool as its task recorded it, for a book that
+// cannot be read: enough to remove what its run made, which needs none of
+// the book.
+func (l *Tools) recordedBookTool(t *wdb.ToolTask, p *toolTaskParams) *bookTool {
+	return &bookTool{toolRun: toolRun{l, t, p}, dir: p.Dir, reason: t.Type, title: t.ItemTitle}
+}
+
+// removeCueWorkspace removes a CUE split's workspace, logging one that
+// stays for the startup sweep to take once its task is gone.
+func (l *Tools) removeCueWorkspace(id string) {
+	if err := os.RemoveAll(filepath.Join(l.Ingest.stagingDir, "tools", id)); err != nil {
+		l.log.Warn("removing a CUE split's workspace", "task", id, "err", err)
 	}
 }
 
-// recordToolTaskDone records a task done with its results.
-func (l *Tools) recordToolTaskDone(ctx context.Context, t *wdb.ToolTask, results []string) {
+// keepLeftOver adds what a settle could not remove to a finished task's
+// error, which then names each file for whoever clears it.
+func (l *Tools) keepLeftOver(ctx context.Context, t *wdb.ToolTask, left string) {
+	if left == "" || strings.Contains(t.Error, left) {
+		return
+	}
+	t.Error = strings.TrimPrefix(t.Error+"; "+left, "; ")
+	if err := l.db.UpdateToolTask(context.WithoutCancel(ctx), *t); err != nil {
+		l.log.Warn("recording what a tool task left behind", "task", t.ID, "err", err)
+	}
+}
+
+// recordToolTaskDone records a task done with its results, its end steps
+// pending (FinishToolTask); false when the task was canceled first, which
+// keeps it canceled.
+func (l *Tools) recordToolTaskDone(ctx context.Context, t *wdb.ToolTask, results []string) bool {
 	t.State = taskStateDone
 	t.ProgressPct = 100
-	t.Error = ""
+	t.Error, t.ErrorCode, t.ErrorParams = "", "", ""
 	t.ResultPIDs = marshalJSON(results)
 	t.FinishedAtNS = time.Now().UnixNano()
-	if err := l.db.UpdateToolTask(context.WithoutCancel(ctx), *t); err != nil {
+	err := l.db.FinishToolTask(context.WithoutCancel(ctx), *t)
+	if errors.Is(err, wdb.ErrNotFound) {
+		return false
+	}
+	if err != nil {
 		l.log.Warn("recording tool task completion", "task", t.ID, "err", err)
 	}
+	return true
 }
 
 // trashToolFiles moves a book tool's sources to the trash under its

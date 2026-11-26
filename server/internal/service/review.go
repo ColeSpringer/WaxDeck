@@ -316,8 +316,18 @@ func (l *Ingest) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action,
 	}
 	// A person deciding takes the entry from an auto-apply waiting for
 	// the catalog, whether their decision stands or fails.
+	dropsWait := payload.WaitingApply != ""
 	if err := l.writeDroppedWait(ctx, &e, &payload); err != nil {
 		return ReviewEntryDTO{}, nil, &Error{Kind: KindInternal, Err: err}
+	}
+	decided := false
+	if dropsWait {
+		// One that fails leaves the entry waiting for a person: it counts.
+		defer func() {
+			if !decided {
+				l.notifyReview(ctx, e.ID, e.UploadedBy, e.Origin, reviewMayJoin)
+			}
+		}()
 	}
 
 	// Ahead of the medium's own refusals, as nothing has landed yet.
@@ -436,7 +446,8 @@ func (l *Ingest) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action,
 	default:
 		return ReviewEntryDTO{}, nil, errInvalid("unknown decision")
 	}
-	l.notifyReview(ctx, e.ID, e.UploadedBy)
+	decided = true
+	l.notifyReview(ctx, e.ID, e.UploadedBy, e.Origin, reviewNoJoin)
 	return reviewDTO(e), warnings, nil
 }
 
@@ -780,6 +791,7 @@ func (l *Ingest) ReidentifyEntry(ctx context.Context, uc *UserCtx, id string, o 
 	// submission originally said - so the declined mark goes with it,
 	// and the empty state stops claiming nothing was searched.
 	payload.IdentifyDeclined = false
+	payload.ImportStalled = false
 	payload.AcceptBestWithheld = ""
 	// A declined import waiting for the catalog is moot with it.
 	payload.WaitingForCatalog = false
@@ -799,6 +811,8 @@ func (l *Ingest) ReidentifyEntry(ctx context.Context, uc *UserCtx, id string, o 
 		return ReviewEntryDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
 	l.waitingForCatalog.Delete(e.ID)
+	// Identifying again, the entry is out of every count until it lands.
+	l.notifyReview(ctx, e.ID, e.UploadedBy, e.Origin, reviewNoJoin)
 	l.matchWakeup()
 	return reviewDTO(e), nil
 }

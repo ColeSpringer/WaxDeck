@@ -5,6 +5,7 @@
   "bellActivityBlurb": "Las transferencias de este dispositivo solo aparecen con la app abierta.",
   "bellActivityTitle": "Actividad reciente",
   "bellClear": "Vaciar",
+  "bellClearCompleted": "Borrar completadas",
   "bellClearConfirm": "¿Eliminar todas las notificaciones en todos los dispositivos? No se puede deshacer.",
   "bellClearTitle": "Vaciar notificaciones",
   "bellDelete": "Eliminar",
@@ -18,7 +19,6 @@
   "bellNothingNew": "Nada nuevo.",
   "bellPlaylistSynced": "Una lista sincronizada ha cambiado, o su sincronización se ha suspendido",
   "bellReadOverline": "Leído",
-  "bellReviewChanged": "La cola de revisión ha cambiado.",
   "bellRow": "{surface}: {what}",
   "bellRowWhen": "{surface} · {when}",
   "bellSurfaceAccounts": "Cuentas",
@@ -31,10 +31,7 @@
   "bellSurfacePodcasts": "Pódcast",
   "bellSurfaceReview": "Cola de revisión",
   "bellSurfaceTasks": "Tareas en segundo plano",
-  "bellSurfaceUploads": "Subidas",
-  "bellTaskChanged": "Una tarea en segundo plano ha cambiado.",
   "bellTitle": "Notificaciones",
   "bellUnread": "{count, plural, =1{Notificaciones, 1 sin leer} other{Notificaciones, {count} sin leer}}",
-  "bellUnreadOverline": "Sin leer",
-  "bellUploadChanged": "Una subida ha cambiado."
+  "bellUnreadOverline": "Sin leer"
 }

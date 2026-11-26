@@ -536,6 +536,9 @@ operations:
   clearItemTag:
     params:
       writeBack: {default: false}
+  clearMyNotifications:
+    params:
+      resolved: {omitFalse: true}
   commitItemMetadata: {body: commit, positional: [pid, commit]}
   # The seal fingerprints, and may import, before it answers.
   completeUpload: {long: true}

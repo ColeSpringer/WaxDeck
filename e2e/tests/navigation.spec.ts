@@ -13,20 +13,18 @@ type ServerSyncPage = components['schemas']['ServerSyncPage'];
 // nothing, and a browser move is told apart from the app's own, which
 // the router sees the same way.
 
-/// The client walking its server stream past upload [id]'s marker. Armed
-/// before the POST that emits it, because the walk can outrun the POST's
-/// own answer.
-function walkedPast(page: SpecPage, id: Promise<string>) {
+/// The client walking its server stream past a `notification` marker. Armed
+/// before the change that emits one, because the walk can outrun the
+/// request's own answer.
+function walkedPastNotification(page: SpecPage) {
   const walked = page.waitForResponse(
     async (r) => {
       if (!r.url().includes('/sync/server') || !r.url().includes('since=')) return false;
       const body = (await r.json().catch(() => undefined)) as ServerSyncPage | undefined;
-      const pid = await id;
-      return (body?.events ?? []).some((e) => e.kind === 'upload' && e.pid === pid);
+      return (body?.events ?? []).some((e) => e.kind === 'notification');
     },
     { timeout: T.fetch },
   );
-  id.catch(() => {});
   walked.catch(() => {});
   return walked;
 }
@@ -43,35 +41,46 @@ test('the arrow is the browser back, so forward returns where it left', async ({
   );
   await app.nav.enter('home');
   await minted;
-  const posting = app.api.post('/uploads', {
-    data: { fileName: 'navigation.mp3', sizeBytes: 1024, mediaType: 'music' },
+  const walked = walkedPastNotification(page);
+  // A backup is the cheapest event that files a row with a place to go.
+  const before = new Date().toISOString();
+  const started = await app.api.raw.post('/admin/backups');
+  expect([202, 409]).toContain(started.status());
+  await expect
+    .poll(
+      async () =>
+        (
+          (await app.api.tryGet('/users/me/notifications', { query: { limit: 200 } }))
+            ?.notifications ?? []
+        ).find((n) => n.event === 'backup-completed' && Date.parse(n.updatedAt) > Date.parse(before))?.id ?? '',
+      { timeout: T.fetch, message: 'the finished backup should file itself in the inbox' },
+    )
+    .not.toBe('');
+  const row = (
+    (await app.api.get('/users/me/notifications', { query: { limit: 200 } })).notifications ?? []
+  ).find((n) => n.event === 'backup-completed' && Date.parse(n.updatedAt) > Date.parse(before))!;
+  await walked;
+  // Walked, not entered: the list is what this client saw while it ran.
+  await app.nav.to('notifications');
+  await expect(app.shell.notificationRow('backup-completed', row.id)).toBeVisible({
+    timeout: T.fetch,
   });
-  const walked = walkedPast(page, posting.then((s) => s.id));
-  const session = await posting;
-  try {
-    await walked;
-    // Walked, not entered: the list is what this client saw while it ran.
-    await app.nav.to('notifications');
-    await expect(app.shell.notificationRow('upload')).toBeVisible({ timeout: T.fetch });
-    await clickThrough(
-      app.shell.notificationRow('upload'),
-      app.shell.control(SemanticsIds.uploadsScreen),
-    );
-    await app.nav.expectAt('uploads');
+  await clickThrough(
+    app.shell.notificationRow('backup-completed', row.id),
+    app.shell.control(SemanticsIds.adminBackups),
+  );
+  await app.nav.expectAt('adminBackups');
 
-    await app.nav.arrow('notifications');
-    await app.nav.expectAt('notifications');
+  await app.nav.arrow('notifications');
+  await app.nav.expectAt('notifications');
 
-    // A step back made by the browser leaves the row's place ahead of it.
-    await app.nav.forward('uploads');
-    await app.nav.expectAt('uploads');
+  // A step back made by the browser leaves the row's place ahead of it.
+  await app.nav.forward('adminBackups');
+  await app.nav.expectAt('adminBackups');
 
-    // And forward did not cost the app its list.
-    await app.nav.arrow('notifications');
-    await app.nav.expectAt('notifications');
-  } finally {
-    await app.api.delete('/uploads/{uploadId}', { path: { uploadId: session.id } });
-  }
+  // And forward did not cost the app its list.
+  await app.nav.arrow('notifications');
+  await app.nav.expectAt('notifications');
 });
 
 test('a search refined twice is one entry, which back leaves', async ({ app }) => {

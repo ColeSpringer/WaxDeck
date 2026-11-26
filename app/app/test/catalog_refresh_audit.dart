@@ -538,6 +538,11 @@ final catalogRule = CatalogRule(
         'clearFinishedToolTasks',
         'deleteToolTask',
       }),
+      'cancelToolTask':
+          'stops a task: what its runs wrote, and what its settle files of '
+          'what they staged (a declined download imported, a repair\'s owed '
+          'reset), reaches the client through the server\'s catalog hints; '
+          'its settle otherwise removes only outputs never filed',
     },
     'UploadsApi': {
       ..._each('staging: bytes received, nothing filed yet', {

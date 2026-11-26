@@ -59,7 +59,16 @@ func scanReview(row interface{ Scan(...any) error }) (ReviewEntry, error) {
 
 // InsertReviewEntry stores a new entry.
 func (d *DB) InsertReviewEntry(ctx context.Context, e ReviewEntry) error {
-	_, err := d.w.ExecContext(ctx, `
+	return insertReviewEntry(ctx, d.w, e)
+}
+
+// execer is what a statement runs on: the writer or a transaction of it.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func insertReviewEntry(ctx context.Context, x execer, e ReviewEntry) error {
+	_, err := x.ExecContext(ctx, `
 		INSERT INTO review_entries (`+reviewCols+`)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		e.ID, e.Kind, e.Status, e.MediaType, e.Origin, e.LibraryPID, e.UploadedBy,
@@ -67,6 +76,47 @@ func (d *DB) InsertReviewEntry(ctx context.Context, e ReviewEntry) error {
 		e.BestArtist, e.BestYear, e.BestSimilarity, e.AppliedMBID, e.Auto, e.AcceptedBest, e.Payload,
 		e.Snapshot, e.CreatedAtNS, e.DecidedAtNS, e.DecidedBy)
 	if err != nil {
+		return fmt.Errorf("db: inserting review entry: %w", err)
+	}
+	return nil
+}
+
+// UnlinkableUploadError is an upload a new entry could not take: already
+// in an entry, or no longer staged (deleted, discarded, imported).
+type UnlinkableUploadError struct{ UploadID string }
+
+func (e *UnlinkableUploadError) Error() string {
+	return "db: linking upload " + e.UploadID + " to review entry: not a staged, unlinked upload"
+}
+
+// InsertReviewEntryLinked stores a new entry, queues it to identify when
+// it is identifying, and links the given staged, unlinked uploads to it,
+// in one transaction: a link that claims no row (an upload already in an
+// entry, or no longer staged) stores none of it.
+func (d *DB) InsertReviewEntryLinked(ctx context.Context, e ReviewEntry, uploadIDs []string) error {
+	tx, err := d.w.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("db: inserting review entry: %w", err)
+	}
+	defer tx.Rollback()
+	if err := insertReviewEntry(ctx, tx, e); err != nil {
+		return err
+	}
+	if e.Identifying {
+		if err := enqueueMatch(ctx, tx, e.ID); err != nil {
+			return err
+		}
+	}
+	for _, id := range uploadIDs {
+		linked, err := linkUploadReviewEntry(ctx, tx, id, e.ID)
+		if err != nil {
+			return err
+		}
+		if !linked {
+			return &UnlinkableUploadError{UploadID: id}
+		}
+	}
+	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("db: inserting review entry: %w", err)
 	}
 	return nil
@@ -185,17 +235,45 @@ func (d *DB) ListReviewEntries(ctx context.Context, status, uploader string, bef
 // ReviewEntriesWaitingForCatalog lists the pending entries whose declined
 // import waits for the catalog to free.
 func (d *DB) ReviewEntriesWaitingForCatalog(ctx context.Context) ([]string, error) {
-	rows, err := d.r.QueryContext(ctx, `SELECT id FROM review_entries
+	return d.reviewEntryIDs(ctx, "entries waiting for the catalog", `SELECT id FROM review_entries
 		WHERE status = 'pending' AND json_extract(payload, '$.waitingForCatalog') = 1`)
+}
+
+// ReviewEntriesDeclinedInFlight lists the pending entries opened before
+// beforeNS whose declined import neither stalled nor waits: what a stop
+// left between opening the entry and its import. It leaves out an entry a
+// tool task will take up: one linked to a download the task fetched and
+// has not recorded the entry of, while the task will be leased again
+// (leasableTask at maxAttempts).
+func (d *DB) ReviewEntriesDeclinedInFlight(ctx context.Context, beforeNS int64, maxAttempts int) ([]string, error) {
+	return d.reviewEntryIDs(ctx, "declined entries in flight", `SELECT r.id FROM review_entries r
+		WHERE r.status = 'pending' AND r.identifying = 0 AND r.created_at_ns < ? AND json_valid(r.payload)
+			AND COALESCE(json_extract(r.payload, '$.identifyDeclined'), 0) = 1
+			AND COALESCE(json_extract(r.payload, '$.importStalled'), 0) = 0
+			AND COALESCE(json_extract(r.payload, '$.waitingForCatalog'), 0) = 0
+			AND COALESCE(json_extract(r.payload, '$.waitingApply'), '') = ''
+			AND NOT EXISTS (
+				SELECT 1 FROM uploads u
+				JOIN tool_tasks t ON `+leasableTask("t")+` AND json_valid(t.params)
+				JOIN json_each(t.params, '$.fetched') f
+					ON json_extract(f.value, '$.upload') = u.id
+					AND COALESCE(json_extract(f.value, '$.dropped'), 0) = 0
+				WHERE u.review_entry_id = r.id
+					AND NOT EXISTS (SELECT 1 FROM json_each(t.params, '$.entries') e WHERE e.value = r.id))`,
+		beforeNS, maxAttempts)
+}
+
+func (d *DB) reviewEntryIDs(ctx context.Context, what, query string, args ...any) ([]string, error) {
+	rows, err := d.r.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("db: listing entries waiting for the catalog: %w", err)
+		return nil, fmt.Errorf("db: listing %s: %w", what, err)
 	}
 	defer rows.Close()
 	var out []string
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("db: scanning an entry waiting for the catalog: %w", err)
+			return nil, fmt.Errorf("db: scanning %s: %w", what, err)
 		}
 		out = append(out, id)
 	}
@@ -297,9 +375,13 @@ func (d *DB) PendingReviewUnits(ctx context.Context) ([]PendingReviewUnit, error
 // EnqueueMatch queues an entry for the identify worker. Re-queueing an
 // already queued entry is a no-op.
 func (d *DB) EnqueueMatch(ctx context.Context, entryID string) error {
+	return enqueueMatch(ctx, d.w, entryID)
+}
+
+func enqueueMatch(ctx context.Context, x execer, entryID string) error {
 	// A queued entry has its backoff cleared: both callers are fresh
 	// intent. The lease is left alone, so a running job is never stolen.
-	_, err := d.w.ExecContext(ctx, `
+	_, err := x.ExecContext(ctx, `
 		INSERT INTO match_queue (entry_id) VALUES (?)
 		ON CONFLICT (entry_id) DO UPDATE SET
 			attempts = 0, next_at_ns = 0, last_error = ''`, entryID)

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -177,7 +178,8 @@ func (l *Playlists) snapshotFor(ctx context.Context, url string, opts syncsource
 		tried = true
 		snap, err := s.PlaylistSnapshot(ctx, url, opts)
 		if err != nil {
-			if firstErr == nil {
+			// A provider that does not read the link has the least to say.
+			if firstErr == nil || notReadable(firstErr) && !notReadable(err) {
 				firstErr = err
 			}
 			continue
@@ -187,7 +189,29 @@ func (l *Playlists) snapshotFor(ctx context.Context, url string, opts syncsource
 	if !tried {
 		return nil, nil, &Error{Kind: KindUnsupported, Msg: "no acquisition source is running; start the server with WAXDECK_YOUTUBE=true to sync from URLs"}
 	}
-	return nil, nil, fmt.Errorf("%w: %v", errSyncEnumerate, firstErr)
+	return nil, nil, fmt.Errorf("%w: %w", errSyncEnumerate, firstErr)
+}
+
+// bindRefusal is the refusal of a link a bind or its preview met the source
+// refusing, for every reason the classifier names: neither can queue and
+// try later, so a throttled source is said as plainly as a private list.
+// Nil for a failure it cannot name.
+func bindRefusal(err error) error {
+	if reason, _ := acquireReason(err); reason != "" {
+		return sourceRefused(reason, err)
+	}
+	return nil
+}
+
+// unnamedBindFailure is what a bind or its preview answers for a source
+// failure the classifier cannot name: no refusal of the link, so a service
+// error as it stands and anything else by its classification.
+func unnamedBindFailure(err error) error {
+	var se *Error
+	if errors.As(err, &se) {
+		return err
+	}
+	return classify(err)
 }
 
 // GetPlaylistSource reads a playlist's binding. Owner only.
@@ -457,10 +481,13 @@ func (l *Playlists) PreviewPlaylistSync(ctx context.Context, uc *UserCtx, apiPla
 	out, err := l.reconcilePlaylistSource(ctx, nil, uc, pl, row, true)
 	if err != nil {
 		// Preview is the validate-before-save affordance: a source that
-		// would not enumerate is the caller's URL to fix, not a server
-		// fault, so it answers 400 the way the bind's own probe does.
+		// refused the link is the caller's URL to fix, answered the way the
+		// bind's own probe answers it.
+		if refusal := bindRefusal(err); refusal != nil && errors.Is(err, errSyncEnumerate) {
+			return PlaylistSyncPreviewDTO{}, refusal
+		}
 		if errors.Is(err, errSyncEnumerate) {
-			return PlaylistSyncPreviewDTO{}, errInvalid(err.Error())
+			return PlaylistSyncPreviewDTO{}, unnamedBindFailure(err)
 		}
 		return PlaylistSyncPreviewDTO{}, err
 	}
@@ -489,13 +516,51 @@ func (l *Playlists) SyncPlaylistSourceNow(ctx context.Context, uc *UserCtx, apiP
 		return ToolTaskDTO{}, &Error{Kind: KindUnsupported, Msg: "no acquisition source is running; start the server with WAXDECK_YOUTUBE=true to sync from URLs"}
 	}
 	if t, err := l.db.ActiveToolTask(ctx, taskTypePlaylistSync, apiPlaylistPID); err == nil {
-		return toolTaskDTO(t), nil
+		if p := taskParamsOf(&t); !p.Asked {
+			// A scheduled run still waiting to start is the one this press
+			// asks for: its run reads the mark once leased. A running one
+			// keeps the params it has.
+			p.Asked = true
+			if _, err := l.db.UpdateQueuedToolTaskParams(ctx, t.ID, marshalJSON(p)); err != nil {
+				l.log.Warn("marking a scheduled sync asked for", "task", t.ID, "err", err)
+			}
+		}
+		return l.Tools.taskFor(uc, t), nil
 	} else if !errors.Is(err, wdb.ErrNotFound) {
 		return ToolTaskDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
-	return l.Tools.insertToolTask(ctx, uc, taskTypePlaylistSync, apiPlaylistPID, toolTaskParams{
-		PlaylistPID: apiPlaylistPID,
-	})
+	return l.Tools.queueToolTask(ctx, playlistSyncTask(uc, apiPlaylistPID, pl, true))
+}
+
+// playlistSyncTask is a queued sync of pl for uc, titled by the playlist;
+// asked when the person started it.
+func playlistSyncTask(uc *UserCtx, apiPlaylistPID string, pl *model.Playlist, asked bool) wdb.ToolTask {
+	t := newToolTask(uc, taskTypePlaylistSync, apiPlaylistPID, toolTaskParams{PlaylistPID: apiPlaylistPID, Asked: asked}, "")
+	t.ItemTitle = pl.Name
+	return t
+}
+
+// errSyncTargetGone is a sync whose playlist or binding went meanwhile,
+// which the person did: its failure tells nobody.
+var errSyncTargetGone = fmt.Errorf("%w: the synced playlist or its binding is gone", errToolPermanent)
+
+// syncTargetRemoved reports whether a sync's playlist or its binding is
+// gone now. A read that fails answers no.
+func (l *Playlists) syncTargetRemoved(ctx context.Context, apiPlaylistPID string) bool {
+	prefix, bare, ok := parseAPIPID(apiPlaylistPID)
+	if !ok || prefix != PrefixPlaylist {
+		return false
+	}
+	if _, err := l.lib.Playlists().Get(ctx, bare); err != nil {
+		return KindOf(classify(err)) == KindNotFound
+	}
+	_, err := l.db.PlaylistSourceFor(ctx, string(bare))
+	return errors.Is(err, wdb.ErrNotFound)
+}
+
+// syncTargetGone is the failure of a sync that meets errSyncTargetGone.
+func syncTargetGone(msg string) error {
+	return &Error{Kind: KindNotFound, Msg: msg, Err: errSyncTargetGone}
 }
 
 // SyncDuePlaylistSources queues a sync task for every live binding
@@ -548,9 +613,7 @@ func (l *Playlists) SyncDuePlaylistSources(ctx context.Context) {
 			l.log.Warn("checking for a running playlist sync", "playlist", b.PlaylistPID, "err", err)
 			continue
 		}
-		if _, err := l.Tools.insertToolTask(ctx, uc, taskTypePlaylistSync, apiPlaylistPID, toolTaskParams{
-			PlaylistPID: apiPlaylistPID,
-		}); err != nil {
+		if _, err := l.Tools.queueToolTask(ctx, playlistSyncTask(uc, apiPlaylistPID, pl, false)); err != nil {
 			l.log.Warn("queuing playlist sync", "playlist", b.PlaylistPID, "err", err)
 		}
 	}
@@ -565,6 +628,9 @@ func (l *Playlists) runPlaylistSync(ctx context.Context, t *wdb.ToolTask, p tool
 	if err != nil {
 		return nil, err
 	}
+	if err := l.Ingest.openStrandedEntries(ctx, t); err != nil {
+		return nil, entriesFailure(err)
+	}
 	pl, err := l.resolveOwnedPlaylist(ctx, uc, p.PlaylistPID)
 	if err != nil {
 		if KindOf(err) == KindNotFound {
@@ -572,13 +638,13 @@ func (l *Playlists) runPlaylistSync(ctx context.Context, t *wdb.ToolTask, p tool
 			if derr := l.db.DeletePlaylistSource(ctx, string(bare)); derr != nil {
 				l.log.Warn("dropping orphaned playlist source", "playlist", p.PlaylistPID, "err", derr)
 			}
-			return nil, fmt.Errorf("%w: the playlist is gone", errToolPermanent)
+			return nil, syncTargetGone("the playlist is gone")
 		}
 		return nil, err
 	}
 	b, err := l.db.PlaylistSourceFor(ctx, string(pl.PID))
 	if errors.Is(err, wdb.ErrNotFound) {
-		return nil, fmt.Errorf("%w: the binding was removed", errToolPermanent)
+		return nil, syncTargetGone("the binding was removed")
 	}
 	if err != nil {
 		return nil, err
@@ -588,15 +654,19 @@ func (l *Playlists) runPlaylistSync(ctx context.Context, t *wdb.ToolTask, p tool
 		l.log.Warn("recording playlist sync attempt", "playlist", pl.PID, "err", err)
 	}
 	out, rerr := l.reconcilePlaylistSource(ctx, t, uc, pl, b, false)
+	if rerr != nil && errors.Is(context.Cause(ctx), errToolCanceled) {
+		// Asked to stop: no failure of the binding's.
+		return nil, rerr
+	}
 	if rerr != nil {
-		permanent := errors.Is(rerr, errToolPermanent) || kindIsPermanent(KindOf(classify(rerr)))
 		// One recorded failure per run, not per attempt: the task
 		// worker retries a transient failure up to its attempts budget,
 		// and charging each attempt would reach disable-after-ten in
 		// four runs against the ten the constant promises. The run's
 		// first attempt is the one that records - exactly once per run,
-		// whatever the retries behind it do - and the rest only log.
-		if t.Attempts <= 1 {
+		// whatever the retries and waits behind it do - and the rest
+		// only log.
+		if t.Attempts <= 1 && p.SourceWaits == 0 {
 			st, ferr := l.db.RecordPlaylistSyncFailure(ctx, string(pl.PID), rerr.Error(), time.Now().UnixNano(), playlistSyncDisableAfter)
 			if ferr != nil {
 				l.log.Warn("recording playlist sync failure", "playlist", pl.PID, "err", ferr)
@@ -607,10 +677,25 @@ func (l *Playlists) runPlaylistSync(ctx context.Context, t *wdb.ToolTask, p tool
 		} else {
 			l.log.Warn("playlist sync attempt failed; the task will retry", "playlist", pl.PID, "attempt", t.Attempts, "err", rerr)
 		}
-		if permanent {
-			return out.entryIDs, fmt.Errorf("%w: %v", errToolPermanent, rerr)
+		var (
+			fault *sourceFault
+			short *downloadsCutShort
+			err   = rerr
+		)
+		switch {
+		case ctx.Err() != nil:
+			return nil, rerr
+		case errors.Is(rerr, errSyncEnumerate) || errors.As(rerr, &fault):
+			err = l.Tools.sourceWait(ctx, t, rerr)
+		case errors.Is(rerr, errToolPermanent):
+			// Already final: kept as is.
+		case kindIsPermanent(KindOf(rerr)):
+			err = fmt.Errorf("%w: %w", errToolPermanent, rerr)
 		}
-		return out.entryIDs, rerr
+		if errors.As(rerr, &short) && short.staged > 0 && short.total > 1 && permanentToolErr(err) {
+			err = stagedBefore(short.staged, short.total, err)
+		}
+		return nil, err
 	}
 	if out.conflicted {
 		// The owner edited the playlist while the run computed; the
@@ -620,7 +705,7 @@ func (l *Playlists) runPlaylistSync(ctx context.Context, t *wdb.ToolTask, p tool
 		// a real write and say so.
 		t.Summary = marshalJSON(map[string]any{"conflicted": true, "detached": out.detached})
 		l.log.Info("playlist sync backed off a concurrent edit", "playlist", pl.PID, "detached", out.detached)
-		return out.entryIDs, nil
+		return taskParamsOf(t).Entries, nil
 	}
 	if err := l.db.RecordPlaylistSyncSuccess(ctx, string(pl.PID), time.Now().UnixNano(), out.counts); err != nil {
 		l.log.Warn("recording playlist sync success", "playlist", pl.PID, "err", err)
@@ -633,7 +718,7 @@ func (l *Playlists) runPlaylistSync(ctx context.Context, t *wdb.ToolTask, p tool
 	if out.counts.Added+out.counts.Removed+out.counts.Trashed > 0 {
 		l.notifyPlaylistSynced(ctx, uc.ID, pl, out.counts)
 	}
-	return out.entryIDs, nil
+	return taskParamsOf(t).Entries, nil
 }
 
 // validatePlaylistSourceSettings checks the shape of an update: which
@@ -687,10 +772,21 @@ func (l *Playlists) buildPlaylistSourceRow(ctx context.Context, pl *model.Playli
 		}
 		parsed, err := url.Parse(strings.TrimSpace(in.URL))
 		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-			return row, errInvalid("url must be an http or https URL")
+			return row, addressRefusal(reasonInvalidAddress, "url must be an http or https URL")
 		}
 		if err := l.Ingest.guardAcquireHost(ctx, parsed.Hostname()); err != nil {
 			return row, err
+		}
+		// Decided from the link alone, before the source is asked: a link
+		// no source reads is refused, and a single video is no playlist.
+		switch _, _, shape, err := l.Ingest.acquireOwner(parsed.String(), true); {
+		case err != nil:
+			if refusal := bindRefusal(err); refusal != nil {
+				return row, refusal
+			}
+			return row, unnamedBindFailure(err)
+		case shape == syncsource.ShapeVideo:
+			return row, errInvalid("the link names a single video; a synced playlist needs a playlist or channel link")
 		}
 		row.Live = true
 		// The label a prospective (unprobed) binding assumes, so a
@@ -707,10 +803,10 @@ func (l *Playlists) buildPlaylistSourceRow(ctx context.Context, pl *model.Playli
 			// anything is stored.
 			provider, snap, err := l.snapshotFor(ctx, row.URL, syncsource.SnapshotOptions{MaxEntries: 8, EnrichLimit: 4})
 			if err != nil {
-				if KindOf(err) != "" {
-					return row, err
+				if refusal := bindRefusal(err); refusal != nil {
+					return row, refusal
 				}
-				return row, errInvalid("the url does not enumerate as a playlist: " + err.Error())
+				return row, unnamedBindFailure(err)
 			}
 			row.Source = string(provider.SourceType())
 			row.IdentityKey = snap.IdentityKey
@@ -798,9 +894,19 @@ func (l *Playlists) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask
 	)
 	if b.Live {
 		var snap *syncsource.PlaylistSnapshot
-		provider, snap, err = l.snapshotFor(ctx, b.URL, syncsource.SnapshotOptions{MaxEntries: playlistSyncMaxEntries})
+		listCtx, cancel := context.WithTimeout(ctx, toolRunTimeout)
+		opts := syncsource.SnapshotOptions{MaxEntries: playlistSyncMaxEntries}
+		if t != nil {
+			opts.Progress = l.Tools.listingActivity(listCtx, t.ID)
+		}
+		provider, snap, err = l.snapshotFor(listCtx, b.URL, opts)
+		cancel()
 		if err != nil {
 			return out, err
+		}
+		if t != nil {
+			// Working out what changed, until a download begins.
+			l.Tools.noteActivity(ctx, t.ID, func(a *ToolTaskActivity) { *a = ToolTaskActivity{Phase: activityProcessing} })
 		}
 		// A truncated listing is a window, not the playlist. Append only
 		// ever adds, so acting on the window is safe; the mirror modes
@@ -1137,7 +1243,7 @@ func (l *Playlists) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask
 	// mode selection: a Delete right revoked after the bind must stop
 	// the trashing, scheduled runs and sync-now alike.
 	if len(toTrash) > 0 && !uc.Admin && !uc.Delete {
-		return out, fmt.Errorf("%w: the owner no longer holds the delete right, so mirror-trash cannot move files to the trash", errToolPermanent)
+		return out, finalFailure(KindForbidden, "the owner no longer holds the delete right, so mirror-trash cannot move files to the trash", nil)
 	}
 
 	if b.Live && (sourceTitle != b.Title || sourceCover != b.CoverURL) {
@@ -1259,14 +1365,14 @@ func (l *Playlists) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask
 			return out, err
 		}
 		if !owner.UploadEnabled {
-			return out, fmt.Errorf("%w: the playlist owner cannot upload, so new entries cannot be downloaded", errToolPermanent)
+			return out, finalFailure(KindForbidden, "the playlist owner cannot upload, so new entries cannot be downloaded", nil)
 		}
 		has, err := l.Ingest.hasManagedDestination(ctx, owner, model.KindTrack)
 		if err != nil {
 			return out, err
 		}
 		if !has {
-			return out, fmt.Errorf("%w: no managed music library to receive the downloads", errToolPermanent)
+			return out, finalFailure(KindInvalid, "no managed music library to receive the downloads", nil)
 		}
 		if len(downloads) > acquireMaxItems {
 			l.log.Info("playlist sync download batch truncated", "playlist", pl.PID, "want", len(downloads), "cap", acquireMaxItems)
@@ -1296,13 +1402,43 @@ func (l *Playlists) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask
 		out.counts.Queued = staged
 		out.counts.Unavailable += skipped
 		if entriesErr != nil {
-			return out, fmt.Errorf("opening review entries: %w", entriesErr)
+			return out, entriesFailure(entriesErr)
 		}
 		if fetchErr != nil {
-			return out, fmt.Errorf("downloading new entries: %d of %d staged before: %w", staged, len(downloads), fetchErr)
+			return out, cutShort(taskParamsOf(t).Fetched, downloads, fetchErr)
 		}
 	}
 	return out, nil
+}
+
+// downloadsCutShort is a sync's download batch a failure stopped, with
+// how much of it the task has staged.
+type downloadsCutShort struct {
+	staged, total int
+	err           error
+}
+
+func (e *downloadsCutShort) Error() string {
+	return fmt.Sprintf("downloading new entries: %d of %d staged before: %v", e.staged, e.total, e.err)
+}
+
+func (e *downloadsCutShort) Unwrap() error { return e.err }
+
+// cutShort counts what the task staged against the batch and what earlier
+// runs staged, which a later run's batch no longer lists, leaving out a
+// download the person removed.
+func cutShort(fetched []fetchedItem, batch []acquireItem, err error) *downloadsCutShort {
+	listed := make(map[string]bool, len(batch))
+	for _, item := range batch {
+		listed[cmp.Or(item.GUID, item.URL)] = true
+	}
+	total := len(batch)
+	for _, f := range fetched {
+		if !listed[f.Key] && !f.Dropped {
+			total++
+		}
+	}
+	return &downloadsCutShort{staged: stillStaged(fetched), total: total, err: err}
 }
 
 // verifySourceMap checks that every resolved map row still names a live
@@ -1586,8 +1722,9 @@ func (l *Playlists) notifyPlaylistSynced(ctx context.Context, ownerID string, pl
 		parts = append(parts, fmt.Sprintf("%d downloading", c.Queued))
 	}
 	body := fmt.Sprintf("%q synced from its source: %s.", pl.Name, strings.Join(parts, ", "))
+	target := apiPID(PrefixPlaylist, pl.PID)
 	l.Integrations.EmitNotificationFor(ctx, "playlist-synced", "Playlist synced", body,
-		apiPID(PrefixPlaylist, pl.PID), []string{ownerID})
+		target, []string{ownerID}, NotifyKey("playlist-synced:"+target))
 	l.emitUserEvent(ctx, ownerID, eventPlaylistSynced, apiPID(PrefixPlaylist, pl.PID))
 }
 

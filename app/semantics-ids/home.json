@@ -14,6 +14,7 @@
     "notificationRowPlain": "notification-row-{kind}-none",
     "notificationsBell": "notifications-bell",
     "notificationsClear": "notifications-clear",
+    "notificationsClearCompleted": "notifications-clear-completed",
     "notificationsClearConfirm": "notifications-clear-confirm",
     "notificationsEmpty": "notifications-empty",
     "notificationsMarkAllRead": "notifications-mark-all-read",

@@ -21,7 +21,7 @@ import (
 // every earlier lease.
 func drainAt(ctx context.Context, svc *Library, n int) bool {
 	now := time.Now().Add(time.Duration(n) * 2 * toolTaskLease).UnixNano()
-	return svc.Tools.drainToolTasksAt(ctx, wdb.TaskTypes{Except: longToolTasks}, now)
+	return svc.Tools.drainToolTasksAt(ctx, toolDrain, now)
 }
 
 // busyOnce answers a busy catalog the first time op runs, as a scan or

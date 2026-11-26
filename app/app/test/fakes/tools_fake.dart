@@ -62,8 +62,12 @@ mixin FakeTools on FakeRepositoryState implements ToolsApi {
     return _startToolTask('cue-split', pid);
   }
 
+  /// How many times the task list was read.
+  int listToolTasksCalls = 0;
+
   @override
   Future<ToolTaskPage> listToolTasks({String? cursor, int? limit}) async {
+    listToolTasksCalls++;
     final error = toolError;
     if (error != null) throw error;
     await listToolTasksGate?.future;
@@ -83,6 +87,40 @@ mixin FakeTools on FakeRepositoryState implements ToolsApi {
     return task;
   }
 
+  /// Every id [cancelToolTask] was asked to stop, refusals included.
+  final List<String> cancelToolTaskCalls = [];
+
+  /// Thrown by [cancelToolTask] when set.
+  WaxDeckApiException? cancelToolTaskError;
+
+  /// What a cancel does to a running task: a wind-down by default
+  /// (`cancelRequested`), or with this false the stop is at once.
+  bool cancelWindsDown = true;
+
+  @override
+  Future<ToolTask> cancelToolTask(String taskId) async {
+    cancelToolTaskCalls.add(taskId);
+    final error = cancelToolTaskError;
+    if (error != null) throw error;
+    final task = await getToolTask(taskId);
+    if (task.finished) return task;
+    final windsDown = task.state == 'running' && cancelWindsDown;
+    final answered = ToolTask(
+      id: task.id,
+      type: task.type,
+      state: windsDown ? 'running' : 'canceled',
+      cancelRequested: windsDown,
+      itemPid: task.itemPid,
+      itemTitle: task.itemTitle,
+      progressPct: task.progressPct,
+      activity: task.activity,
+      createdAt: task.createdAt,
+      finishedAt: windsDown ? null : task.createdAt,
+    );
+    toolTasksById[taskId] = answered;
+    return answered;
+  }
+
   /// Every id [deleteToolTask] was asked to remove, refusals included.
   final List<String> deleteToolTaskCalls = [];
 
@@ -95,9 +133,14 @@ mixin FakeTools on FakeRepositoryState implements ToolsApi {
   /// How many finished tasks [clearFinishedToolTasks] answers it kept.
   int clearFinishedKept = 0;
 
+  /// Thrown by [deleteToolTask] and [clearFinishedToolTasks] when set.
+  WaxDeckApiException? deleteToolTaskError;
+
   @override
   Future<void> deleteToolTask(String taskId) async {
     deleteToolTaskCalls.add(taskId);
+    final refusal = deleteToolTaskError;
+    if (refusal != null) throw refusal;
     final task = toolTasksById[taskId];
     if (task == null) {
       throw const WaxDeckApiException(
@@ -120,6 +163,8 @@ mixin FakeTools on FakeRepositoryState implements ToolsApi {
   Future<ToolTasksCleared> clearFinishedToolTasks({bool all = false}) async {
     clearFinishedToolTaskCalls++;
     clearFinishedToolTaskScopes.add(all);
+    final refusal = deleteToolTaskError;
+    if (refusal != null) throw refusal;
     final finished = [
       for (final task in toolTasksById.values)
         if (task.finished) task.id,

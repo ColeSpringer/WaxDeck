@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxdeck/fixtures"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -527,5 +529,74 @@ func TestItemGenresAreSplit(t *testing.T) {
 	}
 	if !slices.Equal(d.Genres, []string{"R&B", "Soul"}) {
 		t.Fatalf("genres = %q, want each one apart", d.Genres)
+	}
+}
+
+// A normalize pass whose context ends before it gets to a page's changes
+// counts none of them, dry run or not: no rewrite, no lock, no sample,
+// and only the items it had nothing to do for as scanned.
+func TestACanceledNormalizePassCountsNothingPastItsStop(t *testing.T) {
+	f := newGenreFixture(t)
+	norm, err := f.svc.Reads.genreNormalizer(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := query.New(query.EntityItems).WherePresence("genre", query.OpIsPresent).Build()
+	page, err := f.svc.lib.QueryPage(f.ctx, q, "", 500, false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stopped, stop := context.WithCancel(f.ctx)
+	stop()
+	for _, dryRun := range []bool{true, false} {
+		var sum genreNormalizeSummary
+		res, err := f.svc.Reads.normalizeGenres(stopped, norm, page.Items, dryRun, &sum)
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("dry run %v: err = %v, want the stop", dryRun, err)
+		}
+		if res.normalized != 0 || res.locked != 0 || res.scanned != 2 || len(sum.Samples.Changes) != 0 {
+			t.Errorf("dry run %v: %+v with changes %q, want only the two items already canonical or off the tree counted",
+				dryRun, res, sum.Samples.Changes)
+		}
+	}
+	if got := f.genreOf(t, "Synonym"); got != "Rap" {
+		t.Errorf("Synonym reads %q after the stopped pass", got)
+	}
+}
+
+// stopsAfterFirstLook is a context already ended whose first Err answers
+// nil: a cancel that lands just after a loop's check.
+type stopsAfterFirstLook struct {
+	context.Context
+	looked bool
+}
+
+func (c *stopsAfterFirstLook) Err() error {
+	if !c.looked {
+		c.looked = true
+		return nil
+	}
+	return c.Context.Err()
+}
+
+// A dry run canceled while it reads a candidate's lock does not count
+// that candidate: the lock read on an ended context answers no lock.
+func TestADryRunCanceledDuringALockReadCountsNothing(t *testing.T) {
+	f := newGenreFixture(t)
+	norm, err := f.svc.Reads.genreNormalizer(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := query.New(query.EntityItems).WherePresence("genre", query.OpIsPresent).Build()
+	page, err := f.svc.lib.QueryPage(f.ctx, q, "", 500, false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ended, stop := context.WithCancel(f.ctx)
+	stop()
+	var sum genreNormalizeSummary
+	res, err := f.svc.Reads.normalizeGenres(&stopsAfterFirstLook{Context: ended}, norm, page.Items, true, &sum)
+	if !errors.Is(err, context.Canceled) || res.normalized != 0 || res.locked != 0 || res.scanned != 2 || len(sum.Samples.Changes) != 0 {
+		t.Errorf("dry run = %+v, %v with changes %q, want the stop and no candidate counted", res, err, sum.Samples.Changes)
 	}
 }

@@ -1782,8 +1782,13 @@ func requestFailure(err error) string {
 // far, since the generated writers encode before they write. The
 // connection is cut instead, so what arrived reads as broken rather than
 // whole, and the failure is logged unless the request itself is over: its
-// listener left, or the server is stopping.
+// listener left, or the server is stopping. A handler that failed because
+// its own request ended has nobody to answer either, and is no fault:
+// torn down the same way, unlogged.
 func (s *Server) ResponseErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
+	if r.Context().Err() != nil && errors.Is(err, context.Canceled) {
+		panic(http.ErrAbortHandler)
+	}
 	if respwriter.Started(w) {
 		if r.Context().Err() == nil {
 			s.log.Warn("a response failed after it started", "path", r.URL.Path, "err", err)

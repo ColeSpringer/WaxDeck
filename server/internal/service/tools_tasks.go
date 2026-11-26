@@ -145,6 +145,7 @@ const (
 	refusalPartsInTrash  = "parts-in-trash"
 	refusalOutputsHidden = "outputs-hidden"
 	refusalNoSheet       = "no-sheet"
+	refusalTaskCommitted = "task-committed"
 )
 
 // toolRefusal is a file tool refused before it is queued, for reason:
@@ -178,17 +179,17 @@ func (l *Tools) refuseHeld(ctx context.Context, lock, what string) error {
 }
 
 // heldRefusal refuses what task holds, what naming the task's kind: one
-// parked never finishes by itself, so it is cleared in Tasks first; any
-// other is still at work.
+// parked, or canceled with files it could not remove, never finishes by
+// itself, so it is cleared in Tasks first; any other is still at work.
 func (l *Tools) heldRefusal(ctx context.Context, what, task string) error {
-	if t, err := l.db.ToolTaskByID(ctx, task); err == nil && t.State == taskStateParked {
+	if t, err := l.db.ToolTaskByID(ctx, task); err == nil && (t.State == taskStateParked || t.State == taskStateCanceled) {
 		return toolRefusal(refusalTaskParked, what+" stopped and needs attention: clear it in Tasks, then try again", "task", task)
 	}
 	return toolRefusal(refusalTaskRunning, what+" has not finished yet", "task", task)
 }
 
 // refuseHeldBook refuses a merge or split of a book another one is at
-// work on, or that a parked one holds.
+// work on, or that a parked or canceled one holds.
 func (l *Tools) refuseHeldBook(ctx context.Context, book model.PID) error {
 	return l.refuseHeld(ctx, bookToolLock(book), "a merge or split of this book")
 }
@@ -351,17 +352,79 @@ func (l *Tools) ListToolTasksFor(ctx context.Context, uc *UserCtx, cursor string
 
 // GetToolTaskFor reads one task with the owner-or-admin visibility rule.
 func (l *Tools) GetToolTaskFor(ctx context.Context, uc *UserCtx, taskID string) (ToolTaskDTO, error) {
+	t, err := l.visibleToolTask(ctx, uc, taskID)
+	if err != nil {
+		return ToolTaskDTO{}, err
+	}
+	return l.taskFor(uc, t), nil
+}
+
+// visibleToolTask reads one task its owner or an administrator may see;
+// anyone else is told there is none.
+func (l *Tools) visibleToolTask(ctx context.Context, uc *UserCtx, taskID string) (wdb.ToolTask, error) {
 	t, err := l.db.ToolTaskByID(ctx, taskID)
 	if errors.Is(err, wdb.ErrNotFound) {
-		return ToolTaskDTO{}, errNotFound("no task with id " + taskID)
+		return wdb.ToolTask{}, errNotFound("no task with id " + taskID)
 	}
+	if err != nil {
+		return wdb.ToolTask{}, &Error{Kind: KindInternal, Err: err}
+	}
+	if t.UserID != uc.ID && !uc.Admin {
+		return wdb.ToolTask{}, errNotFound("no task with id " + taskID)
+	}
+	return t, nil
+}
+
+// CancelToolTaskFor asks a task to stop, under the read's visibility, and
+// answers it as it then stands. The ask is recorded first, so a run that
+// would make the task resumable after it cannot, and one that holds the
+// task later finds it. One no run here holds, queued or waiting to try
+// again, ends canceled at once; a held one has its run stopped and reads
+// running, cancel requested, until the run ends it canceled, or done when
+// it finished first. A finished task answers as it is; a book or CUE tool
+// that started moving library files is refused.
+func (l *Tools) CancelToolTaskFor(ctx context.Context, uc *UserCtx, taskID string) (ToolTaskDTO, error) {
+	t, err := l.visibleToolTask(ctx, uc, taskID)
+	if err != nil {
+		return ToolTaskDTO{}, err
+	}
+	if ToolTaskFinished(t.State) {
+		return l.taskFor(uc, t), nil
+	}
+	asked, err := l.db.RequestToolTaskCancel(ctx, taskID)
 	if err != nil {
 		return ToolTaskDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
-	if t.UserID != uc.ID && !uc.Admin {
-		return ToolTaskDTO{}, errNotFound("no task with id " + taskID)
+	if !asked {
+		// It finished meanwhile, or its run made it resumable first.
+		t, err := l.visibleToolTask(ctx, uc, taskID)
+		if err != nil {
+			return ToolTaskDTO{}, err
+		}
+		if !ToolTaskFinished(t.State) && t.Resumable {
+			return ToolTaskDTO{}, toolRefusal(refusalTaskCommitted,
+				"the task has started moving library files, so it finishes, or puts things back, on its own")
+		}
+		return l.taskFor(uc, t), nil
 	}
-	return l.taskFor(uc, t), nil
+	// Asked, it is seen through whatever becomes of the request. Under the
+	// lock a hold is taken in: a run held now is stopped before it can let
+	// go, and one held later reads the ask as it starts.
+	ctx = context.WithoutCancel(ctx)
+	l.toolRunsMu.Lock()
+	run := l.toolRuns[taskID]
+	if run != nil && run.cancel != nil {
+		run.cancel(errToolCanceled)
+	}
+	l.toolRunsMu.Unlock()
+	if run != nil {
+		l.notifyToolTask(ctx, taskID)
+	} else if t, err := l.db.ToolTaskByID(ctx, taskID); err == nil {
+		l.cancelToolTask(ctx, &t)
+	}
+	// A settle that could not be recorded leaves the ask, which the next
+	// lease of the task settles.
+	return l.GetToolTaskFor(ctx, uc, taskID)
 }
 
 // DeleteToolTaskFor removes one finished task (parked included, which
@@ -370,17 +433,11 @@ func (l *Tools) GetToolTaskFor(ctx context.Context, uc *UserCtx, taskID string) 
 // conflict, because deleting a row out from under a worker leases
 // nothing back.
 func (l *Tools) DeleteToolTaskFor(ctx context.Context, uc *UserCtx, taskID string) error {
-	t, err := l.db.ToolTaskByID(ctx, taskID)
-	if errors.Is(err, wdb.ErrNotFound) {
-		return errNotFound("no task with id " + taskID)
-	}
+	// The read's answer for a stranger, not "forbidden": that would
+	// confirm the row exists.
+	t, err := l.visibleToolTask(ctx, uc, taskID)
 	if err != nil {
-		return &Error{Kind: KindInternal, Err: err}
-	}
-	if t.UserID != uc.ID && !uc.Admin {
-		// The read's answer, not "forbidden": that would confirm the
-		// row exists.
-		return errNotFound("no task with id " + taskID)
+		return err
 	}
 	if !ToolTaskFinished(t.State) {
 		return &Error{Kind: KindConflict, Msg: "the task has not finished"}
@@ -466,8 +523,21 @@ func (l *Tools) ClearFinishedToolTasksFor(ctx context.Context, uc *UserCtx, scop
 // records the clear, saying what became of those files, under uc, or the
 // task's starter for the prune. A hidden file that could not take its
 // name keeps the task, its error saying so, and answers the refusal the
-// clear meets; other tasks leave nothing to settle.
+// clear meets. A CUE split's workspace goes too; other tasks leave
+// nothing to settle.
 func (l *Tools) settleClearedTask(ctx context.Context, uc *UserCtx, t wdb.ToolTask) error {
+	if t.SettlePending {
+		// What its end left to settle comes first.
+		if row, ok := l.finishSettle(ctx, t.ID); ok {
+			t = row
+		}
+	}
+	if t.Type == taskTypeCueSplit {
+		// Scratch, not the library: a workspace that stays never keeps
+		// the task.
+		l.removeCueWorkspace(t.ID)
+		return nil
+	}
 	if t.Type != taskTypeBookMerge && t.Type != taskTypeBookSplit {
 		return nil
 	}
@@ -477,7 +547,7 @@ func (l *Tools) settleClearedTask(ctx context.Context, uc *UserCtx, t wdb.ToolTa
 	}
 	b, err := l.bookToolFor(ctx, &t, &p)
 	if err != nil {
-		return nil
+		b = l.recordedBookTool(&t, &p)
 	}
 	ctx = context.WithoutCancel(ctx)
 	out := b.settleCleared(ctx)

@@ -23,11 +23,11 @@ final notificationsBinderProvider = Provider.autoDispose<void>((ref) {
   Timer? coalescing;
   ref.onDispose(() => coalescing?.cancel());
 
-  // The bell row plus the one refetch the marker calls for: the sync
-  // chip and sheet watch the binding, and nothing else would tell an
-  // open playlist screen that a background run just moved it.
+  // The refetches the markers call for: the sync chip and sheet watch
+  // the binding, and nothing else would tell an open playlist screen that
+  // a background run just moved it. The review, upload and task markers
+  // mint no row; their surfaces refetch elsewhere.
   final subscription = ref.watch(serverEventBusProvider).events.listen((event) {
-    local.recordServerEvent(event);
     // The inbox is where the announcements land, so its own marker is
     // the one that refetches it. Invalidated rather than appended to:
     // the row carries a read stamp and an id this client has not seen.

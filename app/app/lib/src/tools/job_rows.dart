@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math';
 
+import 'package:clock/clock.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -39,6 +41,88 @@ List<Job> visibleJobs(List<Job> jobs) {
 
 /// The row's key, so it moves with its job (see [indexByKey]).
 Key jobKey(Job job) => ValueKey(SemanticsIds.jobRow(job.pid));
+
+/// Which sentence a [RelativeTimeLine] puts its time in.
+enum RelativeTimeKind { queued, started, finished }
+
+/// When something happened, as "queued 5 min ago", kept current: one timer
+/// turns the line over when its phrase would change, so a screen left open
+/// does not read a time behind it.
+class RelativeTimeLine extends StatefulWidget {
+  const RelativeTimeLine({super.key, required this.at, required this.kind});
+
+  final DateTime at;
+  final RelativeTimeKind kind;
+
+  @override
+  State<RelativeTimeLine> createState() => _RelativeTimeLineState();
+}
+
+class _RelativeTimeLineState extends State<RelativeTimeLine> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _arm();
+  }
+
+  @override
+  void didUpdateWidget(RelativeTimeLine old) {
+    super.didUpdateWidget(old);
+    if (old.at != widget.at) _arm();
+  }
+
+  /// Sleeps to the next moment the phrase changes: a minute's step to the
+  /// hour, an hour's to the day, a day's after.
+  void _arm() {
+    _timer?.cancel();
+    final age = clock.now().difference(widget.at);
+    final unit = switch (age) {
+      < const Duration(hours: 1) => const Duration(minutes: 1),
+      < const Duration(days: 1) => const Duration(hours: 1),
+      _ => const Duration(days: 1),
+    };
+    // A time ahead of this clock reads as just now until it is a minute old.
+    final left = age.isNegative
+        ? const Duration(minutes: 1) - age
+        : Duration(
+            microseconds:
+                unit.inMicroseconds - age.inMicroseconds % unit.inMicroseconds,
+          );
+    _timer = Timer(left, () {
+      if (!mounted) return;
+      setState(() {});
+      _arm();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final now = clock.now();
+    final when = l10n.relativeSpaced(widget.at, now: now);
+    return Padding(
+      padding: const EdgeInsets.only(top: WaxSpace.s4),
+      child: Text(
+        switch (widget.kind) {
+          RelativeTimeKind.queued => l10n.toolsTimeQueued(when),
+          RelativeTimeKind.started => l10n.toolsTimeStarted(when),
+          RelativeTimeKind.finished => l10n.toolsTimeFinished(when),
+        },
+        style: WaxType.caption.copyWith(
+          color: WaxColors.of(context).textTertiary,
+        ),
+      ),
+    );
+  }
+}
 
 /// A job's name, and what it ran on when that is known.
 String _jobTitle(AppLocalizations l10n, Job job) {
@@ -249,6 +333,16 @@ class JobRow extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if (job.ended
+                          ? job.finishedAt ?? job.startedAt
+                          : job.startedAt
+                      case final at?)
+                    RelativeTimeLine(
+                      at: at,
+                      kind: job.ended
+                          ? RelativeTimeKind.finished
+                          : RelativeTimeKind.started,
+                    ),
                   if (message != null && message.isNotEmpty) ...<Widget>[
                     const SizedBox(height: WaxSpace.s4),
                     Text(

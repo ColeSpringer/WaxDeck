@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,10 +15,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colespringer/waxbin/source"
+
 	"github.com/colespringer/waxdeck/fixtures"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/service"
+	"github.com/colespringer/waxdeck/server/internal/syncsource"
 )
 
 // fakeToolJobStore is the fake sidecar's merge and split surface: it
@@ -217,12 +221,12 @@ func newToolHarness(t *testing.T) *harness {
 	})
 }
 
-// drainToolTasks drives the tool worker the way main's supervised
-// ticker would, until the queue reports idle.
+// drainToolTasks drives the tool and source workers the way main's
+// supervised tickers would, until both report idle.
 func drainToolTasks(t *testing.T, h *harness) {
 	t.Helper()
 	deadline := time.Now().Add(90 * time.Second)
-	for h.svc.Tools.DrainToolTasks(context.Background()) {
+	for h.svc.Tools.DrainToolTasks(context.Background()) || h.svc.Tools.DrainSourceToolTasks(context.Background()) {
 		if time.Now().After(deadline) {
 			t.Fatal("tool tasks did not drain in time")
 		}
@@ -387,6 +391,18 @@ func TestBookMergeEndToEnd(t *testing.T) {
 		t.Fatalf("sam task read status = %d, want 404", resp.StatusCode)
 	}
 	resp.Body.Close()
+
+	// Cancel keeps the read's visibility, and a finished task answers as
+	// it stands.
+	resp = postJSON(t, h.ts.URL+"/api/v1/tools/tasks/"+task.Id+"/cancel", sam.Token, ``)
+	if resp.StatusCode != 404 {
+		t.Fatalf("sam task cancel status = %d, want 404", resp.StatusCode)
+	}
+	resp.Body.Close()
+	canceled := decodeStatus[ToolTask](t, postJSON(t, h.ts.URL+"/api/v1/tools/tasks/"+task.Id+"/cancel", h.token, ``), 200, "cancel a done task")
+	if canceled.Id != task.Id || canceled.State != "done" {
+		t.Fatalf("cancel of a done task = %+v, want it unchanged", canceled)
+	}
 }
 
 func TestBookSplitEndToEnd(t *testing.T) {
@@ -830,6 +846,206 @@ func TestToolTaskDeleteAndClear(t *testing.T) {
 	}
 	if ids := listed(h.token); len(ids) != 1 || !ids[adminRun] {
 		t.Fatalf("after the all-scope clear, tasks = %v", ids)
+	}
+}
+
+// Cancel keeps the read's visibility. A task no run holds, queued or
+// waiting, answers canceled at once and its watchers are told; a finished
+// one answers as it is; a book merge that started moving library files is
+// refused as committed and runs on; a running one asked to cancel reads
+// cancelRequested; and a canceled task deletes as a finished one does.
+func TestToolTaskCancel(t *testing.T) {
+	t.Parallel()
+	h := newHarnessDirect(t)
+	ctx := context.Background()
+	me := decode[SessionInfo](t, get(t, h.ts, "/api/v1/auth/session", h.token))
+	if me.User == nil {
+		t.Fatal("no session user")
+	}
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{"username": "sam", "password": testPassword})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create user status = %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+	sam := loginAs(t, h.ts, "sam", testPassword)
+
+	seed := func(id, typ, state string, edit func(*wdb.ToolTask)) {
+		t.Helper()
+		row := wdb.ToolTask{ID: id, Type: typ, State: state, UserID: me.User.Id,
+			Params: "{}", ResultPIDs: "[]", CreatedAtNS: time.Now().UnixNano()}
+		if edit != nil {
+			edit(&row)
+		}
+		if err := h.store.InsertToolTask(ctx, row); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const (
+		queued    = "tk-01JZX5N8QW3F4V9T2B7KCNQUE1"
+		waiting   = "tk-01JZX5N8QW3F4V9T2B7KCNWAT1"
+		done      = "tk-01JZX5N8QW3F4V9T2B7KCND0N1"
+		committed = "tk-01JZX5N8QW3F4V9T2B7KCNC0M1"
+		asked     = "tk-01JZX5N8QW3F4V9T2B7KCNASK1"
+	)
+	seed(queued, "acquire", "queued", nil)
+	seed(waiting, "acquire", "running", func(r *wdb.ToolTask) {
+		r.WaitReason, r.Error = "rate-limited", "rate limited by server"
+		r.LeaseUntilNS = time.Now().Add(30 * time.Minute).UnixNano()
+	})
+	seed(done, "acquire", "done", func(r *wdb.ToolTask) { r.FinishedAtNS = time.Now().UnixNano() })
+	seed(committed, "book-merge", "running", func(r *wdb.ToolTask) { r.Resumable = true })
+	seed(asked, "acquire", "running", func(r *wdb.ToolTask) { r.CancelRequested = true })
+	cancel := func(id, token string) *http.Response {
+		t.Helper()
+		return postJSON(t, h.ts.URL+"/api/v1/tools/tasks/"+id+"/cancel", token, ``)
+	}
+
+	// A stranger learns nothing, and the task stays as it was.
+	resp = cancel(queued, sam.Token)
+	if resp.StatusCode != 404 {
+		t.Fatalf("sam's cancel status = %d, want 404", resp.StatusCode)
+	}
+	resp.Body.Close()
+	resp = cancel("tk-01JZX5N8QW3F4V9T2B7KCNN0NE", h.token)
+	if resp.StatusCode != 404 {
+		t.Fatalf("cancel of no task status = %d, want 404", resp.StatusCode)
+	}
+	resp.Body.Close()
+	if got := h.toolTask(t, queued); got.State != "queued" {
+		t.Fatalf("after a stranger's cancel the task reads %s", got.State)
+	}
+
+	for _, id := range []string{queued, waiting} {
+		got := decodeStatus[ToolTask](t, cancel(id, h.token), 200, "cancel "+id)
+		if got.State != "canceled" || got.FinishedAt == nil || got.WaitReason != nil || got.Error != nil ||
+			(got.CancelRequested != nil && *got.CancelRequested) {
+			t.Fatalf("cancel of %s = %+v, want it canceled at once", id, got)
+		}
+		if read := h.toolTask(t, id); read.State != "canceled" {
+			t.Fatalf("%s reads %s after its cancel", id, read.State)
+		}
+	}
+	events, _, err := h.store.EventsSince(ctx, me.User.Id, 0, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marked := map[string]bool{}
+	for _, e := range events {
+		if e.Kind == "task" {
+			marked[e.ItemPID] = true
+		}
+	}
+	if !marked[queued] || !marked[waiting] {
+		t.Errorf("task markers for %v, want both canceled tasks", marked)
+	}
+
+	if got := decodeStatus[ToolTask](t, cancel(done, h.token), 200, "cancel done"); got.State != "done" {
+		t.Fatalf("cancel of a done task = %+v, want it as it is", got)
+	}
+
+	resp = cancel(committed, h.token)
+	refused := decodeStatus[Error](t, resp, 409, "cancel committed")
+	if refused.Code != "conflict" || refused.Params == nil || (*refused.Params)["reason"] != "task-committed" {
+		t.Fatalf("committed cancel = %+v, want conflict for task-committed", refused)
+	}
+	if got := h.toolTask(t, committed); got.State != "running" || got.CancelRequested != nil {
+		t.Fatalf("the committed task reads %+v after its refused cancel", got)
+	}
+
+	if got := h.toolTask(t, asked); got.CancelRequested == nil || !*got.CancelRequested {
+		t.Fatalf("a running task asked to cancel reads %+v, want cancelRequested", got)
+	}
+
+	resp = reqAs(t, h, "DELETE", "/api/v1/tools/tasks/"+queued, h.token, nil)
+	if resp.StatusCode != 204 {
+		t.Fatalf("deleting a canceled task status = %d, want 204", resp.StatusCode)
+	}
+	resp.Body.Close()
+}
+
+// heldFetchSource is an acquisition source whose fetch, once started,
+// answers only when released, its context's error then.
+type heldFetchSource struct {
+	*fakeAcquireSource
+	fetching, release chan struct{}
+}
+
+func (s *heldFetchSource) FetchWith(ctx context.Context, req source.FetchRequest, w io.Writer, opts syncsource.FetchOptions) (*source.FetchResult, error) {
+	close(s.fetching)
+	<-s.release
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return s.fakeAcquireSource.FetchWith(ctx, req, w, opts)
+}
+
+// A cancel of a download a run holds answers it still running, asking
+// to cancel, and the run then ends it canceled.
+func TestToolTaskCancelOfARunningTask(t *testing.T) {
+	t.Parallel()
+	const link = "https://tube.example/watch?v=held"
+	src := &heldFetchSource{fakeAcquireSource: &fakeAcquireSource{files: map[string]string{}},
+		fetching: make(chan struct{}), release: make(chan struct{})}
+	cannedFiles(t, src.fakeAcquireSource, map[string]map[string]string{link: {"TITLE": "Held", "ARTIST": "Someone"}})
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.SourceProviders = append(cfg.SourceProviders, src)
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+		cfg.AllowPrivateFeedHosts = true
+	})
+	task := decodeStatus[ToolTask](t, h.postJSON(t, "/api/v1/acquisitions", map[string]any{"url": link, "mediaType": "music"}), 202, "acquisition")
+	ran := make(chan struct{})
+	go func() {
+		defer close(ran)
+		h.svc.Tools.DrainSourceToolTasks(context.Background())
+	}()
+	select {
+	case <-src.fetching:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the run never fetched")
+	}
+	got := decodeStatus[ToolTask](t, postJSON(t, h.ts.URL+"/api/v1/tools/tasks/"+task.Id+"/cancel", h.token, ``), 200, "cancel")
+	close(src.release)
+	if got.State != "running" || got.CancelRequested == nil || !*got.CancelRequested {
+		t.Errorf("cancel of a held run = %s, cancel requested %v; want it running, asked to cancel", got.State, got.CancelRequested)
+	}
+	select {
+	case <-ran:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the canceled run did not stop")
+	}
+	if read := h.toolTask(t, task.Id); read.State != "canceled" || read.CancelRequested != nil {
+		t.Fatalf("the task reads %s, cancel requested %v; want it canceled", read.State, read.CancelRequested)
+	}
+}
+
+// A URL download says what it is for from the moment it is queued (its
+// link and how the link was taken) and, once it has run, its name and the
+// titles of the review entries it opened.
+func TestAnAcquisitionSaysWhatItIsFor(t *testing.T) {
+	t.Parallel()
+	const link = "https://tube.example/watch?v=lone"
+	src := &fakeAcquireSource{files: map[string]string{}}
+	cannedFiles(t, src, map[string]map[string]string{link: {"TITLE": "Lone", "ARTIST": "Someone"}})
+	h := acquiringHarness(t, src)
+	task := decodeStatus[ToolTask](t, h.postJSON(t, "/api/v1/acquisitions", map[string]any{"url": link, "mediaType": "music"}), 202, "acquisition")
+	if task.ItemTitle != nil || task.Summary == nil || (*task.Summary)["url"] != link || (*task.Summary)["source"] != "video" {
+		t.Fatalf("queued task = title %v, summary %v; want no title yet, its link and source", task.ItemTitle, task.Summary)
+	}
+	drainToolTasks(t, h)
+	got := h.toolTask(t, task.Id)
+	if got.State != "done" || got.ItemTitle == nil || *got.ItemTitle != "Lone" || got.ResultPids == nil || len(*got.ResultPids) != 1 {
+		t.Fatalf("task = %+v, want it done, titled by its download, with its one entry", got)
+	}
+	entry, err := h.store.ReviewEntryByID(context.Background(), (*got.ResultPids)[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := *got.Summary
+	entries, _ := sum["entries"].([]any)
+	if len(entries) != 1 || entries[0] != entry.Title || sum["truncated"] != false || sum["url"] != link {
+		t.Errorf("summary %v, want its link kept, untruncated, naming the entry %q", sum, entry.Title)
 	}
 }
 

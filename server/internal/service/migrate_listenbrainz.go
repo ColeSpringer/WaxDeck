@@ -197,6 +197,7 @@ func (l *Migrate) runListenBrainzImport(ctx context.Context, t *wdb.ToolTask, uc
 					return sum, err
 				}
 			}
+			prog.items(ctx, activityImporting, page+1, 0)
 			prog.report(ctx, 85)
 			// Walked until a page comes back empty rather than until one
 			// comes back short: a short page is not documented to mean

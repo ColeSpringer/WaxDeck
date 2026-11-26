@@ -60,7 +60,7 @@ var notifyEventCatalog = []NotifyEvent{
 	{Name: "job-failed", Scope: NotifyScopeUser,
 		Description: "A library job you started failed."},
 	{Name: "tool-task-failed", Scope: NotifyScopeUser,
-		Description: "A book merge or split, or a CUE split, you started failed, or stopped after its runs kept ending with the server."},
+		Description: "A book merge or split, a CUE split, a URL download or a playlist sync you started failed, or a merge or split stopped after its runs kept ending with the server."},
 	{Name: "health-fix-finished", Scope: NotifyScopeUser,
 		Description: "A health fix you started finished."},
 }
@@ -529,10 +529,47 @@ func (l *Integrations) notificationTargetDTO(r wdb.NotificationTarget) Notificat
 
 // --- emit paths -------------------------------------------------------------------
 
-// EmitNotification is EmitNotificationFor for an event that names
-// nothing to open.
-func (l *Integrations) EmitNotification(ctx context.Context, event, title, body string, userIDs []string) {
-	l.EmitNotificationFor(ctx, event, title, body, "", userIDs)
+// NotifyOption adjusts one emit.
+type NotifyOption func(*notifyOptions)
+
+type notifyOptions struct {
+	key       string
+	targetPID string
+	readFor   string
+	once      bool
+}
+
+// NotifyKey folds the emit into each inbox's one unresolved row for key
+// instead of adding a row.
+func NotifyKey(key string) NotifyOption {
+	return func(o *notifyOptions) { o.key = key }
+}
+
+// NotifyTarget names what a server-scope event is about.
+func NotifyTarget(pid string) NotifyOption {
+	return func(o *notifyOptions) { o.targetPID = pid }
+}
+
+// NotifyReadFor files the keyed row read for the account that did what
+// the event reports, and leaves that account's standing row as read or
+// unread as it is.
+func NotifyReadFor(userID string) NotifyOption {
+	return func(o *notifyOptions) { o.readFor = userID }
+}
+
+// notifyOnce files a user-scope emit only for an account whose inbox holds
+// no row of the event naming its target yet, and delivers it only there:
+// news of something that happens once, which a redone step may emit again.
+func notifyOnce() NotifyOption {
+	return func(o *notifyOptions) { o.once = true }
+}
+
+func applyNotifyOptions(opts []NotifyOption) notifyOptions {
+	var o notifyOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return o
 }
 
 // EmitNotificationFor files one user-scope event in each named user's
@@ -543,44 +580,87 @@ func (l *Integrations) EmitNotification(ctx context.Context, event, title, body 
 //
 // The inbox row is written whether or not the account has a target: a
 // target is how news leaves the server, not where it is kept.
-func (l *Integrations) EmitNotificationFor(ctx context.Context, event, title, body, targetPID string, userIDs []string) {
+func (l *Integrations) EmitNotificationFor(ctx context.Context, event, title, body, targetPID string, userIDs []string, opts ...NotifyOption) {
 	ev, ok := notifyEventByName(event)
 	if !ok || ev.Scope != NotifyScopeUser {
 		l.log.Warn("emit of unknown or non-user notification event", "event", event)
 		return
 	}
+	o := applyNotifyOptions(opts)
 	now := time.Now().UnixNano()
-	seen := map[string]bool{}
-	for _, uid := range userIDs {
-		if uid == "" || seen[uid] {
+	for _, uid := range distinctIDs(userIDs) {
+		if o.once && l.notificationFiled(ctx, uid, event, targetPID) {
 			continue
 		}
-		seen[uid] = true
-		l.recordNotification(ctx, uid, event, title, body, targetPID, now)
-		targets, err := l.db.UserNotificationTargets(ctx, uid)
-		if err != nil {
-			l.log.Warn("reading notification targets", "user", uid, "err", err)
-			continue
-		}
-		l.enqueueToEnabled(ctx, targets, event, title, body, targetPID, now)
+		l.recordNotification(ctx, uid, event, title, body, targetPID, now, o)
+		l.deliverTo(ctx, uid, event, title, body, targetPID, now)
 	}
+}
+
+// notificationFiled reports whether userID's inbox holds a row of event
+// naming targetPID. A read that fails answers no, so the news is filed.
+func (l *Integrations) notificationFiled(ctx context.Context, userID, event, targetPID string) bool {
+	filed, err := l.db.NotificationFiled(ctx, userID, event, targetPID)
+	if err != nil {
+		l.log.Warn("reading whether a notification was filed", "event", event, "user", userID, "err", err)
+	}
+	return filed
+}
+
+// DeliverNotification queues one user-scope event to each named user's
+// targets and nothing else: no inbox row, no sync marker. For an event
+// whose inbox row is kept some other way.
+func (l *Integrations) DeliverNotification(ctx context.Context, event, title, body, targetPID string, userIDs []string) {
+	ev, ok := notifyEventByName(event)
+	if !ok || ev.Scope != NotifyScopeUser {
+		l.log.Warn("delivery of unknown or non-user notification event", "event", event)
+		return
+	}
+	now := time.Now().UnixNano()
+	for _, uid := range distinctIDs(userIDs) {
+		l.deliverTo(ctx, uid, event, title, body, targetPID, now)
+	}
+}
+
+func (l *Integrations) deliverTo(ctx context.Context, uid, event, title, body, targetPID string, now int64) {
+	targets, err := l.db.UserNotificationTargets(ctx, uid)
+	if err != nil {
+		l.log.Warn("reading notification targets", "user", uid, "err", err)
+		return
+	}
+	l.enqueueToEnabled(ctx, targets, event, title, body, targetPID, now)
+}
+
+// distinctIDs is ids in order, empties and repeats dropped.
+func distinctIDs(ids []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
 }
 
 // EmitServerNotification queues one server-scope event to the server
 // targets plus admin-owned personal targets that opted in. The admin
 // set is re-read at emit time, so a demoted administrator's targets
 // deliver nothing.
-func (l *Integrations) EmitServerNotification(ctx context.Context, event, title, body string) {
+func (l *Integrations) EmitServerNotification(ctx context.Context, event, title, body string, opts ...NotifyOption) {
 	ev, ok := notifyEventByName(event)
 	if !ok || ev.Scope != NotifyScopeServer {
 		l.log.Warn("emit of unknown or non-server notification event", "event", event)
 		return
 	}
+	o := applyNotifyOptions(opts)
 	now := time.Now().UnixNano()
 	if targets, err := l.db.ServerNotificationTargets(ctx); err != nil {
 		l.log.Warn("reading server notification targets", "err", err)
 	} else {
-		l.enqueueToEnabled(ctx, targets, event, title, body, "", now)
+		l.enqueueToEnabled(ctx, targets, event, title, body, o.targetPID, now)
 	}
 	admins, err := l.db.EnabledAdminIDs(ctx)
 	if err != nil {
@@ -591,13 +671,8 @@ func (l *Integrations) EmitServerNotification(ctx context.Context, event, title,
 		// The inbox is the administrator's own record of what the
 		// server did, so it is written for every enabled admin whether
 		// or not they configured a destination.
-		l.recordNotification(ctx, uid, event, title, body, "", now)
-		targets, err := l.db.UserNotificationTargets(ctx, uid)
-		if err != nil {
-			l.log.Warn("reading notification targets", "user", uid, "err", err)
-			continue
-		}
-		l.enqueueToEnabled(ctx, targets, event, title, body, "", now)
+		l.recordNotification(ctx, uid, event, title, body, o.targetPID, now, o)
+		l.deliverTo(ctx, uid, event, title, body, o.targetPID, now)
 	}
 }
 

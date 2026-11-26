@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
+import 'package:clock/clock.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -31,7 +33,8 @@ Key _taskKey(ToolTask task) => ValueKey(SemanticsIds.taskRow(task.id));
 /// The kinds in words. The three imports name a product rather than a
 /// kind of work, so the name rides in as a placeholder and the sentence
 /// around it is what gets translated; a health fix names its rule, which
-/// its summary carries from the start.
+/// its summary carries from the start, and a genre clean-up says when it
+/// is only a preview.
 String _typeLabel(
   AppLocalizations l10n,
   String type, [
@@ -42,7 +45,10 @@ String _typeLabel(
   'cue-split' => l10n.toolsTaskCueSplit,
   'acquire' => l10n.toolsTaskAcquire,
   'playlist-sync' => l10n.toolsTaskPlaylistSync,
-  'genre-normalize' => l10n.toolsTaskGenreNormalize,
+  'genre-normalize' =>
+    summary?['dryRun'] == true
+        ? l10n.toolsTaskGenreNormalizePreview
+        : l10n.toolsTaskGenreNormalize,
   'catalog-repair' => l10n.toolsTaskCatalogRepair,
   'health-fix' => switch (summary?['rule']) {
     final String rule => l10n.toolsTaskHealthFix(
@@ -59,6 +65,23 @@ String _typeLabel(
   'import-spotify' => l10n.toolsTaskImportFrom('Spotify'),
   _ => type,
 };
+
+/// A link without its scheme and a leading `www.`, port, path and query kept:
+/// what tells one download from another when its source has not named it
+/// (`v=` and `list=` are the difference between two videos). The row cuts
+/// it where the line ends. A string that is no link stays as it came.
+String _shortUrl(String url) {
+  final uri = Uri.tryParse(url.trim());
+  if (uri == null || uri.host.isEmpty) return url;
+  final host = uri.host.replaceFirst(RegExp(r'^www\.'), '');
+  final port = uri.hasPort ? ':${uri.port}' : '';
+  final path = uri.path.replaceFirst(RegExp(r'/+$'), '');
+  final query = uri.hasQuery ? '?${uri.query}' : '';
+  return host + port + path + query;
+}
+
+/// How many entry titles a finished download lists before "and N more".
+const _entryTitlesShown = 3;
 
 /// Long-running library tool tasks (book merge and split, CUE split,
 /// downloads, imports): state, progress, errors, and a way into what
@@ -291,26 +314,44 @@ class _TaskRow extends ConsumerWidget {
   /// on its own: no work is under way, whatever its percentage says.
   bool get _waiting => task.state == 'running' && task.waitReason != null;
 
+  /// A running task that was asked to stop and has not yet: it ends
+  /// canceled, or done when it finished first.
+  bool get _winding => task.state == 'running' && task.cancelRequested;
+
+  /// Whether a cancel would keep work already opened: a download or a
+  /// playlist sync that has finished an item has review entries staged,
+  /// and says they stay. Progress alone says nothing while activity is
+  /// reported: it counts the bytes of the item in hand.
+  bool get _hasStaged =>
+      (task.type == 'acquire' || task.type == 'playlist-sync') &&
+      switch (task.activity) {
+        final activity? => (activity.itemsDone ?? 0) > 0,
+        null => (task.progressPct ?? 0) > 0,
+      };
+
   /// The humanized state, with the running percentage when the engine
   /// reports one.
   String _statusLabel(AppLocalizations l10n) {
     final pct = task.progressPct;
+    if (_winding) return l10n.toolsStateCanceling;
     if (_waiting) return l10n.toolsStateWaiting;
     return switch (task.state) {
       'queued' => l10n.toolsStateQueued,
       'running' =>
-        pct == null
+        // A bar that sweeps has no progress to put a number to.
+        pct == null || _barValue == null
             ? l10n.toolsStateRunning
             : l10n.toolsStateRunningPct(pct.round()),
       'done' => l10n.toolsStateDone,
       'failed' => l10n.toolsStateFailed,
+      'canceled' => l10n.toolsStateTaskCanceled,
       'parked' => l10n.toolsStateParked,
       final other => other,
     };
   }
 
   Color _statusColor(WaxColors colors) => switch (task.state) {
-    _ when _waiting => colors.textSecondary,
+    _ when _winding || _waiting => colors.textSecondary,
     'done' => colors.success,
     'failed' || 'parked' => colors.error,
     'running' => colors.accent,
@@ -330,16 +371,94 @@ class _TaskRow extends ConsumerWidget {
         'part-missing' => l10n.toolsWaitPartMissing,
         'put-back-blocked' => l10n.toolsWaitPutBackBlocked,
         'stopped' => l10n.toolsWaitStopped,
+        'source-retry' => l10n.toolsWaitSourceRetry,
+        'rate-limited' => l10n.toolsWaitRateLimited,
+        'stalled' => l10n.toolsWaitStalled,
         _ => l10n.toolsWaitOther,
       };
 
-  /// The summary as a report, or null when there is none: a health fix
-  /// carries its rule from the start, to be named by, and its counts only
-  /// once it has some.
+  /// The bar's fill, or null for one that sweeps: it fills from the
+  /// reported percentage once the task reports anything, activity or a
+  /// percentage above zero; before that nothing says how far along it is.
+  double? get _barValue {
+    final pct = task.progressPct;
+    if (task.activity == null && (pct == null || pct <= 0)) return null;
+    return ((pct ?? 0) / 100).clamp(0.0, 1.0);
+  }
+
+  /// What a running task is doing, in a line, or null for a phase this
+  /// app has no words for. The byte part rides only on a download, and
+  /// only when the source gave the size.
+  static String? _activityCaption(
+    AppLocalizations l10n,
+    String type,
+    Object? source,
+    ToolTaskActivity activity,
+  ) {
+    final title = switch (activity.itemTitle) {
+      final String t when t.isNotEmpty => t,
+      _ => null,
+    };
+    final total = activity.itemsTotal;
+    // itemsDone counts the finished, so the item in hand is the next one.
+    final place = total != null && total > 1
+        ? ((activity.itemsDone ?? 0) + 1).clamp(1, total).toInt()
+        : null;
+    final caption = switch (activity.phase) {
+      'listing' =>
+        type == 'acquire' && source == 'channel'
+            ? l10n.toolsActivityListingChannel
+            : l10n.toolsActivityListing,
+      // A download or a sync opens review entries, an import reads from
+      // elsewhere, and the file tools write into the library.
+      'importing' =>
+        type == 'acquire' || type == 'playlist-sync'
+            ? l10n.toolsActivityImporting
+            : type.startsWith('import-')
+            ? l10n.toolsActivityImportingPlain
+            : l10n.toolsActivityImportingLibrary,
+      'processing' =>
+        title == null
+            ? l10n.toolsActivityProcessing
+            : l10n.toolsActivityProcessingTitled(title),
+      'downloading' => switch ((place, title)) {
+        (final int n, final String t) =>
+          l10n.toolsActivityDownloadingCountTitled(n, total!, t),
+        (final int n, null) => l10n.toolsActivityDownloadingCount(n, total!),
+        (null, final String t) => l10n.toolsActivityDownloadingTitled(t),
+        (null, null) => l10n.toolsActivityDownloading,
+      },
+      _ => null,
+    };
+    final bytesTotal = activity.bytesTotal;
+    if (caption == null || activity.phase != 'downloading') return caption;
+    if (bytesTotal == null || bytesTotal <= 0) return caption;
+    return l10n.toolsActivityBytes(
+      caption,
+      l10n.formatBytes(activity.bytesDone ?? 0),
+      l10n.formatBytes(bytesTotal),
+    );
+  }
+
+  /// The keys a task's summary carries from the moment it is queued, to
+  /// be named and scoped by, and the ones a download adds for the entries
+  /// it opened: none of them is a report.
+  static const _queuedSummaryKeys = {
+    'url',
+    'source',
+    'entries',
+    'truncated',
+    'target',
+    'dryRun',
+    'scoped',
+    'rule',
+  };
+
+  /// The summary as a report, or null when it holds nothing past the keys
+  /// the task was queued with.
   Map<String, Object?>? get _report {
     final summary = task.summary;
-    if (task.type == 'health-fix' &&
-        !(summary?.containsKey('attempted') ?? false)) {
+    if (summary == null || summary.keys.every(_queuedSummaryKeys.contains)) {
       return null;
     }
     return summary;
@@ -416,6 +535,53 @@ class _TaskRow extends ConsumerWidget {
     if (parts.isEmpty) return null;
     return parts.join(', ');
   }
+
+  /// The link of a download its source has not named, for the subject
+  /// line; null for any other task.
+  String? get _untitledUrl {
+    if (task.type != 'acquire' || (task.itemTitle?.isNotEmpty ?? false)) {
+      return null;
+    }
+    return switch (task.summary?['url']) {
+      final String url when url.isNotEmpty => _shortUrl(url),
+      _ => null,
+    };
+  }
+
+  /// What a task was queued with that its name leaves out: the account an
+  /// import writes into and whether it only rehearsed, how many items a
+  /// health fix was given.
+  String? _queuedDetail(AppLocalizations l10n) {
+    final summary = task.summary;
+    if (summary == null) return null;
+    if (task.type.startsWith('import-')) {
+      final dryRun = summary['dryRun'] == true;
+      return switch (summary['target']) {
+        final String target when target.isNotEmpty =>
+          dryRun
+              ? l10n.toolsImportTargetDryRun(target)
+              : l10n.toolsImportTarget(target),
+        _ => dryRun ? l10n.toolsImportDryRun : null,
+      };
+    }
+    if (task.type == 'health-fix') {
+      final scoped = summaryCount(summary['scoped']);
+      return scoped == null || scoped < 1
+          ? null
+          : l10n.toolsHealthScoped(scoped);
+    }
+    return null;
+  }
+
+  /// The titles of the review entries a download opened, in order.
+  List<String> get _entryTitles =>
+      switch ((task.type, task.summary?['entries'])) {
+        ('acquire', final List<Object?> titles) => [
+          for (final title in titles)
+            if (title is String && title.isNotEmpty) title,
+        ],
+        _ => const <String>[],
+      };
 
   /// Where a finished task's tap goes, and its name, which the forward
   /// glyph gives a screen reader. Null when it goes nowhere: a running
@@ -570,6 +736,39 @@ class _TaskRow extends ConsumerWidget {
     }
   }
 
+  Future<void> _cancel(BuildContext context, WidgetRef ref) async {
+    final messenger = ref.read(shellMessengerProvider);
+    final notifier = ref.read(toolTasksProvider.notifier);
+    final l10n = context.l10n;
+    if (_hasStaged) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(l10n.toolsCancelTitle),
+          content: WaxProse(l10n.toolsCancelBody),
+          actions: <Widget>[
+            WaxButton(
+              label: l10n.toolsCancelKeep,
+              kind: WaxButtonKind.text,
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+            ),
+            WaxButton(
+              label: l10n.toolsCancelAction,
+              semanticsId: SemanticsIds.taskCancelConfirm,
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    try {
+      await notifier.cancel(task.id);
+    } on WaxDeckApiException catch (e) {
+      messenger.show(explainError(l10n, e), channel: ShellChannel.tasks);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
@@ -581,7 +780,7 @@ class _TaskRow extends ConsumerWidget {
     final waitReason = _waiting ? task.waitReason : null;
     final retryAt = task.retryAt;
     final itemTitle = task.itemTitle;
-    final typeLabel = itemTitle == null
+    final typeLabel = itemTitle == null || itemTitle.isEmpty
         ? _typeLabel(l10n, task.type, task.summary)
         : l10n.toolsTaskTitled(
             _typeLabel(l10n, task.type, task.summary),
@@ -589,6 +788,31 @@ class _TaskRow extends ConsumerWidget {
           );
     final open = _openAction(context, ref);
     final error = task.error;
+    // A failure's code says it in this app's words; the server's own
+    // sentence stays under it as detail. Without a code the sentence is
+    // all there is, and a code this app does not know falls back to it.
+    // `internal` is what the server says when it has nothing more
+    // specific, so its sentence, when there is one, is the better headline.
+    final code =
+        task.state == 'failed' &&
+            !(task.errorCode == 'internal' && (error?.isNotEmpty ?? false))
+        ? task.errorCode
+        : null;
+    final headline = code == null
+        ? null
+        : explainError(
+            l10n,
+            WaxDeckApiException(
+              code: code,
+              message: error ?? '',
+              params: task.errorParams,
+            ),
+          );
+    final coded = headline != null && headline.isNotEmpty;
+    final activity = running && task.state == 'running' ? task.activity : null;
+    final activityCaption = activity == null
+        ? null
+        : _activityCaption(l10n, task.type, task.summary?['source'], activity);
     final summary = task.summary;
     final summaryCounters = summary == null ? null : summaryLine(l10n, summary);
     final result = _resultLabel(l10n);
@@ -604,7 +828,15 @@ class _TaskRow extends ConsumerWidget {
         task.type == 'acquire' || results.any((pid) => pid.startsWith('rv-'))
         ? const <String>[]
         : results;
+    final queuedDetail = _queuedDetail(l10n);
+    final entryTitles = _entryTitles;
+    final shownTitles = min(entryTitles.length, _entryTitlesShown);
+    // What the task opened, less what is drawn; nothing under no titles.
+    final unseenEntries = shownTitles == 0 ? 0 : results.length - shownTitles;
+    final truncated =
+        task.type == 'acquire' && task.summary?['truncated'] == true;
     final subject = [
+      ?_untitledUrl,
       if (task.itemPid != null) task.itemPid!,
       if (produced.isNotEmpty) l10n.toolsProduced(produced.join(', ')),
     ].join(' · ');
@@ -649,14 +881,44 @@ class _TaskRow extends ConsumerWidget {
                         ),
                       ),
                     ],
-                    if (running) ...<Widget>[
-                      const SizedBox(height: WaxSpace.s8),
-                      WaxProgressBar(
-                        value: task.progressPct == null
-                            ? null
-                            : task.progressPct! / 100,
+                    if (queuedDetail != null) ...<Widget>[
+                      const SizedBox(height: WaxSpace.s4),
+                      Text(
+                        queuedDetail,
+                        style: WaxType.caption.copyWith(
+                          color: colors.textSecondary,
+                        ),
                       ),
                     ],
+                    RelativeTimeLine(
+                      at: _finished(task)
+                          ? task.finishedAt ?? task.createdAt
+                          : task.createdAt,
+                      kind: _finished(task)
+                          ? RelativeTimeKind.finished
+                          : RelativeTimeKind.queued,
+                    ),
+                    if (running) ...<Widget>[
+                      const SizedBox(height: WaxSpace.s8),
+                      WaxProgressBar(value: _barValue),
+                    ],
+                    if (activityCaption != null) ...<Widget>[
+                      const SizedBox(height: WaxSpace.s4),
+                      Text(
+                        activityCaption,
+                        style: WaxType.caption.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ],
+                    // Only the phases whose source reports activity can go
+                    // quiet: the others work without telling it.
+                    if (activity != null &&
+                        const {
+                          'downloading',
+                          'listing',
+                        }.contains(activity.phase))
+                      _Stall(at: activity.at),
                     if (waitReason != null) ...<Widget>[
                       const SizedBox(height: WaxSpace.s4),
                       Text(
@@ -681,7 +943,24 @@ class _TaskRow extends ConsumerWidget {
                     ],
                     // A wait's error is the server's account of what it
                     // waits out: detail under the sentence, not a failure.
-                    if (error != null) ...<Widget>[
+                    if (coded) ...<Widget>[
+                      const SizedBox(height: WaxSpace.s4),
+                      _TaskAccount(
+                        text: headline,
+                        style: WaxType.caption.copyWith(color: colors.error),
+                        onTap: open?.go,
+                      ),
+                      if (error != null &&
+                          error.isNotEmpty &&
+                          error != headline)
+                        _TaskDetail(
+                          taskId: task.id,
+                          text: error,
+                          style: WaxType.caption.copyWith(
+                            color: colors.textTertiary,
+                          ),
+                        ),
+                    ] else if (error != null) ...<Widget>[
                       const SizedBox(height: WaxSpace.s4),
                       _TaskAccount(
                         text: error,
@@ -702,6 +981,29 @@ class _TaskRow extends ConsumerWidget {
                         ),
                       ),
                     ],
+                    for (final title in entryTitles.take(_entryTitlesShown))
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: WaxType.caption.copyWith(
+                          color: colors.textTertiary,
+                        ),
+                      ),
+                    if (unseenEntries > 0)
+                      Text(
+                        l10n.toolsEntriesMore(unseenEntries),
+                        style: WaxType.caption.copyWith(
+                          color: colors.textTertiary,
+                        ),
+                      ),
+                    if (truncated)
+                      Text(
+                        l10n.toolsAcquireTruncated,
+                        style: WaxType.caption.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
                     if (summaryCounters != null) ...<Widget>[
                       const SizedBox(height: WaxSpace.s4),
                       Text(
@@ -737,6 +1039,17 @@ class _TaskRow extends ConsumerWidget {
                   label: l10n.toolsDismiss,
                   semanticsId: SemanticsIds.taskDismiss(task.id),
                   onPressed: () => unawaited(_dismiss(context, ref)),
+                ),
+              ] else if (!task.cancelRequested) ...<Widget>[
+                const SizedBox(width: WaxSpace.s8),
+                WaxIconButton(
+                  glyph: WaxIcons.stop,
+                  label: l10n.toolsCancelTask(switch (_untitledUrl) {
+                    final url? => l10n.toolsTaskTitled(typeLabel, url),
+                    _ => typeLabel,
+                  }),
+                  semanticsId: SemanticsIds.taskCancel(task.id),
+                  onPressed: () => unawaited(_cancel(context, ref)),
                 ),
               ],
             ],
@@ -802,6 +1115,111 @@ class _NextTryState extends State<_NextTry> {
       style: WaxType.caption.copyWith(
         color: WaxColors.of(context).textTertiary,
       ),
+    );
+  }
+}
+
+/// How long a running task has shown no sign of work, once that passes
+/// two minutes: one timer turns the line on at the threshold and then
+/// keeps its count a minute at a time, so a screen left open does not
+/// read a stall that has cleared or one that has grown.
+class _Stall extends StatefulWidget {
+  const _Stall({required this.at});
+
+  /// The last activity the server saw.
+  final DateTime at;
+
+  /// How old the last activity may be before the row says so.
+  static const threshold = Duration(minutes: 2);
+
+  @override
+  State<_Stall> createState() => _StallState();
+}
+
+class _StallState extends State<_Stall> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _arm();
+  }
+
+  @override
+  void didUpdateWidget(_Stall old) {
+    super.didUpdateWidget(old);
+    if (old.at != widget.at) _arm();
+  }
+
+  void _arm() {
+    _timer?.cancel();
+    final age = clock.now().difference(widget.at);
+    final left = age < _Stall.threshold
+        ? _Stall.threshold - age
+        : Duration(milliseconds: 60000 - age.inMilliseconds % 60000);
+    _timer = Timer(left, () {
+      if (!mounted) return;
+      setState(() {});
+      _arm();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final age = clock.now().difference(widget.at);
+    if (age < _Stall.threshold) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: WaxSpace.s4),
+      child: Text(
+        context.l10n.toolsActivityStalled(age.inMinutes),
+        style: WaxType.caption.copyWith(
+          color: WaxColors.of(context).textSecondary,
+        ),
+      ),
+    );
+  }
+}
+
+/// The server's own words under a failure it also gave a code for: shut
+/// until asked, since the sentence above already says it.
+class _TaskDetail extends StatefulWidget {
+  const _TaskDetail({
+    required this.taskId,
+    required this.text,
+    required this.style,
+  });
+
+  final String taskId;
+  final String text;
+  final TextStyle style;
+
+  @override
+  State<_TaskDetail> createState() => _TaskDetailState();
+}
+
+class _TaskDetailState extends State<_TaskDetail> {
+  var _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        WaxButton(
+          label: _open ? l10n.toolsHideDetails : l10n.toolsShowDetails,
+          kind: WaxButtonKind.inline,
+          semanticsId: SemanticsIds.taskErrorDetails(widget.taskId),
+          onPressed: () => setState(() => _open = !_open),
+        ),
+        if (_open) _TaskAccount(text: widget.text, style: widget.style),
+      ],
     );
   }
 }

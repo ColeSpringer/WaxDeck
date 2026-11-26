@@ -1154,7 +1154,7 @@ void main() {
     await tester.pumpAndSettle();
     container
         .read(localNotificationsProvider.notifier)
-        .record(NotificationKind.download, at: DateTime.now());
+        .recordDownloadCompleted(at: DateTime.now());
     await tester.pumpAndSettle();
 
     await tester.tap(

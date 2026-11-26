@@ -273,10 +273,10 @@ func (s *Server) CreateAcquisition(ctx context.Context, req CreateAcquisitionReq
 	if req.Body.Format != nil {
 		format = string(*req.Body.Format)
 	}
-	task, err := s.svc.Ingest.StartAcquisition(ctx, uc, req.Body.Url, string(req.Body.MediaType), deref(req.Body.LibraryPid), format, req.Body.Identify, req.Body.AcceptBestMatch)
+	task, err := s.svc.Ingest.StartAcquisition(ctx, uc, req.Body.Url, derefBool(req.Body.Playlist), string(req.Body.MediaType), deref(req.Body.LibraryPid), format, req.Body.Identify, req.Body.AcceptBestMatch)
 	if err != nil {
 		if k := service.KindOf(err); k == service.KindInvalid || k == service.KindNotFound {
-			return nil, refuse(http.StatusBadRequest, "invalid-request", serviceMessage(err))
+			return nil, refuseParams(http.StatusBadRequest, "invalid-request", serviceMessage(err), service.RefusalParams(err))
 		}
 		return nil, err
 	}

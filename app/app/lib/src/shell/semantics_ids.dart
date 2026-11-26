@@ -408,6 +408,8 @@ abstract final class SemanticsIds {
       'notification-row-$kind-none';
   static const String notificationsBell = 'notifications-bell';
   static const String notificationsClear = 'notifications-clear';
+  static const String notificationsClearCompleted =
+      'notifications-clear-completed';
   static const String notificationsClearConfirm = 'notifications-clear-confirm';
   static const String notificationsEmpty = 'notifications-empty';
   static const String notificationsMarkAllRead = 'notifications-mark-all-read';
@@ -1035,7 +1037,10 @@ abstract final class SemanticsIds {
   // tools: Long-running tools and their progress rows.
   static String jobRow(Object pid) => 'job-row-$pid';
   static const String openTasks = 'open-tasks';
+  static String taskCancel(Object id) => 'task-cancel-$id';
+  static const String taskCancelConfirm = 'task-cancel-confirm';
   static String taskDismiss(Object id) => 'task-dismiss-$id';
+  static String taskErrorDetails(Object id) => 'task-error-details-$id';
   static String taskRow(Object id) => 'task-row-$id';
   static const String tasksClearFinished = 'tasks-clear-finished';
   static const String tasksClearFinishedAll = 'tasks-clear-finished-all';
@@ -1048,6 +1053,7 @@ abstract final class SemanticsIds {
   static const String acquireAcceptBest = 'acquire-accept-best';
   static const String acquireFormat = 'acquire-format';
   static const String acquireIdentify = 'acquire-identify';
+  static const String acquirePlaylist = 'acquire-playlist';
   static const String acquireSubmit = 'acquire-submit';
   static const String acquireTasks = 'acquire-tasks';
   static const String acquireUrl = 'acquire-url';

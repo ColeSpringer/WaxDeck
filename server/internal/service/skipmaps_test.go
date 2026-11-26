@@ -33,6 +33,7 @@ func (stubFlowJobs) JobStatus(context.Context, string) (string, float64, int, st
 func (stubFlowJobs) DownloadJobResult(context.Context, string, int, string, os.FileMode) error {
 	return nil
 }
+func (stubFlowJobs) DeleteJob(context.Context, string) error { return nil }
 
 func TestSilenceMapStale(t *testing.T) {
 	t.Parallel()

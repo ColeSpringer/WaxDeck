@@ -4,6 +4,7 @@
     "acquireAcceptBest": "acquire-accept-best",
     "acquireFormat": "acquire-format",
     "acquireIdentify": "acquire-identify",
+    "acquirePlaylist": "acquire-playlist",
     "acquireSubmit": "acquire-submit",
     "acquireTasks": "acquire-tasks",
     "acquireUrl": "acquire-url",

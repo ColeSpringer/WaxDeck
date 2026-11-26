@@ -44,12 +44,18 @@ type Ingest struct {
 	// a test; an error stands in for that write's. Nothing in the server
 	// sets it.
 	appliedWriteHook func() error
+	// reviewTallyHook runs as the inbox recounts its review queue, in a
+	// test; nothing in the server sets it.
+	reviewTallyHook func()
 	// batchFinalizeMu serializes upload-batch finalization (the flip,
 	// entry opening, and member linking as one unit): two concurrent
 	// finalizes of one batch would otherwise both gather the same
 	// still-unlinked members and open duplicate review entries.
 	// Process-wide is fine - finalizes are rare and database-only.
 	batchFinalizeMu sync.Mutex
+	// reviewInboxMu serializes syncReviewInbox's read of the queue and
+	// write of the rows, so an older count never lands over a newer one.
+	reviewInboxMu sync.Mutex
 	// engine is the release matching engine; nil when no candidate
 	// source is configured (review entries then hold no candidates).
 	engine *match.Engine
@@ -82,6 +88,9 @@ type Ingest struct {
 	// change held, tried again when it lets go.
 	waitingForCatalog sync.Map
 	heldOff           sync.Map
+	// openedNS is when this process opened the service: a declined entry
+	// opened before it and still in flight was left by an earlier one.
+	openedNS int64
 	// fpcalcTimeout bounds one fpcalc run when set, defaultFpcalcTimeout
 	// otherwise.
 	fpcalcTimeout time.Duration
@@ -94,6 +103,19 @@ type Ingest struct {
 	// the acquire-from-URL surface (the catalog holds its own copy for
 	// show dispatch).
 	sourceProviders []source.Provider
+	// acquireProbeBudget bounds the check of a link before it is queued;
+	// zero is acquireProbeTimeout. A test shortens it.
+	acquireProbeBudget time.Duration
+	// acquireItemBound bounds one item's fetch in an acquisition or a
+	// sync; zero is acquireItemTimeout. A test shortens it.
+	acquireItemBound time.Duration
+	// acquireStallWindow is how long a download may show no activity
+	// before it is stopped; zero is acquireStallTimeout. A test shortens
+	// it.
+	acquireStallWindow time.Duration
+	// acquireItemCap is how many items one acquisition takes at most; zero
+	// is acquireMaxItems. A test lowers it.
+	acquireItemCap int
 	// releaseCovers fetches an approved release's cover; nil when matching
 	// is off. reviewCoverDir keeps the front an approval replaced, per
 	// entry, for its revert.
@@ -106,5 +128,6 @@ func newIngest(c *core, cfg Config) *Ingest {
 		core:            c,
 		matchWake:       make(chan struct{}, 1),
 		uploadRetention: cmp.Or(cfg.UploadRetention, 7*24*time.Hour),
+		openedNS:        time.Now().UnixNano(),
 	}
 }

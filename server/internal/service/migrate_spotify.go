@@ -91,6 +91,7 @@ func (l *Migrate) runSpotifyImport(ctx context.Context, t *wdb.ToolTask, uc *Use
 		if !read[f.Name] {
 			continue
 		}
+		prog.items(ctx, activityImporting, i, len(zr.File))
 		prog.report(ctx, float64(i+1)/float64(len(zr.File))*85)
 		base := path.Base(f.Name)
 		library := base == "YourLibrary.json"

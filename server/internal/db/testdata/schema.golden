@@ -349,16 +349,22 @@ table notification_targets
   index notification_targets_owner|unique=0|partial=0|(user_id,created_at_ns DESC,id)
 table notifications
   column body|TEXT|notnull=1|default=''|pk=0
+  column bumped_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column count|INTEGER|notnull=1|default=1|pk=0
   column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column dedupe_key|TEXT|notnull=0|default=<none>|pk=0
   column event|TEXT|notnull=1|default=<none>|pk=0
   column id|TEXT|notnull=0|default=<none>|pk=1
   column read_at_ns|INTEGER|notnull=0|default=<none>|pk=0
+  column resolved_at_ns|INTEGER|notnull=0|default=<none>|pk=0
   column target_pid|TEXT|notnull=0|default=<none>|pk=0
   column title|TEXT|notnull=1|default=''|pk=0
   column user_id|TEXT|notnull=1|default=<none>|pk=0
   fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
   autoindex pk|unique=1|(id)
-  index notifications_owner|unique=0|partial=0|(user_id,id DESC)
+  index notifications_keyed|unique=1|partial=1|(dedupe_key,user_id)
+  index notifications_owner|unique=0|partial=0|(user_id,bumped_at_ns DESC,id DESC)
+  index notifications_target|unique=0|partial=1|(target_pid)
   index notifications_unread|unique=0|partial=1|(user_id)
 table notify_outbox
   column attempts|INTEGER|notnull=1|default=0|pk=0
@@ -698,7 +704,10 @@ table timeline_stash
   index timeline_stash_expiry|unique=0|partial=0|(expires_at_ns)
 table tool_tasks
   column attempts|INTEGER|notnull=1|default=0|pk=0
+  column cancel_requested|INTEGER|notnull=1|default=0|pk=0
   column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column error_code|TEXT|notnull=1|default=''|pk=0
+  column error_params|TEXT|notnull=1|default=''|pk=0
   column error|TEXT|notnull=1|default=''|pk=0
   column finished_at_ns|INTEGER|notnull=1|default=0|pk=0
   column id|TEXT|notnull=0|default=<none>|pk=1
@@ -710,6 +719,7 @@ table tool_tasks
   column progress_pct|REAL|notnull=1|default=0|pk=0
   column result_pids|TEXT|notnull=1|default='[]'|pk=0
   column resumable|INTEGER|notnull=1|default=0|pk=0
+  column settle_pending|INTEGER|notnull=1|default=0|pk=0
   column state|TEXT|notnull=1|default='queued'|pk=0
   column summary|TEXT|notnull=1|default=''|pk=0
   column type|TEXT|notnull=1|default=<none>|pk=0

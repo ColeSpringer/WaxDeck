@@ -170,13 +170,35 @@ abstract interface class UploadsApi {
   ///
   /// Downloads audio from a source URL through the acquisition bridge as a
   /// background task: a single video, or every entry of a playlist or channel
-  /// (bounded to the first two hundred entries; the response task reports
-  /// progress per item). Downloaded files stage exactly like uploads, appear as
-  /// upload sessions, and flow through the same identify and review pipeline,
-  /// grouped into album units. Each file carries the source's own metadata in
-  /// its tags, and provenance tags record the origin, so content with no
-  /// canonical release reaches the review queue ready for keep-as-is or
-  /// mark-unofficial and stays hand-editable by the acquiring user afterward.
+  /// (bounded to the first two hundred entries; the task reports progress per
+  /// item, and what it is doing right now in its `activity`). A link naming
+  /// both a video and a playlist downloads the video unless `playlist` asks for
+  /// the list.
+  ///
+  /// A link that is not an `http` or `https` address answers 400
+  /// `invalid-request` with `params.reason` `invalid-address`. Unless the
+  /// server is set to fetch from private hosts, so does one whose host does not
+  /// resolve, and one on a private or local network answers it with
+  /// `blocked-address`.
+  ///
+  /// Before queuing, the server checks the link with the source, bounded to a
+  /// few seconds, and refuses it only on the source's verdict on the link (such
+  /// as an unavailable, private or deleted video or playlist, an empty
+  /// playlist, or a link the source cannot read): that answers 422
+  /// `source-refused`, with `params.reason` naming the verdict, and nothing is
+  /// queued. A check that gets no verdict queues the task anyway, and its run
+  /// checks again: one that cannot finish in time, and one that meets the
+  /// source's trouble at the time (`rate-limited`, `source-broken`,
+  /// `timed-out`, `unreachable`, or `video-private` for a sign-in wall). The
+  /// queued task carries the title the check read as `itemTitle`, and
+  /// `summary.url` and `summary.source` from the start.
+  ///
+  /// Downloaded files stage exactly like uploads, appear as upload sessions,
+  /// and flow through the same identify and review pipeline, grouped into album
+  /// units. Each file carries the source's own metadata in its tags, and
+  /// provenance tags record the origin, so content with no canonical release
+  /// reaches the review queue ready for keep-as-is or mark-unofficial and stays
+  /// hand-editable by the acquiring user afterward.
   ///
   /// What the fetch writes into a downloaded file's tags: the source's title;
   /// its channel as the artist, with a ` - Topic` channel suffix dropped; and
@@ -201,6 +223,7 @@ abstract interface class UploadsApi {
   /// task to follow (type `acquire`).
   Future<ToolTask> createAcquisition({
     required String url,
+    bool? playlist,
     required MediaType mediaType,
     String? libraryPid,
     String? format,

@@ -8,6 +8,7 @@ class AcquisitionRequest {
   const AcquisitionRequest({
     required this.url,
     required this.mediaType,
+    this.playlist,
     this.libraryPid,
     this.format,
     this.identify,
@@ -17,6 +18,12 @@ class AcquisitionRequest {
   /// The source URL: a single video, a playlist, or a channel the acquisition
   /// bridge understands.
   final String url;
+
+  /// For a link naming both a video and a playlist (a `watch?v=...&list=...`
+  /// link): true downloads the playlist, absent or false the video. A link
+  /// naming only a video downloads the video, and one naming only a playlist or
+  /// a channel downloads the list, whatever this says.
+  final bool? playlist;
 
   final String mediaType;
 

@@ -1,10 +1,16 @@
 // Uploads: the add sheet, the grouping dialog, and the uploads screen.
 
-import { expect, Locator } from '@playwright/test';
+import { expect, Locator, Request, Response } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { clickThrough, rectAtRest } from '../gestures';
+import {
+  clickThrough,
+  clickToward,
+  clickUntilRequested,
+  rectAtRest,
+  typeInto,
+} from '../gestures';
 
 export class Uploads extends Surface {
   /// The shell's add control, which an account with no upload right is
@@ -307,5 +313,66 @@ export class Uploads extends Surface {
       }
       await dialog.waitFor({ timeout: T.step });
     }).toPass({ timeout: T.fetch });
+  }
+
+  /// Open the Add from URL dialog from the Music screen.
+  async openAddFromUrl(): Promise<void> {
+    await clickThrough(this.control(SemanticsIds.musicAdd), this.control(SemanticsIds.addFromUrl));
+    await clickThrough(this.control(SemanticsIds.addFromUrl), this.control(SemanticsIds.acquireUrl));
+  }
+
+  /// The link field of that dialog.
+  acquireUrl(): Locator {
+    return this.control(SemanticsIds.acquireUrl);
+  }
+
+  /// The input inside it, the node that carries the field's error as its
+  /// description.
+  acquireUrlInput(): Locator {
+    return this.acquireUrl().locator('input');
+  }
+
+  /// Type [url] into the open dialog and send it, answering the server's
+  /// reply to the acquisition.
+  async sendUrl(url: string): Promise<Response> {
+    const page = this.ctx.page;
+    await typeInto(page, this.acquireUrl(), url);
+    const isAcquire = (r: Request) => r.url().endsWith('/acquisitions') && r.method() === 'POST';
+    const answered = page.waitForResponse((r) => isAcquire(r.request()), { timeout: T.fetch });
+    await clickUntilRequested(page, this.control(SemanticsIds.acquireSubmit), isAcquire);
+    return answered;
+  }
+
+  /// One task's row on the Tasks screen.
+  taskRow(id: string): Locator {
+    return this.control(SemanticsIds.taskRow(id));
+  }
+
+  /// Ask a running task to stop from its row. A task with review entries
+  /// staged asks first, and the dialog is confirmed; one with nothing
+  /// staged stops without asking.
+  async cancelTask(id: string): Promise<void> {
+    const cancel = this.control(SemanticsIds.taskCancel(id));
+    const confirmation = this.control(SemanticsIds.taskCancelConfirm);
+    await cancel.waitFor({ timeout: T.nav });
+    // A click loop, so never inside another `toPass`. A press that
+    // answered, with or without the dialog, leaves the cancel control
+    // gone; the press is only repeated while it is still there and
+    // nothing has asked.
+    await expect(async () => {
+      if ((await cancel.count()) > 0 && !(await confirmation.isVisible())) {
+        await cancel.click({ timeout: 2_000, force: true }).catch(() => {});
+      }
+      await expect
+        .poll(async () => (await confirmation.isVisible()) || (await cancel.count()) === 0, {
+          timeout: T.step,
+          message: 'the press should ask to confirm or stop the task',
+        })
+        .toBe(true);
+      if (await confirmation.isVisible()) {
+        await clickToward(confirmation, { gone: confirmation });
+      }
+      await expect(cancel).toHaveCount(0, { timeout: T.step });
+    }).toPass({ timeout: T.nav });
   }
 }

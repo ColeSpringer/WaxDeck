@@ -24,6 +24,7 @@ package service
 // the catalog stored.
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -395,30 +396,44 @@ type genreNormalizeResult struct {
 // alone instead of failing the pass. dryRun computes without writing.
 func (l *Reads) normalizeGenres(ctx context.Context, norm *genre.Normalizer, views []*model.ItemView, dryRun bool, sum *genreNormalizeSummary) (genreNormalizeResult, error) {
 	var res genreNormalizeResult
-	byValue := map[string][]model.PID{}
-	var order []string
-	for _, it := range views {
-		if it == nil || it.Genre == "" {
-			continue
-		}
+	// An item is counted once its outcome is: one with nothing to change
+	// at once, a candidate once its value's write (or a dry run's look at
+	// it) is done, so a pass stopped part way counts nothing past the stop.
+	type candidate struct {
+		pid      model.PID
+		from     string
+		unmapped []string
+	}
+	count := func(unmapped []string) {
 		res.scanned++
-		normalized, unmapped := norm.NormalizeScalar(it.Genre)
 		if len(unmapped) > 0 {
 			res.unmapped++
 			if sum != nil && len(sum.Samples.Unmapped) < genreSampleCap {
 				sum.Samples.Unmapped = append(sum.Samples.Unmapped, unmapped...)
 			}
 		}
+	}
+	countChange := func(c candidate, to string) {
+		count(c.unmapped)
+		if sum != nil && len(sum.Samples.Changes) < genreSampleCap {
+			sum.Samples.Changes = append(sum.Samples.Changes, c.from+" -> "+to)
+		}
+	}
+	byValue := map[string][]candidate{}
+	var order []string
+	for _, it := range views {
+		if it == nil || it.Genre == "" {
+			continue
+		}
+		normalized, unmapped := norm.NormalizeScalar(it.Genre)
 		if normalized == "" || normalized == it.Genre {
+			count(unmapped)
 			continue
 		}
 		if _, known := byValue[normalized]; !known {
 			order = append(order, normalized)
 		}
-		byValue[normalized] = append(byValue[normalized], it.PID)
-		if sum != nil && len(sum.Samples.Changes) < genreSampleCap {
-			sum.Samples.Changes = append(sum.Samples.Changes, it.Genre+" -> "+normalized)
-		}
+		byValue[normalized] = append(byValue[normalized], candidate{pid: it.PID, from: it.Genre, unmapped: unmapped})
 	}
 	if dryRun {
 		// A dry run's whole job is to report what the apply will do, so it
@@ -430,8 +445,17 @@ func (l *Reads) normalizeGenres(ctx context.Context, norm *genre.Normalizer, vie
 		// normalized catalog and bounded by how much is off-vocabulary
 		// otherwise.
 		for _, v := range order {
-			for _, pid := range byValue[v] {
-				if l.genreFieldLocked(ctx, pid) {
+			for _, c := range byValue[v] {
+				if err := ctx.Err(); err != nil {
+					return res, err
+				}
+				locked := l.genreFieldLocked(ctx, c.pid)
+				// A read the stop cut short answers no lock: not an outcome.
+				if err := ctx.Err(); err != nil {
+					return res, err
+				}
+				countChange(c, v)
+				if locked {
 					res.locked++
 					continue
 				}
@@ -441,7 +465,14 @@ func (l *Reads) normalizeGenres(ctx context.Context, norm *genre.Normalizer, vie
 		return res, nil
 	}
 	for _, v := range order {
-		pids := byValue[v]
+		if err := ctx.Err(); err != nil {
+			return res, err
+		}
+		group := byValue[v]
+		pids := make([]model.PID, len(group))
+		for i, c := range group {
+			pids[i] = c.pid
+		}
 		// Lock stays off: normalization is housekeeping, not a user
 		// decision, and locking would freeze the value against the
 		// enrichment and organize paths that may still improve it. The
@@ -459,6 +490,9 @@ func (l *Reads) normalizeGenres(ctx context.Context, norm *genre.Normalizer, vie
 			waxbin.EditOptions{SkipLocked: true, Lock: model.LockUnchanged, Source: model.SourceNormalize})
 		if err != nil {
 			return res, classify(err)
+		}
+		for _, c := range group {
+			countChange(c, v)
 		}
 		res.normalized += len(batch.Edited)
 		res.locked += len(batch.Skipped)
@@ -500,6 +534,7 @@ func (l *Reads) StartGenreNormalize(ctx context.Context, uc *UserCtx, dryRun boo
 		State:       taskStateQueued,
 		UserID:      uc.ID,
 		Params:      marshalJSON(genreNormalizeParams{DryRun: dryRun}),
+		Summary:     marshalJSON(map[string]any{"dryRun": dryRun}),
 		ResultPIDs:  "[]",
 		CreatedAtNS: time.Now().UnixNano(),
 	}
@@ -513,6 +548,15 @@ func (l *Reads) StartGenreNormalize(ctx context.Context, uc *UserCtx, dryRun boo
 // genreNormalizeParams is the persisted work order.
 type genreNormalizeParams struct {
 	DryRun bool `json:"dryRun"`
+}
+
+// genreSweepTotal is what a sweep that has done done items has in all, by
+// its count; 0, unknown, when the count failed.
+func genreSweepTotal(done, total int) int {
+	if total <= 0 {
+		return 0
+	}
+	return max(total, done)
 }
 
 // runGenreNormalize walks every item carrying a genre and normalizes it.
@@ -530,20 +574,43 @@ func (l *Reads) runGenreNormalize(ctx context.Context, t *wdb.ToolTask) error {
 	}
 	sum := genreNormalizeSummary{DryRun: p.DryRun}
 	q := query.New(query.EntityItems).WherePresence("genre", query.OpIsPresent).Build()
+	// What the sweep has in all, for its activity alone: a failed count
+	// leaves it unknown.
+	total, _ := l.lib.Count(ctx, q, "")
+	report := func(done int) {
+		l.Tools.noteActivity(ctx, t.ID, func(a *ToolTaskActivity) {
+			a.Phase, a.ItemsDone, a.ItemsTotal = activityProcessing, done, genreSweepTotal(done, total)
+		})
+	}
+	report(0)
+	// A sweep stopped short says what it did, kept on the task: a wait
+	// records none of it, and a cancel of the waiting task reads it there.
+	stopped := func(err error) error {
+		sum.Samples.Unmapped = dedupeStrings(sum.Samples.Unmapped, genreSampleCap)
+		l.Tools.keepAttemptSummary(ctx, t, sum)
+		return err
+	}
 	cursor := read.Cursor("")
 	for {
-		page, err := l.lib.QueryPage(ctx, q, cursor, 500, false, "")
+		if err := ctx.Err(); err != nil {
+			return stopped(err)
+		}
+		page, err := l.lib.QueryPage(ctx, q, cursor, cmp.Or(l.genrePage, 500), false, "")
 		if err != nil {
-			return classify(err)
+			if ctx.Err() != nil {
+				return stopped(err)
+			}
+			return stopped(classify(err))
 		}
 		res, err := l.normalizeGenres(ctx, norm, page.Items, p.DryRun, &sum)
-		if err != nil {
-			return err
-		}
+		report(sum.Scanned + res.scanned)
 		sum.Scanned += res.scanned
 		sum.Normalized += res.normalized
 		sum.Locked += res.locked
 		sum.Unmapped += res.unmapped
+		if err != nil {
+			return stopped(err)
+		}
 		if !page.HasMore {
 			break
 		}

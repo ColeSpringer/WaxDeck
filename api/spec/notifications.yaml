@@ -25,7 +25,10 @@ paths:
         reach the account that started the work: a catalog job (a scan,
         an analysis, an enrichment or organize run, emptying the
         trash) finished or failed, a book merge or split or a CUE split
-        failed or stopped for good (parked), or a health fix finished.
+        failed or stopped for good (parked), a URL download failed, or
+        a playlist sync asked for with Sync now failed (one whose
+        playlist or binding was removed meanwhile files nothing), or a
+        health fix finished.
         Work the server started on its own schedule notifies nobody.
         `catalog-reset` says the server built a new catalog because the
         old one's schema was another release's; its body counts the
@@ -432,15 +435,19 @@ paths:
       operationId: listMyNotifications
       summary: List the caller's notification inbox
       description: >
-        What happened to this account, newest first, whether or not any
-        delivery target was configured for it. The inbox is written on
-        every emit, so it is the record a client that was closed at the
-        time can still read; targets are how news leaves the server, not
-        where it is kept.
+        What happened to this account, by `updatedAt`, newest first,
+        whether or not any delivery target was configured for it: a row
+        that folds a new occurrence rises to the top under the same id
+        (see `Notification`). The inbox is written on every emit, so it
+        is the record a client that was closed at the time can still
+        read; targets are how news leaves the server, not where it is
+        kept.
 
 
-        Rows are pruned by age and by a per-account cap, so the inbox is
-        recent history rather than an audit log.
+        Rows are pruned by age, read from `updatedAt`, and by a
+        per-account cap, so the inbox is recent history rather than an
+        audit log; an unresolved `review-ready` or `signup-requested`
+        row is never pruned, since what it reports is still open.
       tags: [notifications]
       parameters:
         - name: cursor
@@ -472,8 +479,19 @@ paths:
     delete:
       operationId: clearMyNotifications
       summary: Empty the caller's notification inbox
-      description: Removes every row. Clearing an empty inbox answers 204.
+      description: >
+        Removes every row, or with `resolved` only the resolved ones
+        (Clear completed). Clearing an inbox with nothing to remove
+        answers 204.
       tags: [notifications]
+      parameters:
+        - name: resolved
+          in: query
+          description: >
+            True removes only rows with `resolvedAt`; absent or false
+            removes every row.
+          schema:
+            type: boolean
       responses:
         "204":
           description: Inbox emptied.
@@ -485,10 +503,14 @@ paths:
       operationId: markMyNotificationsRead
       summary: Mark inbox rows read
       description: >
-        Stamps `readAt` on the named rows, or on every unread row when
-        `ids` is absent or empty. Already-read rows keep the stamp they
-        have, and an id that names nothing is ignored: the caller asked
-        for those rows to be read and they are.
+        Stamps `readAt` on the rows `ids` names, or, with `events`, on
+        every unread row of those events (only those naming `targetPid`,
+        when it is given), so a client can settle rows it never loaded;
+        with neither, on every unread row. Already-read rows keep the
+        stamp they have, and an id that names nothing is ignored: the
+        caller asked for those rows to be read and they are. Non-empty
+        `ids` and `events` together, or `targetPid` without `events`, are
+        refused with `invalid-request`.
       tags: [notifications]
       requestBody:
         required: false
@@ -590,7 +612,35 @@ components:
         event name, so a client words the row itself and stays
         localized; `title` and `body` are the server's own English
         wording, for a client that does not know the event.
-      required: [id, event, title, body, createdAt]
+
+
+        Most events add one row per occurrence. A few fold instead,
+        keeping one unresolved row in each inbox: `review-ready`,
+        `import-completed` and `backup-completed` one row each,
+        `playlist-synced` one for each playlist (its per-run synced
+        notice; a notice that the playlist's sync was suspended adds a
+        row of its own), `episode-arrived` one for each show, and
+        `signup-requested` one for each pending account. A new
+        occurrence counts the row up, takes its wording and
+        `targetPid`, moves `updatedAt`, so the row rises to the top of
+        the listing under the same `id`, and marks it unread, except
+        an `import-completed` for the account that submitted the upload
+        or acquisition, which arrives read and folds without changing
+        the row's read state (an unread row stays unread).
+        `review-ready`'s `count` is recomputed from the account's review
+        queue as it changes; a fall leaves the read state and
+        `updatedAt` as they are, and the row resolves when the count
+        reaches zero. `signup-requested` resolves when the account it
+        names is approved, rejected or deleted, and deleting a playlist
+        or a podcast subscription resolves the rows that name it. A
+        resolve also marks an unread row read, so a resolved row never
+        counts toward `unreadCount`. A resolved row stays as history
+        until it is deleted, and a later occurrence starts a new row.
+        The `notification` sync marker fires for the account when a row
+        is added, folds, is recounted (`review-ready`'s count moving
+        either way) or resolves; marking rows read and deleting them
+        fire nothing.
+      required: [id, event, title, body, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -614,19 +664,47 @@ components:
             for `episode-downloaded`, the playlist for `playlist-synced`,
             the review entry (`rv-`) for `import-completed`, the catalog
             job (`jb-`) for `job-finished` and `job-failed`, the tool task
-            (`tk-`) for `tool-task-failed`, and the job or the tool task
-            that ran the fix for `health-fix-finished`. Absent for events that are about the
-            server rather than an item, for `subscription-failed`, whose
-            feed never became a show, and for `gpodder-device-removed`.
+            (`tk-`) for `tool-task-failed` (a book merge or split, a CUE
+            split, a URL download or a playlist sync), the job or the
+            tool task that ran the fix for `health-fix-finished`, and the
+            pending account (`us-`) for `signup-requested`. Absent for
+            other events that are about the server rather than an item,
+            for `review-ready`, which counts the whole queue, for
+            `subscription-failed`, whose feed never became a show, and
+            for `gpodder-device-removed`.
           example: pc-01JZX5N8QW3F4V9T2B7KD3M9R6
         createdAt:
           type: string
           format: date-time
-          description: When the event happened.
+          description: When the event happened, the row's first occurrence.
+        updatedAt:
+          type: string
+          format: date-time
+          description: >
+            The row's latest occurrence: `createdAt` for a row that never
+            folded one. The listing orders by it. A falling `count` and a
+            resolve leave it as it is.
+        count:
+          type: integer
+          minimum: 1
+          default: 1
+          description: >
+            How many occurrences the row folds; for `review-ready`, how
+            many entries wait in the account's review queue while the row
+            stands, a resolved row keeping the count it last had.
+        resolvedAt:
+          type: string
+          format: date-time
+          description: >
+            When what the row reports was dealt with: the account's review
+            queue emptied, the signup decided, the playlist or
+            subscription it names deleted. Absent while unresolved.
         readAt:
           type: string
           format: date-time
-          description: When the row was marked read. Absent while unread.
+          description: >
+            When the row was marked read, or resolved while unread.
+            Absent while unread.
 
     NotificationPage:
       type: object
@@ -635,7 +713,7 @@ components:
       properties:
         notifications:
           type: array
-          description: Rows newest first.
+          description: Rows by `updatedAt`, newest first.
           items:
             $ref: "#/components/schemas/Notification"
         nextCursor:
@@ -654,12 +732,28 @@ components:
         ids:
           type: array
           description: >
-            The rows to stamp. Absent or empty marks every unread row
-            read, which is what the "mark all read" affordance sends.
+            The rows to stamp. With `events` also absent or empty, marks
+            every unread row read, which is what the "mark all read"
+            affordance sends.
           maxItems: 200
           items:
             type: string
             example: nf-01JZX5N8QW3F4V9T2B7KD3M9R6
+        events:
+          type: array
+          description: >
+            Catalog event names: marks every unread row of these events
+            read, loaded or not. Refused beside a non-empty `ids`.
+          maxItems: 200
+          items:
+            type: string
+            example: review-ready
+        targetPid:
+          type: string
+          description: >
+            Narrows `events` to the rows naming this pid. Refused without
+            `events`.
+          example: pl-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     NotificationTarget:
       type: object

@@ -27,6 +27,9 @@ type fakeBookEngine struct {
 	dir  string
 	mu   sync.Mutex
 	jobs map[string][]fixtures.Spec
+	// running is how many polls of a job answer it still running first.
+	running int
+	polls   map[string]int
 }
 
 func newFakeBookEngine(t *testing.T) *fakeBookEngine {
@@ -95,6 +98,12 @@ func (e *fakeBookEngine) CreateSplitJob(_ context.Context, _ string, cuts []int6
 func (e *fakeBookEngine) JobStatus(_ context.Context, id string) (string, float64, int, string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.polls == nil {
+		e.polls = map[string]int{}
+	}
+	if e.polls[id]++; e.polls[id] <= e.running {
+		return "running", 50, 0, "", nil
+	}
 	return "done", 100, len(e.jobs[id]), "", nil
 }
 
@@ -112,6 +121,8 @@ func (e *fakeBookEngine) DownloadJobResult(_ context.Context, id string, index i
 	}
 	return os.WriteFile(dst, data, mode)
 }
+
+func (e *fakeBookEngine) DeleteJob(context.Context, string) error { return nil }
 
 // errStopped is how a test ends a book tool's run where a crash or a
 // restart would.

@@ -43,8 +43,10 @@ class NotificationsBell extends ConsumerWidget {
             // Not the index: the menu holds the list it opened with, and
             // news landing behind it shifts every index down one.
             value: row.location,
-            label: l10n.bellRow(row.surfaceOf(l10n), row.messageOf(l10n)),
+            label: l10n.bellRow(row.surfaceOf(l10n), row.bellLineOf(l10n)),
             glyph: row.glyph,
+            // A resolved row has nowhere left to go.
+            enabled: !row.resolved,
             semanticsId: row.semanticsId,
           ),
         if (rows.isNotEmpty)

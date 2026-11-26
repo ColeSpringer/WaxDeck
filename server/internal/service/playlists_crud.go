@@ -361,6 +361,8 @@ func (l *Playlists) removePlaylist(ctx context.Context, pl *model.Playlist) erro
 	if err := l.db.DeletePlaylistSource(ctx, string(pl.PID)); err != nil {
 		l.log.Warn("clearing playlist source binding", "playlist", pl.PID, "err", err)
 	}
+	// What the inbox says of it is settled for every account.
+	l.Integrations.resolveNotificationsFor(ctx, apiPID(PrefixPlaylist, pl.PID))
 	return nil
 }
 

@@ -49,6 +49,10 @@ func (p *Provider) fetch(ctx context.Context, req source.FetchRequest, w io.Writ
 	// requested transcode names its own container (opus, mp3, m4a, flac).
 	v, err := p.tap.Info(ctx, req.URL, waxtap.InfoBasic)
 	if err != nil {
+		if notAVideo(err) {
+			// In WaxDeck's words rather than WaxTap's advice to enumerate.
+			return nil, &syncsource.Refusal{Reason: syncsource.ReasonUnsupportedURL, Err: err}
+		}
 		return nil, err
 	}
 	tspec, ext := transcodeFor(opts.Format, v.Formats)
@@ -74,7 +78,7 @@ func (p *Provider) fetch(ctx context.Context, req source.FetchRequest, w io.Writ
 		Cut:            cut,
 		EmbedThumbnail: p.cfg.EmbedThumbnail,
 		EmbedMetadata:  p.cfg.EmbedMetadata,
-		Events:         p.warningEvents(ctx, req.URL),
+		Events:         p.downloadEvents(ctx, req.URL, opts.OnEvent),
 	}
 	if p.cfg.EmbedThumbnail {
 		// Conditional and not unconditional: a cover-art mode without an
@@ -181,6 +185,41 @@ func (p *Provider) warningEvents(ctx context.Context, url string) func(waxtap.Ev
 		}
 		p.log.Log(ctx, level, msg, "url", url, "code", e.Warning.Code.String(), "detail", e.Warning.Detail)
 	}
+}
+
+// downloadEvents is a download's event hook: the warnings are logged
+// (warningEvents), and onEvent, when set, hears what the download does in
+// a fetch's phases.
+func (p *Provider) downloadEvents(ctx context.Context, url string, onEvent func(syncsource.FetchEvent)) func(waxtap.Event) {
+	warn := p.warningEvents(ctx, url)
+	return func(e waxtap.Event) {
+		warn(e)
+		if onEvent == nil {
+			return
+		}
+		if ev, ok := fetchEventOf(e); ok {
+			onEvent(ev)
+		}
+	}
+}
+
+// fetchEventOf is a WaxTap event as a fetch's: the client chain and the
+// transfer are downloading, with the transfer's bytes, and every stage
+// after it processing, which WaxTap reports only as each begins. A
+// warning is activity in the phase at hand. The job's end says nothing
+// the fetch's return does not.
+func fetchEventOf(e waxtap.Event) (syncsource.FetchEvent, bool) {
+	switch e.Stage {
+	case waxtap.StageExtracting, waxtap.StageResolving:
+		return syncsource.FetchEvent{Phase: syncsource.PhaseDownloading}, true
+	case waxtap.StageDownloading:
+		return syncsource.FetchEvent{Phase: syncsource.PhaseDownloading, Bytes: e.Bytes, Total: e.Total}, true
+	case waxtap.StageWarning:
+		return syncsource.FetchEvent{}, true
+	case waxtap.StageDone, waxtap.StageFailed, waxtap.StageSkipped:
+		return syncsource.FetchEvent{}, false
+	}
+	return syncsource.FetchEvent{Phase: syncsource.PhaseProcessing}, true
 }
 
 // stampSourceTags runs the source tags pass on the downloaded file: the

@@ -3556,6 +3556,10 @@
   "@bellClear": {
     "description": "Empties the list: the last row of the open bell, and the action on the notifications screen."
   },
+  "bellClearCompleted": "Clear completed",
+  "@bellClearCompleted": {
+    "description": "Deletes the resolved rows of the inbox (a queue that emptied, a request that was decided); beside Mark all read on the notifications screen. Asks nothing: a resolved row carries no unactioned news."
+  },
   "bellClearConfirm": "Delete all notifications on every device? This cannot be undone.",
   "@bellClearConfirm": {
     "description": "Body of the confirmation before emptying the notification inbox, which is durable and shared across the account's devices."
@@ -3608,21 +3612,17 @@
   "@bellReadOverline": {
     "description": "Overline on a notification row somebody has already dealt with."
   },
-  "bellReviewChanged": "The review queue changed.",
-  "@bellReviewChanged": {
-    "description": "What a bell row says. Generic because the marker it comes from carries no detail; the surface it opens has it."
-  },
   "bellRow": "{surface}: {what}",
   "@bellRow": {
     "description": "One row of the bell: which surface moved, then what happened there.",
     "placeholders": {
       "surface": {
         "type": "String",
-        "example": "Uploads"
+        "example": "Backups"
       },
       "what": {
         "type": "String",
-        "example": "An upload changed."
+        "example": "Backup finished"
       }
     }
   },
@@ -3632,7 +3632,7 @@
     "placeholders": {
       "surface": {
         "type": "String",
-        "example": "Uploads"
+        "example": "Downloads"
       },
       "when": {
         "type": "String",
@@ -3680,14 +3680,6 @@
   "@bellSurfaceTasks": {
     "description": "Which surface a bell row is about."
   },
-  "bellSurfaceUploads": "Uploads",
-  "@bellSurfaceUploads": {
-    "description": "Which surface a bell row is about."
-  },
-  "bellTaskChanged": "A background task changed.",
-  "@bellTaskChanged": {
-    "description": "What a bell row says. Generic because the marker carries no detail."
-  },
   "bellTitle": "Notifications",
   "@bellTitle": {
     "description": "The word for notifications: the accessible name of the bell in the top app bar with nothing unread, and the title of the screen that holds the same list."
@@ -3705,10 +3697,6 @@
   "bellUnreadOverline": "Unread",
   "@bellUnreadOverline": {
     "description": "Overline on a notification row nobody has dealt with yet. Words rather than colour alone, so the state reads out."
-  },
-  "bellUploadChanged": "An upload changed.",
-  "@bellUploadChanged": {
-    "description": "What a bell row says. Generic because the marker carries no detail."
   },
   "bookAuthorUnknown": "Unknown author",
   "@bookAuthorUnknown": {
@@ -5263,6 +5251,10 @@
   "@errorInternal": {
     "description": "Error sentence for the spec code `internal`."
   },
+  "errorInvalidAddress": "That address is not one the server can fetch from: it has to be an http or https link whose host exists.",
+  "@errorInvalidAddress": {
+    "description": "Error sentence for the reason invalid-address, under `invalid-request`: a link whose scheme is not http or https, or whose host does not resolve."
+  },
   "errorInvalidRequest": "That request was not something the server could act on.",
   "@errorInvalidRequest": {
     "description": "Error sentence for the spec code `invalid-request`."
@@ -5323,9 +5315,77 @@
   "@errorServiceUnreachable": {
     "description": "Error sentence for the spec code `service-unreachable`, such as a scrobbling provider."
   },
+  "errorSourceAgeRestricted": "That video is age-restricted, so it cannot be downloaded.",
+  "@errorSourceAgeRestricted": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is age-restricted: the video is age-restricted."
+  },
+  "errorSourceBroken": "The bridge to that source needs maintenance. Ask whoever runs this server.",
+  "@errorSourceBroken": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is source-broken: the bridge to the source needs maintenance."
+  },
+  "errorSourceLive": "That is a live video. Try again once it has ended.",
+  "@errorSourceLive": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is live: the link is a live broadcast that has not ended."
+  },
+  "errorSourceMembersOnly": "That video is for channel members only.",
+  "@errorSourceMembersOnly": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is members-only: the video is limited to members of its channel."
+  },
+  "errorSourceNoAudio": "That link has no audio to download.",
+  "@errorSourceNoAudio": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is no-audio: the item carries no audio stream."
+  },
+  "errorSourceNotStarted": "That video has not started yet. Try again after it airs.",
+  "@errorSourceNotStarted": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is not-started: the link is a premiere or scheduled stream that has not begun."
+  },
+  "errorSourcePlaylistEmpty": "That playlist has no videos in it.",
+  "@errorSourcePlaylistEmpty": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is playlist-empty: the playlist exists and holds nothing to download."
+  },
+  "errorSourcePlaylistUnavailable": "That playlist is private or has been removed.",
+  "@errorSourcePlaylistUnavailable": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is playlist-unavailable: the playlist is private or deleted, so nothing can be read from it."
+  },
+  "errorSourceRateLimited": "The source is limiting requests right now. Try again later.",
+  "@errorSourceRateLimited": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is rate-limited: the source is rate-limiting this server."
+  },
+  "errorSourceRefused": "The source refused this link or one of its items.",
+  "@errorSourceRefused": {
+    "description": "Error sentence for the spec code `source-refused`, its general case: the source (such as YouTube) would not give the link or an item of it, for example a private playlist or a removed video."
+  },
+  "errorSourceRegionBlocked": "That video is not available where this server is.",
+  "@errorSourceRegionBlocked": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is region-blocked: the video is blocked in the server's region."
+  },
+  "errorSourceStalled": "The download stalled and was stopped. Try again.",
+  "@errorSourceStalled": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is stalled: the download made no progress and was stopped."
+  },
+  "errorSourceTimedOut": "The source took too long to answer. Try again.",
+  "@errorSourceTimedOut": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is timed-out: the source did not answer in time."
+  },
   "errorSourceUnavailable": "This server is not running the source that request needs.",
   "@errorSourceUnavailable": {
     "description": "Error sentence for the spec code `source-unavailable`: an acquisition integration this server does not run."
+  },
+  "errorSourceUnreachable": "The source could not be reached, or the connection broke off. Try again later.",
+  "@errorSourceUnreachable": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is unreachable: the server could not connect to the source, or the connection dropped partway."
+  },
+  "errorSourceUnsupportedUrl": "That is not a video, playlist or channel the source can read.",
+  "@errorSourceUnsupportedUrl": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is unsupported-url: the link is not a video, playlist or channel the source can read, a Shorts shelf included."
+  },
+  "errorSourceVideoPrivate": "That video needs a sign-in, so it cannot be downloaded.",
+  "@errorSourceVideoPrivate": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is video-private: the video is private or asks the viewer to sign in."
+  },
+  "errorSourceVideoUnavailable": "That video has been removed.",
+  "@errorSourceVideoUnavailable": {
+    "description": "Error sentence for the spec code `source-refused` when the params' reason is video-unavailable: the video was removed or no longer exists."
   },
   "errorStationDirectoryUnavailable": "The station directory did not answer; add a station by its stream URL in Radio.",
   "@errorStationDirectoryUnavailable": {
@@ -5368,6 +5428,10 @@
         "example": "permission denied"
       }
     }
+  },
+  "errorToolTaskCommitted": "It has started moving files, so it can no longer be canceled. It finishes, or puts them back, on its own.",
+  "@errorToolTaskCommitted": {
+    "description": "Error sentence for a cancel refused with `conflict` and the params' reason task-committed: a book merge or split, or a CUE split, has started moving library files, so it runs to its end or puts them back by itself."
   },
   "errorToolTaskParked": "An earlier merge or split of this stopped and needs attention. Clear it in Tasks, then try again.",
   "@errorToolTaskParked": {
@@ -8248,6 +8312,16 @@
   "@notifBackupCompletedHelp": {
     "description": "What the `backup-completed` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
   },
+  "notifBackupCompletedRowTitle": "{count, plural, =1{Backup finished} other{{count} backups finished}}",
+  "@notifBackupCompletedRowTitle": {
+    "description": "Heading of an inbox row for finished backups: the count where several folded into the row.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "notifBackupCompletedTitle": "Backup finished",
   "@notifBackupCompletedTitle": {
     "description": "Switch label for the `backup-completed` notification."
@@ -8271,6 +8345,16 @@
   "notifEpisodeArrivedHelp": "A subscribed show published a new episode",
   "@notifEpisodeArrivedHelp": {
     "description": "What the new-episode notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
+  },
+  "notifEpisodeArrivedRowTitle": "{count, plural, =1{New episode} other{{count} episode updates}}",
+  "@notifEpisodeArrivedRowTitle": {
+    "description": "Heading of an inbox row for new episodes of one show: the count where several arrivals folded into the row.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
   },
   "notifEpisodeArrivedTitle": "New episode",
   "@notifEpisodeArrivedTitle": {
@@ -8308,11 +8392,21 @@
   "@notifHealthFixFinishedTitle": {
     "description": "Heading of the notification that a library health fix the reader started finished. The line under it says what it filled."
   },
-  "notifImportCompletedHelp": "An import was filed without review",
+  "notifImportCompletedHelp": "An upload or acquisition was added to the library",
   "@notifImportCompletedHelp": {
     "description": "What the `import-completed` notification is about, drawn under its switch."
   },
-  "notifImportCompletedTitle": "Filed without review",
+  "notifImportCompletedRowTitle": "{count, plural, =1{Added to the library} other{{count} added to the library}}",
+  "@notifImportCompletedRowTitle": {
+    "description": "Heading of an inbox row for finished imports, true whether or not they were identified: the count where several folded into the row.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "notifImportCompletedTitle": "Added to the library",
   "@notifImportCompletedTitle": {
     "description": "Switch label for the `import-completed` notification."
   },
@@ -8336,6 +8430,16 @@
   "@notifPlaylistSyncedHelp": {
     "description": "Help under the playlist-synced row in the notification-events checklist."
   },
+  "notifPlaylistSyncedRowTitle": "{count, plural, =1{Playlist synced} other{Synced {count} times}}",
+  "@notifPlaylistSyncedRowTitle": {
+    "description": "Heading of an inbox row for one synced playlist: the count where several syncs folded into the row.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "notifPlaylistSyncedTitle": "Playlist synced",
   "@notifPlaylistSyncedTitle": {
     "description": "Title of the playlist-synced row in the notification-events checklist."
@@ -8344,6 +8448,20 @@
   "@notifReviewReadyHelp": {
     "description": "What the `review-ready` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
   },
+  "notifReviewReadyResolvedTitle": "Review queue cleared",
+  "@notifReviewReadyResolvedTitle": {
+    "description": "Heading of the review-ready inbox row once the review queue has emptied."
+  },
+  "notifReviewReadyRowTitle": "{count, plural, =1{Waiting for review} other{{count} waiting for review}}",
+  "@notifReviewReadyRowTitle": {
+    "description": "Heading of the review-ready inbox row: how many entries wait in the review queue.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "notifReviewReadyTitle": "Waiting for review",
   "@notifReviewReadyTitle": {
     "description": "Switch label for the `review-ready` notification."
@@ -8351,6 +8469,10 @@
   "notifSignupRequestedHelp": "A new account request is waiting for approval",
   "@notifSignupRequestedHelp": {
     "description": "What the `signup-requested` notification is about. Not drawn in the event checklist, where the title says it; the inbox row's line when the server sends no body."
+  },
+  "notifSignupRequestedResolvedTitle": "Request decided",
+  "@notifSignupRequestedResolvedTitle": {
+    "description": "Heading of a signup-requested inbox row once the account was approved, rejected or deleted."
   },
   "notifSignupRequestedTitle": "Account request",
   "@notifSignupRequestedTitle": {
@@ -16271,9 +16393,147 @@
   "@statsYearTopTracks": {
     "description": "Heading over the recap's five most-played tracks."
   },
+  "toolsAcquireTruncated": "Only the first 200 were taken",
+  "@toolsAcquireTruncated": {
+    "description": "Note under a finished playlist download: the listing stopped at its 200-item cap, so the rest was not taken."
+  },
+  "toolsActivityBytes": "{activity} ({done} of {total})",
+  "@toolsActivityBytes": {
+    "description": "A running download's caption with the size of the item in hand: what it is doing, then the bytes fetched of the bytes in all, each already written with its unit.",
+    "placeholders": {
+      "activity": {
+        "type": "String",
+        "example": "Downloading 3 of 37: Long Division"
+      },
+      "done": {
+        "type": "String",
+        "example": "4.2 MB"
+      },
+      "total": {
+        "type": "String",
+        "example": "9.8 MB"
+      }
+    }
+  },
+  "toolsActivityDownloading": "Downloading",
+  "@toolsActivityDownloading": {
+    "description": "Caption of a running task that is fetching audio, when it names no item."
+  },
+  "toolsActivityDownloadingCount": "Downloading {done} of {total}",
+  "@toolsActivityDownloadingCount": {
+    "description": "Caption of a running task fetching one of several items, with no title for it yet. {done} is the place of the item in hand.",
+    "placeholders": {
+      "done": {
+        "type": "int",
+        "example": "3"
+      },
+      "total": {
+        "type": "int",
+        "example": "37"
+      }
+    }
+  },
+  "toolsActivityDownloadingCountTitled": "Downloading {done} of {total}: {title}",
+  "@toolsActivityDownloadingCountTitled": {
+    "description": "Caption of a running task fetching one of several items. {done} is the place of the item in hand, {title} its title.",
+    "placeholders": {
+      "done": {
+        "type": "int",
+        "example": "3"
+      },
+      "total": {
+        "type": "int",
+        "example": "37"
+      },
+      "title": {
+        "type": "String",
+        "example": "Long Division"
+      }
+    }
+  },
+  "toolsActivityDownloadingTitled": "Downloading {title}",
+  "@toolsActivityDownloadingTitled": {
+    "description": "Caption of a running task fetching a single item, by its title.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Division"
+      }
+    }
+  },
+  "toolsActivityImporting": "Opening review entries",
+  "@toolsActivityImporting": {
+    "description": "Caption of a running download that is writing what it fetched into the review queue."
+  },
+  "toolsActivityImportingLibrary": "Adding to the library",
+  "@toolsActivityImportingLibrary": {
+    "description": "Caption of a running book merge or split or CUE split that is writing the files it produced into the library, in place of the review entries a download opens."
+  },
+  "toolsActivityImportingPlain": "Importing",
+  "@toolsActivityImportingPlain": {
+    "description": "Caption of a running import from another server or a listening service that is writing what it read into the library or a listening history."
+  },
+  "toolsActivityListing": "Listing the playlist",
+  "@toolsActivityListing": {
+    "description": "Caption of a running playlist download or playlist sync that is reading the playlist to see what it holds."
+  },
+  "toolsActivityListingChannel": "Listing the channel",
+  "@toolsActivityListingChannel": {
+    "description": "Caption of a running channel download that is reading the channel to see what it holds."
+  },
+  "toolsActivityProcessing": "Processing",
+  "@toolsActivityProcessing": {
+    "description": "Caption of a running task that is converting or cutting what it fetched, when it names no item."
+  },
+  "toolsActivityProcessingTitled": "Processing {title}",
+  "@toolsActivityProcessingTitled": {
+    "description": "Caption of a running task that is converting or cutting what it fetched, by the item title.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Long Division"
+      }
+    }
+  },
+  "toolsActivityStalled": "No activity for {minutes} min",
+  "@toolsActivityStalled": {
+    "description": "Caption on a running task whose last sign of work is more than two minutes old; {minutes} is how long. Min is the unit abbreviation.",
+    "placeholders": {
+      "minutes": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
   "toolsBookInTrash": "The book's files are in the trash until this finishes.",
   "@toolsBookInTrash": {
     "description": "Line on a book merge or split task whose sources are in the trash and whose new files are not yet the book: the book is missing from the library until the task finishes."
+  },
+  "toolsCancelAction": "Cancel task",
+  "@toolsCancelAction": {
+    "description": "Confirm button of the dialog that asks before stopping a download or playlist sync that has already opened review entries."
+  },
+  "toolsCancelBody": "Entries it has already opened stay in the review queue.",
+  "@toolsCancelBody": {
+    "description": "Body of the dialog that asks before canceling a download or playlist sync that has already opened review entries: what a cancel keeps."
+  },
+  "toolsCancelKeep": "Keep running",
+  "@toolsCancelKeep": {
+    "description": "Dismiss button of the dialog that asks before canceling a task: leaves the task running."
+  },
+  "toolsCancelTask": "Cancel {task}",
+  "@toolsCancelTask": {
+    "description": "Accessible name of the control that asks one unfinished task to stop, naming the task by its row title so rows are told apart.",
+    "placeholders": {
+      "task": {
+        "type": "String",
+        "example": "URL download: Long Division"
+      }
+    }
+  },
+  "toolsCancelTitle": "Cancel this task?",
+  "@toolsCancelTitle": {
+    "description": "Title of the dialog that asks before canceling a download or playlist sync that has already opened review entries."
   },
   "toolsClearAllAction": "Clear",
   "@toolsClearAllAction": {
@@ -16592,6 +16852,54 @@
   "@toolsEmptyTitle": {
     "description": "Empty state of the tool task list."
   },
+  "toolsEntriesMore": "{count, plural, =1{and 1 more} other{and {count} more}}",
+  "@toolsEntriesMore": {
+    "description": "Last line of a finished download's entry titles, after the first three: how many more it opened.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "toolsHealthScoped": "{count, plural, =1{For 1 chosen item} other{For {count} chosen items}}",
+  "@toolsHealthScoped": {
+    "description": "Line on a health fix queued for chosen items rather than every one: how many.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "toolsHideDetails": "Hide details",
+  "@toolsHideDetails": {
+    "description": "Folds away the server's own words under a failed task's sentence."
+  },
+  "toolsImportDryRun": "Dry run",
+  "@toolsImportDryRun": {
+    "description": "Line on an import task that was queued as a dry run and has no named account."
+  },
+  "toolsImportTarget": "Into {target}",
+  "@toolsImportTarget": {
+    "description": "Line on an import task: the account it imports into, by display name.",
+    "placeholders": {
+      "target": {
+        "type": "String",
+        "example": "Alice"
+      }
+    }
+  },
+  "toolsImportTargetDryRun": "Dry run into {target}",
+  "@toolsImportTargetDryRun": {
+    "description": "Line on an import task queued as a dry run: the account it would import into, by display name.",
+    "placeholders": {
+      "target": {
+        "type": "String",
+        "example": "Alice"
+      }
+    }
+  },
   "toolsItemsProduced": "{count, plural, =1{1 item} other{{count} items}}",
   "@toolsItemsProduced": {
     "description": "Line under a finished task: how many items it produced.",
@@ -16755,6 +17063,10 @@
   "@toolsShowAll": {
     "description": "Opens a task's account (why it failed or stopped, and where its files are) past its first lines."
   },
+  "toolsShowDetails": "Show details",
+  "@toolsShowDetails": {
+    "description": "Opens the server's own words under a failed task's sentence, which the sentence above translates."
+  },
   "toolsShowLess": "Show less",
   "@toolsShowLess": {
     "description": "Folds a task's opened account back to its first lines."
@@ -16762,6 +17074,10 @@
   "toolsStateCanceled": "Stopped",
   "@toolsStateCanceled": {
     "description": "State of a job the server stopped before it finished, as it shut down or restarted. Agrees with the word for a task in this language."
+  },
+  "toolsStateCanceling": "Canceling",
+  "@toolsStateCanceling": {
+    "description": "State of a running task that was asked to cancel and is winding down. It then ends canceled, or done when it finished first."
   },
   "toolsStateCrashed": "Crashed",
   "@toolsStateCrashed": {
@@ -16796,6 +17112,10 @@
         "example": "42"
       }
     }
+  },
+  "toolsStateTaskCanceled": "Canceled",
+  "@toolsStateTaskCanceled": {
+    "description": "State of a task that stopped because someone canceled it. Terminal, and it counts as finished: it is dismissed and cleared like a done task. Agrees with the word for a task in this language."
   },
   "toolsStateWaiting": "Waiting",
   "@toolsStateWaiting": {
@@ -16893,6 +17213,10 @@
   "@toolsTaskGenreNormalize": {
     "description": "Name of a task that folds genre spellings onto the canonical genre tree."
   },
+  "toolsTaskGenreNormalizePreview": "Genre clean-up (preview)",
+  "@toolsTaskGenreNormalizePreview": {
+    "description": "Name of the genre clean-up task when it was queued as a dry run that changes nothing."
+  },
   "toolsTaskHealthFix": "Fix: {rule}",
   "@toolsTaskHealthFix": {
     "description": "Name of a task fixing one library health rule. {rule} is the rule's own name.",
@@ -16955,6 +17279,36 @@
   "@toolsTasksSection": {
     "description": "Heading over the tool tasks list when the catalog's jobs are listed above it."
   },
+  "toolsTimeFinished": "finished {when}",
+  "@toolsTimeFinished": {
+    "description": "Line on a tool task or job that has ended: when, as a relative phrase such as '2 h ago'.",
+    "placeholders": {
+      "when": {
+        "type": "String",
+        "example": "2 h ago"
+      }
+    }
+  },
+  "toolsTimeQueued": "queued {when}",
+  "@toolsTimeQueued": {
+    "description": "Line on a tool task that is queued or running: when it was queued, as a relative phrase such as '5 min ago'.",
+    "placeholders": {
+      "when": {
+        "type": "String",
+        "example": "5 min ago"
+      }
+    }
+  },
+  "toolsTimeStarted": "started {when}",
+  "@toolsTimeStarted": {
+    "description": "Line on a library job that is running: when it started, as a relative phrase such as '5 min ago'.",
+    "placeholders": {
+      "when": {
+        "type": "String",
+        "example": "5 min ago"
+      }
+    }
+  },
   "toolsTitle": "Tool tasks",
   "@toolsTitle": {
     "description": "Title of the screen following long-running library work: merges, splits, downloads, imports."
@@ -16993,9 +17347,21 @@
   "@toolsWaitPutBackBlocked": {
     "description": "Why a book merge or split waits: undoing, it cannot put a file back from the trash."
   },
+  "toolsWaitRateLimited": "The source asked it to slow down.",
+  "@toolsWaitRateLimited": {
+    "description": "Why a waiting download waits: the source asked it to slow down, and it tries again after the pause the source named."
+  },
   "toolsWaitReadOnly": "A library it works in is read-only. Turn that off for it or the server.",
   "@toolsWaitReadOnly": {
     "description": "Why a waiting task waits: a library it works in, or the whole server, is in read-only mode."
+  },
+  "toolsWaitSourceRetry": "The source had a problem. It will try again.",
+  "@toolsWaitSourceRetry": {
+    "description": "Why a waiting download waits: the source failed in a way that may pass."
+  },
+  "toolsWaitStalled": "The download stalled. It will start again.",
+  "@toolsWaitStalled": {
+    "description": "Why a waiting download waits: it showed no activity for a while and was stopped to start over."
   },
   "toolsWaitStopped": "Cut short by a server stop or a time limit.",
   "@toolsWaitStopped": {
@@ -17047,9 +17413,35 @@
   "@uploadsAcceptBestTitle": {
     "description": "The switch under Identify that files music under its best MusicBrainz match without review, when that match is clear."
   },
+  "uploadsAcquireChecking": "Checking the link",
+  "@uploadsAcquireChecking": {
+    "description": "Label of the dialog's Download button while the server checks the link before queuing it."
+  },
+  "uploadsAcquirePlaylist": "Download the whole playlist",
+  "@uploadsAcquirePlaylist": {
+    "description": "The switch in the add-from-URL dialog, shown when the link names both a video and a playlist."
+  },
+  "uploadsAcquirePlaylistHelp": "Off downloads only the linked video",
+  "@uploadsAcquirePlaylistHelp": {
+    "description": "Info on the whole-playlist switch: what leaving it off does."
+  },
   "uploadsAcquireQueued": "Downloading; appears in review when ready",
   "@uploadsAcquireQueued": {
     "description": "Snackbar after asking the server to download from a URL."
+  },
+  "uploadsAcquireQueuedTitled": "{source, select, playlist{Downloading playlist {title}; appears in review when ready} channel{Downloading channel {title}; appears in review when ready} other{Downloading {title}; appears in review when ready}}",
+  "@uploadsAcquireQueuedTitled": {
+    "description": "Snackbar after a download from a URL was queued and the server named what it is. {source} is playlist, channel or video; {title} is its name.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "playlist"
+      },
+      "title": {
+        "type": "String",
+        "example": "Night Drive Mix"
+      }
+    }
   },
   "uploadsAcquireTasks": "Tasks",
   "@uploadsAcquireTasks": {

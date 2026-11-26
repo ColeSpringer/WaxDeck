@@ -1,11 +1,16 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
+import 'package:waxdeck/src/l10n/formats.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations.dart'
+    show lookupAppLocalizations;
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_es.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/tools/tasks_screen.dart';
@@ -332,6 +337,9 @@ void main() {
       'put-back-blocked':
           'A file cannot leave the trash: free its place or fix its folder.',
       'stopped': 'Cut short by a server stop or a time limit.',
+      'source-retry': 'The source had a problem. It will try again.',
+      'rate-limited': 'The source asked it to slow down.',
+      'stalled': 'The download stalled. It will start again.',
       'other': 'Something passing got in the way.',
       'a-reason-from-later': 'Something passing got in the way.',
     };
@@ -368,6 +376,48 @@ void main() {
       );
       i++;
     }
+  });
+
+  testWidgets('the wait sentences added for downloads read in Spanish', (
+    tester,
+  ) async {
+    final es = AppLocalizationsEs();
+    final reasons = {
+      'source-retry': es.toolsWaitSourceRetry,
+      'rate-limited': es.toolsWaitRateLimited,
+      'stalled': es.toolsWaitStalled,
+      'other': es.toolsWaitOther,
+    };
+    final repo = FakeRepository();
+    var i = 0;
+    for (final reason in reasons.keys) {
+      repo.toolTasksById['tt-$i'] = ToolTask(
+        id: 'tt-$i',
+        type: 'acquire',
+        state: 'running',
+        waitReason: reason,
+        createdAt: DateTime.utc(2026, 7, 1, 0, i),
+      );
+      i++;
+    }
+    await pumpApp(
+      tester,
+      const TasksScreen(),
+      container: appContainer(repo: repo),
+      locale: const Locale('es'),
+    );
+
+    i = 0;
+    for (final sentence in reasons.values) {
+      expect(
+        find.descendant(of: _row('tt-$i'), matching: find.text(sentence)),
+        findsOneWidget,
+        reason: reasons.keys.elementAt(i),
+      );
+      i++;
+    }
+    // The words are Spanish, not the English fallthrough.
+    expect(es.toolsWaitStalled, isNot(AppLocalizationsEn().toolsWaitStalled));
   });
 
   testWidgets('a waiting task reads in Spanish too', (tester) async {
@@ -752,6 +802,53 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('task-summary-dialog')), findsOneWidget);
     expect(find.textContaining('"matched": 41'), findsOneWidget);
+  });
+
+  testWidgets('a failure whose summary holds only what the task was queued '
+      'with offers no report', (tester) async {
+    // Queue-time keys are the row's name and scope, and a download's entry
+    // keys say what it opened: none of them is a report to open.
+    final repo = FakeRepository();
+    final summaries = <String, (String, Map<String, Object?>)>{
+      'tt-url': ('acquire', {'url': 'https://v.example/x', 'source': 'video'}),
+      'tt-ran': (
+        'acquire',
+        {
+          'url': 'https://v.example/x',
+          'source': 'video',
+          'entries': 2,
+          'truncated': false,
+        },
+      ),
+      'tt-imp': ('import-jellyfin', {'target': 'music', 'dryRun': false}),
+      'tt-gn': ('genre-normalize', {'dryRun': true, 'scoped': true}),
+    };
+    for (final MapEntry(key: id, value: (type, summary)) in summaries.entries) {
+      repo.toolTasksById[id] = ToolTask(
+        id: id,
+        type: type,
+        state: 'failed',
+        error: 'the source refused it',
+        summary: summary,
+        createdAt: DateTime.utc(2026, 7, 1),
+        finishedAt: DateTime.utc(2026, 7, 1, 1),
+      );
+    }
+    repo.toolTasksById['tt-rep'] = ToolTask(
+      id: 'tt-rep',
+      type: 'import-jellyfin',
+      state: 'failed',
+      error: 'the server went away mid-import',
+      summary: const {'target': 'music', 'dryRun': false, 'matched': 4},
+      createdAt: DateTime.utc(2026, 7, 1),
+      finishedAt: DateTime.utc(2026, 7, 1, 1),
+    );
+    await _pump(tester, repo);
+
+    for (final id in summaries.keys) {
+      expect(_forward(_row(id)), findsNothing, reason: id);
+    }
+    expect(_forward(_row('tt-rep')), findsOneWidget);
   });
 
   testWidgets('a dismiss of a row already gone still clears it', (
@@ -1909,5 +2006,1086 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  group('a failed task', () {
+    ToolTask failed({
+      String? code,
+      Map<String, String>? params,
+      String? error = 'video unavailable (private)',
+    }) => ToolTask(
+      id: 'tt-f',
+      type: 'acquire',
+      state: 'failed',
+      error: error,
+      errorCode: code,
+      errorParams: params,
+      createdAt: DateTime.utc(2026, 7, 1),
+      finishedAt: DateTime.utc(2026, 7, 1, 1),
+    );
+
+    Finder inRow(String text) =>
+        find.descendant(of: _row('tt-f'), matching: find.text(text));
+
+    testWidgets('headlines the translated sentence for its code and folds '
+        'the server sentence out', (tester) async {
+      final repo = FakeRepository();
+      repo.toolTasksById['tt-f'] = failed(
+        code: 'source-refused',
+        params: const {'reason': 'video-private'},
+      );
+      await _pump(tester, repo);
+
+      expect(
+        inRow(AppLocalizationsEn().errorSourceVideoPrivate),
+        findsOneWidget,
+      );
+      expect(inRow('video unavailable (private)'), findsNothing);
+
+      // One control under one id, whichever way it reads.
+      final toggle = find.bySemanticsIdentifier(
+        SemanticsIds.taskErrorDetails('tt-f'),
+      );
+      expect(toggle, findsOneWidget);
+      await tester.tap(toggle);
+      await tester.pump();
+      expect(inRow('video unavailable (private)'), findsOneWidget);
+      expect(
+        inRow(AppLocalizationsEn().errorSourceVideoPrivate),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Hide details'));
+      await tester.pump();
+      expect(inRow('video unavailable (private)'), findsNothing);
+    });
+
+    testWidgets('a parked row keeps its server sentence whatever code it '
+        'carries', (tester) async {
+      final repo = FakeRepository();
+      repo.toolTasksById['tt-f'] = ToolTask(
+        id: 'tt-f',
+        type: 'book-merge',
+        state: 'parked',
+        error: 'stopped: its last 3 runs ended with the server',
+        errorCode: 'source-refused',
+        errorParams: const {'reason': 'video-private'},
+        createdAt: DateTime.utc(2026, 7, 1),
+        finishedAt: DateTime.utc(2026, 7, 1, 1),
+      );
+      await _pump(tester, repo);
+
+      expect(
+        inRow('stopped: its last 3 runs ended with the server'),
+        findsOneWidget,
+      );
+      expect(inRow(AppLocalizationsEn().errorSourceVideoPrivate), findsNothing);
+      expect(find.text('Show details'), findsNothing);
+    });
+
+    testWidgets('a code this app does not know shows the server sentence '
+        'once, with nothing to fold', (tester) async {
+      final repo = FakeRepository();
+      repo.toolTasksById['tt-f'] = failed(code: 'a-code-from-later');
+      await _pump(tester, repo);
+
+      expect(inRow('video unavailable (private)'), findsOneWidget);
+      expect(find.text('Show details'), findsNothing);
+    });
+
+    testWidgets('an internal code shows the server sentence once, with '
+        'nothing to fold', (tester) async {
+      // The server codes an unclassified failure `internal`, which says
+      // less than the sentence it came with.
+      final repo = FakeRepository();
+      repo.toolTasksById['tt-f'] = failed(code: 'internal');
+      await _pump(tester, repo);
+
+      expect(inRow('video unavailable (private)'), findsOneWidget);
+      expect(inRow(AppLocalizationsEn().errorInternal), findsNothing);
+      expect(find.text('Show details'), findsNothing);
+    });
+
+    testWidgets('an internal code with no server sentence headlines its own '
+        'copy', (tester) async {
+      for (final error in <String?>[null, '']) {
+        final repo = FakeRepository();
+        repo.toolTasksById['tt-f'] = failed(code: 'internal', error: error);
+        await _pump(tester, repo);
+
+        expect(
+          inRow(AppLocalizationsEn().errorInternal),
+          findsOneWidget,
+          reason: '$error',
+        );
+        expect(find.text('Show details'), findsNothing);
+      }
+    });
+
+    testWidgets('a code with no server sentence has no details to open', (
+      tester,
+    ) async {
+      final repo = FakeRepository();
+      repo.toolTasksById['tt-f'] = failed(code: 'timeout', error: null);
+      await _pump(tester, repo);
+
+      expect(inRow(AppLocalizationsEn().errorTimeout), findsOneWidget);
+      expect(find.text('Show details'), findsNothing);
+    });
+
+    testWidgets('with no code keeps the server sentence as it was', (
+      tester,
+    ) async {
+      final repo = FakeRepository();
+      repo.toolTasksById['tt-f'] = failed();
+      await _pump(tester, repo);
+
+      expect(inRow('video unavailable (private)'), findsOneWidget);
+      expect(find.text('Show details'), findsNothing);
+    });
+
+    testWidgets('reads in Spanish', (tester) async {
+      final repo = FakeRepository();
+      repo.toolTasksById['tt-f'] = failed(
+        code: 'source-refused',
+        params: const {'reason': 'video-private'},
+      );
+      await pumpApp(
+        tester,
+        const TasksScreen(),
+        container: appContainer(repo: repo),
+        locale: const Locale('es'),
+      );
+
+      expect(
+        inRow(AppLocalizationsEs().errorSourceVideoPrivate),
+        findsOneWidget,
+      );
+      expect(find.text('Ver detalles'), findsOneWidget);
+    });
+  });
+
+  group('a running task', () {
+    ToolTask running(
+      ToolTaskActivity? activity, {
+      double? pct,
+      String? waitReason,
+      String type = 'acquire',
+      Map<String, Object?>? summary,
+    }) => ToolTask(
+      id: 'tt-a',
+      type: type,
+      summary: summary,
+      state: 'running',
+      progressPct: pct,
+      activity: activity,
+      waitReason: waitReason,
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+
+    Future<void> showRow(WidgetTester tester, ToolTask task) async {
+      final repo = FakeRepository();
+      repo.toolTasksById[task.id] = task;
+      await _mount(tester, repo);
+      // No pumpAndSettle: a bar animates.
+      await tester.pump();
+      await tester.pump();
+    }
+
+    Finder inRow(String text) =>
+        find.descendant(of: _row('tt-a'), matching: find.text(text));
+
+    ToolTaskActivity phase(
+      String phase, {
+      int? done,
+      int? total,
+      String? title,
+      int? bytes,
+      int? bytesTotal,
+      DateTime? at,
+    }) => ToolTaskActivity(
+      phase: phase,
+      at: at ?? clock.now(),
+      itemsDone: done,
+      itemsTotal: total,
+      itemTitle: title,
+      bytesDone: bytes,
+      bytesTotal: bytesTotal,
+    );
+
+    testWidgets('says what it is doing, phase by phase', (tester) async {
+      final cases = <(ToolTaskActivity, String)>[
+        (phase('listing'), 'Listing the playlist'),
+        (phase('importing'), 'Opening review entries'),
+        (phase('processing'), 'Processing'),
+        (
+          phase('processing', title: 'Long Division'),
+          'Processing Long Division',
+        ),
+        (phase('downloading'), 'Downloading'),
+        (
+          phase('downloading', title: 'Long Division'),
+          'Downloading Long Division',
+        ),
+        // One item is not "1 of 1".
+        (
+          phase('downloading', done: 0, total: 1, title: 'Long Division'),
+          'Downloading Long Division',
+        ),
+        (phase('downloading', done: 2, total: 37), 'Downloading 3 of 37'),
+        (
+          phase('downloading', done: 2, total: 37, title: 'Long Division'),
+          'Downloading 3 of 37: Long Division',
+        ),
+        (
+          phase(
+            'downloading',
+            done: 2,
+            total: 37,
+            title: 'Long Division',
+            bytes: 4404019,
+            bytesTotal: 10276045,
+          ),
+          'Downloading 3 of 37: Long Division (4.2 MB of 9.8 MB)',
+        ),
+        (
+          phase(
+            'downloading',
+            title: 'Long Division',
+            bytes: 900 * 1024,
+            bytesTotal: 10276045,
+          ),
+          'Downloading Long Division (900 KB of 9.8 MB)',
+        ),
+        // A size the source never gave leaves the bytes out.
+        (
+          phase('downloading', title: 'Long Division', bytes: 4404019),
+          'Downloading Long Division',
+        ),
+      ];
+      for (final (activity, caption) in cases) {
+        await showRow(tester, running(activity));
+        expect(inRow(caption), findsOneWidget, reason: caption);
+      }
+    });
+
+    testWidgets('listing follows the link: a channel, a playlist, a sync', (
+      tester,
+    ) async {
+      final cases = <(String, Map<String, Object?>?, String)>[
+        ('acquire', {'source': 'channel'}, 'Listing the channel'),
+        ('acquire', {'source': 'playlist'}, 'Listing the playlist'),
+        ('acquire', null, 'Listing the playlist'),
+        ('playlist-sync', null, 'Listing the playlist'),
+      ];
+      for (final (type, summary, caption) in cases) {
+        await showRow(
+          tester,
+          running(phase('listing'), type: type, summary: summary),
+        );
+        expect(inRow(caption), findsOneWidget, reason: '$type $summary');
+      }
+    });
+
+    testWidgets('listing a channel reads in Spanish', (tester) async {
+      final es = AppLocalizationsEs();
+      final repo = FakeRepository();
+      repo.toolTasksById['tt-a'] = running(
+        phase('listing'),
+        summary: const {'source': 'channel'},
+      );
+      await mountApp(
+        tester,
+        const TasksScreen(),
+        container: appContainer(repo: repo),
+        locale: const Locale('es'),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(inRow(es.toolsActivityListingChannel), findsOneWidget);
+      expect(inRow(es.toolsActivityListing), findsNothing);
+    });
+
+    testWidgets('importing follows the kind: review entries for a download '
+        'or a sync, the library for the rest', (tester) async {
+      for (final type in ['acquire', 'playlist-sync']) {
+        await showRow(tester, running(phase('importing'), type: type));
+        expect(inRow('Opening review entries'), findsOneWidget, reason: type);
+      }
+      for (final type in ['book-merge', 'book-split', 'cue-split']) {
+        await showRow(tester, running(phase('importing'), type: type));
+        expect(inRow('Adding to the library'), findsOneWidget, reason: type);
+        expect(inRow('Opening review entries'), findsNothing, reason: type);
+      }
+      // A listening-history import writes no library item.
+      for (final type in [
+        'import-jellyfin',
+        'import-lastfm',
+        'import-spotify',
+      ]) {
+        await showRow(tester, running(phase('importing'), type: type));
+        expect(inRow('Importing'), findsOneWidget, reason: type);
+        expect(inRow('Adding to the library'), findsNothing, reason: type);
+        expect(inRow('Opening review entries'), findsNothing, reason: type);
+      }
+    });
+
+    testWidgets('importing reads in Spanish by kind', (tester) async {
+      final es = AppLocalizationsEs();
+      final repo = FakeRepository();
+      repo.toolTasksById['tt-a'] = running(
+        phase('importing'),
+        type: 'book-merge',
+      );
+      await mountApp(
+        tester,
+        const TasksScreen(),
+        container: appContainer(repo: repo),
+        locale: const Locale('es'),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(inRow(es.toolsActivityImportingLibrary), findsOneWidget);
+      expect(inRow(es.toolsActivityImporting), findsNothing);
+
+      repo.toolTasksById['tt-a'] = running(
+        phase('importing'),
+        type: 'import-lastfm',
+      );
+      await mountApp(
+        tester,
+        const TasksScreen(),
+        container: appContainer(repo: repo),
+        locale: const Locale('es'),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(inRow(es.toolsActivityImportingPlain), findsOneWidget);
+    });
+
+    testWidgets('a phase this app does not know adds no caption', (
+      tester,
+    ) async {
+      // No server sets these two, so they draw nothing.
+      await showRow(tester, running(phase('probing', title: 'X')));
+      expect(inRow('X'), findsNothing);
+      expect(inRow('Checking the link'), findsNothing);
+      await showRow(tester, running(phase('waiting', title: 'X')));
+      expect(inRow('X'), findsNothing);
+      await showRow(tester, running(phase('rewinding-tape', title: 'X')));
+      expect(inRow('X'), findsNothing);
+      expect(find.textContaining('No activity'), findsNothing);
+    });
+
+    testWidgets('its bar is determinate once it reports, and indeterminate '
+        'before', (tester) async {
+      WaxProgressBar bar() => tester.widget<WaxProgressBar>(
+        find.descendant(
+          of: _row('tt-a'),
+          matching: find.byType(WaxProgressBar),
+        ),
+      );
+
+      await showRow(tester, running(null));
+      expect(bar().value, isNull);
+
+      await showRow(tester, running(null, pct: 0));
+      expect(bar().value, isNull);
+      // A bar that sweeps says no percent.
+      expect(inRow('Running'), findsOneWidget);
+      expect(inRow('Running · 0%'), findsNothing);
+
+      await showRow(tester, running(null, pct: 40));
+      expect(bar().value, closeTo(0.4, 1e-9));
+
+      // Activity with nothing finished is an empty bar, not one that sweeps.
+      await showRow(tester, running(phase('downloading')));
+      expect(bar().value, 0);
+
+      await showRow(
+        tester,
+        running(phase('downloading', done: 2, total: 37), pct: 8.1),
+      );
+      expect(bar().value, closeTo(0.081, 1e-9));
+      expect(inRow('Running · 8%'), findsOneWidget);
+    });
+
+    testWidgets('says nothing of a stall until the last activity is two '
+        'minutes old, then counts the minutes', (tester) async {
+      final seen = clock.now();
+      await showRow(
+        tester,
+        running(
+          phase(
+            'downloading',
+            title: 'Long Division',
+            at: seen.subtract(const Duration(seconds: 70)),
+          ),
+        ),
+      );
+      expect(find.textContaining('No activity'), findsNothing);
+
+      // 70 s old, plus 49 s: still short of two minutes.
+      await tester.pump(const Duration(seconds: 49));
+      expect(find.textContaining('No activity'), findsNothing);
+
+      await tester.pump(const Duration(seconds: 2));
+      expect(inRow('No activity for 2 min'), findsOneWidget);
+      expect(
+        tester.widget<Text>(inRow('No activity for 2 min')).style?.color,
+        WaxColors.of(tester.element(_row('tt-a'))).textSecondary,
+      );
+      // What it was doing stays beside it.
+      expect(inRow('Downloading Long Division'), findsOneWidget);
+
+      // The count follows the clock without another fetch.
+      await tester.pump(const Duration(minutes: 3));
+      expect(inRow('No activity for 5 min'), findsOneWidget);
+    });
+
+    testWidgets('only the phases whose source reports activity can stall', (
+      tester,
+    ) async {
+      final old = clock.now().subtract(const Duration(minutes: 9));
+      for (final name in ['downloading', 'listing']) {
+        await showRow(tester, running(phase(name, at: old)));
+        expect(inRow('No activity for 9 min'), findsOneWidget, reason: name);
+      }
+      for (final name in [
+        'processing',
+        'importing',
+        'probing',
+        'waiting',
+        'rewinding-tape',
+      ]) {
+        await showRow(tester, running(phase(name, at: old)));
+        expect(find.textContaining('No activity'), findsNothing, reason: name);
+      }
+    });
+
+    testWidgets('a fresh sign of life clears the stall', (tester) async {
+      final repo = FakeRepository();
+      repo.toolTasksById['tt-a'] = running(
+        phase(
+          'downloading',
+          at: clock.now().subtract(const Duration(minutes: 9)),
+        ),
+      );
+      await _mount(tester, repo);
+      await tester.pump();
+      await tester.pump();
+      expect(inRow('No activity for 9 min'), findsOneWidget);
+
+      repo.toolTasksById['tt-a'] = running(phase('downloading'));
+      ProviderScope.containerOf(
+        tester.element(find.byType(TasksScreen)),
+      ).invalidate(toolTasksProvider);
+      await tester.pump();
+      await tester.pump();
+      expect(find.textContaining('No activity'), findsNothing);
+    });
+
+    testWidgets('a waiting task is not called stalled, and shows no phase', (
+      tester,
+    ) async {
+      await showRow(
+        tester,
+        running(
+          phase(
+            'downloading',
+            title: 'Long Division',
+            at: clock.now().subtract(const Duration(minutes: 9)),
+          ),
+          waitReason: 'rate-limited',
+        ),
+      );
+      expect(find.textContaining('No activity'), findsNothing);
+      expect(inRow('Downloading Long Division'), findsNothing);
+      expect(inRow('The source asked it to slow down.'), findsOneWidget);
+    });
+
+    testWidgets('a queued task has no stall to report', (tester) async {
+      await showRow(
+        tester,
+        ToolTask(
+          id: 'tt-a',
+          type: 'acquire',
+          state: 'queued',
+          createdAt: DateTime.utc(2026, 7, 1),
+        ),
+      );
+      expect(find.textContaining('No activity'), findsNothing);
+    });
+
+    testWidgets('reads in Spanish', (tester) async {
+      final repo = FakeRepository();
+      repo.toolTasksById['tt-a'] = running(
+        phase(
+          'downloading',
+          done: 2,
+          total: 37,
+          title: 'Long Division',
+          bytes: 4404019,
+          bytesTotal: 10276045,
+          at: clock.now().subtract(const Duration(minutes: 3)),
+        ),
+      );
+      await mountApp(
+        tester,
+        const TasksScreen(),
+        container: appContainer(repo: repo),
+        locale: const Locale('es'),
+      );
+      await tester.pump();
+      await tester.pump();
+      final es = AppLocalizationsEs();
+      expect(
+        inRow(
+          es.toolsActivityBytes(
+            es.toolsActivityDownloadingCountTitled(3, 37, 'Long Division'),
+            es.formatBytes(4404019),
+            es.formatBytes(10276045),
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(inRow(es.toolsActivityStalled(3)), findsOneWidget);
+    });
+  });
+
+  group('a canceled task that left files', () {
+    ToolTask canceledMerge() => ToolTask(
+      id: 'tt-c',
+      type: 'book-merge',
+      state: 'canceled',
+      itemPid: 'bk-1',
+      error:
+          'canceled; these files could not be removed and are still in '
+          'Ada/Book: part 1.tmp, part 2.tmp',
+      createdAt: DateTime.utc(2026, 7, 1),
+      finishedAt: DateTime.utc(2026, 7, 1, 1),
+    );
+
+    const hidden = WaxDeckApiException(
+      code: 'conflict',
+      message: 'the files could not be removed',
+      statusCode: 409,
+      params: {
+        'reason': 'outputs-hidden',
+        'folder': 'Ada/Book',
+        'cause': 'permission denied',
+      },
+    );
+    final sentence = AppLocalizationsEn().errorToolOutputsHidden(
+      'Ada/Book',
+      'permission denied',
+    );
+
+    testWidgets('says what it could not remove, as a parked row does', (
+      tester,
+    ) async {
+      final repo = FakeRepository();
+      repo.toolTasksById['tt-c'] = canceledMerge();
+      await _pump(tester, repo);
+
+      final row = _row('tt-c');
+      expect(
+        find.descendant(of: row, matching: find.text('Canceled')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: row, matching: find.text(canceledMerge().error!)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('dismissing it words a refusal to clear its files', (
+      tester,
+    ) async {
+      final repo = FakeRepository()..deleteToolTaskError = hidden;
+      repo.toolTasksById['tt-c'] = canceledMerge();
+      await _pump(tester, repo);
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.taskDismiss('tt-c')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repo.deleteToolTaskCalls, ['tt-c']);
+      expect(shellMessageText(raisedMessage(tester)), sentence);
+      expect(_row('tt-c'), findsOneWidget, reason: 'the task stays');
+    });
+
+    testWidgets('Clear finished words the same refusal', (tester) async {
+      final repo = FakeRepository()..deleteToolTaskError = hidden;
+      repo.toolTasksById['tt-c'] = canceledMerge();
+      await _pump(tester, repo);
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.tasksClearFinished),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repo.clearFinishedToolTaskCalls, 1);
+      expect(shellMessageText(raisedMessage(tester)), sentence);
+    });
+  });
+
+  group('canceling a task', () {
+    ToolTask task(
+      String id, {
+      String type = 'acquire',
+      String state = 'running',
+      bool cancelRequested = false,
+      String? waitReason,
+      double? pct,
+      ToolTaskActivity? activity,
+    }) => ToolTask(
+      id: id,
+      type: type,
+      state: state,
+      cancelRequested: cancelRequested,
+      waitReason: waitReason,
+      progressPct: pct,
+      activity: activity,
+      createdAt: DateTime.utc(2026, 7, 1),
+      finishedAt: switch (state) {
+        'queued' || 'running' => null,
+        _ => DateTime.utc(2026, 7, 1, 1),
+      },
+    );
+
+    ToolTaskActivity downloading({int? done, int? total}) => ToolTaskActivity(
+      phase: 'downloading',
+      at: clock.now(),
+      itemsDone: done,
+      itemsTotal: total,
+      itemTitle: 'Long Division',
+    );
+
+    Finder cancelControl(String id) =>
+        find.bySemanticsIdentifier(SemanticsIds.taskCancel(id));
+    Finder dismissControl(String id) =>
+        find.bySemanticsIdentifier(SemanticsIds.taskDismiss(id));
+    Finder confirm() =>
+        find.bySemanticsIdentifier(SemanticsIds.taskCancelConfirm);
+    Finder inRow(String id, String text) =>
+        find.descendant(of: _row(id), matching: find.text(text));
+
+    // No pumpAndSettle: a running row's bar animates.
+    Future<void> advance(WidgetTester tester) async {
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    Future<FakeRepository> show(
+      WidgetTester tester,
+      List<ToolTask> tasks, {
+      Locale locale = const Locale('en'),
+    }) async {
+      final repo = FakeRepository();
+      for (final t in tasks) {
+        repo.toolTasksById[t.id] = t;
+      }
+      await mountApp(
+        tester,
+        const TasksScreen(),
+        container: appContainer(repo: repo),
+        locale: locale,
+      );
+      await advance(tester);
+      return repo;
+    }
+
+    testWidgets('is offered on queued, running and waiting rows only', (
+      tester,
+    ) async {
+      await show(tester, [
+        task('tt-queued', state: 'queued'),
+        task('tt-running'),
+        task('tt-waiting', waitReason: 'rate-limited'),
+        task('tt-unknown', state: 'a-new-state'),
+        task('tt-done', state: 'done'),
+        task('tt-failed', state: 'failed'),
+        task('tt-parked', state: 'parked'),
+        task('tt-canceled', state: 'canceled'),
+        task('tt-winding', cancelRequested: true),
+      ]);
+
+      for (final id in [
+        'tt-queued',
+        'tt-running',
+        'tt-waiting',
+        'tt-unknown',
+      ]) {
+        expect(cancelControl(id), findsOneWidget, reason: id);
+        expect(dismissControl(id), findsNothing, reason: id);
+      }
+      for (final id in [
+        'tt-done',
+        'tt-failed',
+        'tt-parked',
+        'tt-canceled',
+        'tt-winding',
+      ]) {
+        expect(cancelControl(id), findsNothing, reason: id);
+      }
+      for (final id in ['tt-done', 'tt-failed', 'tt-parked', 'tt-canceled']) {
+        expect(dismissControl(id), findsOneWidget, reason: id);
+      }
+      expect(dismissControl('tt-winding'), findsNothing);
+    });
+
+    testWidgets(
+      'a queued task stops at once and reads Canceled, then dismisses',
+      (tester) async {
+        final repo = await show(tester, [task('tt-a', state: 'queued')]);
+
+        await tester.tap(cancelControl('tt-a'));
+        await advance(tester);
+
+        expect(repo.cancelToolTaskCalls, ['tt-a']);
+        expect(confirm(), findsNothing);
+        expect(inRow('tt-a', 'Canceled'), findsOneWidget);
+        expect(cancelControl('tt-a'), findsNothing);
+        expect(find.byType(WaxProgressBar), findsNothing);
+        expect(raisedMessage(tester), isNull);
+
+        await tester.tap(dismissControl('tt-a'));
+        await advance(tester);
+        expect(repo.deleteToolTaskCalls, ['tt-a']);
+        expect(_row('tt-a'), findsNothing);
+      },
+    );
+
+    testWidgets('a canceled task counts as finished for Clear finished', (
+      tester,
+    ) async {
+      final repo = await show(tester, [task('tt-a', state: 'canceled')]);
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.tasksClearFinished),
+      );
+      await advance(tester);
+
+      expect(repo.clearFinishedToolTaskCalls, 1);
+      expect(_row('tt-a'), findsNothing);
+    });
+
+    testWidgets('a running task with nothing staged cancels without asking and '
+        'winds down on its row', (tester) async {
+      final repo = await show(tester, [
+        task('tt-a', type: 'genre-normalize', pct: 40),
+        task('tt-b', activity: downloading(done: 0, total: 3)),
+      ]);
+
+      await tester.tap(cancelControl('tt-a'));
+      await advance(tester);
+      expect(confirm(), findsNothing, reason: 'only a download stages items');
+      expect(repo.cancelToolTaskCalls, ['tt-a']);
+
+      await tester.tap(cancelControl('tt-b'));
+      await advance(tester);
+      expect(confirm(), findsNothing, reason: 'none done, none counted');
+      expect(repo.cancelToolTaskCalls, ['tt-a', 'tt-b']);
+
+      // Winding down: still a bar and its caption, no control, no word of
+      // a finished state.
+      expect(inRow('tt-b', 'Canceling'), findsOneWidget);
+      expect(inRow('tt-b', 'Running'), findsNothing);
+      expect(cancelControl('tt-b'), findsNothing);
+      expect(dismissControl('tt-b'), findsNothing);
+      expect(
+        find.descendant(
+          of: _row('tt-b'),
+          matching: find.byType(WaxProgressBar),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        inRow('tt-b', 'Downloading 1 of 3: Long Division'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('puts the answer in the row without reading the list again', (
+      tester,
+    ) async {
+      final repo = await show(tester, [task('tt-a', state: 'queued')]);
+      final reads = repo.listToolTasksCalls;
+
+      await tester.tap(cancelControl('tt-a'));
+      await advance(tester);
+
+      expect(inRow('tt-a', 'Canceled'), findsOneWidget);
+      expect(repo.listToolTasksCalls, reads);
+    });
+
+    testWidgets('a waiting task cancels from its row and winds down', (
+      tester,
+    ) async {
+      final repo = await show(tester, [
+        task('tt-a', waitReason: 'rate-limited'),
+      ]);
+      expect(cancelControl('tt-a'), findsOneWidget);
+
+      await tester.tap(cancelControl('tt-a'));
+      await advance(tester);
+
+      expect(repo.cancelToolTaskCalls, ['tt-a']);
+      expect(inRow('tt-a', 'Canceling'), findsOneWidget);
+      expect(cancelControl('tt-a'), findsNothing);
+    });
+
+    testWidgets('a row both waiting and asked to cancel reads Canceling with '
+        'no control, and keeps its wait sentence', (tester) async {
+      await show(tester, [
+        task('tt-a', waitReason: 'rate-limited', cancelRequested: true),
+      ]);
+
+      expect(inRow('tt-a', 'Canceling'), findsOneWidget);
+      expect(inRow('tt-a', 'Waiting'), findsNothing);
+      expect(cancelControl('tt-a'), findsNothing);
+      expect(dismissControl('tt-a'), findsNothing);
+      expect(
+        inRow('tt-a', 'The source asked it to slow down.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a playlist sync with nothing staged cancels without asking', (
+      tester,
+    ) async {
+      final repo = await show(tester, [
+        task(
+          'tt-a',
+          type: 'playlist-sync',
+          activity: downloading(done: 0, total: 4),
+        ),
+      ]);
+
+      await tester.tap(cancelControl('tt-a'));
+      await advance(tester);
+
+      expect(confirm(), findsNothing);
+      expect(find.text('Cancel this task?'), findsNothing);
+      expect(repo.cancelToolTaskCalls, ['tt-a']);
+    });
+
+    testWidgets('a task the server no longer has leaves the list, quietly', (
+      tester,
+    ) async {
+      final repo = await show(tester, [
+        task('tt-a', state: 'queued'),
+        task('tt-b', state: 'queued'),
+      ]);
+      repo.cancelToolTaskError = const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such task',
+        statusCode: 404,
+      );
+      final reads = repo.listToolTasksCalls;
+
+      await tester.tap(cancelControl('tt-a'));
+      await advance(tester);
+
+      expect(_row('tt-a'), findsNothing);
+      expect(_row('tt-b'), findsOneWidget);
+      expect(raisedMessage(tester), isNull);
+      expect(repo.listToolTasksCalls, reads);
+    });
+
+    for (final locale in const [Locale('en'), Locale('es')]) {
+      testWidgets(
+        'each cancel control names its task (${locale.languageCode})',
+        (tester) async {
+          final handle = tester.ensureSemantics();
+          await show(tester, [
+            ToolTask(
+              id: 'tt-a',
+              type: 'acquire',
+              state: 'running',
+              itemTitle: 'Long Division',
+              createdAt: DateTime.utc(2026, 7, 1),
+            ),
+            ToolTask(
+              id: 'tt-b',
+              type: 'book-merge',
+              state: 'queued',
+              itemTitle: 'The Book',
+              createdAt: DateTime.utc(2026, 7, 1),
+            ),
+          ], locale: locale);
+
+          final l10n = lookupAppLocalizations(locale);
+          String heard(String id) =>
+              tester.getSemantics(cancelControl(id)).label;
+          expect(
+            heard('tt-a'),
+            l10n.toolsCancelTask(
+              l10n.toolsTaskTitled(l10n.toolsTaskAcquire, 'Long Division'),
+            ),
+          );
+          expect(
+            heard('tt-b'),
+            l10n.toolsCancelTask(
+              l10n.toolsTaskTitled(l10n.toolsTaskBookMerge, 'The Book'),
+            ),
+          );
+          expect(heard('tt-a'), isNot(heard('tt-b')));
+          handle.dispose();
+        },
+      );
+    }
+
+    group('with items already staged', () {
+      final staged = <(String, ToolTask)>[
+        (
+          'a download with items done',
+          task('tt-a', activity: downloading(done: 2, total: 5)),
+        ),
+        ('a download with a percentage', task('tt-a', pct: 12)),
+        (
+          'a playlist sync with items done',
+          task(
+            'tt-a',
+            type: 'playlist-sync',
+            activity: downloading(done: 1, total: 4),
+          ),
+        ),
+      ];
+
+      for (final (name, running) in staged) {
+        testWidgets(
+          '$name asks first, and keeping it running cancels nothing',
+          (tester) async {
+            final repo = await show(tester, [running]);
+
+            await tester.tap(cancelControl('tt-a'));
+            await advance(tester);
+
+            expect(repo.cancelToolTaskCalls, isEmpty);
+            expect(find.text('Cancel this task?'), findsOneWidget);
+            expect(
+              find.textContaining('stay in the review queue'),
+              findsOneWidget,
+            );
+
+            await tester.tap(find.text('Keep running'));
+            await advance(tester);
+            expect(find.text('Cancel this task?'), findsNothing);
+            expect(repo.cancelToolTaskCalls, isEmpty);
+            expect(cancelControl('tt-a'), findsOneWidget);
+          },
+        );
+      }
+
+      testWidgets('with activity, only items done say anything is staged', (
+        tester,
+      ) async {
+        // A percentage carries the byte fraction of the item in hand,
+        // which opened no entry.
+        final repo = await show(tester, [
+          task('tt-a', pct: 12, activity: downloading(done: 0, total: 3)),
+        ]);
+
+        await tester.tap(cancelControl('tt-a'));
+        await advance(tester);
+
+        expect(find.text('Cancel this task?'), findsNothing);
+        expect(repo.cancelToolTaskCalls, ['tt-a']);
+      });
+
+      testWidgets('confirming posts the cancel', (tester) async {
+        final repo = await show(tester, [
+          task('tt-a', activity: downloading(done: 2, total: 5)),
+        ]);
+
+        await tester.tap(cancelControl('tt-a'));
+        await advance(tester);
+        await tester.tap(confirm());
+        await advance(tester);
+
+        expect(repo.cancelToolTaskCalls, ['tt-a']);
+        expect(find.text('Cancel this task?'), findsNothing);
+        expect(inRow('tt-a', 'Canceling'), findsOneWidget);
+        expect(cancelControl('tt-a'), findsNothing);
+      });
+    });
+
+    testWidgets('an answer that says it had already finished shows the row as '
+        'it ended', (tester) async {
+      final repo = await show(tester, [task('tt-a', type: 'genre-normalize')]);
+      repo.toolTasksById['tt-a'] = task(
+        'tt-a',
+        type: 'genre-normalize',
+        state: 'done',
+      );
+
+      await tester.tap(cancelControl('tt-a'));
+      await advance(tester);
+
+      expect(inRow('tt-a', 'Done'), findsOneWidget);
+      expect(cancelControl('tt-a'), findsNothing);
+      expect(dismissControl('tt-a'), findsOneWidget);
+      expect(raisedMessage(tester), isNull);
+    });
+
+    testWidgets('a task that has started moving files says it cannot stop', (
+      tester,
+    ) async {
+      final repo = await show(tester, [task('tt-a', type: 'book-merge')]);
+      repo.cancelToolTaskError = const WaxDeckApiException(
+        code: 'conflict',
+        message: 'committed',
+        statusCode: 409,
+        params: {'reason': 'task-committed'},
+      );
+
+      await tester.tap(cancelControl('tt-a'));
+      await advance(tester);
+
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'It has started moving files, so it can no longer be canceled. It '
+        'finishes, or puts them back, on its own.',
+      );
+      expect(cancelControl('tt-a'), findsOneWidget);
+      expect(inRow('tt-a', 'Running'), findsOneWidget);
+    });
+
+    testWidgets('reads in Spanish', (tester) async {
+      final es = AppLocalizationsEs();
+      final repo = await show(tester, [
+        task('tt-a', activity: downloading(done: 2, total: 5)),
+        task('tt-b', type: 'book-merge'),
+        task('tt-c', state: 'canceled'),
+        task('tt-d', cancelRequested: true),
+      ], locale: const Locale('es'));
+
+      expect(inRow('tt-c', es.toolsStateTaskCanceled), findsOneWidget);
+      expect(inRow('tt-d', es.toolsStateCanceling), findsOneWidget);
+
+      await tester.tap(cancelControl('tt-a'));
+      await advance(tester);
+      expect(find.text(es.toolsCancelTitle), findsOneWidget);
+      expect(find.text(es.toolsCancelBody), findsOneWidget);
+      await tester.tap(find.text(es.toolsCancelKeep));
+      await advance(tester);
+
+      repo.cancelToolTaskError = const WaxDeckApiException(
+        code: 'conflict',
+        message: 'committed',
+        statusCode: 409,
+        params: {'reason': 'task-committed'},
+      );
+      await tester.tap(cancelControl('tt-b'));
+      await advance(tester);
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        es.errorToolTaskCommitted,
+      );
+    });
   });
 }

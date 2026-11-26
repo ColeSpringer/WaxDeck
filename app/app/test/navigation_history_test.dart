@@ -12,6 +12,7 @@ import 'package:waxdeck/src/auth/login_screen.dart';
 import 'package:waxdeck/src/auth/signup_screen.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/books/books_screen.dart';
+import 'package:waxdeck/src/downloads/downloads_screen.dart';
 import 'package:waxdeck/src/home/home_screen.dart';
 import 'package:waxdeck/src/library/item_delete.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
@@ -45,7 +46,6 @@ import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/tools/tasks_screen.dart';
-import 'package:waxdeck/src/uploads/uploads_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -202,18 +202,16 @@ Future<void> _tapNav(WidgetTester tester, WaxNavTarget target) async {
   await tester.pumpAndSettle();
 }
 
-/// Opens the row a session-local notification of [kind] draws.
-Future<void> _openHintRow(
+/// Opens the row the inbox draws for [event].
+Future<void> _openNoticeRow(
   WidgetTester tester,
   ProviderContainer container,
-  NotificationKind kind,
+  String event,
 ) async {
-  container
-      .read(localNotificationsProvider.notifier)
-      .record(kind, at: DateTime.now());
-  await tester.pumpAndSettle();
+  final row = _notice(event);
+  await _fileInInbox(tester, container, row);
   await tester.tap(
-    find.bySemanticsIdentifier(SemanticsIds.notificationRowPlain(kind.token)),
+    find.bySemanticsIdentifier(SemanticsIds.notificationRow(event, row.id)),
   );
   await tester.pumpAndSettle();
 }
@@ -262,23 +260,36 @@ UserAccount _account(String id, String username) => UserAccount(
   libraryAccess: const LibraryAccess(mode: 'all'),
 );
 
+/// Files [row] in the fake inbox and reads it, as the notifications screen
+/// does on arrival.
+Future<void> _fileInInbox(
+  WidgetTester tester,
+  ProviderContainer container,
+  ServerNotification row,
+) async {
+  _repo(container).inbox = <ServerNotification>[row];
+  container.invalidate(notificationsProvider);
+  await tester.pumpAndSettle();
+}
+
+ServerNotification _notice(String event, {String? id, String? target}) =>
+    ServerNotification(
+      id: id ?? 'nf-$event',
+      event: event,
+      title: 'Server title',
+      body: 'Server body',
+      targetPid: target,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
 void main() {
   testWidgets('the arrow returns from a notification row to the list', (
     tester,
   ) async {
     final container = await _pumpApp(tester);
     await _go(tester, container, WaxRoute.notifications);
-    container
-        .read(localNotificationsProvider.notifier)
-        .record(NotificationKind.task, at: DateTime.now());
-    await tester.pumpAndSettle();
-
-    await tester.tap(
-      find.bySemanticsIdentifier(
-        SemanticsIds.notificationRowPlain(NotificationKind.task.token),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _openNoticeRow(tester, container, 'job-finished');
     expect(find.byType(TasksScreen), findsOneWidget);
 
     await _back(tester);
@@ -291,21 +302,14 @@ void main() {
     final container = await _pumpApp(tester);
     await _go(tester, container, WaxRoute.tasks);
     await _go(tester, container, WaxRoute.notifications);
-    container
-        .read(localNotificationsProvider.notifier)
-        .record(
-          NotificationKind.feedDisabled,
-          at: DateTime.now(),
-          pid: _showPid,
-        );
-    await tester.pumpAndSettle();
-
+    await _fileInInbox(
+      tester,
+      container,
+      _notice('feed-disabled', id: 'nf-feed', target: _showPid),
+    );
     await tester.tap(
       find.bySemanticsIdentifier(
-        SemanticsIds.notificationRow(
-          NotificationKind.feedDisabled.token,
-          _showPid,
-        ),
+        SemanticsIds.notificationRow('feed-disabled', 'nf-feed'),
       ),
     );
     await tester.pumpAndSettle();
@@ -384,7 +388,7 @@ void main() {
     ) async {
       final container = await _pumpApp(tester);
       await _go(tester, container, WaxRoute.notifications);
-      await _openHintRow(tester, container, NotificationKind.review);
+      await _openNoticeRow(tester, container, 'review-ready');
       expect(find.byType(ReviewScreen), findsOneWidget);
 
       await _back(tester);
@@ -415,13 +419,22 @@ void main() {
     });
   });
 
-  testWidgets('uploads reached by a go returns to where it was opened from', (
+  testWidgets('downloads reached by a go returns to where it was opened from', (
     tester,
   ) async {
     final container = await _pumpApp(tester);
     await _go(tester, container, WaxRoute.notifications);
-    await _openHintRow(tester, container, NotificationKind.upload);
-    expect(find.byType(UploadsScreen), findsOneWidget);
+    container
+        .read(localNotificationsProvider.notifier)
+        .recordDownloadCompleted();
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(
+        SemanticsIds.notificationRowPlain(NotificationKind.download.token),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(DownloadsScreen), findsOneWidget);
 
     await _back(tester);
     expect(find.byType(NotificationsScreen), findsOneWidget);
@@ -489,20 +502,14 @@ void main() {
       testReviewEntry('rv-2', title: 'Second Album'),
     ];
     await _go(tester, container, WaxRoute.notifications);
-    container
-        .read(localNotificationsProvider.notifier)
-        .record(
-          NotificationKind.importCompleted,
-          at: DateTime.now(),
-          pid: 'rv-1',
-        );
-    await tester.pumpAndSettle();
+    await _fileInInbox(
+      tester,
+      container,
+      _notice('import-completed', id: 'nf-import', target: 'rv-1'),
+    );
     await tester.tap(
       find.bySemanticsIdentifier(
-        SemanticsIds.notificationRow(
-          NotificationKind.importCompleted.token,
-          'rv-1',
-        ),
+        SemanticsIds.notificationRow('import-completed', 'nf-import'),
       ),
     );
     await tester.pumpAndSettle();

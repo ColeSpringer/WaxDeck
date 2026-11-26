@@ -16,7 +16,6 @@ import (
 	"github.com/colespringer/waxbin/waxerr"
 
 	"github.com/colespringer/waxdeck/fixtures"
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // repairFixture is the catalog fixture with six more tracks, each its own
@@ -430,7 +429,7 @@ func TestARetriedRepairResumesAfterItsLastStep(t *testing.T) {
 	}
 
 	ran = nil
-	if !svc.Tools.drainToolTasksAt(ctx, wdb.TaskTypes{Only: longToolTasks}, time.Now().Add(time.Hour).UnixNano()) {
+	if !svc.Tools.drainToolTasksAt(ctx, longDrain, time.Now().Add(time.Hour).UnixNano()) {
 		t.Fatal("the cut repair did not run again")
 	}
 	rest := []string{catalogRepairArt, catalogRepairTagProvenance, catalogRepairStrandedTags, catalogRepairSearch, catalogRepairVerify}
@@ -501,7 +500,7 @@ func TestACatalogRepairWaitsOutAHandOff(t *testing.T) {
 	if err := svc.lib.EndMaintenance(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if !svc.Tools.drainToolTasksAt(ctx, wdb.TaskTypes{Only: longToolTasks}, time.Now().Add(time.Hour).UnixNano()) {
+	if !svc.Tools.drainToolTasksAt(ctx, longDrain, time.Now().Add(time.Hour).UnixNano()) {
 		t.Fatal("the waiting repair did not run again")
 	}
 	sum := repairSummary(t, ctx, svc, uc, task.ID)

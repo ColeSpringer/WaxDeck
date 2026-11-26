@@ -101,6 +101,7 @@ var kindCodes = map[service.ErrorKind]struct {
 	service.KindForbidden:         {http.StatusForbidden, "forbidden", "not allowed"},
 	service.KindUnsupported:       {http.StatusNotImplemented, "source-unavailable", "this server is not running the needed integration"},
 	service.KindUpstream:          {http.StatusBadGateway, "feed-unreachable", "the upstream feed could not be fetched"},
+	service.KindRefused:           {http.StatusUnprocessableEntity, "source-refused", "the source refused the link"},
 	service.KindDirectory:         {http.StatusBadGateway, "directory-unavailable", "the external directory could not be reached"},
 	service.KindService:           {http.StatusBadGateway, "service-unreachable", "an external service could not be reached"},
 	service.KindQuota:             {http.StatusRequestEntityTooLarge, "quota-exceeded", "the upload would exceed your storage quota"},

@@ -404,9 +404,16 @@ abstract interface class PlaylistsApi {
   /// `mirror` only, and no interval - a static export never changes by itself.
   /// Owner only; static playlists only (a smart playlist's membership is its
   /// rule). Live sources need a running acquisition bridge
-  /// (`source-unavailable` without one). Binding does not sync by itself: the
-  /// first scheduled run comes one interval after the bind, and the sync
-  /// endpoint runs one now.
+  /// (`source-unavailable` without one). A live link the source refuses answers
+  /// 422 `source-refused`, with `params.reason` saying why, and nothing is
+  /// bound: a verdict on the link (a private, deleted or empty playlist, a link
+  /// the source cannot read), which only another link changes, or the source's
+  /// trouble at the time (`rate-limited`, `source-broken`, `timed-out`,
+  /// `unreachable`, or `video-private` for a sign-in wall), which the same link
+  /// can pass later. A link to a single video answers 400 `invalid-request`,
+  /// since a synced playlist needs a playlist or channel link, and nothing is
+  /// bound either. Binding does not sync by itself: the first scheduled run
+  /// comes one interval after the bind, and the sync endpoint runs one now.
   Future<PlaylistSource> setPlaylistSource(
     String pid, {
     required String mode,
@@ -444,7 +451,10 @@ abstract interface class PlaylistsApi {
   /// the one reading that answers `not-found` for an unbound playlist.
   ///
   /// A live source is enumerated either way: that network read is what a dry
-  /// run *is*, so unlike the save, a settings-only preview does not avoid it.
+  /// run *is*, so unlike the save, a settings-only preview does not avoid it. A
+  /// live link the source refuses answers 422 `source-refused`, for any of the
+  /// reasons the save names, and a link to a single video 400
+  /// `invalid-request`, as the save does.
   Future<PlaylistSyncPreview> previewPlaylistSync(
     String pid, {
     String? mode,
@@ -464,6 +474,11 @@ abstract interface class PlaylistsApi {
   /// membership by the stored mode, and updates the binding's health; a
   /// successful run re-enables a binding that repeated failures had suspended.
   /// A run already queued or running for this playlist is answered with that
-  /// task rather than a second one. Owner only.
+  /// task rather than a second one; one winding down from a cancel is not, and
+  /// a fresh run queues behind it. The run this call queues, and a scheduled
+  /// run still waiting to start that it answers, files `tool-task-failed` for
+  /// the owner if it fails, unless the playlist or its binding was removed
+  /// meanwhile; a scheduled run's failures otherwise file none, and repeated
+  /// ones suspend the binding, which says so once. Owner only.
   Future<ToolTask> syncPlaylistSource(String pid);
 }
