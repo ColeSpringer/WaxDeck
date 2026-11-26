@@ -1026,6 +1026,7 @@ abstract final class SemanticsIds {
   static const String shareCardOpen = 'share-card-open';
   static String shareCardPreview(Object format) => 'share-card-preview-$format';
   static const String statsBucket = 'stats-bucket';
+  static String statsMedia(Object media) => 'stats-media-$media';
   static String statsRange(Object range) => 'stats-range-$range';
   static String top(Object kind) => 'top-kind-$kind';
   static String topEntry(Object index) => 'top-entry-$index';
@@ -1033,6 +1034,8 @@ abstract final class SemanticsIds {
   static const String yirPersonal = 'yir-personal';
   static const String yirPrevYear = 'yir-prev-year';
   static const String yirServer = 'yir-server';
+  static String yirTopEntry(Object kind, Object index) =>
+      'yir-top-$kind-$index';
 
   // tools: Long-running tools and their progress rows.
   static String jobRow(Object pid) => 'job-row-$pid';

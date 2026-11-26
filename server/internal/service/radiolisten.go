@@ -42,6 +42,9 @@ type radioListenPoint struct {
 	stationPID string
 	startedAt  time.Time
 	elapsed    time.Duration
+	// announce marks the tune-in's first checkpoint or its closing one,
+	// which tell the listener's devices the record grew.
+	announce bool
 }
 
 func (p radioListenPoint) writeTo(ctx context.Context, l *Radio) {
@@ -61,19 +64,25 @@ func (radioListenPoint) kind() string { return "listen" }
 // heatmap and the streaks read session counts as well as time, so that
 // is a visible choice rather than an implementation detail.
 //
+// announce is set on the connection's first written checkpoint and its
+// closing one: the written row then announces the listener's listening
+// record, and the checkpoints between stay quiet. It reports whether a
+// write was queued, which a tune-in under the floor never is.
+//
 // The caller is the goroutine relaying that listener's audio, so
 // nothing here may touch SQLite; the listener's context is deliberately
 // not carried into the write, for the reason [ScrobbleRadioPlay] gives.
-func (l *Radio) RecordRadioListen(_ context.Context, userID, sessionID, apiStationPID string, startedAt time.Time, elapsed time.Duration) {
+func (l *Radio) RecordRadioListen(_ context.Context, userID, sessionID, apiStationPID string, startedAt time.Time, elapsed time.Duration, announce bool) bool {
 	if elapsed < l.radioListenFloor {
-		return
+		return false
 	}
-	l.queueRadioWrite(radioListenPoint{
+	return l.queueRadioWrite(radioListenPoint{
 		userID:     userID,
 		sessionID:  sessionID,
 		stationPID: apiStationPID,
 		startedAt:  startedAt,
 		elapsed:    elapsed,
+		announce:   announce,
 	}, apiStationPID)
 }
 
@@ -99,5 +108,9 @@ func (l *Radio) writeRadioListen(ctx context.Context, p radioListenPoint) {
 	})
 	if err != nil {
 		l.log.Warn("recording radio listen", "station", p.stationPID, "err", err)
+		return
+	}
+	if p.announce {
+		l.emitUserEvent(ctx, p.userID, eventListens, "")
 	}
 }

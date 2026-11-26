@@ -345,6 +345,16 @@
   "@musicFieldSort": {
     "description": "The album's filing name, as against its title."
   },
+  "musicGenreReady": "Ready to open: {genre}",
+  "@musicGenreReady": {
+    "description": "Message when a genre's listing, asked for by its name (a mix card, a ranked stats row), was found after the listener had moved on; its action opens it. {genre} is the genre's own name.",
+    "placeholders": {
+      "genre": {
+        "type": "String",
+        "example": "Shoegaze"
+      }
+    }
+  },
   "musicHubAddToLibrary": "Add to library",
   "@musicHubAddToLibrary": {
     "description": "Accessible name of the add control on the music hub, and the button on its first-run invitation. Both open the sheet that adds files."

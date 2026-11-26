@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/first_run_wizard.dart';
@@ -10,6 +11,7 @@ import 'package:waxdeck/src/organize/organize_screen.dart';
 import 'package:waxdeck/src/player/entity_play_state_controller.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/shell/server_health.dart';
+import 'package:waxdeck/src/stats/stats_controller.dart';
 import 'package:waxdeck/src/sync/server_event_bus.dart';
 import 'package:waxdeck/src/sync/sync_binder.dart';
 import 'package:waxdeck/src/tools/tool_tasks_provider.dart';
@@ -95,6 +97,34 @@ Future<void> _watchShelves(ProviderContainer container) async {
     await container.read(shelf.future);
   }
 }
+
+/// Holds the stats page's reads open, with a recap and the listen log.
+Future<void> _watchStats(ProviderContainer container) async {
+  final reads = <ProviderListenable<AsyncValue<Object>>>[
+    listeningStatsProvider,
+    listeningHeatmapProvider,
+    topListProvider,
+    yearInReviewProvider(2026),
+    listenLogProvider,
+  ];
+  for (final read in reads) {
+    container.listen(read, (_, _) {});
+  }
+  await container.read(listeningStatsProvider.future);
+  await container.read(listeningHeatmapProvider.future);
+  await container.read(topListProvider.future);
+  await container.read(yearInReviewProvider(2026).future);
+  await container.read(listenLogProvider.future);
+}
+
+/// How often each of [_watchStats]'s reads was asked.
+List<int> _statsReads(FakeRepository repo) => [
+  repo.listeningStatsCalls.length,
+  repo.heatmapCalls.length,
+  repo.topListCalls.length,
+  repo.yearInReviewCalls.length,
+  repo.listenLogCalls.length,
+];
 
 /// Ends a session inside a fake-time test: the pacers' windows and the
 /// engine's reconnect are timers, and one left pending fails the test.
@@ -299,6 +329,83 @@ void main() {
     await tester.pump(kUserRefreshWindow + const Duration(seconds: 1));
 
     expect((b.repo as _CountingRepository).prefsReads, reads + 1);
+    await _signOut(tester, b.container);
+  });
+
+  testWidgets('a listen another device reported reads the stats again', (
+    tester,
+  ) async {
+    // Listens are what the stats count, and they arrive on the user
+    // stream as the play state they moved.
+    final b = await _bind(
+      serverPages: [
+        const ServerSyncPage(nextSince: 'scur-1'),
+        _reported('scur-2', finished: true),
+      ],
+    );
+    await _watchStats(b.container);
+    await b.engine.pullServer();
+    final repo = b.repo;
+    final (stats, heatmap, top, recap) = (
+      repo.listeningStatsCalls.length,
+      repo.heatmapCalls.length,
+      repo.topListCalls.length,
+      repo.yearInReviewCalls.length,
+    );
+
+    await b.engine.pullServer();
+    await tester.pump(kUserRefreshWindow + const Duration(seconds: 1));
+
+    expect(repo.listeningStatsCalls, hasLength(stats + 1));
+    expect(repo.heatmapCalls, hasLength(heatmap + 1));
+    expect(repo.topListCalls, hasLength(top + 1));
+    expect(repo.yearInReviewCalls, hasLength(recap + 1), reason: 'the recap');
+    await _signOut(tester, b.container);
+  });
+
+  testWidgets('a listens marker reads the stats, the open recap and the '
+      'listen log again, and none of the other user surfaces', (tester) async {
+    // A listen that crosses no played threshold moves no play state; the
+    // server marks it on its own.
+    final b = await _bind(
+      serverPages: [
+        const ServerSyncPage(nextSince: 'scur-1'),
+        const ServerSyncPage(
+          events: [ServerSyncEvent(kind: 'listens')],
+          nextSince: 'scur-2',
+        ),
+      ],
+    );
+    await _watchStats(b.container);
+    await b.engine.pullServer();
+    final repo = b.repo as _CountingRepository;
+    final before = _statsReads(repo);
+    final prefs = repo.prefsReads;
+
+    await b.engine.pullServer();
+    await tester.pump(kUserRefreshWindow + const Duration(seconds: 1));
+
+    expect(_statsReads(repo), [for (final n in before) n + 1]);
+    expect(repo.prefsReads, prefs, reason: 'no user pass');
+    await _signOut(tester, b.container);
+  });
+
+  testWidgets('a walk that lost its place reads the listen log again', (
+    tester,
+  ) async {
+    // A listens marker may have been in what the walk lost.
+    final b = await _bind();
+    await _watchStats(b.container);
+    await b.engine.pullServer();
+    await b.engine.pullServer();
+    final repo = b.repo as _CountingRepository;
+    final log = repo.listenLogCalls.length;
+
+    repo.resetServerNext = true;
+    await b.engine.pullServer();
+    await tester.pump(kUserRefreshWindow + const Duration(seconds: 1));
+
+    expect(repo.listenLogCalls, hasLength(log + 1));
     await _signOut(tester, b.container);
   });
 

@@ -12,7 +12,11 @@ abstract interface class StatsApi {
   /// bucketing uses the caller's preferred timezone (UTC when unset).
   /// `timeSavedMs` sums the silence-trim and speed-up savings clients report on
   /// their listen sessions.
-  Future<ListeningStats> getListeningStats({String? range, String? bucket});
+  Future<ListeningStats> getListeningStats({
+    String? range,
+    String? bucket,
+    StatsMediaType? mediaType,
+  });
 
   /// `GET /stats/heatmap`: Calendar heatmap and streaks.
   ///
@@ -20,15 +24,25 @@ abstract interface class StatsApi {
   /// timezone, plus listening streaks. Days without listening are omitted. The
   /// current streak counts consecutive days ending today or yesterday (an
   /// unfinished today does not break it).
-  Future<ListeningHeatmap> getListeningHeatmap({int? year});
+  Future<ListeningHeatmap> getListeningHeatmap({
+    int? year,
+    StatsMediaType? mediaType,
+  });
 
-  /// `GET /stats/top`: Top artists, albums, genres, shows, or stations.
+  /// `GET /stats/top`: Top artists, albums, tracks, genres, shows, episodes,
+  /// books, authors, or stations.
   ///
   /// The caller's most-listened entries of one kind over a range, ranked by
-  /// listening time. `shows` covers podcasts and `stations` covers radio;
-  /// spoken-word listening dominates by raw time, so music kinds only count
-  /// music sessions, `shows` only counts podcast sessions, and `stations` only
-  /// counts radio.
+  /// listening time. Each kind counts one medium's listen sessions: `artists`,
+  /// `albums`, `tracks`, and `genres` count music; `shows` and `episodes`
+  /// podcasts; `books` and `authors` audiobooks; `stations` radio. Every kind
+  /// but `genres` groups by its entity, so two albums that share a title are
+  /// two entries and one artist credited under two spellings is one; a listen
+  /// whose item has no such entity counts under the name the item gives it. In
+  /// `artists`, `albums`, `genres`, `shows`, and `authors`, a listen whose item
+  /// has left, or whose item carries no such entity or name (a track with no
+  /// artist, a book with no author, an episode whose show has no title), counts
+  /// toward no entry, so those lists can total less than the listening figures.
   Future<TopList> getTopList({required String kind, String? range, int? limit});
 
   /// `GET /stats/sessions`: Listen session log.

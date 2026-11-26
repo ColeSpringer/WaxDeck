@@ -622,7 +622,8 @@ func (l *Playback) IngestListens(ctx context.Context, uc *UserCtx, sessions []Li
 // and right for whoever reports it. Announcing is not: that depends on
 // what the caller does afterwards, which the row cannot say.
 type listenIngestOptions struct {
-	// announcedByCaller suppresses the per-listen play-state event.
+	// announcedByCaller suppresses the per-listen play-state event and
+	// the per-call listens marker.
 	// Only the in-process importers set it, and only because they
 	// announce once per item when the run ends: a history is thousands
 	// of plays of hundreds of tracks, and a row plus a device wake for
@@ -729,6 +730,11 @@ func (l *Playback) ingestListens(ctx context.Context, uc *UserCtx, sessions []Li
 		}
 	}
 	l.recordListenMarks(ctx, uc.ID, landed, notOwed)
+	// Once per call that recorded anything, marked or not: the stats
+	// reads follow the whole record, not only the plays that counted.
+	if res.Accepted > 0 && !opts.announcedByCaller {
+		l.emitUserEvent(ctx, uc.ID, eventListens, "")
+	}
 	return res, nil
 }
 

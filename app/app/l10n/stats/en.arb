@@ -1,6 +1,16 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
+  "statsAllTimeEmptyMessage": "{media, select, music{No music has played yet.} podcast{No podcasts have played yet.} audiobook{No audiobooks have played yet.} radio{No radio has played yet.} other{Nothing has played here yet.}}",
+  "@statsAllTimeEmptyMessage": {
+    "description": "Empty state of the listening chart over all time, where no longer range is left to pick: nothing of the medium (its wire name) has played.",
+    "placeholders": {
+      "media": {
+        "type": "String",
+        "example": "music"
+      }
+    }
+  },
   "statsBucketDay": "Day",
   "@statsBucketDay": {
     "description": "Chart grouping: one bar per day."
@@ -173,13 +183,19 @@
   "@statsDoorYearInReviewSubtitle": {
     "description": "Second line of the row opening the year's recap."
   },
-  "statsEmptyMessage": "Pick a longer range.",
+  "statsEmptyMessage": "Pick a longer range or another medium.",
   "@statsEmptyMessage": {
-    "description": "Empty state of the listening chart."
+    "description": "Empty state of the listening chart while a longer range exists: the range chips and the medium chips above."
   },
-  "statsEmptyTitle": "Nothing played in this range",
+  "statsEmptyTitle": "{media, select, music{No music in this range} podcast{No podcasts in this range} audiobook{No audiobooks in this range} radio{No radio in this range} other{Nothing played in this range}}",
   "@statsEmptyTitle": {
-    "description": "Empty state of the listening chart."
+    "description": "Empty state of the listening chart, naming the medium the page is scoped to (its wire name).",
+    "placeholders": {
+      "media": {
+        "type": "String",
+        "example": "music"
+      }
+    }
   },
   "statsGroupBy": "Group by",
   "@statsGroupBy": {
@@ -223,21 +239,51 @@
   "@statsKindArtists": {
     "description": "Chip choosing which ranked list to show."
   },
+  "statsKindAuthors": "Authors",
+  "@statsKindAuthors": {
+    "description": "Chip choosing which ranked list to show. Audiobook authors."
+  },
+  "statsKindBooks": "Books",
+  "@statsKindBooks": {
+    "description": "Chip choosing which ranked list to show. Audiobooks."
+  },
+  "statsKindEpisodes": "Episodes",
+  "@statsKindEpisodes": {
+    "description": "Chip choosing which ranked list to show. Podcast episodes."
+  },
   "statsKindGenres": "Genres",
   "@statsKindGenres": {
     "description": "Chip choosing which ranked list to show."
   },
   "statsKindShows": "Shows",
   "@statsKindShows": {
-    "description": "Chip choosing which ranked list to show."
+    "description": "Chip choosing which ranked list to show. Podcast shows."
   },
   "statsKindStations": "Stations",
   "@statsKindStations": {
     "description": "Chip choosing which ranked list to show; radio stations."
   },
+  "statsKindTracks": "Tracks",
+  "@statsKindTracks": {
+    "description": "Chip choosing which ranked list to show."
+  },
   "statsListened": "listened",
   "@statsListened": {
     "description": "Caption under the total listening time. Lower case: it sits under a figure and reads as one phrase with it."
+  },
+  "statsListens": "{count, plural, =1{1 listen} other{{count} listens}}",
+  "@statsListens": {
+    "description": "How many listen sessions a ranked entry holds, under its name.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "42"
+      }
+    }
+  },
+  "statsListensCaption": "listens",
+  "@statsListensCaption": {
+    "description": "Caption under how many listens were recorded, the word each ranked row counts in. Lower case: it sits under a figure."
   },
   "statsLoadError": "Could not load your listening stats",
   "@statsLoadError": {
@@ -279,29 +325,19 @@
   },
   "statsMediaAudiobooks": "Audiobooks",
   "@statsMediaAudiobooks": {
-    "description": "Names the audiobook share of the listening split, on the bar's legend."
+    "description": "Names the audiobook listening: the stats page's chip scoping every figure to it, and its share on the recap's split bar."
   },
   "statsMediaMusic": "Music",
   "@statsMediaMusic": {
-    "description": "Names the music share of the listening split, on the bar's legend."
+    "description": "Names the music listening: the stats page's chip scoping every figure to it, and its share on the recap's split bar."
   },
   "statsMediaPodcasts": "Podcasts",
   "@statsMediaPodcasts": {
-    "description": "Names the podcast share of the listening split, on the bar's legend."
+    "description": "Names the podcast listening: the stats page's chip scoping every figure to it, and its share on the recap's split bar."
   },
   "statsMediaRadio": "Radio",
   "@statsMediaRadio": {
-    "description": "Names the radio share of the listening split, on the bar's legend."
-  },
-  "statsPlays": "{count, plural, =1{1 play} other{{count} plays}}",
-  "@statsPlays": {
-    "description": "How many times a ranked entry was played, under its name.",
-    "placeholders": {
-      "count": {
-        "type": "int",
-        "example": "42"
-      }
-    }
+    "description": "Names the radio listening: the stats page's chip scoping every figure to it, and its share on the recap's split bar."
   },
   "statsRange30d": "30 days",
   "@statsRange30d": {
@@ -326,10 +362,6 @@
   "statsRecapLoadError": "Could not load the recap",
   "@statsRecapLoadError": {
     "description": "Title over the failure of one year-in-review panel, which retries in place."
-  },
-  "statsSessions": "sessions",
-  "@statsSessions": {
-    "description": "Caption under how many listening sessions were recorded. Lower case: it sits under a figure."
   },
   "statsSplitShare": "{label} {duration}",
   "@statsSplitShare": {
@@ -488,6 +520,14 @@
   "statsYearTopArtists": "Top artists",
   "@statsYearTopArtists": {
     "description": "Heading over the recap's five most-played artists."
+  },
+  "statsYearTopAuthors": "Top authors",
+  "@statsYearTopAuthors": {
+    "description": "Heading over the recap's five most-listened audiobook authors."
+  },
+  "statsYearTopBooks": "Top books",
+  "@statsYearTopBooks": {
+    "description": "Heading over the recap's five most-listened audiobooks."
   },
   "statsYearTopGenres": "Top genres",
   "@statsYearTopGenres": {

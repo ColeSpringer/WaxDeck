@@ -85,17 +85,40 @@ time stays right. The stats surface aggregates all of it:
 - `GET /api/v1/stats/listening` - listening time over a range (7d to
   all time), bucketed by day, week, or month for charts, split by
   media type, with the time-saved counter (what silence trimming and
-  faster playback saved you, as reported by clients).
+  faster playback saved you, as reported by clients). `mediaType`
+  (music, podcast, audiobook, or radio) narrows every figure to that
+  medium; without it every medium counts.
 - `GET /api/v1/stats/heatmap` - a calendar year of per-day listening
   plus streaks. The current streak counts runs ending today or
-  yesterday, and streaks cross year boundaries honestly.
-- `GET /api/v1/stats/top` - top artists, albums, genres, shows, or
-  stations by listening time over a range. Music kinds count only music
-  sessions, shows only podcast sessions, and stations only radio, so
-  spoken-word hours never drown a music chart.
+  yesterday, and streaks cross year boundaries honestly. `mediaType`
+  narrows the days and both streaks the same way.
+- `GET /api/v1/stats/top` - the most-listened entries of one kind over
+  a range. Each kind counts one medium: artists, albums, tracks, and
+  genres count music; shows and episodes podcasts; books and authors
+  audiobooks; stations radio - so spoken-word hours never drown a music
+  chart. Every kind but genres groups by its entity rather than by the
+  name it is shown with, so two albums that share a title are two
+  entries and one artist credited under two spellings is one. Each
+  entry grouped by an entity carries the entity's pid and picture (an
+  artist, author or show with no picture of its own draws its
+  most-listened item's); a listen whose item has no such entity counts
+  under the name its item gives it, in an entry with no pid that draws
+  that item's picture. A picture drawn from an item is always one you
+  can open. An entry you cannot open now - a track, episode or book in
+  the trash or outside what you may see, an artist, album or author
+  none of whose items you may see, a show outside your reach - keeps
+  its name and time with no pid and no picture. A track, episode, book,
+  or station that has since left keeps its time under its pid with no
+  name; in the grouped kinds, a listen whose item left or names nothing
+  of the kind counts toward no entry.
 - `GET /api/v1/stats/sessions` - the raw session log, newest first,
   with the reporting client, so "what played on which device when" is
   answerable. Filter by client label.
+
+Whenever your listening record grows - a client's listens are
+accepted, or the stream proxy records a tune-in starting or ending -
+the server's sync stream carries a `listens` marker, so an open stats
+page re-reads.
 
 All calendar bucketing happens in your preferred timezone (the
 `timezone` preference; UTC when unset). Sessions store UTC and the
@@ -131,10 +154,11 @@ anything.
 
 `GET /api/v1/stats/year-in-review` is your listening recap for any
 calendar year: totals, the month-by-month shape, top artists, tracks,
-genres, and shows, the longest streak, the time-saved counter, and
-how much joined the library that year. It is always available and
-always current (rolling stats, not a December-only event); ask for
-any year with data.
+genres, shows, books, and authors, the longest streak, the time-saved
+counter, and how much joined the library that year. It is always
+available and always current (rolling stats, not a December-only
+event); ask for any year with data. Its top lists carry pids and
+pictures the way `/stats/top` does.
 
 `GET /api/v1/stats/server-year-in-review` is the same recap for the
 whole server, aggregated across users; its top artists, tracks and

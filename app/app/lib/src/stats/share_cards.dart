@@ -55,7 +55,7 @@ class ShareCardData {
         headline: l10n.formatListenTime(recap.totalMs),
         headlineLabel: l10n.statsListened,
         facts: <(String, String)>[
-          ('${recap.sessions}', l10n.statsSessions),
+          ('${recap.sessions}', l10n.statsListensCaption),
           ('${recap.distinctItems}', l10n.statsCardFactDifferentThings),
           ('${recap.longestStreakDays}', l10n.statsCardFactDayStreak),
         ],
@@ -74,7 +74,7 @@ class ShareCardData {
     headlineLabel: l10n.statsYearListenedTogether,
     facts: <(String, String)>[
       ('${recap.participants}', l10n.statsCardFactListeners),
-      ('${recap.sessions}', l10n.statsSessions),
+      ('${recap.sessions}', l10n.statsListensCaption),
     ],
     artists: <ShareCardArtist>[
       for (final entry in recap.topArtists)
@@ -131,8 +131,9 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet>
     for (final format in ShareCardFormat.values) format: GlobalKey(),
   };
 
-  /// The covers, by artist name, once they are fetched AND decoded.
-  var _covers = const <String, ImageProvider>{};
+  /// The covers, by the artist's place in the list, once they are
+  /// fetched AND decoded.
+  var _covers = const <int, ImageProvider>{};
 
   /// The fetch, so an export that beats it can wait rather than
   /// exporting a card whose pictures were a frame away.
@@ -171,8 +172,8 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet>
             .reduce((a, b) => a > b ? a : b),
       ),
     ];
-    final found = <String, ImageProvider>{};
-    for (final artist in wanted) {
+    final found = <int, ImageProvider>{};
+    for (final (index, artist) in wanted.indexed) {
       final url = artist.artUrl;
       if (url == null || url.isEmpty) continue;
       try {
@@ -193,7 +194,7 @@ class _ShareCardSheetState extends ConsumerState<_ShareCardSheet>
           onError: (_, _) => decoded = false,
         );
         if (!decoded) continue;
-        found[artist.name] = provider;
+        found[index] = provider;
       } on Object {
         // A cover that will not fetch or will not decode is a monogram,
         // which is a designed state rather than a failure: the card is
@@ -360,7 +361,7 @@ class _Preview extends StatelessWidget {
 
   final ShareCardFormat format;
   final ShareCardData data;
-  final Map<String, ImageProvider> covers;
+  final Map<int, ImageProvider> covers;
 
   /// What the export captures: it wraps the card at its own layout
   /// size, inside the box that shrinks it.
@@ -485,17 +486,18 @@ class YearShareCard extends StatelessWidget {
     super.key,
     required this.format,
     required this.data,
-    this.covers = const <String, ImageProvider>{},
+    this.covers = const <int, ImageProvider>{},
   });
 
   final ShareCardFormat format;
   final ShareCardData data;
 
-  /// Covers by artist name, decoded before this widget was built. A
-  /// name with none draws a monogram, which is a designed state: a card
+  /// Covers by the artist's place in [ShareCardData.artists], decoded
+  /// before this widget was built: two entries can share a name. A
+  /// place with none draws a monogram, which is a designed state: a card
   /// exported on a plane is a card with monograms on it, not a card
   /// with holes.
-  final Map<String, ImageProvider> covers;
+  final Map<int, ImageProvider> covers;
 
   /// Everything on the card is sized against the 1080 the card is wide,
   /// so one set of proportions serves both shapes.
@@ -629,7 +631,7 @@ class YearShareCard extends StatelessWidget {
                           _Cover(
                             edge: _s(0.045),
                             name: artist.name,
-                            image: covers[artist.name],
+                            image: covers[index],
                           ),
                           SizedBox(width: _s(0.02)),
                           Expanded(

@@ -751,7 +751,7 @@ const Map<String, String> _unswept = {
   'lib/src/discovery/discovery_actions.dart: openSimilarTracks: '
           'getSimilarTracks':
       _handedOn,
-  'lib/src/home/mix_shelf.dart: _openBasis: listFacets': _verbsLookup,
+  'lib/src/music/genre_open.dart: openGenreByLabel: listFacets': _verbsLookup,
   'lib/src/home/mix_shelf.dart: playMixCard: createInstantMix': _handedOn,
   'lib/src/discovery/discovery_actions.dart: _InstantMixSheetState._mix: '
           'createInstantMix':

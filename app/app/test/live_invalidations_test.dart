@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_store.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
@@ -24,6 +25,7 @@ import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/shell/lifecycle_banners.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
+import 'package:waxdeck/src/stats/stats_controller.dart';
 import 'package:waxdeck/src/sync/catalog_cursor.dart';
 import 'package:waxdeck/src/sync/live_invalidations.dart';
 import 'package:waxdeck/src/sync/refresh_pacing.dart';
@@ -576,6 +578,102 @@ void main() {
       expect(b.repo.entityReads, entities + 1);
       expect(b.repo.browseCalls.length, browses);
       expect(b.repo.prefsReads, prefs);
+      b.container.dispose();
+      await tester.pump();
+    });
+
+    testWidgets('a listens marker reads the stats, the open recap and the '
+        'listen log again, and none of the other user surfaces', (
+      tester,
+    ) async {
+      final b = await _bindWeb();
+      final reads = <ProviderListenable<AsyncValue<Object>>>[
+        listeningStatsProvider,
+        listeningHeatmapProvider,
+        topListProvider,
+        yearInReviewProvider(2026),
+        listenLogProvider,
+      ];
+      for (final read in reads) {
+        b.container.listen(read, (_, _) {});
+      }
+      await tester.pump(const Duration(seconds: 1));
+      final repo = b.repo;
+      List<int> asked() => [
+        repo.listeningStatsCalls.length,
+        repo.heatmapCalls.length,
+        repo.topListCalls.length,
+        repo.yearInReviewCalls.length,
+        repo.listenLogCalls.length,
+      ];
+      final before = asked();
+      expect(before, everyElement(1), reason: 'each read once');
+      final (browses, prefs) = (repo.browseCalls.length, repo.prefsReads);
+
+      b.bus.add(const ServerSyncEvent(kind: 'listens'));
+      await tester.pump(const Duration(seconds: 6));
+
+      expect(asked(), [for (final n in before) n + 1]);
+      expect(repo.browseCalls.length, browses);
+      expect(repo.prefsReads, prefs);
+      b.container.dispose();
+      await tester.pump();
+    });
+
+    testWidgets('a listens marker reads a scrolled listen log through what '
+        'it has loaded', (tester) async {
+      final b = await _bindWeb();
+      b.repo.listenLog = [
+        for (var i = 0; i < 120; i++)
+          ListenLogEntry(
+            sessionId: 's-$i',
+            pid: 'tr-$i',
+            mediaType: StatsMediaType.music,
+            startedAt: DateTime.utc(2026, 7, 20).subtract(Duration(hours: i)),
+            msPlayed: 1,
+            finished: true,
+            client: 'web',
+            source: 'local',
+          ),
+      ];
+      b.container.listen(listenLogProvider, (_, _) {});
+      await b.container.read(listenLogProvider.future);
+      final log = b.container.read(listenLogProvider.notifier);
+      await log.loadMore();
+      await log.loadMore();
+      final asked = b.repo.listenLogCalls.length;
+
+      b.bus.add(const ServerSyncEvent(kind: 'listens'));
+      await tester.pump(const Duration(seconds: 6));
+
+      expect(
+        b.container.read(listenLogProvider).value?.entries,
+        hasLength(120),
+      );
+      expect(
+        [for (final c in b.repo.listenLogCalls.skip(asked)) c.cursor],
+        [null, '50', '100'],
+      );
+      b.container.dispose();
+      await tester.pump();
+    });
+
+    testWidgets('a pass of the user stream reads the open recap again', (
+      tester,
+    ) async {
+      // The current year's recap counts the same listens as the stats.
+      final b = await _bindWeb();
+      final recap = yearInReviewProvider(2026);
+      b.container.listen(recap, (_, _) {});
+      await b.container.read(recap.future);
+      b.bus.add(_report(1000, minute: 1));
+      await tester.pump(const Duration(seconds: 6));
+      final asked = b.repo.yearInReviewCalls.length;
+
+      b.bus.add(_report(214000, finished: true, minute: 2));
+      await tester.pump(const Duration(seconds: 6));
+
+      expect(b.repo.yearInReviewCalls, hasLength(asked + 1));
       b.container.dispose();
       await tester.pump();
     });

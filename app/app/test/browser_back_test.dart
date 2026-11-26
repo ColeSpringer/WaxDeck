@@ -4061,10 +4061,7 @@ void main() {
           'offered there $how', (tester) async {
         final container = await genreAskedThenLeft(tester);
 
-        await _takeOffer(
-          tester,
-          AppLocalizationsEn().homeMixBasisReady('Jazz'),
-        );
+        await _takeOffer(tester, AppLocalizationsEn().musicGenreReady('Jazz'));
         expect(tester.takeException(), isNull);
         expect(find.byType(MusicListingScreen), findsOneWidget);
         expect(_location(container), WaxRoute.radio, reason: 'a drill-in');
@@ -4087,7 +4084,7 @@ void main() {
         expect(find.byType(PlayerScreen), findsOneWidget);
 
         // The player's own scaffold draws the bar too, over it.
-        final offer = find.text(AppLocalizationsEn().homeMixBasisReady('Jazz'));
+        final offer = find.text(AppLocalizationsEn().musicGenreReady('Jazz'));
         expect(offer.hitTestable(), findsOneWidget, reason: 'still offered');
         await tester.tap(
           find

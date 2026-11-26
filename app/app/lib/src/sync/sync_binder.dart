@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
@@ -29,6 +30,7 @@ import '../review/review_controller.dart';
 import '../settings/prefs_controller.dart';
 import '../shell/lifecycle_banners.dart';
 import '../shell/server_health.dart';
+import '../stats/stats_controller.dart';
 import '../tools/tool_tasks_provider.dart';
 import '../uploads/uploads_controller.dart';
 import 'catalog_cursor.dart';
@@ -138,8 +140,13 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       pendingReviewCountProvider,
       uploadsProvider,
       toolTasksProvider,
+      // Listens are what the stats count, and a listen that moved a play
+      // state arrives here as that state. The top list and the recaps are
+      // on the catalog's quiet path as well, for the names they rank.
+      ..._listenReads,
     ],
     families: [
+      ..._listenFamilies,
       playStateControllerProvider,
       // Entity stars and ratings have a marker and a fan-out of their
       // own below; a full pass still covers them, for the walks that
@@ -195,6 +202,17 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     container: ref.container,
     firstBuilds: firstBuilds,
     providers: [toolTasksProvider],
+  );
+  // A listen the server accepted, which may have moved no play state.
+  // The log refreshes in place, through what it has loaded.
+  final listensFanOut = InvalidationFanOut(
+    container: ref.container,
+    firstBuilds: firstBuilds,
+    pagedProviders: [listenLogProvider],
+    owed: owed,
+    failed: failedRefreshes,
+    providers: [..._listenReads, listenLogProvider],
+    families: _listenFamilies,
   );
   // A library added, restored or flagged anywhere, the CLI included. Home's
   // probe rides it: a library coming or going can change its answer
@@ -414,6 +432,10 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     fanOut: tasksFanOut.sweep,
     retry: tasksFanOut.retry,
   );
+  final listens = PacedRefresh(
+    fanOut: () => listensFanOut.sweep(CatalogRefresh.loaded),
+    retry: listensFanOut.retry,
+  );
   final libraries = PacedRefresh(
     fanOut: librariesFanOut.sweep,
     retry: librariesFanOut.retry,
@@ -439,6 +461,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       jobs,
       health,
       tasks,
+      listens,
       libraries,
       radio,
     ]) {
@@ -457,6 +480,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   // cannot say by kind what changed, a `server` marker included.
   void everyStateTopic() {
     userHint();
+    listens.hint();
     entities.hint();
     jobs.hint();
     health.hint();
@@ -478,6 +502,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       jobsFanOut,
       healthFanOut,
       tasksFanOut,
+      listensFanOut,
       librariesFanOut,
       serverHealthFanOut,
     ]) {
@@ -568,6 +593,8 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
         health.hint();
       case 'task-progress':
         tasks.hint();
+      case 'listens':
+        listens.hint();
       case 'libraries':
         libraries.hint();
       case 'server':
@@ -845,6 +872,17 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     });
   }
 });
+
+/// What a listen moves, on the user pass and the listens marker's alike.
+/// The log rides the marker alone, which every accepted listen sends.
+final List<ProviderBase<Object?>> _listenReads = [
+  listeningStatsProvider,
+  listeningHeatmapProvider,
+  topListProvider,
+];
+
+/// The same, as families: a year's recap.
+final List<Family> _listenFamilies = [yearInReviewProvider];
 
 /// The most entities one catalog invalidation names: the contract's
 /// bound on its `pids`.

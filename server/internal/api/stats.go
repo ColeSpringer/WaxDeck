@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -12,8 +13,24 @@ import (
 
 // Listening statistics and the year in review.
 
+// statsMediaParam reads an optional medium; the generated binding does not
+// enforce enum membership on query params, so it is checked here.
+func statsMediaParam(p *StatsMediaType) (string, error) {
+	if p == nil {
+		return "", nil
+	}
+	if !p.Valid() {
+		return "", refuse(http.StatusBadRequest, "invalid-request", "unknown mediaType")
+	}
+	return string(*p), nil
+}
+
 func (s *Server) GetListeningStats(ctx context.Context, req GetListeningStatsRequestObject) (GetListeningStatsResponseObject, error) {
 	uc := userCtx(ctx)
+	media, err := statsMediaParam(req.Params.MediaType)
+	if err != nil {
+		return nil, err
+	}
 	rng, bucket := "30d", "day"
 	if req.Params.Range != nil {
 		rng = string(*req.Params.Range)
@@ -21,7 +38,7 @@ func (s *Server) GetListeningStats(ctx context.Context, req GetListeningStatsReq
 	if req.Params.Bucket != nil {
 		bucket = string(*req.Params.Bucket)
 	}
-	res, err := s.svc.Reads.ListeningStats(ctx, uc, rng, bucket)
+	res, err := s.svc.Reads.ListeningStats(ctx, uc, rng, bucket, media)
 	if err != nil {
 		return nil, err
 	}
@@ -52,11 +69,15 @@ func (s *Server) GetListeningStats(ctx context.Context, req GetListeningStatsReq
 
 func (s *Server) GetListeningHeatmap(ctx context.Context, req GetListeningHeatmapRequestObject) (GetListeningHeatmapResponseObject, error) {
 	uc := userCtx(ctx)
+	media, err := statsMediaParam(req.Params.MediaType)
+	if err != nil {
+		return nil, err
+	}
 	year := 0
 	if req.Params.Year != nil {
 		year = *req.Params.Year
 	}
-	res, err := s.svc.Reads.ListeningHeatmap(ctx, uc, year)
+	res, err := s.svc.Reads.ListeningHeatmap(ctx, uc, year, media)
 	if err != nil {
 		return nil, err
 	}
@@ -78,6 +99,9 @@ func (s *Server) GetListeningHeatmap(ctx context.Context, req GetListeningHeatma
 }
 
 func (s *Server) GetTopList(ctx context.Context, req GetTopListRequestObject) (GetTopListResponseObject, error) {
+	if !req.Params.Kind.Valid() {
+		return nil, refuse(http.StatusBadRequest, "invalid-request", "unknown kind")
+	}
 	uc := userCtx(ctx)
 	rng := "30d"
 	if req.Params.Range != nil {
@@ -105,15 +129,15 @@ func topEntriesJSON(entries []service.TopEntry) []TopEntry {
 		if e.PID != "" {
 			te.Pid = ptr(e.PID)
 		}
-		if e.ArtItemPID != "" {
+		if e.ArtPID != "" {
 			// A station's picture comes from the logo proxy, not from
 			// the item store: it is not a catalog item, and the item
 			// art route would answer 404 for every entry in a Top
 			// stations list.
-			if strings.HasPrefix(e.ArtItemPID, service.PrefixRadioStation+"-") {
-				te.ArtUrl = ptr("/api/v1/radio/stations/" + url.PathEscape(e.ArtItemPID) + "/logo")
+			if strings.HasPrefix(e.ArtPID, service.PrefixRadioStation+"-") {
+				te.ArtUrl = ptr("/api/v1/radio/stations/" + url.PathEscape(e.ArtPID) + "/logo")
 			} else {
-				te.ArtUrl = ptr("/api/v1/items/" + url.PathEscape(e.ArtItemPID) + "/art")
+				te.ArtUrl = ptr("/api/v1/items/" + url.PathEscape(e.ArtPID) + "/art")
 			}
 		}
 		out = append(out, te)
@@ -185,6 +209,8 @@ func (s *Server) GetYearInReview(ctx context.Context, req GetYearInReviewRequest
 		TopTracks:         topEntriesJSON(res.TopTracks),
 		TopGenres:         topEntriesJSON(res.TopGenres),
 		TopShows:          topEntriesJSON(res.TopShows),
+		TopBooks:          topEntriesJSON(res.TopBooks),
+		TopAuthors:        topEntriesJSON(res.TopAuthors),
 	}
 	for _, m := range res.ByMonth {
 		out.ByMonth = append(out.ByMonth, MonthListening{Month: m.Month, Ms: m.Ms, Sessions: m.Sessions})

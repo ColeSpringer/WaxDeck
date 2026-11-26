@@ -4,11 +4,44 @@ import { expect, Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { clickThrough, clickToward, wheelIntoView } from '../gestures';
+import { clickThrough, clickToward, wheelIntoReach, wheelIntoView } from '../gestures';
+
+/// The media the page's switch scopes it to, as the wire names them.
+export type StatsMedia = 'music' | 'podcast' | 'audiobook' | 'radio';
 
 export class Stats extends Surface {
   range(name: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.statsRange(name)));
+  }
+
+  medium(name: StatsMedia): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.statsMedia(name)));
+  }
+
+  /// Scope the page to a medium, and hold the switch to what it does:
+  /// something leaving the screen or something arriving on it. Retried
+  /// as `narrowTo` is, the click plus its effect as one unit.
+  async scopeTo(name: StatsMedia, goal: { gone: Locator } | { shows: Locator }): Promise<void> {
+    await this.medium(name).waitFor({ timeout: T.assert });
+    if ('gone' in goal) await expect(goal.gone).not.toHaveCount(0);
+    await expect(async () => {
+      await clickToward(this.medium(name), goal);
+    }).toPass({ timeout: T.nav });
+  }
+
+  /// One ranked row of the top list, counted from the top.
+  topEntry(nth: number): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.topEntry(nth)));
+  }
+
+  /// Open what a ranked row names, holding it to naming [name] first and
+  /// settling on [settled]. Wheeled into reach: the list sits below the
+  /// chart and the heatmap, culled until it is scrolled to.
+  async openTopEntry(nth: number, name: string, settled: Locator): Promise<void> {
+    const row = this.topEntry(nth);
+    await wheelIntoReach(this.ctx.page, row);
+    await expect(row).toContainText(name);
+    await clickThrough(row, settled);
   }
 
   /// Switch the range, and hold the switch to something leaving the

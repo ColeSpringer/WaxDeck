@@ -430,3 +430,51 @@ func TestReplayedCheckpointStampsItsRecordedTime(t *testing.T) {
 		t.Fatalf("lastProgressAt = %v, want the live checkpoint at or after %v", at, before)
 	}
 }
+
+// An accepted listen announces the caller's listening record once per
+// call, marked or not, so an open stats page re-reads; a report of
+// duplicates alone grew nothing and announces nothing.
+func TestIngestAnnouncesTheListeningRecord(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	amber, amberBare := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
+	basalt, _ := fixtureTrackPID(t, ctx, svc, uc, "Basalt Steps")
+	since, err := svc.MintServerCursor(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := func() (listens, played int) {
+		t.Helper()
+		return markers(t, ctx, svc, uc.ID, eventListens, ""), markers(t, ctx, svc, uc.ID, eventPlayState, string(amberBare))
+	}
+	ingest := func(sessions ...ListenSession) {
+		t.Helper()
+		if _, err := svc.Playback.IngestListens(ctx, uc, sessions); err != nil {
+			t.Fatal(err)
+		}
+	}
+	brief := func(id, pid string) ListenSession {
+		return ListenSession{SessionID: id, PID: pid, StartedAt: time.Now().UTC(), MsPlayed: 100}
+	}
+
+	ingest(brief("brief-1", amber), brief("brief-2", basalt))
+	if l, p := counts(); l != 1 || p != 0 {
+		t.Fatalf("two sub-threshold listens: %d listens markers and %d play-states, want 1 and 0", l, p)
+	}
+	ingest(brief("brief-1", amber))
+	if l, _ := counts(); l != 1 {
+		t.Fatalf("a duplicate report: %d listens markers, want still 1", l)
+	}
+	ingest(ListenSession{SessionID: "full", PID: amber, StartedAt: time.Now().UTC(), MsPlayed: 1500, Finished: true})
+	if l, p := counts(); l != 2 || p != 1 {
+		t.Fatalf("a marked listen: %d listens markers and %d play-states, want 2 and 1", l, p)
+	}
+
+	delta, err := svc.SyncServerDelta(ctx, uc, since, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(delta.Events, func(e ServerSyncEvent) bool { return e.Kind == eventListens && e.PID == "" }) {
+		t.Fatalf("delta = %+v, want a pid-less listens marker", delta.Events)
+	}
+}

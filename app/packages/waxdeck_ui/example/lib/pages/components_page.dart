@@ -604,6 +604,16 @@ class _ComponentsPageState extends State<ComponentsPage> {
               ),
               MediaListRow(
                 data: MediaTileData(
+                  title: 'Salt Harbour',
+                  subtitle: 'Nightjar',
+                  artwork: art.of('Salt Harbour'),
+                  trailingText: '188',
+                ),
+                rank: 1,
+                onTap: () {},
+              ),
+              MediaListRow(
+                data: MediaTileData(
                   title: 'The Quiet Part',
                   subtitle: 'Field Recordings',
                   artwork: art.of('The Quiet Part'),

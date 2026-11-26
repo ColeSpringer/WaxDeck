@@ -119,6 +119,15 @@ void main() {
         }
       });
 
+      test('an empty chart names every medium the page scopes to', () {
+        final title = l10n.statsEmptyTitle('none-of-them');
+        final allTime = l10n.statsAllTimeEmptyMessage('none-of-them');
+        for (final media in StatsMediaType.values) {
+          expect(l10n.statsEmptyTitle(media.wireName), isNot(title));
+          expect(l10n.statsAllTimeEmptyMessage(media.wireName), isNot(allTime));
+        }
+      });
+
       test('every card shape reads as itself', () {
         final fallback = l10n.statsCardPreviewSpoken('none-of-them');
         for (final format in ShareCardFormat.values) {

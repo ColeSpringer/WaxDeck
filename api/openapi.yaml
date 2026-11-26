@@ -11876,6 +11876,14 @@ paths:
             type: string
             enum: [day, week, month]
             default: day
+        - name: mediaType
+          in: query
+          description: >
+            Only listening of this medium counts toward every figure
+            the read answers; `byMediaType` then holds that medium
+            alone, or nothing. Absent, every medium counts.
+          schema:
+            $ref: "#/components/schemas/StatsMediaType"
       responses:
         "200":
           description: Aggregated listening time.
@@ -11909,6 +11917,14 @@ paths:
             type: integer
             minimum: 1970
             maximum: 2200
+        - name: mediaType
+          in: query
+          description: >
+            Only listening of this medium counts toward every figure
+            the read answers, the days and both streaks alike. Absent,
+            every medium counts.
+          schema:
+            $ref: "#/components/schemas/StatsMediaType"
       responses:
         "200":
           description: The heatmap.
@@ -11924,13 +11940,21 @@ paths:
   /stats/top:
     get:
       operationId: getTopList
-      summary: Top artists, albums, genres, shows, or stations
+      summary: Top artists, albums, tracks, genres, shows, episodes, books, authors, or stations
       description: >
         The caller's most-listened entries of one kind over a range,
-        ranked by listening time. `shows` covers podcasts and
-        `stations` covers radio; spoken-word listening dominates by raw
-        time, so music kinds only count music sessions, `shows` only
-        counts podcast sessions, and `stations` only counts radio.
+        ranked by listening time. Each kind counts one medium's listen
+        sessions: `artists`, `albums`, `tracks`, and `genres` count
+        music; `shows` and `episodes` podcasts; `books` and `authors`
+        audiobooks; `stations` radio. Every kind but `genres` groups by
+        its entity, so two albums that share a title are two entries and
+        one artist credited under two spellings is one; a listen whose
+        item has no such entity counts under the name the item gives
+        it. In `artists`, `albums`, `genres`, `shows`, and `authors`, a
+        listen whose item has left, or whose item carries no such
+        entity or name (a track with no artist, a book with no author,
+        an episode whose show has no title), counts toward no entry, so
+        those lists can total less than the listening figures.
       tags: [stats]
       parameters:
         - name: kind
@@ -11939,7 +11963,7 @@ paths:
           description: Which top list.
           schema:
             type: string
-            enum: [artists, albums, genres, shows, stations]
+            enum: [artists, albums, tracks, genres, shows, episodes, books, authors, stations]
         - name: range
           in: query
           description: How far back to aggregate, ending now.
@@ -26340,7 +26364,7 @@ components:
         kind:
           type: string
           description: Which top list this is.
-          enum: [artists, albums, genres, shows, stations]
+          enum: [artists, albums, tracks, genres, shows, episodes, books, authors, stations]
         range:
           type: string
           description: The range that was aggregated.
@@ -26358,22 +26382,43 @@ components:
       properties:
         name:
           type: string
-          description: Display name (artist, album, genre, or show).
+          description: >
+            The entity's own name, the title of a track, episode, or
+            book, the genre, or the station's name. Empty for a
+            `tracks`, `episodes`, `books`, or `stations` entry whose item
+            or station has left; it keeps its pid and its time.
           example: Muddy Waters
         pid:
           type: string
           description: >
-            The entry's pid when the entry is a catalog entity (absent
-            for genres, and for names that no longer resolve). A
-            `stations` entry carries the station's `rs-` pid, which is
-            not a catalog entity but is addressable all the same.
+            The entry's entity: `ar-` for artists and authors, `al-` for
+            albums, `pc-` for shows, `tr-`, `ep-`, and `bk-` for tracks,
+            episodes, and books, and `rs-` for stations (a station is
+            addressable but not a catalog entity). Absent for genres, for
+            an entry grouped by name, and for an entry the caller cannot
+            open now: an item in the trash or outside what the caller may
+            see, an entity none of whose items it may see, or a show
+            outside its reach; such an entry keeps its name and its time.
+            A `tracks`, `episodes`, `books`, or `stations` entry whose
+            item or station has left keeps its pid.
           example: ar-01JZX5N8QW3F4V9T2B7KD3M9R6
         artUrl:
           type: string
           format: uri-reference
           description: >
-            Origin-relative artwork URL, when the entry has one.
-          example: /api/v1/items/tr-01JZX5N8QW3F4V9T2B7KD3M9R6/art
+            The URL of the entry's picture, origin-relative. For a
+            catalog entity it is the entity's `/api/v1/items/{pid}/art`,
+            which answers `not-found` only when nothing in the entity's
+            art chain has a picture (an album with no cover of its own
+            falls through to a member's); an artist, author, or show,
+            whose chain is its own picture alone, draws the art of its
+            most-listened item the caller can open when it has none. A
+            station draws its logo, and an entry grouped by name the art
+            of its most-listened item the caller can open. Absent for
+            genres, for an entry whose item or station has left, for an
+            entry grouped by name with no item the caller can open, and
+            for an entry the caller cannot open now.
+          example: /api/v1/items/ar-01JZX5N8QW3F4V9T2B7KD3M9R6/art
         plays:
           type: integer
           description: Listen sessions attributed to the entry in the range.
@@ -26461,7 +26506,7 @@ components:
       required:
         [year, timezone, totalMs, sessions, distinctItems, newInLibrary,
          timeSavedMs, longestStreakDays, byMonth, byMediaType, topArtists,
-         topTracks, topGenres, topShows]
+         topTracks, topGenres, topShows, topBooks, topAuthors]
       properties:
         year:
           type: integer
@@ -26527,6 +26572,16 @@ components:
         topShows:
           type: array
           description: Most-listened podcast shows that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+        topBooks:
+          type: array
+          description: Most-listened audiobooks that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+        topAuthors:
+          type: array
+          description: Most-listened audiobook authors that year.
           items:
             $ref: "#/components/schemas/TopEntry"
 
@@ -26786,6 +26841,12 @@ components:
             It reaches every signed-in account.
 
 
+            `listens` carries no `pid`: the caller's listening record grew
+            (a client's listens were accepted, or the server's stream
+            proxy recorded a radio tune-in starting or ending), so re-read
+            the listening stats.
+
+
             Further markers are announcements rather than refetch
             hints, carrying the same news as the notification-target
             event of the same name: `feed-disabled` (`pid` is the show
@@ -26820,8 +26881,8 @@ components:
           type: string
           description: >
             The item, show, book, playlist, or job the event is about
-            (absent for `prefs`, `account`, `health`, `libraries`, and
-            `server`).
+            (absent for `prefs`, `account`, `health`, `libraries`,
+            `server`, and `listens`).
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         playState:
           $ref: "#/components/schemas/PlayState"

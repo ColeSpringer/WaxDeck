@@ -1240,6 +1240,117 @@ void main() {
     }
   });
 
+  group('MediaListRow rank', () {
+    const ranked = MediaTileData(
+      title: 'Harbour Lights',
+      subtitle: 'Nightjar',
+      trailingText: '4:18',
+    );
+
+    Future<void> pumpRow(WidgetTester tester, Widget row, {double scale = 1}) =>
+        tester.pumpWidget(
+          MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+            child: _host(
+              Column(mainAxisSize: MainAxisSize.min, children: <Widget>[row]),
+              height: 120,
+            ),
+          ),
+        );
+
+    testWidgets('draws the rank and the picture together', (tester) async {
+      await pumpRow(tester, const MediaListRow(data: ranked, rank: 3));
+
+      expect(find.text('3'), findsOneWidget);
+      expect(find.byType(ArtworkImage), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('3')).dx,
+        lessThan(tester.getTopLeft(find.byType(ArtworkImage)).dx),
+        reason: 'the rank comes before the picture',
+      );
+      expect(
+        tester.getTopLeft(find.byType(ArtworkImage)).dx,
+        lessThan(tester.getTopLeft(find.text('Harbour Lights')).dx),
+      );
+    });
+
+    for (final scale in <double>[1, 2]) {
+      testWidgets('holds a three-digit rank whole at ${scale}x text', (
+        tester,
+      ) async {
+        await pumpRow(
+          tester,
+          const MediaListRow(data: ranked, rank: 100),
+          scale: scale,
+        );
+
+        expect(tester.takeException(), isNull);
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.text('100'),
+        );
+        expect(paragraph.didExceedMaxLines, isFalse);
+        expect(
+          paragraph.getMaxIntrinsicWidth(double.infinity),
+          lessThanOrEqualTo(paragraph.size.width),
+          reason: 'the number fits the column without an ellipsis',
+        );
+      });
+    }
+
+    testWidgets(
+      'draws the rank beside a selection box, which keeps the picture out',
+      (tester) async {
+        await pumpRow(
+          tester,
+          MediaListRow(data: ranked, rank: 2, onSelect: (_) {}),
+        );
+
+        expect(find.text('2'), findsOneWidget);
+        expect(find.byType(Checkbox), findsOneWidget);
+        expect(find.byType(ArtworkImage), findsNothing);
+      },
+    );
+
+    for (final scale in <double>[1, 1.5, 2]) {
+      testWidgets('holds a two-digit rank whole at ${scale}x text', (
+        tester,
+      ) async {
+        await pumpRow(
+          tester,
+          const MediaListRow(data: ranked, rank: 20),
+          scale: scale,
+        );
+
+        expect(tester.takeException(), isNull);
+        final paragraph = tester.renderObject<RenderParagraph>(find.text('20'));
+        expect(paragraph.didExceedMaxLines, isFalse);
+        expect(
+          paragraph.getMaxIntrinsicWidth(double.infinity),
+          lessThanOrEqualTo(paragraph.size.width),
+          reason: 'the number fits the column it is given',
+        );
+        expect(
+          tester.getSize(find.byType(MediaListRow)).height,
+          MediaListRow.heightFor(tester.element(find.byType(MediaListRow))),
+          reason: 'a ranked row is no taller than a plain one',
+        );
+      });
+    }
+
+    testWidgets('is a programming error beside a leading index or text', (
+      tester,
+    ) async {
+      expect(
+        () => MediaListRow(data: ranked, rank: 1, leadingIndex: 1),
+        throwsAssertionError,
+      );
+      expect(
+        () => MediaListRow(data: ranked, rank: 1, leadingText: 'Jul 12'),
+        throwsAssertionError,
+      );
+    });
+  });
+
   group('MediaListRow play count', () {
     Future<void> pumpRow(
       WidgetTester tester,

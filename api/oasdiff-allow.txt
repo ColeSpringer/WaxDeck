@@ -1,0 +1,6 @@
+# A top list answers the kind it was asked for, so a client only ever
+# receives a kind it sent.
+GET /stats/top added the new `authors` enum value to the `kind` response property for the response status `200`
+GET /stats/top added the new `books` enum value to the `kind` response property for the response status `200`
+GET /stats/top added the new `episodes` enum value to the `kind` response property for the response status `200`
+GET /stats/top added the new `tracks` enum value to the `kind` response property for the response status `200`

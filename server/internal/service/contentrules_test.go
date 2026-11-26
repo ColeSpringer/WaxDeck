@@ -482,6 +482,46 @@ func TestServerYearInReviewRanksOnlyWhatTheCallerCanSee(t *testing.T) {
 	}
 }
 
+// An artist with no picture of its own draws its most-listened track the
+// reader can see, never one their rules hide; one whose every track is
+// hidden from them ranks not at all.
+func TestServerYearInReviewDrawsAnArtistFromWhatTheReaderCanSee(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	f.tag(t, "Canonical", "MOOD", "calm")
+	canonical, lowercase := f.itemNamed(t, "Canonical"), f.itemNamed(t, "Lowercase")
+	started := time.Now().Add(-time.Hour)
+	var rows []wdb.ListenSession
+	for i, it := range []*model.ItemView{canonical, lowercase} {
+		rows = append(rows, wdb.ListenSession{
+			UserID: f.uc.ID, SessionID: fmt.Sprintf("drawn-%d", i),
+			ItemPID: string(it.PID), MediaType: "music",
+			StartedAt: started, MsPlayed: int64(60000 * (2 - i)),
+		})
+	}
+	if _, err := f.svc.db.InsertListens(f.ctx, rows); err != nil {
+		t.Fatal(err)
+	}
+	artists := func(uc *UserCtx) []TopEntry {
+		t.Helper()
+		recap, err := f.svc.Reads.ServerWideYearInReview(f.ctx, uc, started.Year())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return recap.TopArtists
+	}
+	if got := artists(f.uc); len(got) != 1 || got[0].ArtPID != apiPID(PrefixTrack, canonical.PID) {
+		t.Fatalf("unrestricted top artists = %+v, want the artist drawing Canonical", got)
+	}
+	if got := artists(f.calmDenied()); len(got) != 1 || got[0].ArtPID != apiPID(PrefixTrack, lowercase.PID) {
+		t.Errorf("restricted top artists = %+v, want the artist drawing Lowercase", got)
+	}
+	f.tag(t, "Lowercase", "MOOD", "calm")
+	if got := artists(f.calmDenied()); len(got) != 0 {
+		t.Errorf("top artists with every heard track hidden = %+v, want none", got)
+	}
+}
+
 // A reader's recap leaves out only what their libraries or rules hide:
 // a track in the trash, or one gone from the catalog, ranks for them
 // exactly as it does for a reader who sees everything.

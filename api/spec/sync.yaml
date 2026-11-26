@@ -405,6 +405,12 @@ components:
             It reaches every signed-in account.
 
 
+            `listens` carries no `pid`: the caller's listening record grew
+            (a client's listens were accepted, or the server's stream
+            proxy recorded a radio tune-in starting or ending), so re-read
+            the listening stats.
+
+
             Further markers are announcements rather than refetch
             hints, carrying the same news as the notification-target
             event of the same name: `feed-disabled` (`pid` is the show
@@ -439,8 +445,8 @@ components:
           type: string
           description: >
             The item, show, book, playlist, or job the event is about
-            (absent for `prefs`, `account`, `health`, `libraries`, and
-            `server`).
+            (absent for `prefs`, `account`, `health`, `libraries`,
+            `server`, and `listens`).
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         playState:
           $ref: "#/components/schemas/PlayState"

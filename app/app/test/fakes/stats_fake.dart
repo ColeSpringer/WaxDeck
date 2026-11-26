@@ -41,8 +41,9 @@ mixin FakeStats on FakeRepositoryState implements StatsApi {
   YearInReview? yearInReview;
   ServerYearInReview? serverYearInReview;
 
-  final List<({String? range, String? bucket})> listeningStatsCalls = [];
-  final List<int?> heatmapCalls = [];
+  final List<({String? range, String? bucket, StatsMediaType? mediaType})>
+  listeningStatsCalls = [];
+  final List<({int? year, StatsMediaType? mediaType})> heatmapCalls = [];
   final List<({String kind, String? range, int? limit})> topListCalls = [];
   final List<({String? client, String? cursor, int? limit})> listenLogCalls =
       [];
@@ -53,8 +54,13 @@ mixin FakeStats on FakeRepositoryState implements StatsApi {
   Future<ListeningStats> getListeningStats({
     String? range,
     String? bucket,
+    StatsMediaType? mediaType,
   }) async {
-    listeningStatsCalls.add((range: range, bucket: bucket));
+    listeningStatsCalls.add((
+      range: range,
+      bucket: bucket,
+      mediaType: mediaType,
+    ));
     await statsGate?.future;
     final error = statsError;
     if (error != null) throw error;
@@ -62,8 +68,11 @@ mixin FakeStats on FakeRepositoryState implements StatsApi {
   }
 
   @override
-  Future<ListeningHeatmap> getListeningHeatmap({int? year}) async {
-    heatmapCalls.add(year);
+  Future<ListeningHeatmap> getListeningHeatmap({
+    int? year,
+    StatsMediaType? mediaType,
+  }) async {
+    heatmapCalls.add((year: year, mediaType: mediaType));
     await statsGate?.future;
     final error = statsError;
     if (error != null) throw error;

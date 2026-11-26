@@ -972,6 +972,7 @@ export const SemanticsIds = {
   shareCardOpen: 'share-card-open',
   shareCardPreview: (format: string | number) => `share-card-preview-${format}`,
   statsBucket: 'stats-bucket',
+  statsMedia: (media: string | number) => `stats-media-${media}`,
   statsRange: (range: string | number) => `stats-range-${range}`,
   top: (kind: string | number) => `top-kind-${kind}`,
   topEntry: (index: string | number) => `top-entry-${index}`,
@@ -979,6 +980,7 @@ export const SemanticsIds = {
   yirPersonal: 'yir-personal',
   yirPrevYear: 'yir-prev-year',
   yirServer: 'yir-server',
+  yirTopEntry: (kind: string | number, index: string | number) => `yir-top-${kind}-${index}`,
 
   // tools: Long-running tools and their progress rows.
   jobRow: (pid: string | number) => `job-row-${pid}`,
@@ -1345,9 +1347,11 @@ export const SemanticsIdPrefixes = {
   // stats: Listening stats and year in review.
   shareCardExport: 'share-card-export-',
   shareCardPreview: 'share-card-preview-',
+  statsMedia: 'stats-media-',
   statsRange: 'stats-range-',
   top: 'top-kind-',
   topEntry: 'top-entry-',
+  yirTopEntry: 'yir-top-',
 
   // tools: Long-running tools and their progress rows.
   jobRow: 'job-row-',

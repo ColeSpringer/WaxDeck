@@ -33,16 +33,6 @@
   "@homeLibraryLoadError": {
     "description": "Title of the error state when home's probe of the library failed."
   },
-  "homeMixBasisReady": "Ready to open: {genre}",
-  "@homeMixBasisReady": {
-    "description": "Message when a genre mix card's listing was found after the listener had moved on from home; its action opens it. {genre} is the genre's own name.",
-    "placeholders": {
-      "genre": {
-        "type": "String",
-        "example": "Shoegaze"
-      }
-    }
-  },
   "homeMixEmpty": "No mix available for {title}",
   "@homeMixEmpty": {
     "description": "Snackbar when a mix card was tapped and the server answered with no tracks. {title} is the card's own name.",

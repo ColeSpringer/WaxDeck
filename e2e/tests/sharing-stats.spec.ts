@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { J } from './driver';
+import { J, T } from './driver';
 
 // Listening stats and public share links over the real stack: sessions
 // reported through the listen API surface in the stats screen and the
@@ -65,7 +65,14 @@ test('reported listens surface in stats and the year in review', async ({ app })
   // the listened headline reads in hours.
   const hoursTotal = app.stats.figure(/\d+h \d+m\s+listened/);
   await expect(hoursTotal.first()).toBeVisible();
-  await expect(app.stats.figure(/\d+\s+sessions/).first()).toBeVisible();
+  // Anchored, since every ranked row counts its listens too.
+  await expect(app.stats.figure(/^\d+\s+listens$/).first()).toBeVisible();
+
+  // The page opens on music, which the seeded track is. Podcasts hold
+  // none of these listens; music again holds them all.
+  await app.stats.scopeTo('podcast', { gone: hoursTotal });
+  await expect(app.stats.figure(/^0\s+listens$/).first()).toBeVisible();
+  await app.stats.scopeTo('music', { shows: hoursTotal.first() });
 
   // Switching to 7d drops the backdated session: every hours-scale
   // figure leaves the screen and a minutes-scale total remains.
@@ -84,6 +91,46 @@ test('reported listens surface in stats and the year in review', async ({ app })
   // asserts is that the view renders a total at all.
   await app.stats.openServerRecap(app.stats.figure('listeners counted in').first());
   await expect(app.stats.figure(/\d+h \d+m\s+listened together/).first()).toBeVisible();
+
+  // The music top list ranks the seeded track's artist first, and the
+  // row opens the artist's own page.
+  await app.nav.enter('stats');
+  await app.stats.openTopEntry(0, 'Fixture Artist', app.music.entityShuffle());
+});
+
+// A listen too short to cross the played threshold moves no play state,
+// so only the server's own listens marker can tell an open stats page.
+test('a listen reported while stats is open moves its total', async ({ app }) => {
+  const { pid } = await app.seed.item('Charlie Song');
+  const listens = async () =>
+    (await app.api.get('/stats/listening', { query: { range: '30d', mediaType: 'music' } }))
+      .sessions;
+  const shown = (n: number) => app.stats.figure(new RegExp(`^${n}\\s+listens$`)).first();
+
+  await app.nav.enter('stats');
+  const before = await listens();
+  await expect(shown(before)).toBeVisible();
+
+  // A fresh session id each attempt: the account outlives a retry and a
+  // reused stack, and a repeated id deduplicates to no change at all.
+  const outcome = await app.api.post('/listens', {
+    data: {
+      sessions: [
+        {
+          sessionId: `e2e-stats-live-${Date.now()}`,
+          pid,
+          startedAt: new Date(Date.now() - 20_000).toISOString(),
+          msPlayed: 20_000,
+          finished: false,
+          source: 'live' as const,
+        },
+      ],
+    },
+  });
+  expect(outcome.accepted).toBe(1);
+
+  // No reload: the figure moves over the socket.
+  await expect(shown(before + 1)).toBeVisible({ timeout: T.live });
 });
 
 test('a share link plays anonymously and dies on revocation', async ({

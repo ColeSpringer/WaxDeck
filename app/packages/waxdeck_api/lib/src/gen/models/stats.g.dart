@@ -260,16 +260,32 @@ class TopEntry {
     this.artUrl,
   });
 
-  /// Display name (artist, album, genre, or show).
+  /// The entity's own name, the title of a track, episode, or book, the genre,
+  /// or the station's name. Empty for a `tracks`, `episodes`, `books`, or
+  /// `stations` entry whose item or station has left; it keeps its pid and its
+  /// time.
   final String name;
 
-  /// The entry's pid when the entry is a catalog entity (absent for genres, and
-  /// for names that no longer resolve). A `stations` entry carries the
-  /// station's `rs-` pid, which is not a catalog entity but is addressable all
-  /// the same.
+  /// The entry's entity: `ar-` for artists and authors, `al-` for albums, `pc-`
+  /// for shows, `tr-`, `ep-`, and `bk-` for tracks, episodes, and books, and
+  /// `rs-` for stations (a station is addressable but not a catalog entity).
+  /// Absent for genres, for an entry grouped by name, and for an entry the
+  /// caller cannot open now: an item in the trash or outside what the caller
+  /// may see, an entity none of whose items it may see, or a show outside its
+  /// reach; such an entry keeps its name and its time. A `tracks`, `episodes`,
+  /// `books`, or `stations` entry whose item or station has left keeps its pid.
   final String? pid;
 
-  /// Origin-relative artwork URL, when the entry has one.
+  /// The URL of the entry's picture, origin-relative. For a catalog entity it
+  /// is the entity's `/api/v1/items/{pid}/art`, which answers `not-found` only
+  /// when nothing in the entity's art chain has a picture (an album with no
+  /// cover of its own falls through to a member's); an artist, author, or show,
+  /// whose chain is its own picture alone, draws the art of its most-listened
+  /// item the caller can open when it has none. A station draws its logo, and
+  /// an entry grouped by name the art of its most-listened item the caller can
+  /// open. Absent for genres, for an entry whose item or station has left, for
+  /// an entry grouped by name with no item the caller can open, and for an
+  /// entry the caller cannot open now.
   /// Arrives resolved against the client's base URL.
   final String? artUrl;
 
@@ -316,6 +332,8 @@ class YearInReview {
     this.topTracks = const [],
     this.topGenres = const [],
     this.topShows = const [],
+    this.topBooks = const [],
+    this.topAuthors = const [],
   });
 
   /// The calendar year.
@@ -362,4 +380,10 @@ class YearInReview {
 
   /// Most-listened podcast shows that year.
   final List<TopEntry> topShows;
+
+  /// Most-listened audiobooks that year.
+  final List<TopEntry> topBooks;
+
+  /// Most-listened audiobook authors that year.
+  final List<TopEntry> topAuthors;
 }

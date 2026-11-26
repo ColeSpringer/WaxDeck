@@ -10906,6 +10906,20 @@ YearInReview decodeYearInReview(Map<String, Object?> json, WireContext ctx) {
       (v, at) =>
           wireList(v, at, (e, at) => decodeTopEntry(wireObject(e, at), ctx)),
     ),
+    topBooks: readRequired(
+      json,
+      'topBooks',
+      type,
+      (v, at) =>
+          wireList(v, at, (e, at) => decodeTopEntry(wireObject(e, at), ctx)),
+    ),
+    topAuthors: readRequired(
+      json,
+      'topAuthors',
+      type,
+      (v, at) =>
+          wireList(v, at, (e, at) => decodeTopEntry(wireObject(e, at), ctx)),
+    ),
   );
 }
 
@@ -10926,6 +10940,8 @@ Map<String, Object?> encodeYearInReview(YearInReview value) => {
   'topTracks': [for (final e in value.topTracks) encodeTopEntry(e)],
   'topGenres': [for (final e in value.topGenres) encodeTopEntry(e)],
   'topShows': [for (final e in value.topShows) encodeTopEntry(e)],
+  'topBooks': [for (final e in value.topBooks) encodeTopEntry(e)],
+  'topAuthors': [for (final e in value.topAuthors) encodeTopEntry(e)],
 };
 
 bool _keepEntityCard(Object? element) =>

@@ -927,7 +927,8 @@ MediaTileData listenLogTile(
 }
 
 WaxDomain _topDomain(String kind) => switch (kind) {
-  'shows' => WaxDomain.podcasts,
+  'shows' || 'episodes' => WaxDomain.podcasts,
+  'books' || 'authors' => WaxDomain.audiobooks,
   'stations' => WaxDomain.radio,
   _ => WaxDomain.music,
 };
@@ -946,14 +947,15 @@ MediaTileData topEntryTile(
   // listen log gives a row in the same state, rather than a blank line
   // where a title goes.
   title: entry.name.isEmpty ? l10n.statsLogRemovedItem : entry.name,
-  subtitle: l10n.statsPlays(entry.plays),
+  subtitle: l10n.statsListens(entry.plays),
   artwork: waxArtwork(store, entry.artUrl),
   domain: _topDomain(kind),
-  // An artist reads as a disc, the way every other artist row in the app
-  // does; an album and a show are square by nature.
-  shape: kind == 'artists' || kind == 'genres'
-      ? ArtworkShape.circle
-      : ArtworkShape.square,
+  // A person reads as a disc, the way every other artist row in the app
+  // does, and a genre with them; the rest are square.
+  shape: switch (kind) {
+    'artists' || 'authors' || 'genres' => ArtworkShape.circle,
+    _ => ArtworkShape.square,
+  },
   trailingText: l10n.formatListenTime(entry.ms),
   semanticsId: semanticsId,
 );

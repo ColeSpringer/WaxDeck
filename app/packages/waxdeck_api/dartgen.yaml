@@ -461,6 +461,8 @@ models:
       topTracks: {default: []}
       topGenres: {default: []}
       topShows: {default: []}
+      topBooks: {default: []}
+      topAuthors: {default: []}
 
 hand:
   M3uPreview: {covers: [matched, merged, unmatched, entries]}

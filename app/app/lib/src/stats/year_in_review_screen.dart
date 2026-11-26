@@ -40,7 +40,7 @@ class _YearInReviewScreenState extends ConsumerState<YearInReviewScreen> {
         SliverPadding(
           padding: sizeClass.gutter,
           // The recap reads top to bottom as one story - figures, a
-          // chart, four ranked lists - so it takes the reading column
+          // chart, ranked lists - so it takes the reading column
           // rather than stretching its rank rows across a desktop
           // window with the time they name a screen's width away.
           // Column-per-child rather than one column in an adapter: the
@@ -163,7 +163,7 @@ class _PersonalRecap extends ConsumerWidget {
                       StatFigure(
                         key: const Key('yir-sessions'),
                         value: '${value.sessions}',
-                        caption: l10n.statsSessions,
+                        caption: l10n.statsListensCaption,
                       ),
                       StatFigure(
                         key: const Key('yir-distinct'),
@@ -226,6 +226,16 @@ class _PersonalRecap extends ConsumerWidget {
                     kind: 'shows',
                     entries: value.topShows,
                   ),
+                  _TopFive(
+                    title: l10n.statsYearTopBooks,
+                    kind: 'books',
+                    entries: value.topBooks,
+                  ),
+                  _TopFive(
+                    title: l10n.statsYearTopAuthors,
+                    kind: 'authors',
+                    entries: value.topAuthors,
+                  ),
                   _ShareCardsDoor(data: ShareCardData.personal(l10n, value)),
                 ],
               ),
@@ -274,7 +284,7 @@ class _ServerRecap extends ConsumerWidget {
                       StatFigure(
                         key: const Key('yir-server-sessions'),
                         value: '${value.sessions}',
-                        caption: l10n.statsSessions,
+                        caption: l10n.statsListensCaption,
                       ),
                     ],
                   ),
@@ -331,7 +341,13 @@ class _TopFive extends StatelessWidget {
         SizedBox(height: WaxLayout.of(context).sectionGap),
         SectionHeader(title: title),
         for (var i = 0; i < top.length; i++)
-          TopEntryRow(index: i, entry: top[i], kind: kind),
+          TopEntryRow(
+            index: i,
+            entry: top[i],
+            kind: kind,
+            // Per list: the recap stacks several, each row a button.
+            semanticsId: SemanticsIds.yirTopEntry(kind, i),
+          ),
       ],
     );
   }

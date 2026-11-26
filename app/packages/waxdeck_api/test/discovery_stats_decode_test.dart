@@ -213,6 +213,22 @@ void main() {
           {'name': 'blues', 'plays': 22, 'ms': 4000000},
         ],
         'topShows': <Object?>[],
+        'topBooks': [
+          {
+            'name': 'The Long Way Home',
+            'pid': 'bk-01JZX5N8QW3F4V9T2B7KD3BOOK1',
+            'plays': 4,
+            'ms': 1800000,
+          },
+        ],
+        'topAuthors': [
+          {
+            'name': 'Ursula Reed',
+            'pid': 'ar-01JZX5N8QW3F4V9T2B7KDAUTHOR',
+            'plays': 5,
+            'ms': 2000000,
+          },
+        ],
       }, _host);
       expect(mapped.year, 2026);
       expect(mapped.timezone, 'America/Denver');
@@ -235,6 +251,12 @@ void main() {
       expect(genre.artUrl, isNull);
       expect(mapped.topTracks, isEmpty);
       expect(mapped.topShows, isEmpty);
+      final book = mapped.topBooks.single;
+      expect(book.name, 'The Long Way Home');
+      expect(book.pid, 'bk-01JZX5N8QW3F4V9T2B7KD3BOOK1');
+      final author = mapped.topAuthors.single;
+      expect(author.name, 'Ursula Reed');
+      expect(author.pid, 'ar-01JZX5N8QW3F4V9T2B7KDAUTHOR');
     });
 
     test('a top list keeps its range in the wire spelling', () {

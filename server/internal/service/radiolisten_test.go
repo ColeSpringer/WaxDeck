@@ -27,10 +27,10 @@ func TestRecordRadioListenReachesStats(t *testing.T) {
 	}
 
 	started := time.Now().Add(-10 * time.Minute)
-	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, started, 4*time.Minute)
+	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, started, 4*time.Minute, true)
 	settled()
 
-	stats, err := svc.Reads.ListeningStats(ctx, admin, "30d", "day")
+	stats, err := svc.Reads.ListeningStats(ctx, admin, "30d", "day", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,16 +55,16 @@ func TestRecordRadioListenReachesStats(t *testing.T) {
 		t.Fatalf("top stations: %+v", top.Entries)
 	}
 	e := top.Entries[0]
-	if e.Name != "Groove Salad" || e.PID != st.PID || e.ArtItemPID != st.PID {
+	if e.Name != "Groove Salad" || e.PID != st.PID || e.ArtPID != st.PID {
 		t.Fatalf("top station entry: %+v", e)
 	}
 
 	// A second checkpoint of the same connection extends the one row
 	// rather than adding a session: the payload carries the elapsed
 	// total, which is what makes a dropped checkpoint survivable.
-	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, started, 9*time.Minute)
+	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, started, 9*time.Minute, false)
 	settled()
-	stats, err = svc.Reads.ListeningStats(ctx, admin, "30d", "day")
+	stats, err = svc.Reads.ListeningStats(ctx, admin, "30d", "day", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,10 +112,10 @@ func TestRecordRadioListenIgnoresAGlance(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, time.Now(), svc.Radio.radioListenFloor-time.Second)
+	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, time.Now(), svc.Radio.radioListenFloor-time.Second, true)
 	// Nothing was queued, so there is no writer tick to wait for; the
 	// assertion is that the row never appears.
-	stats, err := svc.Reads.ListeningStats(ctx, admin, "30d", "day")
+	stats, err := svc.Reads.ListeningStats(ctx, admin, "30d", "day", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func TestRadioListenSurvivesShutdown(t *testing.T) {
 	// listener's context dies at the same instant their last segment is
 	// reported.
 	started := time.Now().Add(-4 * time.Minute)
-	svc.Radio.RecordRadioListen(context.WithoutCancel(ctx), admin.ID, "listen-1", st.PID, started, 4*time.Minute)
+	svc.Radio.RecordRadioListen(context.WithoutCancel(ctx), admin.ID, "listen-1", st.PID, started, 4*time.Minute, true)
 
 	if err := svc.Close(); err != nil {
 		t.Fatal(err)
@@ -231,12 +231,12 @@ func TestTopStationsAfterTheStationIsDeleted(t *testing.T) {
 	}
 
 	started := time.Now().Add(-time.Hour)
-	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", kept.PID, started, 4*time.Minute)
+	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", kept.PID, started, 4*time.Minute, true)
 	settled()
 	// More time on the one about to go, so its place in the ranking is
 	// unambiguous and the assertion is about the entry rather than the
 	// order.
-	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-2", gone.PID, started, 9*time.Minute)
+	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-2", gone.PID, started, 9*time.Minute, true)
 	settled()
 
 	if err := svc.Radio.DeleteRadioStation(ctx, gone.PID); err != nil {
@@ -257,10 +257,54 @@ func TestTopStationsAfterTheStationIsDeleted(t *testing.T) {
 	if first.Name != "" {
 		t.Fatalf("a deleted station has no name to give: %q", first.Name)
 	}
-	if first.ArtItemPID != "" {
-		t.Fatalf("a deleted station must carry no art handle: %q", first.ArtItemPID)
+	if first.ArtPID != "" {
+		t.Fatalf("a deleted station must carry no art handle: %q", first.ArtPID)
 	}
-	if second := top.Entries[1]; second.Name != "Groove Salad" || second.ArtItemPID != kept.PID {
+	if second := top.Entries[1]; second.Name != "Groove Salad" || second.ArtPID != kept.PID {
 		t.Fatalf("the surviving station lost its name or art: %+v", second)
 	}
+}
+
+// A tune-in announces the caller's listening record on its first written
+// checkpoint and on its closing one, never between, and a glance under
+// the floor writes nothing and announces nothing.
+func TestRadioListenAnnouncesItsStartAndEnd(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin := newAdminFixture(t)
+	settled := watchRadioScrobbles(t, svc)
+	st, err := svc.Radio.CreateRadioStation(ctx, admin, RadioStationEdit{
+		Name: "Groove Salad", StreamURL: "https://ice.example.net/groove",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	announced := func(want int, what string) {
+		t.Helper()
+		if n := markers(t, ctx, svc, admin.ID, eventListens, ""); n != want {
+			t.Fatalf("%s: %d listens markers, want %d", what, n, want)
+		}
+	}
+	started := time.Now().Add(-5 * time.Minute)
+	if !svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, started, time.Minute, true) {
+		t.Fatal("a checkpoint over the floor reported no write")
+	}
+	settled()
+	announced(1, "the first checkpoint")
+	for _, at := range []time.Duration{2 * time.Minute, 3 * time.Minute} {
+		svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, started, at, false)
+		settled()
+	}
+	announced(1, "the checkpoints between")
+	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, started, 3*time.Minute+10*time.Second, true)
+	settled()
+	announced(2, "the closing checkpoint")
+
+	if svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-2", st.PID, time.Now(), svc.Radio.radioListenFloor-time.Second, true) {
+		t.Fatal("a glance under the floor reported a write")
+	}
+	// Queued behind nothing: a later write settling proves the glance
+	// was never queued ahead of it.
+	svc.Radio.RecordRadioListen(ctx, admin.ID, "listen-1", st.PID, started, 4*time.Minute, false)
+	settled()
+	announced(2, "a glance under the floor")
 }

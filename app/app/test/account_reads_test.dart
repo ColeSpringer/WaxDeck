@@ -185,6 +185,7 @@ class _PerCaller extends FakeRepository {
   Future<ListeningStats> getListeningStats({
     String? range,
     String? bucket,
+    StatsMediaType? mediaType,
   }) async => ListeningStats(
     range: '30d',
     bucket: 'day',
@@ -195,13 +196,15 @@ class _PerCaller extends FakeRepository {
   );
 
   @override
-  Future<ListeningHeatmap> getListeningHeatmap({int? year}) async =>
-      ListeningHeatmap(
-        year: 2026,
-        timezone: 'UTC',
-        currentStreakDays: _ms,
-        longestStreakDays: _ms,
-      );
+  Future<ListeningHeatmap> getListeningHeatmap({
+    int? year,
+    StatsMediaType? mediaType,
+  }) async => ListeningHeatmap(
+    year: 2026,
+    timezone: 'UTC',
+    currentStreakDays: _ms,
+    longestStreakDays: _ms,
+  );
 
   @override
   Future<TopList> getTopList({
@@ -408,7 +411,8 @@ void main() {
         (
           'the listening stats',
           listeningStatsProvider,
-          (c) async => (await c.read(listeningStatsProvider.future)).totalMs,
+          (c) async =>
+              (await c.read(listeningStatsProvider.future)).stats.totalMs,
           1,
           2,
         ),

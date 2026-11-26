@@ -69,6 +69,7 @@
   "musicFieldReleaseGroupMbid": "ID de grupo de lanzamiento de MusicBrainz",
   "musicFieldReleaseGroupType": "Tipo",
   "musicFieldSort": "Nombre de ordenación",
+  "musicGenreReady": "Listo para abrir: {genre}",
   "musicHubAddToLibrary": "Añadir a la biblioteca",
   "musicHubEmptyMessage": "Añade una biblioteca o suelta archivos aquí.",
   "musicIndexCount": "{dimension, select, artists{{count, plural, =1{1 artista} other{{count} artistas}}} albums{{count, plural, =1{1 álbum} other{{count} álbumes}}} releaseGroups{{count, plural, =1{1 grupo de lanzamiento} other{{count} grupos de lanzamiento}}} genres{{count, plural, =1{1 género} other{{count} géneros}}} years{{count, plural, =1{1 año} other{{count} años}}} other{{count, plural, =1{1 entrada} other{{count} entradas}}}}",

@@ -8,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../discovery/discovery_actions.dart';
 import '../l10n/l10n.dart';
+import '../music/genre_open.dart';
 import '../music/music_controllers.dart';
 import '../player/now_playing_controller.dart';
 import '../presenters/media_tiles.dart';
@@ -221,55 +222,10 @@ Future<void> _openBasis(
     unawaited(router.push(WaxRoute.musicBucket(MusicDimension.artists, seed)));
     return;
   }
-  final from = pageOnTop(router);
-  final messenger = ref.read(shellMessengerProvider);
-  final l10n = context.l10n;
-  final genre = card.genre ?? card.name;
-  try {
-    // A top genre carries no pid, so its bucket is found by its label.
-    final page = await ref
-        .read(repositoryProvider)
-        .listFacets(
-          MusicDimension.genres.wireName,
-          sort: FacetSort.label,
-          startsAt: genre,
-          limit: 5,
-        );
-    final bucket = page.buckets
-        .where((b) => b.label.toLowerCase() == genre.toLowerCase())
-        .firstOrNull;
-    void open() {
-      if (bucket == null) {
-        // The index has a place of its own in the chrome, so it is gone
-        // to; only a bucket is a drill-in that keeps home beneath it.
-        router.go(WaxRoute.musicIndex(MusicDimension.genres));
-        return;
-      }
-      // In the shell, past an overlay the offer may be taken from.
-      unawaited(
-        router.pushInShell<void>(
-          WaxRoute.musicBucket(
-            MusicDimension.genres,
-            musicBucketSegment(MusicDimension.genres, bucket),
-          ),
-          extra: bucket.label,
-        ),
-      );
-    }
-
-    // The router outlives the card: a visitor who walked on meanwhile, or
-    // opened something over home, is offered the bucket there instead.
-    if (await stillShowing(router, from)) {
-      open();
-    } else {
-      messenger.show(
-        l10n.homeMixBasisReady(genre),
-        actionLabel: l10n.commonOpen,
-        onAction: open,
-        channel: ShellChannel.mixes,
-      );
-    }
-  } on WaxDeckApiException catch (e) {
-    messenger.show(explainError(l10n, e), channel: ShellChannel.mixes);
-  }
+  await openGenreByLabel(
+    context,
+    ref,
+    card.genre ?? card.name,
+    channel: ShellChannel.mixes,
+  );
 }

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -23,7 +24,8 @@ import (
 // is their own record of what they played, and hiding rows after a
 // grant change would silently falsify their totals. Item metadata for
 // display resolves best-effort; items gone from the catalog keep their
-// listening time under an empty title.
+// listening time under an empty title. What the caller cannot open now
+// keeps its name and time without its pid and picture (closeUnopenable).
 //
 // All calendar bucketing happens here in the user's preferred timezone
 // (UTC when unset): sessions store UTC and SQLite cannot bucket in an
@@ -72,14 +74,13 @@ type ListeningHeatmap struct {
 	LongestStreakDays int
 }
 
-// TopEntry is one ranked top-list entry. ArtItemPID names the group's
-// most-listened item as its artwork representative (API-prefixed).
+// TopEntry is one ranked top-list entry.
 type TopEntry struct {
-	Name       string
-	PID        string // API pid when the entry is one item; empty for name groups
-	ArtItemPID string
-	Plays      int
-	Ms         int64
+	Name   string
+	PID    string // the entry's entity or item (API pid); empty for genres and name groups
+	ArtPID string // the API pid whose picture the entry draws; empty for none
+	Plays  int
+	Ms     int64
 }
 
 // TopList is one ranked list.
@@ -133,6 +134,8 @@ type YearInReview struct {
 	TopTracks         []TopEntry
 	TopGenres         []TopEntry
 	TopShows          []TopEntry
+	TopBooks          []TopEntry
+	TopAuthors        []TopEntry
 }
 
 // ServerYearInReview is the whole server's yearly recap.
@@ -168,13 +171,28 @@ func (l *Reads) userLocation(ctx context.Context, uc *UserCtx) (*time.Location, 
 	return loc, p.Timezone
 }
 
-// ListeningStats aggregates the caller's listening over a range.
-func (l *Reads) ListeningStats(ctx context.Context, uc *UserCtx, rng, bucket string) (ListeningStats, error) {
+// statsMedia are the media a listen session records.
+var statsMedia = map[string]bool{"music": true, "podcast": true, "audiobook": true, "radio": true}
+
+// checkStatsMedia accepts a medium a session can record, or "" for all.
+func checkStatsMedia(media string) error {
+	if media != "" && !statsMedia[media] {
+		return errInvalid("unknown mediaType " + media)
+	}
+	return nil
+}
+
+// ListeningStats aggregates the caller's listening over a range, of one
+// medium or ("") of every one.
+func (l *Reads) ListeningStats(ctx context.Context, uc *UserCtx, rng, bucket, media string) (ListeningStats, error) {
 	if _, ok := statsRanges[rng]; !ok && rng != "all" {
 		return ListeningStats{}, errInvalid("unknown range " + rng)
 	}
 	if bucket != "day" && bucket != "week" && bucket != "month" {
 		return ListeningStats{}, errInvalid("unknown bucket " + bucket)
+	}
+	if err := checkStatsMedia(media); err != nil {
+		return ListeningStats{}, err
 	}
 	loc, tzName := l.userLocation(ctx, uc)
 	from := time.Time{}
@@ -185,6 +203,9 @@ func (l *Reads) ListeningStats(ctx context.Context, uc *UserCtx, rng, bucket str
 	byBucket := map[time.Time]*ListeningBucket{}
 	byMedia := map[string]*MediaTypeListening{}
 	err := l.db.ListensInRange(ctx, uc.ID, from, time.Now().Add(time.Hour), func(r wdb.ListenRow) {
+		if media != "" && r.MediaType != media {
+			return
+		}
 		out.TotalMs += r.MsPlayed
 		out.Sessions++
 		out.TimeSavedMs += r.SkippedMs
@@ -251,9 +272,12 @@ func dayNumber(t time.Time) int {
 }
 
 // ListeningHeatmap answers one calendar year of per-day listening plus
-// streaks. Streaks scan the user's whole history so runs cross year
-// boundaries honestly.
-func (l *Reads) ListeningHeatmap(ctx context.Context, uc *UserCtx, year int) (ListeningHeatmap, error) {
+// streaks, of one medium or ("") of every one. Streaks scan the user's
+// whole history so runs cross year boundaries honestly.
+func (l *Reads) ListeningHeatmap(ctx context.Context, uc *UserCtx, year int, media string) (ListeningHeatmap, error) {
+	if err := checkStatsMedia(media); err != nil {
+		return ListeningHeatmap{}, err
+	}
 	loc, tzName := l.userLocation(ctx, uc)
 	if year == 0 {
 		year = time.Now().In(loc).Year()
@@ -261,6 +285,9 @@ func (l *Reads) ListeningHeatmap(ctx context.Context, uc *UserCtx, year int) (Li
 	out := ListeningHeatmap{Year: year, Timezone: tzName}
 	days := map[int]*HeatmapDay{}
 	err := l.db.ListensInRange(ctx, uc.ID, time.Time{}, time.Now().Add(time.Hour), func(r wdb.ListenRow) {
+		if media != "" && r.MediaType != media {
+			return
+		}
 		local := r.StartedAt.In(loc)
 		dn := dayNumber(local)
 		d := days[dn]
@@ -315,29 +342,27 @@ type itemTotals struct {
 	plays int
 }
 
+// topKindMedia is each top-list kind and the one medium whose sessions
+// it counts, so spoken-word hours never drown a music list.
+var topKindMedia = map[string]string{
+	"artists": "music", "albums": "music", "tracks": "music", "genres": "music",
+	"shows": "podcast", "episodes": "podcast",
+	"books": "audiobook", "authors": "audiobook",
+	"stations": "radio",
+}
+
 // TopListFor answers one ranked top list over a range.
 func (l *Reads) TopListFor(ctx context.Context, uc *UserCtx, kind, rng string, limit int) (TopList, error) {
 	if _, ok := statsRanges[rng]; !ok && rng != "all" {
 		return TopList{}, errInvalid("unknown range " + rng)
 	}
-	switch kind {
-	case "artists", "albums", "genres", "shows", "stations":
-	default:
+	wantMedia, ok := topKindMedia[kind]
+	if !ok {
 		return TopList{}, errInvalid("unknown kind " + kind)
 	}
 	from := time.Time{}
 	if d, ok := statsRanges[rng]; ok {
 		from = time.Now().Add(-d)
-	}
-	// Shows aggregate podcast sessions and stations aggregate radio;
-	// the music kinds aggregate music sessions, so audiobook and
-	// spoken-word hours never drown a music top list.
-	wantMedia := "music"
-	switch kind {
-	case "shows":
-		wantMedia = "podcast"
-	case "stations":
-		wantMedia = "radio"
 	}
 	totals := map[string]*itemTotals{}
 	err := l.db.ListensInRange(ctx, uc.ID, from, time.Now().Add(time.Hour), func(r wdb.ListenRow) {
@@ -366,32 +391,41 @@ func (l *Reads) TopListFor(ctx context.Context, uc *UserCtx, kind, rng string, l
 		}
 		return TopList{Kind: kind, Range: rng, Entries: entries}, nil
 	}
-	entries, err := l.groupTotals(ctx, totals, kind, limit)
+	entries, err := l.groupTotals(ctx, uc, totals, kind, limit)
 	if err != nil {
 		return TopList{}, err
 	}
 	return TopList{Kind: kind, Range: rng, Entries: entries}, nil
 }
 
-// stationNames reads the station library once and maps bare id to name.
+// readStationNames reads the station library once and maps bare id to
+// name.
 //
 // One query rather than a lookup per row, the way [liveStationPIDs]
 // already reads this table: it is capped at five hundred shared rows, so
 // the whole of it costs less than the per-row form does on a page that
 // is mostly radio - and the per-row form ran before the ranking was
 // truncated, so most of what it fetched was discarded.
-//
-// Best effort. A read that failed leaves every station unnamed, which is
-// what a deleted one already looks like, rather than failing the page.
-func (l *Reads) stationNames(ctx context.Context) map[string]string {
+func (l *Reads) readStationNames(ctx context.Context) (map[string]string, error) {
 	rows, err := l.db.ListRadioStations(ctx)
 	if err != nil {
-		l.log.Debug("reading stations for listening stats", "err", err)
-		return nil
+		return nil, err
 	}
 	names := make(map[string]string, len(rows))
 	for _, r := range rows {
 		names[r.ID] = r.Name
+	}
+	return names, nil
+}
+
+// stationNames is readStationNames at best effort, for the listen log: a
+// read that failed leaves every station unnamed rather than failing the
+// page.
+func (l *Reads) stationNames(ctx context.Context) map[string]string {
+	names, err := l.readStationNames(ctx)
+	if err != nil {
+		l.log.Debug("reading stations for listening stats", "err", err)
+		return nil
 	}
 	return names
 }
@@ -402,27 +436,32 @@ func (l *Reads) stationNames(ctx context.Context) map[string]string {
 // silently dropped from a list that claims to total it. It keeps no art
 // handle, for the reason a deleted track keeps none - a cover URL for a
 // row nothing answers for is a 404 per entry, and the client draws its
-// own placeholder from the domain either way.
+// own placeholder from the domain either way. Since an empty name says
+// the station left, a station library that cannot be read fails the
+// list rather than answering every station that way.
 func (l *Reads) stationTotals(ctx context.Context, totals map[string]*itemTotals, limit int) ([]TopEntry, error) {
 	if len(totals) == 0 {
 		return nil, nil
 	}
-	names := l.stationNames(ctx)
+	names, err := l.readStationNames(ctx)
+	if err != nil {
+		return nil, &Error{Kind: KindInternal, Err: err}
+	}
 	entries := make([]TopEntry, 0, len(totals))
 	for pid, t := range totals {
 		station := apiPID(PrefixRadioStation, model.PID(pid))
 		e := TopEntry{PID: station, Plays: t.plays, Ms: t.ms}
 		if name, ok := names[pid]; ok {
-			e.Name, e.ArtItemPID = name, station
+			e.Name, e.ArtPID = name, station
 		}
 		entries = append(entries, e)
 	}
 	return rankTopEntries(entries, limit), nil
 }
 
-// groupTotals resolves item metadata and folds per-item totals into
-// name groups (or items themselves for kind "tracks").
-func (l *Reads) groupTotals(ctx context.Context, totals map[string]*itemTotals, kind string, limit int) ([]TopEntry, error) {
+// groupTotals resolves item metadata and folds per-item totals into the
+// kind's entries, named and ranked.
+func (l *Reads) groupTotals(ctx context.Context, uc *UserCtx, totals map[string]*itemTotals, kind string, limit int) ([]TopEntry, error) {
 	if len(totals) == 0 {
 		return nil, nil
 	}
@@ -438,83 +477,356 @@ func (l *Reads) groupTotals(ctx context.Context, totals map[string]*itemTotals, 
 	for _, v := range views {
 		byPID[string(v.PID)] = v
 	}
-	type group struct {
-		entry TopEntry
-		topMs int64 // the representative item's listening time
+	groups := foldTopGroups(totals, byPID, kind)
+	if err := l.nameEntityGroups(ctx, groups, kind, limit); err != nil {
+		return nil, err
 	}
-	groups := map[string]*group{}
+	groups = rankTopGroups(groups, limit)
+	if err := l.closeUnopenable(ctx, uc, kind, groups, byPID); err != nil {
+		return nil, err
+	}
+	entries := make([]TopEntry, len(groups))
+	for i, g := range groups {
+		entries[i] = g.entry
+	}
+	return entries, nil
+}
+
+// closeUnopenable takes the pid and picture off every returned entry the
+// caller cannot open now, keeping its name and time (the history stays
+// the caller's record): an item in the trash or outside what the caller
+// may see, an entity none of whose items it may see, a show outside its
+// reach. An item that has left keeps its pid. Every picture an entry
+// draws from a member is the most-listened member the caller can open.
+func (l *Reads) closeUnopenable(ctx context.Context, uc *UserCtx, kind string, groups []*topGroup, byPID map[string]*model.ItemView) error {
+	var members []*model.ItemView
+	for _, g := range groups {
+		for _, m := range g.members {
+			if v := byPID[m.pid]; v != nil {
+				members = append(members, v)
+			}
+		}
+	}
+	opens, err := l.openItems(ctx, uc, members)
+	if err != nil {
+		return err
+	}
+	if _, ok := topItemPrefix[kind]; ok {
+		for _, g := range groups {
+			if byPID[g.repPID] != nil && !opens[model.PID(g.repPID)] {
+				g.entry.PID, g.entry.ArtPID = "", ""
+			}
+		}
+		return nil
+	}
+	closed, err := l.closedEntities(ctx, uc, kind, groups, byPID)
+	if err != nil {
+		return err
+	}
+	for _, g := range groups {
+		switch {
+		case g.entity != "" && closed[g.entity]:
+			g.entry.PID, g.entry.ArtPID = "", ""
+		case g.entity == "" && g.entry.ArtPID != "":
+			// A name group draws a member's picture or none.
+			g.entry.ArtPID = g.openArt(opens)
+		}
+	}
+	if ent, ok := topFallbackArt[kind]; ok {
+		l.drawUnpicturedEntities(ctx, ent, groups, opens)
+	}
+	return nil
+}
+
+// openItems answers which of the items the caller can open now: not in
+// the trash, inside its grants and passing its content rules. The tag
+// rules are one batched read, and nothing at all for a caller they do
+// not narrow.
+func (l *Reads) openItems(ctx context.Context, uc *UserCtx, items []*model.ItemView) (map[model.PID]bool, error) {
+	verdicts, err := l.Grants.tagVerdicts(ctx, uc, items)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[model.PID]bool, len(items))
+	for _, v := range items {
+		if l.Grants.offersWith(ctx, uc, verdicts, v) {
+			out[v.PID] = true
+		}
+	}
+	return out, nil
+}
+
+// closedEntities answers which of the groups' entities the caller cannot
+// open: an artist, album or author with no member its listings offer (as
+// the entity cards gate, skipped for a caller of full reach), and a show
+// its detail would refuse (showReached, judged off the members' views,
+// which carry the show's advisory flag).
+func (l *Reads) closedEntities(ctx context.Context, uc *UserCtx, kind string, groups []*topGroup, byPID map[string]*model.ItemView) (map[model.PID]bool, error) {
+	closed := map[model.PID]bool{}
+	if kind == "shows" {
+		podcasts := l.Grants.podcastsVisible(ctx, uc)
+		for _, g := range groups {
+			if g.entity == "" {
+				continue
+			}
+			v := byPID[g.repPID]
+			if !podcasts || (!uc.Explicit && v != nil && v.PodcastExplicit) {
+				closed[g.entity] = true
+			}
+		}
+		return closed, nil
+	}
+	if fullReach(uc) {
+		return closed, nil
+	}
+	var pids []model.PID
+	for _, g := range groups {
+		if g.entity != "" {
+			pids = append(pids, g.entity)
+		}
+	}
+	if len(pids) == 0 {
+		return closed, nil
+	}
+	visible, err := l.visibleEntities(ctx, uc, topEntityPrefix[kind], pids)
+	if err != nil {
+		return nil, err
+	}
+	for _, pid := range pids {
+		if !visible[pid] {
+			closed[pid] = true
+		}
+	}
+	return closed, nil
+}
+
+// topFallbackArt is the art level of each kind whose entity's picture
+// never falls through to a member's: an artist's chain is its own
+// portrait, a show's its feed image. An album's falls through on its own.
+var topFallbackArt = map[string]model.ArtEntity{
+	"artists": model.ArtArtist, "authors": model.ArtArtist, "shows": model.ArtPodcast,
+}
+
+// drawUnpicturedEntities gives a returned entity entry with no picture of
+// its own the picture of its most-listened member the caller can open,
+// or keeps the entity's URL when it can open none. One read per returned
+// entry, so at most the list's limit; a read that fails keeps the
+// entity's own URL.
+func (l *Reads) drawUnpicturedEntities(ctx context.Context, ent model.ArtEntity, groups []*topGroup, opens map[model.PID]bool) {
+	for _, g := range groups {
+		if g.entity == "" || g.entry.PID == "" {
+			continue
+		}
+		art := g.openArt(opens)
+		if art == "" {
+			continue
+		}
+		_, err := l.lib.ArtProvenance(ctx, model.EntityRef{Type: ent, PID: g.entity}, model.ArtRoleFront)
+		switch {
+		case err == nil:
+		case KindOf(err) == KindNotFound:
+			g.entry.ArtPID = art
+		default:
+			l.log.Debug("reading an entity's picture for listening stats", "entity", g.entity, "err", err)
+		}
+	}
+}
+
+// topItemPrefix is the per-item kinds' pid prefix, for an item that has
+// left the catalog and so has no kind to read one from.
+var topItemPrefix = map[string]string{"tracks": PrefixTrack, "episodes": PrefixEpisode, "books": PrefixBook}
+
+// topEntityPrefix is the entity each grouped kind gathers its members
+// under.
+var topEntityPrefix = map[string]string{
+	"artists": PrefixArtist, "authors": PrefixArtist, "albums": PrefixAlbum, "shows": PrefixPodcast,
+}
+
+// topGroup is one entry while its members are folded in.
+type topGroup struct {
+	entry   TopEntry
+	entity  model.PID // bare entity pid, empty for a name group or an item
+	repMs   int64     // the representative member's time
+	repPID  string    // and its bare pid, so the choice repeats
+	members []topPicture
+}
+
+// topPicture is one member's time and the art pid it can lend its entry.
+type topPicture struct {
+	pid, art string // bare item pid, API art pid
+	ms       int64
+}
+
+// openArt is the art pid of the group's most-listened member the caller
+// can open (lowest pid on a tie), or empty for none.
+func (g *topGroup) openArt(opens map[model.PID]bool) string {
+	var best *topPicture
+	for i := range g.members {
+		m := &g.members[i]
+		if !opens[model.PID(m.pid)] {
+			continue
+		}
+		if best == nil || m.ms > best.ms || (m.ms == best.ms && m.pid < best.pid) {
+			best = m
+		}
+	}
+	if best == nil {
+		return ""
+	}
+	return best.art
+}
+
+// topMember is what one item contributes to its kind's entry.
+type topMember struct {
+	key, name, pid, art string
+	itemArt             string // the item's own art pid, under an entity
+	entity              model.PID
+}
+
+// foldTopGroups folds per-item totals into the kind's groups. A group
+// takes its name and art from its most-listened member (lowest pid on a
+// tie), so two reads of one history answer the same entry.
+func foldTopGroups(totals map[string]*itemTotals, byPID map[string]*model.ItemView, kind string) []*topGroup {
+	groups := map[string]*topGroup{}
 	for pid, t := range totals {
-		v := byPID[pid]
-		if v == nil {
-			// The item left the catalog; a name group cannot form
-			// around it. Tracks keep it under an empty title so time
-			// is never silently dropped from per-item lists.
-			if kind != "tracks" {
-				continue
-			}
+		m, ok := topMemberOf(kind, pid, byPID[pid])
+		if !ok {
+			continue
 		}
-		var key, name, entryPID, artPID string
-		switch kind {
-		case "tracks":
-			key = pid
-			if v != nil {
-				name = v.Title
-				entryPID = itemAPIPID(v)
-				artPID = entryPID
-			}
-		case "artists":
-			if v.Artist == "" {
-				continue
-			}
-			key, name = strings.ToLower(v.Artist), v.Artist
-			artPID = itemAPIPID(v)
-		case "albums":
-			if v.Album == "" {
-				continue
-			}
-			// Album-artist grouping (track artist as fallback), the
-			// same rule the compatibility surface's browse uses: a
-			// various-artists compilation keyed by track artist would
-			// fragment into one entry per contributing artist.
-			albumArtist := v.AlbumArtist
-			if albumArtist == "" {
-				albumArtist = v.Artist
-			}
-			key, name = strings.ToLower(albumArtist+"\x00"+v.Album), v.Album
-			artPID = itemAPIPID(v)
-		case "genres":
-			if v.Genre == "" {
-				continue
-			}
-			key, name = strings.ToLower(v.Genre), v.Genre
-		case "shows":
-			// Episode views carry the show title through Artist.
-			if v.Artist == "" {
-				continue
-			}
-			key, name = strings.ToLower(v.Artist), clipFeedTitle(v.Artist)
-			artPID = itemAPIPID(v)
-		}
-		g := groups[key]
+		g := groups[m.key]
 		if g == nil {
-			g = &group{entry: TopEntry{Name: name, PID: entryPID}}
-			groups[key] = g
+			g = &topGroup{entry: TopEntry{PID: m.pid}, entity: m.entity}
+			groups[m.key] = g
 		}
 		g.entry.Ms += t.ms
 		g.entry.Plays += t.plays
-		if t.ms > g.topMs {
-			g.topMs = t.ms
-			g.entry.ArtItemPID = artPID
-			if kind == "tracks" {
-				g.entry.Name, g.entry.PID = name, entryPID
-			}
+		if art := cmp.Or(m.itemArt, m.art); art != "" {
+			g.members = append(g.members, topPicture{pid: pid, art: art, ms: t.ms})
+		}
+		if g.repPID == "" || t.ms > g.repMs || (t.ms == g.repMs && pid < g.repPID) {
+			g.repMs, g.repPID = t.ms, pid
+			g.entry.Name, g.entry.ArtPID = m.name, m.art
 		}
 	}
-	entries := make([]TopEntry, 0, len(groups))
+	out := make([]*topGroup, 0, len(groups))
 	for _, g := range groups {
-		entries = append(entries, g.entry)
+		out = append(out, g)
 	}
-	return rankTopEntries(entries, limit), nil
+	return out
+}
+
+// topMemberOf places one item in its kind. Per-item kinds keep an item
+// that left under its pid, unnamed, so time is never silently dropped
+// from them; the grouped kinds drop it, and drop an item that names no
+// entity and no name of the kind.
+func topMemberOf(kind, pid string, v *model.ItemView) (topMember, bool) {
+	if prefix, ok := topItemPrefix[kind]; ok {
+		if v == nil {
+			return topMember{key: pid, pid: apiPID(prefix, model.PID(pid))}, true
+		}
+		own := itemAPIPID(v)
+		return topMember{key: pid, name: v.Title, pid: own, art: own}, true
+	}
+	if v == nil {
+		return topMember{}, false
+	}
+	prefix := topEntityPrefix[kind]
+	switch kind {
+	case "genres":
+		if v.Genre == "" {
+			return topMember{}, false
+		}
+		return topMember{key: nameGroupKey(v.Genre), name: v.Genre}, true
+	case "artists", "authors":
+		// A book's author is its artist.
+		return entityMember(prefix, v.ArtistPID, v.Artist, v.Artist, v)
+	case "albums":
+		// A name group keys on the album artist (track artist as
+		// fallback), so a compilation with no album entity does not
+		// fragment into one entry per contributing artist.
+		albumArtist := v.AlbumArtist
+		if albumArtist == "" {
+			albumArtist = v.Artist
+		}
+		return entityMember(prefix, v.AlbumPID, v.Album, albumArtist+"\x00"+v.Album, v)
+	case "shows":
+		// Episode views carry the show title through Artist, and no read
+		// names a show otherwise, so an untitled one names nothing.
+		if v.Artist == "" {
+			return topMember{}, false
+		}
+		return entityMember(prefix, v.PodcastPID, clipFeedTitle(v.Artist), v.Artist, v)
+	}
+	return topMember{}, false
+}
+
+// entityMember places an item under its entity, or, with none, under a
+// name group keyed on fold that carries no pid and draws the item's art.
+func entityMember(prefix string, entity model.PID, name, fold string, v *model.ItemView) (topMember, bool) {
+	if entity != "" {
+		p := apiPID(prefix, entity)
+		return topMember{key: string(entity), name: name, pid: p, art: p, itemArt: itemAPIPID(v), entity: entity}, true
+	}
+	if name == "" {
+		return topMember{}, false
+	}
+	return topMember{key: nameGroupKey(fold), name: name, art: itemAPIPID(v)}, true
+}
+
+// nameGroupKey folds a name into a group key. The NUL lead keeps it apart
+// from every pid key, which a ULID never starts with.
+func nameGroupKey(name string) string {
+	return "\x00" + strings.ToLower(name)
+}
+
+// nameEntityGroups names entity groups by the entity itself, one batched
+// read per list; a member's text stands in for a pid the read has no row
+// for. Names resolve before ranking, so the name tie-break orders entries
+// by the names they are shown with, but only for groups that can still
+// make the cut (the limit-th largest time or more), so a long tail costs
+// no entity reads.
+func (l *Reads) nameEntityGroups(ctx context.Context, groups []*topGroup, kind string, limit int) error {
+	entityKind, ok := entityKindForPrefix(topEntityPrefix[kind])
+	if !ok {
+		return nil
+	}
+	var cut int64
+	if limit > 0 && len(groups) > limit {
+		ms := make([]int64, len(groups))
+		for i, g := range groups {
+			ms[i] = g.entry.Ms
+		}
+		slices.Sort(ms)
+		cut = ms[len(ms)-limit]
+	}
+	var pids []model.PID
+	for _, g := range groups {
+		if g.entity != "" && g.entry.Ms >= cut {
+			pids = append(pids, g.entity)
+		}
+	}
+	if len(pids) == 0 {
+		return nil
+	}
+	infos, err := l.lib.EntityByPIDs(ctx, entityKind, pids)
+	if err != nil {
+		return classify(err)
+	}
+	for _, g := range groups {
+		if info := infos[g.entity]; g.entity != "" && info != nil && info.Name != "" {
+			g.entry.Name = info.Name
+		}
+	}
+	return nil
+}
+
+// rankTopGroups is rankTopEntries over the groups the entries come from.
+func rankTopGroups(groups []*topGroup, limit int) []*topGroup {
+	sort.Slice(groups, func(i, j int) bool { return topEntryLess(groups[i].entry, groups[j].entry) })
+	if len(groups) > limit {
+		groups = groups[:limit]
+	}
+	return groups
 }
 
 // rankTopEntries orders a top list and cuts it to limit.
@@ -527,20 +839,21 @@ func (l *Reads) groupTotals(ctx context.Context, totals map[string]*itemTotals, 
 // alone leaves their order to the sort, and `entries[:limit]` can answer
 // with a different set each time it is asked.
 func rankTopEntries(entries []TopEntry, limit int) []TopEntry {
-	sort.Slice(entries, func(i, j int) bool {
-		a, b := entries[i], entries[j]
-		if a.Ms != b.Ms {
-			return a.Ms > b.Ms
-		}
-		if a.Name != b.Name {
-			return a.Name < b.Name
-		}
-		return a.PID < b.PID
-	})
+	sort.Slice(entries, func(i, j int) bool { return topEntryLess(entries[i], entries[j]) })
 	if len(entries) > limit {
 		entries = entries[:limit]
 	}
 	return entries
+}
+
+func topEntryLess(a, b TopEntry) bool {
+	if a.Ms != b.Ms {
+		return a.Ms > b.Ms
+	}
+	if a.Name != b.Name {
+		return a.Name < b.Name
+	}
+	return a.PID < b.PID
 }
 
 // ListenLog pages the caller's session log newest first.
@@ -687,6 +1000,7 @@ func (l *Reads) UserYearInReview(ctx context.Context, uc *UserCtx, year int) (Ye
 	byMedia := map[string]*MediaTypeListening{}
 	musicTotals := map[string]*itemTotals{}
 	showTotals := map[string]*itemTotals{}
+	bookTotals := map[string]*itemTotals{}
 	distinct := map[string]bool{}
 	days := map[int]bool{}
 	err := l.db.ListensInRange(ctx, uc.ID, from, to, func(r wdb.ListenRow) {
@@ -721,6 +1035,8 @@ func (l *Reads) UserYearInReview(ctx context.Context, uc *UserCtx, year int) (Ye
 			totals = musicTotals
 		case "podcast":
 			totals = showTotals
+		case "audiobook":
+			totals = bookTotals
 		default:
 			return
 		}
@@ -743,16 +1059,22 @@ func (l *Reads) UserYearInReview(ctx context.Context, uc *UserCtx, year int) (Ye
 	out.ByMediaType = sortedMedia(byMedia)
 	out.LongestStreakDays = longestRun(days)
 	const topN = 5
-	if out.TopArtists, err = l.groupTotals(ctx, musicTotals, "artists", topN); err != nil {
+	if out.TopArtists, err = l.groupTotals(ctx, uc, musicTotals, "artists", topN); err != nil {
 		return YearInReview{}, err
 	}
-	if out.TopTracks, err = l.groupTotals(ctx, musicTotals, "tracks", topN); err != nil {
+	if out.TopTracks, err = l.groupTotals(ctx, uc, musicTotals, "tracks", topN); err != nil {
 		return YearInReview{}, err
 	}
-	if out.TopGenres, err = l.groupTotals(ctx, musicTotals, "genres", topN); err != nil {
+	if out.TopGenres, err = l.groupTotals(ctx, uc, musicTotals, "genres", topN); err != nil {
 		return YearInReview{}, err
 	}
-	if out.TopShows, err = l.groupTotals(ctx, showTotals, "shows", topN); err != nil {
+	if out.TopShows, err = l.groupTotals(ctx, uc, showTotals, "shows", topN); err != nil {
+		return YearInReview{}, err
+	}
+	if out.TopBooks, err = l.groupTotals(ctx, uc, bookTotals, "books", topN); err != nil {
+		return YearInReview{}, err
+	}
+	if out.TopAuthors, err = l.groupTotals(ctx, uc, bookTotals, "authors", topN); err != nil {
 		return YearInReview{}, err
 	}
 	// New-in-library is catalog-structural (what joined the library that
@@ -883,13 +1205,13 @@ func (l *Reads) ServerWideYearInReview(ctx context.Context, uc *UserCtx, year in
 		return ServerYearInReview{}, err
 	}
 	const topN = 5
-	if out.TopArtists, err = l.groupTotals(ctx, musicTotals, "artists", topN); err != nil {
+	if out.TopArtists, err = l.groupTotals(ctx, uc, musicTotals, "artists", topN); err != nil {
 		return ServerYearInReview{}, err
 	}
-	if out.TopTracks, err = l.groupTotals(ctx, musicTotals, "tracks", topN); err != nil {
+	if out.TopTracks, err = l.groupTotals(ctx, uc, musicTotals, "tracks", topN); err != nil {
 		return ServerYearInReview{}, err
 	}
-	if out.TopGenres, err = l.groupTotals(ctx, musicTotals, "genres", topN); err != nil {
+	if out.TopGenres, err = l.groupTotals(ctx, uc, musicTotals, "genres", topN); err != nil {
 		return ServerYearInReview{}, err
 	}
 	return out, nil

@@ -5066,29 +5066,53 @@ mixin _StatsCalls on _WaxDeckTransport implements StatsApi {
   Future<Response<Object?>> _getListeningStats({
     String? range = '30d',
     String? bucket = 'day',
+    StatsMediaType? mediaType,
   }) => _send(
     'GET',
     '/stats/listening',
-    query: {'range': ?range, 'bucket': ?bucket},
+    query: {
+      'range': ?range,
+      'bucket': ?bucket,
+      'mediaType': ?mediaType?.wireName,
+    },
   );
 
   @override
-  Future<ListeningStats> getListeningStats({String? range, String? bucket}) =>
-      _guard(() async {
-        final response = await _getListeningStats(range: range, bucket: bucket);
-        return _decode(
-          response,
-          'getListeningStats',
-          (v, at) => decodeListeningStats(wireObject(v, at), _wire),
-        );
-      });
+  Future<ListeningStats> getListeningStats({
+    String? range,
+    String? bucket,
+    StatsMediaType? mediaType,
+  }) => _guard(() async {
+    final response = await _getListeningStats(
+      range: range,
+      bucket: bucket,
+      mediaType: mediaType,
+    );
+    return _decode(
+      response,
+      'getListeningStats',
+      (v, at) => decodeListeningStats(wireObject(v, at), _wire),
+    );
+  });
 
-  Future<Response<Object?>> _getListeningHeatmap({int? year}) =>
-      _send('GET', '/stats/heatmap', query: {'year': ?year});
+  Future<Response<Object?>> _getListeningHeatmap({
+    int? year,
+    StatsMediaType? mediaType,
+  }) => _send(
+    'GET',
+    '/stats/heatmap',
+    query: {'year': ?year, 'mediaType': ?mediaType?.wireName},
+  );
 
   @override
-  Future<ListeningHeatmap> getListeningHeatmap({int? year}) => _guard(() async {
-    final response = await _getListeningHeatmap(year: year);
+  Future<ListeningHeatmap> getListeningHeatmap({
+    int? year,
+    StatsMediaType? mediaType,
+  }) => _guard(() async {
+    final response = await _getListeningHeatmap(
+      year: year,
+      mediaType: mediaType,
+    );
     return _decode(
       response,
       'getListeningHeatmap',

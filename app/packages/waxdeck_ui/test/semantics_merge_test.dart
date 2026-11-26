@@ -665,6 +665,19 @@ final List<_Scenario> _scenarios = <_Scenario>[
     ),
   ),
   _scenario(
+    'a ranked row',
+    () => MediaListRow(
+      data: const MediaTileData(
+        title: 'Harbour Lights',
+        subtitle: 'Nightjar',
+        trailingText: '4:18',
+      ),
+      rank: 7,
+      onTap: () {},
+      onMore: () {},
+    ),
+  ),
+  _scenario(
     'an open disclosure with a control inside',
     () => WaxDisclosure(
       title: 'Edition',
@@ -1183,6 +1196,41 @@ void main() {
       expect(hits, isEmpty, reason: hits.join('\n'));
     });
   }
+
+  testWidgets('a ranked row is one node that opens with its rank', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    var opened = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildWaxTheme(),
+        localizationsDelegates: waxLocalizationsDelegates,
+        home: Scaffold(
+          body: MediaListRow(
+            data: const MediaTileData(
+              title: 'Harbour Lights',
+              subtitle: 'Nightjar',
+            ),
+            rank: 7,
+            onTap: () => opened++,
+            onMore: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.bySemanticsLabel('7, Harbour Lights, Nightjar'), findsOne);
+    expect(
+      find.bySemanticsLabel('7'),
+      findsNothing,
+      reason: 'the number is not a node of its own',
+    );
+    expect(find.bySemanticsLabel('More for Harbour Lights'), findsOne);
+    tester.semantics.tap(find.semantics.byLabel('7, Harbour Lights, Nightjar'));
+    expect(opened, 1);
+    handle.dispose();
+  });
 
   group('the walk itself', () {
     void other() {}

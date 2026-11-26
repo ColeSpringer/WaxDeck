@@ -952,12 +952,17 @@ class MediaListRow extends StatelessWidget {
     this.selectSemanticsId,
     this.leadingIndex,
     this.leadingText,
+    this.rank,
     this.actions = const <Widget>[],
     this.playing = false,
     this.selected = false,
     this.artSize = defaultArtSize,
     super.key,
-  });
+  }) : assert(
+         rank == null || (leadingIndex == null && leadingText == null),
+         'rank is its own column before the artwork; leadingIndex and '
+         'leadingText replace the artwork',
+       );
 
   /// The artwork edge a row draws at unless a caller says otherwise.
   /// Named so a caller warming covers ahead of a scroll can ask for the
@@ -1007,6 +1012,11 @@ class MediaListRow extends StatelessWidget {
   /// date on an episode, which is what orders the list it is in. Mutually
   /// exclusive with [leadingIndex] and drawn in the same slot.
   final String? leadingText;
+
+  /// A position in a ranked list, drawn in a column of its own before the
+  /// artwork, which stays. Not [leadingIndex]: that one is the leading
+  /// element and replaces the artwork. Not combinable with either.
+  final int? rank;
 
   /// Per-row controls before the overflow: fetch, remove, the things a
   /// row can do without opening.
@@ -1147,6 +1157,19 @@ class MediaListRow extends StatelessWidget {
       ),
     };
 
+    final rankColumn = rank == null
+        ? null
+        : SizedBox(
+            width: MediaQuery.textScalerOf(context).scale(24).ceilToDouble(),
+            child: Text(
+              l10n.formatCount(rank!),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: WaxType.monoData.copyWith(color: colors.textTertiary),
+            ),
+          );
+
     // The row's own identity goes on the content region rather than on
     // the whole row, and that placement is load-bearing: the label is
     // built with `excludeSemantics`, which drops every node beneath it,
@@ -1158,6 +1181,7 @@ class MediaListRow extends StatelessWidget {
       button: onTap != null,
       selected: selected,
       label: <String?>[
+        if (rank != null) l10n.formatCount(rank!),
         if (playing) l10n.commonPlaying,
         if (data.unplayed) l10n.cardsUnplayed,
         data.title,
@@ -1169,6 +1193,10 @@ class MediaListRow extends StatelessWidget {
       onLongPress: onLongPress ?? onMore,
       child: Row(
         children: <Widget>[
+          if (rankColumn != null) ...<Widget>[
+            rankColumn,
+            const SizedBox(width: WaxSpace.s8),
+          ],
           if (leading != null)
             leading
           else if (onSelect == null)

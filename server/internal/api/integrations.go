@@ -510,13 +510,16 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 	// Seeded with the start, so the first tick is due one interval in
 	// rather than on the first chunk.
 	checkpointed := listenStart
-	checkpoint := func(now time.Time) {
-		s.svc.Radio.RecordRadioListen(r.Context(), user, listenID, pid, listenStart, now.Sub(listenStart))
+	var announcer listenAnnouncer
+	checkpoint := func(now time.Time, closing bool) {
+		announcer.checkpoint(closing, func(announce bool) bool {
+			return s.svc.Radio.RecordRadioListen(r.Context(), user, listenID, pid, listenStart, now.Sub(listenStart), announce)
+		})
 		checkpointed = now
 	}
 	// Runs however the relay leaves: a read error, a write error, the
 	// idle guard cutting it, or the listener going away.
-	defer func() { checkpoint(time.Now()) }()
+	defer func() { checkpoint(time.Now(), true) }()
 	onBlock := func(block []byte) {
 		// The one thing every block says whatever is in it: the station is
 		// still sending. Unconditional and first, because the blocks that
@@ -581,7 +584,7 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 			// same. Bytes relayed is what proves it. A non-blocking
 			// queue send, like everything else this loop calls.
 			if now := time.Now(); now.Sub(checkpointed) >= service.RadioListenCheckpoint {
-				checkpoint(now)
+				checkpoint(now, false)
 			}
 			if writeErr != nil {
 				return
@@ -590,6 +593,19 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 		if readErr != nil {
 			return
 		}
+	}
+}
+
+// listenAnnouncer is which of one tune-in's checkpoints announce the
+// listener's listening record: the first one written and the closing
+// one. The ones between are only the running total.
+type listenAnnouncer struct{ started bool }
+
+// checkpoint runs one checkpoint through write, which reports whether
+// it wrote anything.
+func (a *listenAnnouncer) checkpoint(closing bool, write func(announce bool) bool) {
+	if write(!a.started || closing) {
+		a.started = true
 	}
 }
 

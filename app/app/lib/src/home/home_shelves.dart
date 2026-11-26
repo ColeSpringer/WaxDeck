@@ -240,9 +240,9 @@ final mixCardsProvider = FutureProvider.autoDispose<List<MixCard>>((ref) async {
     for (final genre in genres.entries.take(kMixCards))
       MixCard(name: genre.name, genre: genre.name, artUrl: genre.artUrl),
     for (final artist in artists.entries.take(kMixCards))
-      // A top entry carries a pid only while its name still resolves to
-      // an entity; a renamed or merged artist reads as a name alone,
-      // which is nothing the mix endpoint takes as a seed.
+      // An artist grouped by its entity carries its pid; one grouped by
+      // the name its items give (no artist entity behind them) reads as
+      // a name alone, which is nothing the mix endpoint takes as a seed.
       if (artist.pid case final seed?)
         MixCard(name: artist.name, seedPid: seed, artUrl: artist.artUrl),
   ];

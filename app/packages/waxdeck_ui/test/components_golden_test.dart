@@ -166,6 +166,10 @@ const _secondaryEntries = <WaxNavEntry>[
 /// Drawn at test setup rather than checked in.
 late final Uint8List _nearBlackCover;
 
+/// A mid-tone cover for the ranked rows, where the picture has to read
+/// against both canvases.
+late final Uint8List _midCover;
+
 Future<Uint8List> _solidPng(Color color) async {
   final recorder = ui.PictureRecorder();
   Canvas(recorder).drawColor(color, BlendMode.src);
@@ -197,6 +201,7 @@ Widget _chevronShelf({required bool darkArt}) => SizedBox(
 void main() {
   setUpAll(() async {
     _nearBlackCover = await _solidPng(const Color(0xFF0A0908));
+    _midCover = await _solidPng(const Color(0xFF7A8F6B));
   });
 
   group('components', () {
@@ -442,6 +447,75 @@ void main() {
                           leadingIndex: 5,
                           onTap: () {},
                           onMore: () {},
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'a ranked row draws its rank, then its picture',
+      fileName: 'list_rows_ranked',
+      // Decoded first, so the pictures are drawn rather than mid-load.
+      pumpBeforeTest: (tester) async {
+        await precacheImages(tester);
+        await _pumpAnimated(tester);
+      },
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        columnWidthBuilder: (_) => const FixedColumnWidth(444),
+        children: <Widget>[
+          for (final variant in <WaxThemeVariant>[
+            WaxThemeVariant.dark,
+            WaxThemeVariant.light,
+          ])
+            for (final density in WaxDensity.values)
+              GoldenTestScenario(
+                name: '${variant.name} ${density.name}',
+                child: _themed(
+                  variant,
+                  density: density,
+                  SizedBox(
+                    width: 420,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        // An artist: the circle.
+                        MediaListRow(
+                          data: MediaTileData(
+                            title: 'Nightjar',
+                            subtitle: '412 plays',
+                            artwork: fixedArtwork(MemoryImage(_midCover)),
+                            shape: ArtworkShape.circle,
+                          ),
+                          rank: 1,
+                          onTap: () {},
+                        ),
+                        // An album: the square.
+                        MediaListRow(
+                          data: MediaTileData(
+                            title: 'Salt Harbour',
+                            subtitle: 'Nightjar',
+                            artwork: fixedArtwork(MemoryImage(_midCover)),
+                            trailingText: '188',
+                          ),
+                          rank: 2,
+                          onTap: () {},
+                          onMore: () {},
+                        ),
+                        // No picture: the monogram, and a two-digit rank.
+                        MediaListRow(
+                          data: const MediaTileData(
+                            title: 'Harbour Lights',
+                            subtitle: 'Nightjar',
+                            trailingText: '4:18',
+                          ),
+                          rank: 20,
+                          onTap: () {},
                         ),
                       ],
                     ),

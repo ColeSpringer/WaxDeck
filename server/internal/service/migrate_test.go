@@ -1797,6 +1797,10 @@ func TestMigrateAnnouncesOncePerItem(t *testing.T) {
 		if e.Kind == eventPlayState {
 			seen[e.ItemPID]++
 		}
+		// The run's own announcement stands in for the listens marker.
+		if e.Kind == eventListens {
+			t.Fatalf("the import announced its listens: %+v", e)
+		}
 	}
 	for pid, n := range seen {
 		if n != 1 {

@@ -8,12 +8,14 @@
     "shareCardOpen": "share-card-open",
     "shareCardPreview": "share-card-preview-{format}",
     "statsBucket": "stats-bucket",
+    "statsMedia": "stats-media-{media}",
     "statsRange": "stats-range-{range}",
     "top": "top-kind-{kind}",
     "topEntry": "top-entry-{index}",
     "yirNextYear": "yir-next-year",
     "yirPersonal": "yir-personal",
     "yirPrevYear": "yir-prev-year",
-    "yirServer": "yir-server"
+    "yirServer": "yir-server",
+    "yirTopEntry": "yir-top-{kind}-{index}"
   }
 }

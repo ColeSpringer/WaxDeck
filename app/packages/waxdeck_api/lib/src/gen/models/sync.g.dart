@@ -354,6 +354,10 @@ class ServerSyncEvent {
   /// engine went away or came back), so re-read it. It reaches every signed-in
   /// account.
   ///
+  /// `listens` carries no `pid`: the caller's listening record grew (a client's
+  /// listens were accepted, or the server's stream proxy recorded a radio
+  /// tune-in starting or ending), so re-read the listening stats.
+  ///
   /// Further markers are announcements rather than refetch hints, carrying the
   /// same news as the notification-target event of the same name:
   /// `feed-disabled` (`pid` is the show whose scheduled refresh was suspended),
@@ -380,7 +384,7 @@ class ServerSyncEvent {
   final String kind;
 
   /// The item, show, book, playlist, or job the event is about (absent for
-  /// `prefs`, `account`, `health`, `libraries`, and `server`).
+  /// `prefs`, `account`, `health`, `libraries`, `server`, and `listens`).
   final String? pid;
 
   final PlayState? playState;

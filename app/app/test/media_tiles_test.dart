@@ -1406,56 +1406,53 @@ void main() {
         plays: 12,
         ms: 600000,
       );
-
-      final artists = topEntryTile(
-        row,
-        'artists',
+      MediaTileData tile(String kind, {TopEntry entry = row}) => topEntryTile(
+        entry,
+        kind,
         l10n: _l10n,
         store: store,
-        semanticsId: 'top-0',
-      );
-      final shows = topEntryTile(
-        row,
-        'shows',
-        l10n: _l10n,
-        store: store,
-        semanticsId: 'top-1',
-      );
-      final stations = topEntryTile(
-        row,
-        'stations',
-        l10n: _l10n,
-        store: store,
-        semanticsId: 'top-2',
-      );
-      final genres = topEntryTile(
-        const TopEntry(name: '', plays: 1, ms: 0),
-        'genres',
-        l10n: _l10n,
-        store: store,
-        semanticsId: 'top-3',
-      );
-      final albums = topEntryTile(
-        row,
-        'albums',
-        l10n: _l10n,
-        store: store,
-        semanticsId: 'top-4',
+        semanticsId: 'top-$kind',
       );
 
+      // A person or a genre is a disc, the way every artist row in the
+      // app is; an album, a track, a show, an episode, a book and a
+      // station are square.
+      for (final (kind, domain, shape) in <(String, WaxDomain, ArtworkShape)>[
+        ('artists', WaxDomain.music, ArtworkShape.circle),
+        ('albums', WaxDomain.music, ArtworkShape.square),
+        ('tracks', WaxDomain.music, ArtworkShape.square),
+        ('genres', WaxDomain.music, ArtworkShape.circle),
+        ('shows', WaxDomain.podcasts, ArtworkShape.square),
+        ('episodes', WaxDomain.podcasts, ArtworkShape.square),
+        ('books', WaxDomain.audiobooks, ArtworkShape.square),
+        ('authors', WaxDomain.audiobooks, ArtworkShape.circle),
+        ('stations', WaxDomain.radio, ArtworkShape.square),
+      ]) {
+        final drawn = tile(kind);
+        expect(drawn.domain, domain, reason: kind);
+        expect(drawn.shape, shape, reason: kind);
+        expect(drawn.subtitle, '12 listens', reason: kind);
+        expect(drawn.semanticsId, 'top-$kind');
+      }
+
+      final artists = tile('artists');
       expect(artists.title, 'Nightjar');
-      expect(artists.subtitle, _l10n.statsPlays(12));
       expect(artists.trailingText, _l10n.formatListenTime(600000));
       expect(artworkUrl(artists), '/art/top');
-      expect(artists.shape, ArtworkShape.circle);
-      expect(artists.domain, WaxDomain.music);
-      expect(shows.domain, WaxDomain.podcasts);
-      expect(shows.shape, ArtworkShape.square);
-      expect(stations.domain, WaxDomain.radio);
-      expect(genres.title, _l10n.statsLogRemovedItem);
-      expect(genres.shape, ArtworkShape.circle);
-      expect(albums.shape, ArtworkShape.square);
-      expect(albums.semanticsId, 'top-4');
+      expect(
+        tile(
+          'tracks',
+          entry: const TopEntry(name: '', pid: 'tr-1', plays: 1, ms: 0),
+        ).title,
+        _l10n.statsLogRemovedItem,
+      );
+      expect(
+        tile(
+          'books',
+          entry: const TopEntry(name: 'X', plays: 1, ms: 0),
+        ).subtitle,
+        '1 listen',
+      );
     });
   });
 }

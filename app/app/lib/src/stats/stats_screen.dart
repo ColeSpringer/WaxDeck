@@ -12,11 +12,12 @@ import '../shell/semantics_ids.dart';
 import 'media_split.dart';
 import 'stats_charts.dart';
 import 'stats_controller.dart';
+import 'top_entry_open.dart';
 
-/// The caller's listening statistics: headline totals with a range
-/// selector, the bucketed listening chart, the calendar heatmap with
-/// streaks, ranked top lists, and doors into the listen log and the
-/// year in review.
+/// The caller's listening statistics, scoped to one medium: headline
+/// totals with a range selector, the bucketed listening chart, the
+/// calendar heatmap with streaks, ranked top lists, and doors into the
+/// listen log and the year in review.
 class StatsScreen extends ConsumerWidget {
   const StatsScreen({super.key});
 
@@ -57,10 +58,31 @@ class StatsScreen extends ConsumerWidget {
     final sizeClass = WaxSizeClass.of(context);
     final l10n = context.l10n;
     final range = ref.watch(statsRangeProvider);
+    final media = ref.watch(statsMediaProvider);
 
     return WaxScaffold(
       title: l10n.statsTitle,
       slivers: <Widget>[
+        // The medium scopes everything beneath it, the range included,
+        // so it is the first row under the title.
+        SliverToBoxAdapter(
+          child: FilterChipRow(
+            padding: sizeClass.gutter,
+            selected: media.wireName,
+            chips: <WaxFilterChip>[
+              for (final value in StatsMediaType.values)
+                WaxFilterChip(
+                  name: value.wireName,
+                  label: statsMediaLabel(l10n, value),
+                  semanticsId: SemanticsIds.statsMedia(value.wireName),
+                ),
+            ],
+            onSelect: (value) => ref
+                .read(statsMediaProvider.notifier)
+                .select(StatsMediaType.fromWire(value) ?? StatsMediaType.music),
+          ),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s8)),
         SliverToBoxAdapter(
           child: FilterChipRow(
             padding: sizeClass.gutter,
@@ -107,82 +129,90 @@ class _ListeningSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final stats = ref.watch(listeningStatsProvider);
     final bucket = ref.watch(statsBucketProvider);
-    final l10n = context.l10n;
-    return _SectionFace<ListeningStats>(
+    return _SectionFace<MediaListening>(
       state: stats,
       skeleton: SkeletonShape.detail,
       onRetry: () => ref.invalidate(listeningStatsProvider),
-      builder: (context, value) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Wrap(
-            spacing: WaxSpace.s32,
-            runSpacing: WaxSpace.s12,
-            children: <Widget>[
-              StatFigure(
-                key: const Key('stats-total'),
-                value: l10n.formatListenTime(value.totalMs),
-                caption: l10n.statsListened,
-              ),
-              StatFigure(
-                key: const Key('stats-sessions'),
-                value: '${value.sessions}',
-                caption: l10n.statsSessions,
-              ),
-              // The general claim, now that it is true: the client
-              // counts what playing faster saved as well as what
-              // trimming skipped, so the honest word is the plain one.
-              StatFigure(
-                key: const Key('stats-saved'),
-                value: l10n.formatListenTime(value.timeSavedMs),
-                caption: l10n.statsTimeSaved,
-              ),
-            ],
+      // The answer's medium, not the chip's: a switch in flight still
+      // shows the last medium's numbers.
+      builder: (context, value) =>
+          _chart(context, ref, value.stats, bucket, value.media),
+    );
+  }
+
+  Widget _chart(
+    BuildContext context,
+    WidgetRef ref,
+    ListeningStats value,
+    String bucket,
+    StatsMediaType media,
+  ) {
+    final l10n = context.l10n;
+    // Spaced in time, from the size the server bucketed by.
+    final buckets = evenBuckets(value.buckets, value.bucket);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Wrap(
+          spacing: WaxSpace.s32,
+          runSpacing: WaxSpace.s12,
+          children: <Widget>[
+            StatFigure(
+              key: const Key('stats-total'),
+              value: l10n.formatListenTime(value.totalMs),
+              caption: l10n.statsListened,
+            ),
+            StatFigure(
+              key: const Key('stats-sessions'),
+              value: '${value.sessions}',
+              caption: l10n.statsListensCaption,
+            ),
+            // The general claim, now that it is true: the client
+            // counts what playing faster saved as well as what
+            // trimming skipped, so the honest word is the plain one.
+            StatFigure(
+              key: const Key('stats-saved'),
+              value: l10n.formatListenTime(value.timeSavedMs),
+              caption: l10n.statsTimeSaved,
+            ),
+          ],
+        ),
+        const SizedBox(height: WaxSpace.s16),
+        if (value.buckets.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: WaxSpace.s24),
+            child: EmptyState(
+              // The medium is as likely the cause as the range.
+              title: l10n.statsEmptyTitle(media.wireName),
+              // All time leaves no longer range to suggest.
+              message: value.range == statsRanges.last
+                  ? l10n.statsAllTimeEmptyMessage(media.wireName)
+                  : l10n.statsEmptyMessage,
+              glyph: WaxIcons.stats,
+            ),
+          )
+        else ...<Widget>[
+          ListeningBarChart(
+            key: const Key('stats-chart'),
+            values: <int>[for (final b in buckets) b.ms],
+            labels: _chartLabels(l10n, buckets),
+            summary: _chartSummary(l10n, buckets, value.bucket),
           ),
-          // Under the headline: hours and sessions alone cannot say
-          // whether podcasts are in there at all.
-          if (mediaSplitBar(
-                l10n,
-                value.byMediaType,
-                key: const Key('stats-media-split'),
-              )
-              case final split?) ...<Widget>[
-            const SizedBox(height: WaxSpace.s20),
-            split,
-          ],
-          const SizedBox(height: WaxSpace.s16),
-          if (value.buckets.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: WaxSpace.s24),
-              child: EmptyState(
-                title: l10n.statsEmptyTitle,
-                message: l10n.statsEmptyMessage,
-                glyph: WaxIcons.stats,
-              ),
-            )
-          else ...<Widget>[
-            ListeningBarChart(
-              key: const Key('stats-chart'),
-              values: <int>[for (final b in value.buckets) b.ms],
-              labels: _chartLabels(l10n, value.buckets),
-              summary: _chartSummary(l10n, value.buckets, bucket),
+          const SizedBox(height: WaxSpace.s8),
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: WaxChoice<String>(
+              value: bucket,
+              options: statsBuckets,
+              labelFor: (value) => StatsScreen.bucketLabel(l10n, value),
+              label: l10n.statsGroupBy,
+              semanticsId: SemanticsIds.statsBucket,
+              onChanged: (value) =>
+                  ref.read(statsBucketProvider.notifier).select(value),
             ),
-            const SizedBox(height: WaxSpace.s8),
-            Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: WaxChoice<String>(
-                value: bucket,
-                options: statsBuckets,
-                labelFor: (value) => StatsScreen.bucketLabel(l10n, value),
-                label: l10n.statsGroupBy,
-                semanticsId: SemanticsIds.statsBucket,
-                onChanged: (value) =>
-                    ref.read(statsBucketProvider.notifier).select(value),
-              ),
-            ),
-          ],
+          ),
         ],
-      ),
+      ],
     );
   }
 
@@ -281,14 +311,19 @@ class _TopListsSection extends ConsumerWidget {
   static String kindLabel(AppLocalizations l10n, String kind) => switch (kind) {
     'artists' => l10n.statsKindArtists,
     'albums' => l10n.statsKindAlbums,
+    'tracks' => l10n.statsKindTracks,
     'genres' => l10n.statsKindGenres,
     'shows' => l10n.statsKindShows,
+    'episodes' => l10n.statsKindEpisodes,
+    'books' => l10n.statsKindBooks,
+    'authors' => l10n.statsKindAuthors,
     'stations' => l10n.statsKindStations,
     _ => kind,
   };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final kinds = topListKindsFor(ref.watch(statsMediaProvider));
     final kind = ref.watch(topKindProvider);
     final top = ref.watch(topListProvider);
     final l10n = context.l10n;
@@ -304,7 +339,7 @@ class _TopListsSection extends ConsumerWidget {
           padding: EdgeInsets.zero,
           selected: kind,
           chips: <WaxFilterChip>[
-            for (final value in topListKinds)
+            for (final value in kinds)
               WaxFilterChip(
                 name: value,
                 label: kindLabel(l10n, value),
@@ -339,18 +374,23 @@ class _TopListsSection extends ConsumerWidget {
   }
 }
 
-/// One ranked top-list row: rank, artwork, name, plays, and time.
+/// One ranked top-list row: rank, artwork, name, listens, and time; a
+/// tap opens what it names.
 class TopEntryRow extends ConsumerWidget {
   const TopEntryRow({
     super.key,
     required this.index,
     required this.entry,
     required this.kind,
+    this.semanticsId,
   });
 
   final int index;
   final TopEntry entry;
   final String kind;
+
+  /// The row's identifier; the stats page's own by its rank when absent.
+  final String? semanticsId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => MediaListRow(
@@ -359,11 +399,12 @@ class TopEntryRow extends ConsumerWidget {
       kind,
       l10n: context.l10n,
       store: ref.watch(artworkStoreProvider),
-      semanticsId: SemanticsIds.topEntry(index),
+      semanticsId: semanticsId ?? SemanticsIds.topEntry(index),
     ),
-    // The rank, in the slot the row already has for one, so it lines up
-    // in mono without this reimplementing the row's leading column.
-    leadingIndex: index + 1,
+    rank: index + 1,
+    onTap: canOpenTopEntry(entry, kind)
+        ? () => openTopEntry(context, ref, entry, kind)
+        : null,
   );
 }
 

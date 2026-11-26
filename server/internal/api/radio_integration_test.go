@@ -232,6 +232,7 @@ func TestRadioRelayRecordsTheListen(t *testing.T) {
 
 	resp = get(t, h.ts, "/api/v1/radio/stations/"+st.Pid+"/play-info", h.token)
 	pi := decode[RadioPlayInfo](t, resp)
+	mint := decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server", h.token))
 	streamResp, err := http.Get(h.ts.URL + pi.Url)
 	if err != nil {
 		t.Fatal(err)
@@ -285,6 +286,30 @@ func TestRadioRelayRecordsTheListen(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("no radio slice: %+v", stats.ByMediaType)
+	}
+
+	// The tune-in's one checkpoint is both its first and its closing one,
+	// and tells the listener's devices once. The marker follows the row's
+	// write, so it can trail the totals by a moment.
+	var page ServerSyncPage
+	n := 0
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		page = decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server?since="+mint.NextSince, h.token))
+		n = 0
+		for _, ev := range page.Events {
+			if ev.Kind == "listens" {
+				n++
+				if ev.Pid != nil {
+					t.Errorf("listens marker carries a pid: %+v", ev)
+				}
+			}
+		}
+		if n > 0 || time.Now().After(deadline) {
+			break
+		}
+	}
+	if n != 1 {
+		t.Fatalf("listens markers = %d in %+v, want 1", n, page.Events)
 	}
 }
 

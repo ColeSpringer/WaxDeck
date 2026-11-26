@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_store.dart';
+import 'package:waxdeck/src/books/book_bucket_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/stats/share_card_export.dart';
@@ -133,7 +134,95 @@ YearInReview _recapWithCovers(int year) => YearInReview(
   ],
 );
 
+/// A recap with podcast and audiobook listening ranked beside the music.
+YearInReview _recapWithBooks(int year) => YearInReview(
+  year: year,
+  timezone: 'UTC',
+  totalMs: 2 * 3600000,
+  sessions: 10,
+  distinctItems: 5,
+  newInLibrary: 3,
+  timeSavedMs: 60000,
+  longestStreakDays: 4,
+  byMonth: [
+    for (var month = 1; month <= 12; month++)
+      MonthListening(month: month, ms: month * 60000, sessions: month),
+  ],
+  topArtists: const [TopEntry(name: 'The Bree Trio', plays: 12, ms: 7200000)],
+  topShows: const [
+    TopEntry(name: 'Pipeweed Economics', pid: 'pc-1', plays: 3, ms: 1800000),
+  ],
+  topBooks: const [
+    TopEntry(name: 'The Long Dark', pid: 'bk-1', plays: 4, ms: 5400000),
+  ],
+  topAuthors: const [
+    TopEntry(name: 'Night Writer', pid: 'ar-2', plays: 4, ms: 5400000),
+  ],
+);
+
 void main() {
+  testWidgets('the recap ranks books and authors after the shows', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final repo = FakeRepository()
+      ..yearInReview = _recapWithBooks(DateTime.now().year);
+    await _pump(tester, _container(repo));
+
+    double top(String text) => tester.getTopLeft(find.text(text)).dy;
+    expect(find.text('Top books'), findsOneWidget);
+    expect(find.text('Top authors'), findsOneWidget);
+    expect(top('Top shows'), lessThan(top('Top books')));
+    expect(top('Top books'), lessThan(top('Top authors')));
+    expect(find.text('The Long Dark'), findsOneWidget);
+    expect(find.text('Night Writer'), findsOneWidget);
+
+    // Each list's rows carry ids named for the list, so these four lists'
+    // first rows answer four ids, not one id four times.
+    for (final kind in const ['artists', 'shows', 'books', 'authors']) {
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.yirTopEntry(kind, 0)),
+        findsOneWidget,
+        reason: kind,
+      );
+    }
+    expect(find.bySemanticsIdentifier(SemanticsIds.topEntry(0)), findsNothing);
+  });
+
+  testWidgets('a recap with no audiobook listening has no book lists', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final repo = FakeRepository()..yearInReview = _recap(DateTime.now().year);
+    await _pump(tester, _container(repo));
+
+    expect(find.text('Top artists'), findsOneWidget);
+    expect(find.text('Top books'), findsNothing);
+    expect(find.text('Top authors'), findsNothing);
+  });
+
+  testWidgets('a recap row opens what it names', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final repo = FakeRepository()
+      ..yearInReview = _recapWithBooks(DateTime.now().year);
+    await pumpApp(
+      tester,
+      const YearInReviewScreen(),
+      container: _container(repo),
+    );
+
+    await tester.tap(find.text('Night Writer'));
+    await tester.pumpAndSettle();
+
+    // An author is a person credited on books: their books, not the
+    // music artist page.
+    expect(find.byType(BookBucketScreen), findsOneWidget);
+    expect(repo.facetDrills, contains(('artist', '2')));
+  });
+
   testWidgets('renders the personal recap with totals and top lists', (
     tester,
   ) async {
@@ -465,6 +554,74 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  // An artist entity and a name group can show one name: each row keeps
+  // its own picture.
+  testWidgets('two entries of one name draw their own covers', (tester) async {
+    final first = Uint8List.fromList(_onePixelPng);
+    final second = Uint8List.fromList(_onePixelPng);
+    final repo = FakeRepository()
+      ..yearInReview = YearInReview(
+        year: DateTime.now().year,
+        timezone: 'UTC',
+        totalMs: 2 * 3600000,
+        sessions: 10,
+        distinctItems: 5,
+        newInLibrary: 3,
+        timeSavedMs: 60000,
+        longestStreakDays: 4,
+        topArtists: const <TopEntry>[
+          TopEntry(
+            pid: 'ar-1',
+            name: 'The Bree Trio',
+            artUrl: '/art/ar-1',
+            plays: 12,
+            ms: 720000,
+          ),
+          TopEntry(
+            name: 'The Bree Trio',
+            artUrl: '/art/tr-9',
+            plays: 9,
+            ms: 540000,
+          ),
+        ],
+      );
+    final artwork = FakeArtworkStore()
+      ..bytes['/art/ar-1'] = first
+      ..bytes['/art/tr-9'] = second;
+    final container = _container(
+      repo,
+      exporter: _FakeExporter(),
+      artwork: artwork,
+    );
+
+    List<String> drawn() => [
+      for (final image in tester.widgetList<Image>(find.byType(Image)))
+        if (image.image case final MemoryImage cover)
+          identical(cover.bytes, first)
+              ? 'first'
+              : identical(cover.bytes, second)
+              ? 'second'
+              : 'other',
+    ];
+
+    await tester.runAsync(() async {
+      await _pump(tester, container);
+      final door = find.bySemanticsIdentifier(SemanticsIds.shareCardOpen);
+      await tester.ensureVisible(door);
+      await tester.pumpAndSettle();
+      await tester.tap(door);
+      await tester.pumpAndSettle();
+      for (var waited = 0; waited < 5000; waited += 10) {
+        await tester.pump();
+        if (drawn().isNotEmpty) break;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+
+    // Both shapes, each its two rows in order.
+    expect(drawn(), <String>['first', 'second', 'first', 'second']);
+  });
+
   // Offline, or a cover the server has no bytes for: the card still
   // renders and still exports, with a monogram where the picture would
   // be. One frame, no network in it.
@@ -540,6 +697,8 @@ extension on YearInReview {
     topTracks: topTracks,
     topGenres: topGenres,
     topShows: topShows,
+    topBooks: topBooks,
+    topAuthors: topAuthors,
   );
 }
 

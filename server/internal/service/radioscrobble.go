@@ -96,13 +96,15 @@ func (l *Radio) ScrobbleRadioPlay(_ context.Context, userID, apiStationPID, rawT
 // The warning names what was lost, because the two payloads do not cost
 // the same: a dropped scrobble is one missing play on a third-party
 // profile, and a dropped closing checkpoint is listening time that no
-// later tick will restate.
-func (l *Radio) queueRadioWrite(w radioWrite, apiStationPID string) {
+// later tick will restate. It reports whether the write was queued.
+func (l *Radio) queueRadioWrite(w radioWrite, apiStationPID string) bool {
 	select {
 	case l.radioWrites <- w:
+		return true
 	default:
 		l.log.Warn("dropping radio bookkeeping; the writer is behind",
 			"kind", w.kind(), "station", apiStationPID)
+		return false
 	}
 }
 

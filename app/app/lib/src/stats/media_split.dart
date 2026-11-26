@@ -4,6 +4,16 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
 
+/// The word for a medium, on the stats page's switch and the recap's
+/// split alike.
+String statsMediaLabel(AppLocalizations l10n, StatsMediaType type) =>
+    switch (type) {
+      StatsMediaType.music => l10n.statsMediaMusic,
+      StatsMediaType.podcast => l10n.statsMediaPodcasts,
+      StatsMediaType.audiobook => l10n.statsMediaAudiobooks,
+      StatsMediaType.radio => l10n.statsMediaRadio,
+    };
+
 /// The split bar over its legend, largest share first, or null when at
 /// most one medium has time on it. Zero shares go before the count: a
 /// listen with no time still gets a slice on the wire.
@@ -17,12 +27,7 @@ MediaSplitBar? mediaSplitBar(
       if (m.ms > 0) m,
   ];
   if (shares.length < 2) return null;
-  String labelOf(StatsMediaType type) => switch (type) {
-    StatsMediaType.music => l10n.statsMediaMusic,
-    StatsMediaType.podcast => l10n.statsMediaPodcasts,
-    StatsMediaType.audiobook => l10n.statsMediaAudiobooks,
-    StatsMediaType.radio => l10n.statsMediaRadio,
-  };
+  String labelOf(StatsMediaType type) => statsMediaLabel(l10n, type);
   return MediaSplitBar(
     key: key,
     summary: l10n.statsSplitSummary(

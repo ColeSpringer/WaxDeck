@@ -12,8 +12,61 @@ const statsRanges = ['7d', '30d', '90d', '365d', 'all'];
 /// Chart bucket sizes, in display order.
 const statsBuckets = ['day', 'week', 'month'];
 
-/// Top-list kinds, in display order.
-const topListKinds = ['artists', 'albums', 'genres', 'shows', 'stations'];
+/// The top-list kinds of one medium, in display order.
+List<String> topListKindsFor(StatsMediaType media) => switch (media) {
+  StatsMediaType.music => const ['artists', 'albums', 'tracks', 'genres'],
+  StatsMediaType.podcast => const ['shows', 'episodes'],
+  StatsMediaType.audiobook => const ['books', 'authors'],
+  StatsMediaType.radio => const ['stations'],
+};
+
+/// The medium every figure, the chart, the heatmap and the top lists
+/// count, held for the session like the range.
+class StatsMediaController extends Notifier<StatsMediaType> {
+  @override
+  StatsMediaType build() => StatsMediaType.music;
+
+  void select(StatsMediaType media) => state = media;
+}
+
+final statsMediaProvider =
+    NotifierProvider<StatsMediaController, StatsMediaType>(
+      StatsMediaController.new,
+    );
+
+/// Every [bucket]-sized bucket from the first of [buckets] to the last,
+/// the ones the wire leaves out (no listening) at zero, so a chart of
+/// them spaces its bars in time. Starts are calendar dates, stepped by
+/// the calendar: a day, a week (the server's start on a Monday), a month.
+List<ListeningBucket> evenBuckets(
+  List<ListeningBucket> buckets,
+  String bucket,
+) {
+  if (buckets.length < 2) return buckets;
+  final sorted = [...buckets]..sort((a, b) => a.start.compareTo(b.start));
+  DateTime step(DateTime d) => switch (bucket) {
+    'week' => DateTime.utc(d.year, d.month, d.day + 7),
+    'month' => DateTime.utc(d.year, d.month + 1, d.day),
+    'day' => DateTime.utc(d.year, d.month, d.day + 1),
+    // A size this build does not know draws as the wire has it.
+    _ => sorted.last.start.add(const Duration(days: 1)),
+  };
+  final byStart = {for (final b in sorted) b.start: b};
+  final out = <ListeningBucket>[];
+  final last = sorted.last.start;
+  for (var at = sorted.first.start; !at.isAfter(last); at = step(at)) {
+    out.add(
+      byStart.remove(at) ?? ListeningBucket(start: at, ms: 0, sessions: 0),
+    );
+  }
+  // A start off the grid still draws, in its place.
+  if (byStart.isNotEmpty) {
+    out
+      ..addAll(byStart.values)
+      ..sort((a, b) => a.start.compareTo(b.start));
+  }
+  return out;
+}
 
 /// The range the listening chart and top lists aggregate over.
 class StatsRangeController extends Notifier<String> {
@@ -39,27 +92,41 @@ final statsBucketProvider = NotifierProvider<StatsBucketController, String>(
   StatsBucketController.new,
 );
 
-/// Aggregated listening for the selected range and bucket.
-final listeningStatsProvider = FutureProvider<ListeningStats>((ref) {
+/// One medium's aggregated listening, with the medium it was asked for:
+/// the answer names no medium, and the one selected moves before the
+/// next answer lands.
+class MediaListening {
+  const MediaListening({required this.media, required this.stats});
+
+  final StatsMediaType media;
+  final ListeningStats stats;
+}
+
+/// Aggregated listening for the selected medium, range and bucket.
+final listeningStatsProvider = FutureProvider<MediaListening>((ref) async {
   // Keyed on the account: the repository moves only with the server.
   ref.watch(signedInAccountProvider);
   final range = ref.watch(statsRangeProvider);
   final bucket = ref.watch(statsBucketProvider);
-  return ref
+  final media = ref.watch(statsMediaProvider);
+  final stats = await ref
       .watch(repositoryProvider)
-      .getListeningStats(range: range, bucket: bucket);
+      .getListeningStats(range: range, bucket: bucket, mediaType: media);
+  return MediaListening(media: media, stats: stats);
 });
 
 /// The current year's per-day listening plus streaks.
 final listeningHeatmapProvider = FutureProvider<ListeningHeatmap>((ref) {
   ref.watch(signedInAccountProvider);
-  return ref.watch(repositoryProvider).getListeningHeatmap();
+  final media = ref.watch(statsMediaProvider);
+  return ref.watch(repositoryProvider).getListeningHeatmap(mediaType: media);
 });
 
-/// Which top list is showing.
+/// Which top list is showing: the medium's first until one is chosen,
+/// and the first again whenever the medium changes.
 class TopKindController extends Notifier<String> {
   @override
-  String build() => 'artists';
+  String build() => topListKindsFor(ref.watch(statsMediaProvider)).first;
 
   void select(String kind) => state = kind;
 }
@@ -68,7 +135,9 @@ final topKindProvider = NotifierProvider<TopKindController, String>(
   TopKindController.new,
 );
 
-/// The selected top list over the selected range.
+/// The selected top list over the selected range. The kind names its
+/// medium, so this watches the kind rather than the medium: a medium
+/// change costs one read, with the new medium's kind.
 final topListProvider = FutureProvider<TopList>((ref) {
   ref.watch(signedInAccountProvider);
   final kind = ref.watch(topKindProvider);
