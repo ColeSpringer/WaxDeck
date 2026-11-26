@@ -587,9 +587,9 @@ func TestBulkApprovalStaysInsideItsCoverBudget(t *testing.T) {
 	if spent > bulkCoverBudget+500*time.Millisecond {
 		t.Errorf("cover fetches took %v over %d asks, want inside the %v bound", spent, len(asked), bulkCoverBudget)
 	}
-	// Past the bound is the catalog work of 20 small decisions.
-	if elapsed > bulkCoverBudget+bulkCatalogMargin {
-		t.Errorf("the bulk call took %v, want inside %v and a small margin", elapsed, bulkCoverBudget)
+	// Past the bound is only the decisions' catalog work.
+	if limit := bulkCoverBudget + n*bulkDecisionWork; elapsed > limit {
+		t.Errorf("the bulk call took %v, want inside %v: the %v bound and its decisions' catalog work", elapsed, limit, bulkCoverBudget)
 	}
 	unreached := 0
 	for _, o := range out {
@@ -683,9 +683,12 @@ func TestKeptFrontsOfSettledEntriesAreSwept(t *testing.T) {
 	}
 }
 
-// bulkCatalogMargin is the time a test's bulk call may take past the
-// cover bound: the catalog work of its decisions.
-const bulkCatalogMargin = 4 * time.Second
+// bulkDecisionWork is what a test's bulk call may take past the cover
+// bound for each decision in it, its catalog work: tens of milliseconds
+// under the race detector, a few hundred with the package's other tests
+// sharing the runner. Twenty of them add up to the bound itself, so a
+// call that waited out the bound twice still fails.
+const bulkDecisionWork = 500 * time.Millisecond
 
 const priorRelease = "1f2e3d4c-5b6a-4789-8a7b-6c5d4e3f2a1b"
 

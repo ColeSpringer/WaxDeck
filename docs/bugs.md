@@ -8,8 +8,8 @@ List of current bugs or correctness issues. Also an area for me to keep my rambl
 
 [11-26-26] When trying to download this song from youtube https://www.youtube.com/watch?v=DjPZQm4sC5E, there are some characters that do not appear correctly in the review queue. (see bad_characters.png) Weirdly, when you approve the track the characters appear correctly when you navigate to the track in the music section.
 
-[11-26-26] When making a decision on a track in the review queue, the notification that pops up is in an awkward place. Kind of takes up a lot of space too. (see review_queue_bad_notification_placement.png)
+[11-26-26] When making a decision on a track in the review queue, the notification that pops up is in an awkward place. (see review_queue_bad_notification_placement.png)
 
 [11-26-26] Notifcations don't seem to go away until you interact with them. They should show for a short period of time before going away. Users should still be able to see there are unread notications from the notification bell.
 
-[11-26-26] "Art from YouTube, for a track" is the ", for a track" really necessary?
+[11-26-26] I was able to break the navigation. I can't find out how to reproduce the problem though. I was on one albums page, clicked the home button, and was brought to a different albums page instead of the home page. This was saved through the browsers back and forward buttons. Clicking home again brought me back to the home page but no idea why it originally happened.

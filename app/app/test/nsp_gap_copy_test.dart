@@ -1,10 +1,10 @@
-import 'dart:io';
-
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/playlists/nsp_gap_copy.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+
+import 'repo_files.dart';
 
 void main() {
   late AppLocalizations en;
@@ -228,23 +228,13 @@ void main() {
 
 /// The reason codes the committed bundle lists for `NspGap.code`.
 Set<String> _specNspCodes() {
-  final spec = File(_repoFile('api/openapi.yaml')).readAsStringSync();
+  final spec = specProse();
   const opening = "The catalog's codes are";
   final start = spec.indexOf(opening);
   expect(start, isNonNegative, reason: 'the spec no longer says "$opening"');
   final end = spec.indexOf('.', start);
+  expect(end, isNonNegative, reason: 'the code list no longer ends as it did');
   return RegExp(
     r'`([a-z_]+)`',
   ).allMatches(spec.substring(start, end)).map((m) => m.group(1)!).toSet();
-}
-
-/// A repo-relative path, resolved by walking up from `app/app`.
-String _repoFile(String relative) {
-  var dir = Directory.current;
-  for (var up = 0; up < 6; up++) {
-    final candidate = File('${dir.path}/$relative');
-    if (candidate.existsSync()) return candidate.path;
-    dir = dir.parent;
-  }
-  throw StateError('no $relative above ${Directory.current.path}');
 }

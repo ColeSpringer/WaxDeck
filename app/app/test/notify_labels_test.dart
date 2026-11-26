@@ -1,11 +1,11 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_es.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
 import 'package:waxdeck/src/settings/notify_labels.dart';
+
+import 'repo_files.dart';
 
 /// The event names the spec says this server can emit.
 ///
@@ -16,27 +16,16 @@ import 'package:waxdeck/src/settings/notify_labels.dart';
 /// server without wording it here is this test failing rather than a row
 /// that says `signup-requested` to somebody.
 Set<String> _specCatalog() {
-  final spec = File(_repoFile('api/openapi.yaml')).readAsStringSync();
+  final spec = specProse();
   const opening = 'The current catalog is';
   final start = spec.indexOf(opening);
   if (start < 0) throw StateError('the spec no longer says "$opening"');
-  final end = spec.indexOf('.', spec.indexOf('`health-fix-finished`', start));
+  final last = spec.indexOf('`health-fix-finished`', start);
+  final end = last < 0 ? -1 : spec.indexOf('.', last);
   if (end < 0) throw StateError('the catalog list no longer ends as it did');
   return RegExp(
     r'`([a-z][a-z-]*)`',
   ).allMatches(spec.substring(start, end)).map((m) => m.group(1)!).toSet();
-}
-
-/// A repo-relative path, resolved by walking up from `app/app`, which is
-/// where this test runs.
-String _repoFile(String relative) {
-  var dir = Directory.current;
-  for (var up = 0; up < 6; up++) {
-    final candidate = File('${dir.path}/$relative');
-    if (candidate.existsSync()) return candidate.path;
-    dir = dir.parent;
-  }
-  throw StateError('no $relative above ${Directory.current.path}');
 }
 
 void main() {

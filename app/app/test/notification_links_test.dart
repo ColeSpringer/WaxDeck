@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 
+import 'repo_files.dart';
+
 /// The server builds a link into this app for every notification it
 /// delivers, and it does that from a table of its own: a Go server
 /// cannot read a Dart constant, so `service/notify.go` writes the paths
@@ -11,7 +13,7 @@ import 'package:waxdeck/src/shell/routes.dart';
 /// renamed here without the server following fails over here rather
 /// than shipping a notification whose link 404s.
 String _serverLinkTable() {
-  final path = _repoFile('server/internal/service/notify.go');
+  final path = repoFile('server/internal/service/notify.go');
   final source = File(path).readAsStringSync();
   const opening = ') notificationLink(';
   final start = source.indexOf(opening);
@@ -19,16 +21,6 @@ String _serverLinkTable() {
   final end = source.indexOf('\n}', start);
   if (end < 0) throw StateError('notificationLink no longer ends as it did');
   return source.substring(start, end);
-}
-
-String _repoFile(String relative) {
-  var dir = Directory.current;
-  for (var up = 0; up < 6; up++) {
-    final candidate = File('${dir.path}/$relative');
-    if (candidate.existsSync()) return candidate.path;
-    dir = dir.parent;
-  }
-  throw StateError('no $relative above ${Directory.current.path}');
 }
 
 void main() {

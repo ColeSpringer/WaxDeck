@@ -7,6 +7,8 @@ import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/settings/notify_labels.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'repo_files.dart';
+
 /// The error table, and the two token tables shaped like it.
 ///
 /// The completeness check reads the contract rather than a second copy of
@@ -667,7 +669,7 @@ WaxDeckApiException _fake(String code) =>
 /// codes too (`catalog-busy` explains itself against a plain `conflict`),
 /// and they name a request field - `force` - that is not a code at all.
 Set<String> _specCodes() {
-  final spec = File(_repoFile('api/openapi.yaml')).readAsStringSync();
+  final spec = specProse();
   const opening = 'currently defined codes:';
   const closing = 'New codes may appear';
   final start = spec.indexOf(opening);
@@ -694,7 +696,7 @@ Set<String> _specCodes() {
 /// The reasons the committed bundle lists under `source-refused`, read out
 /// of its prose like the codes are.
 Set<String> _specSourceRefusedReasons() {
-  final spec = File(_repoFile('api/openapi.yaml')).readAsStringSync();
+  final spec = specProse();
   const opening = 'Under `source-refused`, `reason` says why, one of';
   const closing = 'a client treats a reason it does not know';
   final start = spec.indexOf(opening);
@@ -727,27 +729,16 @@ Set<String> _specSourceRefusedReasons() {
 /// holds them as Go constants and the schema types the field as a free
 /// string, deliberately, so a newer server can add one.
 Set<String> _specHealthRules() {
-  final spec = File(_repoFile('api/openapi.yaml')).readAsStringSync();
+  final spec = specProse();
   const opening = 'the current set is';
   final start = spec.indexOf(opening);
   expect(start, isNonNegative, reason: 'the spec no longer says "$opening"');
-  final end = spec.indexOf('.', spec.indexOf('`corrupt-audio`', start));
+  final last = spec.indexOf('`corrupt-audio`', start);
+  final end = last < 0 ? -1 : spec.indexOf('.', last);
   expect(end, isNonNegative, reason: 'the rule list no longer ends as it did');
   return RegExp(
     r'`([a-z][a-z-]*)`',
   ).allMatches(spec.substring(start, end)).map((m) => m.group(1)!).toSet();
-}
-
-/// A repo-relative path, resolved by walking up from `app/app`, which is
-/// where this test runs.
-String _repoFile(String relative) {
-  var dir = Directory.current;
-  for (var up = 0; up < 6; up++) {
-    final candidate = File('${dir.path}/$relative');
-    if (candidate.existsSync()) return candidate.path;
-    dir = dir.parent;
-  }
-  throw StateError('no $relative above ${Directory.current.path}');
 }
 
 /// The files whose `code:` literals are answers going out over the
