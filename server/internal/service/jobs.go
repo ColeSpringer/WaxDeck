@@ -39,6 +39,9 @@ type Jobs struct {
 	// jobFinishedHook runs as a job's end is taken in (false) and once it
 	// has been (true), in a test; nothing in the server sets it.
 	jobFinishedHook atomic.Pointer[func(j *model.Job, done bool)]
+	// startReadHook fails the read a start makes of its job, in a test;
+	// nothing in the server sets it.
+	startReadHook atomic.Pointer[func(pid model.PID) error]
 	// openedAtNS is when this process opened the library: a job that
 	// ended earlier ended under another process.
 	openedAtNS int64
@@ -76,6 +79,112 @@ type jobWatch struct {
 	changed map[model.PID]struct{}
 	running map[model.PID]string
 	read    map[model.PID]model.Job
+	// held is each job this process started and may cancel, until a read
+	// finds it ended and lets go of it.
+	held map[model.PID]*heldJob
+	// bound is the context of each job started under one of its own whose
+	// kind runs to its end, or whose kind its start could not read:
+	// released at its end, and canceled only by a cancel that reads a kind
+	// that stops.
+	bound map[model.PID]context.CancelFunc
+	// toEnd is the context of each job its start restricted to run to its
+	// end: released at its end, and never canceled.
+	toEnd map[model.PID]context.CancelFunc
+}
+
+// heldJob is the cancel of the context a job runs under, and whether a
+// cancel was asked for.
+type heldJob struct {
+	cancel    context.CancelFunc
+	requested bool
+}
+
+func (w *jobWatch) hold(pid model.PID, cancel context.CancelFunc) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.held == nil {
+		w.held = map[model.PID]*heldJob{}
+	}
+	w.held[pid] = &heldJob{cancel: cancel}
+}
+
+func (w *jobWatch) bind(pid model.PID, release context.CancelFunc) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.bound == nil {
+		w.bound = map[model.PID]context.CancelFunc{}
+	}
+	w.bound[pid] = release
+}
+
+func (w *jobWatch) pinToEnd(pid model.PID, release context.CancelFunc) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.toEnd == nil {
+		w.toEnd = map[model.PID]context.CancelFunc{}
+	}
+	w.toEnd[pid] = release
+}
+
+// runsToEnd answers whether a job's start restricted it to run to its end.
+func (w *jobWatch) runsToEnd(pid model.PID) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	_, ok := w.toEnd[pid]
+	return ok
+}
+
+// letGoLocked releases the context of a job read ended or gone; w.mu is
+// held.
+func (w *jobWatch) letGoLocked(pid model.PID) {
+	if release, ok := w.bound[pid]; ok {
+		release()
+		delete(w.bound, pid)
+	}
+	if release, ok := w.toEnd[pid]; ok {
+		release()
+		delete(w.toEnd, pid)
+	}
+	if h, ok := w.held[pid]; ok {
+		h.cancel()
+		delete(w.held, pid)
+	}
+}
+
+// askCancel cancels the context of a held job, or of a bound one whose
+// kind (as read now) stops, which is held from then on; it answers
+// whether the job was asked to stop.
+func (w *jobWatch) askCancel(pid model.PID, kind string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	h, ok := w.held[pid]
+	if !ok {
+		release, bound := w.bound[pid]
+		if !bound || !cancelableJobKinds[kind] {
+			return false
+		}
+		delete(w.bound, pid)
+		h = &heldJob{cancel: release}
+		if w.held == nil {
+			w.held = map[model.PID]*heldJob{}
+		}
+		w.held[pid] = h
+	}
+	h.requested = true
+	h.cancel()
+	return true
+}
+
+// cancelState answers whether askCancel would stop a running job of kind
+// now, and whether a cancel was asked of it.
+func (w *jobWatch) cancelState(pid model.PID, kind string) (cancelable, requested bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if h, ok := w.held[pid]; ok {
+		return !h.requested, h.requested
+	}
+	_, bound := w.bound[pid]
+	return bound && cancelableJobKinds[kind], false
 }
 
 func (w *jobWatch) saw(pid model.PID) {
@@ -87,13 +196,27 @@ func (w *jobWatch) saw(pid model.PID) {
 	w.changed[pid] = struct{}{}
 }
 
-// forget drops every job followed, which a replaced catalog does not hold.
+// forget drops every job followed, which a replaced catalog does not
+// hold, but for the held ones: read again, each the new catalog ended or
+// does not hold is let go.
 func (w *jobWatch) forget() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	clear(w.changed)
 	clear(w.running)
 	clear(w.read)
+	if w.changed == nil {
+		w.changed = map[model.PID]struct{}{}
+	}
+	for pid := range w.held {
+		w.changed[pid] = struct{}{}
+	}
+	for pid := range w.bound {
+		w.changed[pid] = struct{}{}
+	}
+	for pid := range w.toEnd {
+		w.changed[pid] = struct{}{}
+	}
 }
 
 // followJob hands a job to the follower, which reads it at once.
@@ -191,12 +314,14 @@ func (l *Jobs) applyReads(reads map[model.PID]*model.Job) {
 		switch {
 		case j == nil:
 			delete(w.running, pid)
+			w.letGoLocked(pid)
 			gone = append(gone, pid)
 		case j.State == model.JobRunning:
 			w.running[pid] = j.Kind
 			w.read[pid] = *j
 		default:
 			delete(w.running, pid)
+			w.letGoLocked(pid)
 			w.read[pid] = *j
 		}
 	}
@@ -510,19 +635,26 @@ func (l *Jobs) adoptJob(ctx context.Context, pid model.PID, userID, rule string)
 // adoptJobWith is adoptJob for an origin carrying more, answering whether
 // it was recorded.
 func (l *Jobs) adoptJobWith(ctx context.Context, o wdb.JobOrigin) error {
-	ctx = context.WithoutCancel(ctx)
-	o.CreatedAtNS = time.Now().UnixNano()
-	err := l.db.InsertJobOrigin(ctx, o)
+	err := l.recordOrigin(ctx, o)
 	pid := model.PID(o.PID)
 	l.followJob(pid)
 	if err != nil {
-		l.log.Warn("recording who started a job", "job", o.PID, "err", err)
 		return err
 	}
-	if j, err := l.lib.Job(ctx, pid); err == nil && j.State != model.JobRunning {
+	if j, err := l.lib.Job(context.WithoutCancel(ctx), pid); err == nil && j.State != model.JobRunning {
 		l.settleLater(func(ctx context.Context) { l.settleJobOrigin(ctx, j) })
 	}
 	return nil
+}
+
+// recordOrigin records who started a job.
+func (l *Jobs) recordOrigin(ctx context.Context, o wdb.JobOrigin) error {
+	o.CreatedAtNS = time.Now().UnixNano()
+	err := l.db.InsertJobOrigin(context.WithoutCancel(ctx), o)
+	if err != nil {
+		l.log.Warn("recording who started a job", "job", o.PID, "err", err)
+	}
+	return err
 }
 
 // settleJobOrigin tells whoever started an ended job about it, once: the
@@ -538,6 +670,12 @@ func (l *Jobs) settleJobOrigin(ctx context.Context, j *model.Job) {
 		}
 		return
 	}
+	// A cancel somebody asked for files nothing, as a canceled task's
+	// does: only a stop nobody asked for is told. A health fix is the
+	// exception: its notice, worded as canceled, says what its re-check
+	// found. The ask is on the origin, so a repeat after a restart reads
+	// it too.
+	asked := o.CancelAsked && j.State == model.JobCanceled
 	// Its rows follow before anyone is told: the reader opens what the
 	// change made. A follow-up that failed keeps the origin, so the next
 	// start's settle repeats it.
@@ -550,13 +688,13 @@ func (l *Jobs) settleJobOrigin(ctx context.Context, j *model.Job) {
 		return
 	}
 	if o.Rule != "" {
-		l.Health.finishHealthFixJob(ctx, o, jobDTO(j))
+		l.Health.finishHealthFixJob(ctx, o, jobDTO(j), asked)
 		return
 	}
 	ctx = context.WithoutCancel(ctx)
 	audit := l.Health.finishOrganizeJob(ctx, o, j)
 	// An origin of no one's only kept a follow-up; there is nobody to tell.
-	if o.UserID != "" {
+	if o.UserID != "" && !asked {
 		ended := []Job{jobDTO(j)}
 		l.nameJobTargets(ctx, ended)
 		if removed {
@@ -832,6 +970,167 @@ func (l *Jobs) followStarted(ctx context.Context, pid model.PID, userID string) 
 	l.followJob(pid)
 }
 
+// startCancelable starts a job under a context of its own below parent,
+// records o (who started it; none without a UserID), and holds its
+// cancel while it runs when WaxBin gives it a kind cancelableJobKinds
+// names; any other kind's context, or one whose kind could not be read,
+// is bound, which a cancel rules by the kind it reads then. The
+// origin goes in before the job is held or followed, so no cancel or end
+// can be settled without it; an end that came first is settled here.
+func (l *Jobs) startCancelable(parent context.Context, o wdb.JobOrigin, start func(context.Context) (model.PID, error)) (model.PID, error) {
+	return l.startJob(parent, o, false, start)
+}
+
+// startRunToEnd is startCancelable for a job that must run to its end
+// whatever its kind: its context is only released at its end.
+func (l *Jobs) startRunToEnd(parent context.Context, o wdb.JobOrigin, start func(context.Context) (model.PID, error)) (model.PID, error) {
+	return l.startJob(parent, o, true, start)
+}
+
+func (l *Jobs) startJob(parent context.Context, o wdb.JobOrigin, toEnd bool, start func(context.Context) (model.PID, error)) (model.PID, error) {
+	ctx, cancel := context.WithCancel(parent)
+	pid, err := start(ctx)
+	if err != nil {
+		cancel()
+		return pid, err
+	}
+	o.PID = string(pid)
+	recorded := o.UserID != "" && l.recordOrigin(parent, o) == nil
+	j, err := l.readStarted(context.WithoutCancel(parent), pid)
+	switch {
+	case err != nil:
+		l.log.Warn("reading a started job", "job", string(pid), "err", err)
+		if toEnd {
+			l.jobs.pinToEnd(pid, cancel)
+		} else {
+			l.jobs.bind(pid, cancel)
+		}
+	case j.State != model.JobRunning:
+		cancel()
+		if recorded {
+			l.settleLater(func(ctx context.Context) { l.settleJobOrigin(ctx, j) })
+		}
+	case toEnd:
+		l.jobs.pinToEnd(pid, cancel)
+	case cancelableJobKinds[j.Kind]:
+		l.jobs.hold(pid, cancel)
+	default:
+		l.jobs.bind(pid, cancel)
+	}
+	// Read again once held, so an end a read took in first still lets go.
+	l.followJob(pid)
+	return pid, nil
+}
+
+// readStarted reads a job just started.
+func (l *Jobs) readStarted(ctx context.Context, pid model.PID) (*model.Job, error) {
+	if hook := l.startReadHook.Load(); hook != nil {
+		if err := (*hook)(pid); err != nil {
+			return nil, err
+		}
+	}
+	return l.lib.Job(ctx, pid)
+}
+
+// cancelableJobKinds are the kinds a cancel stops: stopped part way, each
+// keeps what it did, and an ordinary run's next pass carries on (a forced
+// one is not resumed). Every other kind runs to its end.
+var cancelableJobKinds = map[string]bool{"scan": true, "analyze": true, "enrich": true}
+
+const (
+	refusalJobRunsToEnd = "job-runs-to-end"
+	refusalJobNotHeld   = "job-not-held"
+)
+
+// uncancelable is the refusal of a cancel of a running job of kind that
+// this process holds no cancel for: one its start restricted to run to
+// its end (toEnd), one the command line submitted, or one a request or a
+// worker runs inline.
+func uncancelable(kind string, toEnd bool) *Error {
+	if toEnd {
+		return &Error{Kind: KindConflict, Msg: "this job runs to its end and cannot be canceled",
+			Params: map[string]string{"reason": refusalJobRunsToEnd}}
+	}
+	if !cancelableJobKinds[kind] {
+		return &Error{Kind: KindConflict, Msg: "this kind of job runs to its end and cannot be canceled",
+			Params: map[string]string{"reason": refusalJobRunsToEnd}}
+	}
+	return &Error{Kind: KindConflict, Msg: "this server holds no way to stop the job: the command line submitted it, or it runs inside other work",
+		Params: map[string]string{"reason": refusalJobNotHeld}}
+}
+
+// jobOut maps a job as read now, with what a cancel would do to it.
+func (l *Jobs) jobOut(j *model.Job) Job {
+	out := jobDTO(j)
+	if j.State == model.JobRunning {
+		out.Cancelable, out.CancelRequested = l.jobs.cancelState(j.PID, j.Kind)
+	}
+	return out
+}
+
+// CancelFor asks a running job this process started to stop, and answers
+// it as it then stands: running with the cancel asked for, or unchanged
+// once ended. Administrators only: anyone else gets what reading the job
+// gives them, or forbidden where they may read it.
+func (l *Jobs) CancelFor(ctx context.Context, uc *UserCtx, apiJobPID string) (Job, error) {
+	if !uc.Admin {
+		if _, err := l.StatusFor(ctx, uc, apiJobPID); err != nil {
+			return Job{}, err
+		}
+		return Job{}, &Error{Kind: KindForbidden, Msg: "only administrators may cancel a job"}
+	}
+	prefix, pid, ok := parseAPIPID(apiJobPID)
+	if !ok || prefix != PrefixJob {
+		return Job{}, errNotFound("no job with pid " + apiJobPID)
+	}
+	j, err := l.lib.Job(ctx, pid)
+	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return Job{}, errNotFound("no job with pid " + apiJobPID)
+		}
+		return Job{}, classify(err)
+	}
+	if j.State == model.JobRunning {
+		// Read before an end lets go of it, which the refusal would miss.
+		toEnd := l.jobs.runsToEnd(pid)
+		// The ask goes on the origin before the job's context ends, so its
+		// end, settled here or after a restart, files nothing.
+		if cancelable, _ := l.jobs.cancelState(pid, j.Kind); cancelable {
+			if err := l.db.AskJobOriginCancel(ctx, string(pid)); err != nil {
+				return Job{}, &Error{Kind: KindInternal, Err: err}
+			}
+		}
+		if !l.jobs.askCancel(pid, j.Kind) {
+			// One that ended since is answered as it stands.
+			again, err := l.lib.Job(ctx, pid)
+			if err != nil {
+				return Job{}, classify(err)
+			}
+			if again.State == model.JobRunning {
+				return Job{}, uncancelable(j.Kind, toEnd)
+			}
+		} else {
+			l.announceCancel(ctx, j)
+		}
+	}
+	return l.Status(ctx, apiJobPID)
+}
+
+// announceCancel tells the administrators, who list every running job,
+// and a targeted job's starter that it is winding down: the audience of
+// its end.
+func (l *Jobs) announceCancel(ctx context.Context, j *model.Job) {
+	admins, err := l.db.EnabledAdminIDs(ctx)
+	if err != nil {
+		l.log.Warn("listing administrators for a job's cancel", "err", err)
+	}
+	ended := *j
+	ended.State = model.JobCanceled
+	for _, id := range l.audience(ctx, ended, admins) {
+		l.emitUserEvent(ctx, id, eventJob, apiPID(PrefixJob, j.PID))
+	}
+}
+
 // Status reports one catalog job.
 func (l *Jobs) Status(ctx context.Context, apiJobPID string) (Job, error) {
 	prefix, pid, ok := parseAPIPID(apiJobPID)
@@ -845,7 +1144,7 @@ func (l *Jobs) Status(ctx context.Context, apiJobPID string) (Job, error) {
 		}
 		return Job{}, classify(err)
 	}
-	out := []Job{jobDTO(job)}
+	out := []Job{l.jobOut(job)}
 	l.nameJobTargets(ctx, out)
 	return out[0], nil
 }
@@ -889,6 +1188,7 @@ func (l *Jobs) StatusFor(ctx context.Context, uc *UserCtx, apiJobPID string) (Jo
 // the administrators', and a kind change's report keeps what is in the
 // reader's sight.
 func (l *Jobs) narrowJob(ctx context.Context, uc *UserCtx, job *Job) {
+	job.Cancelable = false
 	if job.Scan != nil {
 		job.Scan.Runs, job.Scan.RootsUnreachable = nil, nil
 	}
@@ -1069,12 +1369,12 @@ func (l *Jobs) List(ctx context.Context, uc *UserCtx, limit int) ([]Job, error) 
 			continue
 		}
 		if job, err := l.lib.Job(ctx, pid); err == nil && job.State == model.JobRunning {
-			out = append(out, jobDTO(job))
+			out = append(out, l.jobOut(job))
 		}
 	}
 	sortJobsNewestFirst(out)
 	for _, job := range jobs {
-		out = append(out, jobDTO(job))
+		out = append(out, l.jobOut(job))
 	}
 	l.nameJobTargets(ctx, out)
 	return out, nil

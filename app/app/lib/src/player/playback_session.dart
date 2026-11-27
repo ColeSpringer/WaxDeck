@@ -110,9 +110,19 @@ class PlaybackSession {
     this.timeline,
     this.listenOutbox,
     DateTime Function()? clock,
-  }) : _clock = clock ?? DateTime.now;
+  }) : _clock = clock ?? DateTime.now,
+       _account = switch (repository) {
+         AccountCredentials(:final boundAccount) => boundAccount,
+         _ => null,
+       };
 
+  /// The account's view of the client this session began under: what it
+  /// writes, its last checkpoint and listen report included, is made for
+  /// that account, and none of it goes once the client holds another.
   final WaxDeckRepository repository;
+
+  /// The account [repository] is for, null for one that names none.
+  final String? _account;
   final AudioEnginePort engine;
   final ItemSummary item;
 

@@ -569,10 +569,12 @@ func (l *Roots) SetLibraryMedia(ctx context.Context, uc *UserCtx, apiLibraryPID,
 	}
 	l.refreshLibraryState(ctx)
 	force := to != model.MediaAudiobook
-	jobPID, scanErr := l.lib.StartScan(l.procCtx, waxbin.ScanRequest{LibraryPID: pid, Force: force})
-	if scanErr == nil {
-		l.Jobs.followStarted(ctx, jobPID, uc.ID)
-	} else {
+	// It runs to its end: stopped part way it leaves files in the old
+	// medium, which the unforced scans after it skip as unchanged.
+	_, scanErr := l.Jobs.startRunToEnd(l.procCtx, wdb.JobOrigin{UserID: uc.ID}, func(ctx context.Context) (model.PID, error) {
+		return l.lib.StartScan(ctx, waxbin.ScanRequest{LibraryPID: pid, Force: force})
+	})
+	if scanErr != nil {
 		l.log.Warn("a library's media changed while a catalog job is running; rescan it once the job ends",
 			"library", apiLibraryPID, "force", force, "err", scanErr)
 	}

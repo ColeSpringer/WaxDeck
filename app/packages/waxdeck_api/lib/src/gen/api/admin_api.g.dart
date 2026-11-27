@@ -69,6 +69,39 @@ abstract interface class AdminApi {
   /// is `not-found` to any other.
   Future<Job> getJob(String pid);
 
+  /// `POST /jobs/{pid}/cancel`: Cancel a catalog job.
+  ///
+  /// Asks a running catalog job to stop. Administrators only; anyone else gets
+  /// the refusal `getJob` gives them, or `forbidden` where they may read the
+  /// job. Only the account whose queue a timeline measurement measures can
+  /// reach it, as with `getJob`: it answers unchanged once ended, and
+  /// `conflict` while it runs. A running job this server can cancel (its
+  /// `cancelable`) answers still `running`, with `cancelRequested`, while it
+  /// winds down; it then ends `canceled`, or `done` when it finished first. The
+  /// `job` marker fires when the cancel is asked for and again when the job
+  /// ends. A job that has already ended answers unchanged, with no error. A job
+  /// canceled on request files no notification, except a health fix's pass: its
+  /// fix still files its notice, which says the pass was canceled rather than
+  /// calling it failed, and what its re-check found. One that ends `canceled`
+  /// with no cancel asked for, as when the server shuts down under it, still
+  /// tells its starter the server stopped before it finished.
+  ///
+  /// What can be canceled: a scan, an analyze pass and an enrichment pass this
+  /// server started, whether an administrator, the schedule or the server
+  /// itself started it. A canceled one keeps what it did before it stopped (the
+  /// files it scanned, the files it analyzed, the lookups it stored). An
+  /// ordinary run's next pass carries on from there; a forced one (a scan or
+  /// enrichment with `force`, or an enrichment's `forcePhases`) is not resumed,
+  /// so start it again to finish it. Everything else runs to its end and
+  /// answers `conflict` (see below): a kind change, a library removal, an
+  /// organize run or undo, the rescan a library's media change starts, a job
+  /// that answers the request that started it (an upload's import, a delete, a
+  /// trash restore, emptying the trash or a purge) and a timeline measurement;
+  /// and so does a scan, analysis or enrichment this server process holds no
+  /// way to stop: one the command line submitted, or one run inside a request
+  /// or another task (one item's enrichment, a watched folder's scan).
+  Future<Job> cancelJob(String pid);
+
   /// `DELETE /libraries/{pid}`: Remove a library.
   ///
   /// Takes the library out of the catalog and answers the job doing it. The
@@ -105,9 +138,11 @@ abstract interface class AdminApi {
   /// re-reads every file and classifies it by its tags: in `music` a book its
   /// parts' tags do not make one is read again as tracks, while in `mixed` a
   /// book whose parts already make one keeps them. Items whose kind was set by
-  /// hand or by an upload keep it either way. The podcast library is
-  /// `invalid-request`, and so is moving a root `WAXDECK_AUDIOBOOK_ROOTS`
-  /// declares (`mediaDeclared`) off audiobook. Administrators only.
+  /// hand or by an upload keep it either way. The scan runs to its end and
+  /// cannot be canceled: stopped part way, it would leave files in the old
+  /// class. The podcast library is `invalid-request`, and so is moving a root
+  /// `WAXDECK_AUDIOBOOK_ROOTS` declares (`mediaDeclared`) off audiobook.
+  /// Administrators only.
   Future<bool> setLibraryMedia(String libraryPid, String media);
 
   /// `PUT /libraries/{pid}/read-only`: Set a library's read-only mode.

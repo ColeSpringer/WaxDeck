@@ -22,6 +22,10 @@ final pageExitPortProvider = Provider<PageExitPort>(
 /// the tray is: the tab can be closed from any screen, including none.
 final pageExitBinderProvider = Provider.autoDispose<void>((ref) {
   final port = ref.watch(pageExitPortProvider);
+  // Read once: this relies on every account change passing through signed
+  // out, which unmounts the signed-in scope and this binder. With the scope
+  // kept up, this view would build no beacons for the next account, and its
+  // last checkpoint and listen report would be lost with nothing failing.
   final repository = ref.read(repositoryProvider);
 
   /// The requests to send, read synchronously off whatever is playing.

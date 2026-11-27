@@ -108,6 +108,19 @@ mixin _AdminCalls on _WaxDeckTransport implements AdminApi {
     );
   });
 
+  Future<Response<Object?>> _cancelJob(String pid) =>
+      _send('POST', '/jobs/${Uri.encodeComponent(pid)}/cancel');
+
+  @override
+  Future<Job> cancelJob(String pid) => _guard(() async {
+    final response = await _cancelJob(pid);
+    return _decode(
+      response,
+      'cancelJob',
+      (v, at) => decodeJob(wireObject(v, at), _wire),
+    );
+  });
+
   Future<Response<Object?>> _removeLibrary(String pid) =>
       _send('DELETE', '/libraries/${Uri.encodeComponent(pid)}');
 
@@ -1010,13 +1023,20 @@ mixin _AuthCalls on _WaxDeckTransport implements AuthApi {
         );
       });
 
-  Future<Response<Object?>> _revokeSession(String sessionId) =>
-      _send('DELETE', '/auth/sessions/${Uri.encodeComponent(sessionId)}');
-
-  @override
-  Future<void> revokeSession(String sessionId) => _guard(() async {
-    await _revokeSession(sessionId);
-  });
+  Future<Response<Object?>> _revokeSession(
+    String sessionId, {
+    CancelToken? cancelToken,
+    ProgressCallback? onSendProgress,
+    bool Function(int?)? validateStatus,
+    Map<String, Object?>? extra,
+  }) => _send(
+    'DELETE',
+    '/auth/sessions/${Uri.encodeComponent(sessionId)}',
+    extra: extra,
+    cancelToken: cancelToken,
+    onSendProgress: onSendProgress,
+    validateStatus: validateStatus,
+  );
 
   Future<Response<Object?>> _listOidcProviders() =>
       _send('GET', '/auth/oidc/providers');

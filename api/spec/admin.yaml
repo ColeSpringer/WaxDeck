@@ -226,6 +226,77 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /jobs/{pid}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    post:
+      operationId: cancelJob
+      summary: Cancel a catalog job
+      description: >
+        Asks a running catalog job to stop. Administrators only; anyone
+        else gets the refusal `getJob` gives them, or `forbidden` where
+        they may read the job. Only the account whose queue a timeline
+        measurement measures can reach it, as with `getJob`: it answers
+        unchanged once ended, and `conflict` while it runs. A running job
+        this server can cancel (its `cancelable`) answers still
+        `running`, with `cancelRequested`, while it winds down; it then
+        ends `canceled`, or `done` when it finished first. The `job`
+        marker fires when the cancel is asked for and again when the job
+        ends. A job that has already ended answers unchanged, with no
+        error. A job canceled on request files no notification, except a
+        health fix's pass: its fix still files its notice, which says the
+        pass was canceled rather than calling it failed, and what its
+        re-check found. One that ends `canceled` with no cancel asked
+        for, as when the server shuts down under it, still tells its
+        starter the server stopped before it finished.
+
+
+        What can be canceled: a scan, an analyze pass and an enrichment
+        pass this server started, whether an administrator, the schedule
+        or the server itself started it. A canceled one keeps what it did
+        before it stopped (the files it scanned, the files it analyzed,
+        the lookups it stored). An ordinary run's next pass carries on
+        from there; a forced one (a scan or enrichment with `force`, or
+        an enrichment's `forcePhases`) is not resumed, so start it again
+        to finish it. Everything else runs to its end and
+        answers `conflict` (see below): a kind change, a library removal,
+        an organize run or undo, the rescan a library's media change
+        starts, a job that answers the request that started it (an
+        upload's import, a delete, a trash restore, emptying the trash or
+        a purge) and a timeline measurement; and so does a scan,
+        analysis or enrichment this server process holds no way to stop:
+        one the command line submitted, or one run inside a request or
+        another task (one item's enrichment, a watched folder's scan).
+      tags: [admin]
+      responses:
+        "200":
+          description: >
+            The job after the request: `running` with `cancelRequested`,
+            or unchanged when it had already ended.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            `conflict` with `params.reason` naming why a running job
+            cannot be canceled: `job-runs-to-end`, a job that always
+            runs to its end (one of a kind that does, or a library's
+            rescan after its media changed), or `job-not-held`, a job
+            this server process holds no way to stop (see above).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /libraries/{pid}:
     parameters:
       - $ref: "#/components/parameters/Pid"
@@ -336,8 +407,10 @@ paths:
         tags: in `music` a book its parts' tags do not make one is read
         again as tracks, while in `mixed` a book whose parts already make
         one keeps them. Items whose kind was set by hand or by an upload
-        keep it either way. The podcast library is `invalid-request`,
-        and so is moving a root `WAXDECK_AUDIOBOOK_ROOTS` declares
+        keep it either way. The scan runs to its end and cannot be
+        canceled: stopped part way, it would leave files in the old
+        class. The podcast library is `invalid-request`, and so is
+        moving a root `WAXDECK_AUDIOBOOK_ROOTS` declares
         (`mediaDeclared`) off audiobook. Administrators only.
       tags: [admin]
       requestBody:
@@ -1837,7 +1910,7 @@ components:
     Job:
       type: object
       description: A server-run catalog job.
-      required: [pid, kind, state]
+      required: [pid, kind, state, cancelable, cancelRequested]
       properties:
         pid:
           type: string
@@ -1855,10 +1928,25 @@ components:
           type: string
           description: >
             Job lifecycle state. Currently `running`, `done`, `failed`,
-            `crashed`, or `canceled`; new states may appear, and clients
-            must treat unknown values as "not finished successfully yet"
-            rather than failing.
+            `crashed`, or `canceled` (stopped before it finished, because
+            `cancelJob` asked it to or the server shut down); new states
+            may appear, and clients must treat unknown values as "not
+            finished successfully yet" rather than failing.
           example: running
+        cancelable:
+          type: boolean
+          description: >
+            True while the job runs and `cancelJob` would stop it now: a
+            scan, analyze or enrichment pass this server started, not yet
+            asked to cancel, other than the rescan a library's media
+            change starts. Always false for a reader who is not an
+            administrator.
+        cancelRequested:
+          type: boolean
+          description: >
+            True while a `running` job that was asked to cancel winds
+            down. It then ends `canceled`, or `done` when it finished
+            first.
         progress:
           type: number
           format: double

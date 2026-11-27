@@ -459,6 +459,8 @@ class Job {
     required this.pid,
     required this.kind,
     required this.state,
+    this.cancelable = false,
+    this.cancelRequested = false,
     this.progress,
     this.message,
     this.error,
@@ -477,9 +479,20 @@ class Job {
   final String kind;
 
   /// Job lifecycle state. Currently `running`, `done`, `failed`, `crashed`, or
-  /// `canceled`; new states may appear, and clients must treat unknown values
-  /// as "not finished successfully yet" rather than failing.
+  /// `canceled` (stopped before it finished, because `cancelJob` asked it to or
+  /// the server shut down); new states may appear, and clients must treat
+  /// unknown values as "not finished successfully yet" rather than failing.
   final String state;
+
+  /// True while the job runs and `cancelJob` would stop it now: a scan, analyze
+  /// or enrichment pass this server started, not yet asked to cancel, other
+  /// than the rescan a library's media change starts. Always false for a reader
+  /// who is not an administrator.
+  final bool cancelable;
+
+  /// True while a `running` job that was asked to cancel winds down. It then
+  /// ends `canceled`, or `done` when it finished first.
+  final bool cancelRequested;
 
   /// Completion fraction in [0, 1]. Absent when the job has not yet reported
   /// progress or cannot estimate it.

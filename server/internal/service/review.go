@@ -63,8 +63,11 @@ type CandidateSummaryDTO struct {
 // ReviewDetailDTO adds the stored evidence.
 type ReviewDetailDTO struct {
 	ReviewEntryDTO
-	Tracks     []reviewTrackDoc
-	Candidates []reviewCandidateDoc
+	// UploadedByName is the submitting account's display name, or its
+	// username without one; empty when the account is gone.
+	UploadedByName string
+	Tracks         []reviewTrackDoc
+	Candidates     []reviewCandidateDoc
 	// IdentifyDeclined says the submission asked not to be identified,
 	// which is what tells an empty candidate list apart from a search
 	// that came back empty.
@@ -196,6 +199,13 @@ func (l *Ingest) GetReviewEntry(ctx context.Context, uc *UserCtx, id string) (Re
 		Candidates:       payload.Candidates,
 		IdentifyDeclined: payload.IdentifyDeclined,
 		MediumFixed:      anyLanded(payload.Tracks),
+	}
+	// The caller passed reviewEntryForCaller, so it is the entry's
+	// submitter or an administrator: the name goes to no one else.
+	if e.UploadedBy != "" {
+		if u, err := l.db.UserByID(ctx, e.UploadedBy); err == nil && u != nil {
+			detail.UploadedByName = cmp.Or(u.DisplayName, u.Username)
+		}
 	}
 	if e.Status == reviewPending && !e.Identifying {
 		detail.AcceptBestWithheld = payload.AcceptBestWithheld

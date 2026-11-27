@@ -68,6 +68,7 @@ ServerSyncPage _reported(
   bool finished = false,
   int minute = 0,
 }) => ServerSyncPage(
+  userId: 'us-1',
   events: [
     ServerSyncEvent(
       kind: 'play-state',
@@ -226,8 +227,9 @@ void main() {
       ..prefs = const Prefs(timezone: 'America/Denver')
       ..serverPages.addAll(const <ServerSyncPage>[
         // The first walk mints the cursor; what follows it is news.
-        ServerSyncPage(nextSince: 'scur-1'),
+        ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
         ServerSyncPage(
+          userId: 'us-1',
           events: [
             ServerSyncEvent(
               kind: 'prefs',
@@ -302,8 +304,9 @@ void main() {
     // it would run the fan-out again at the end of the pacing window.
     final b = await _bind(
       serverPages: [
-        const ServerSyncPage(nextSince: 'scur-1'),
+        const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
         ServerSyncPage(
+          userId: 'us-1',
           events: [
             ServerSyncEvent(
               kind: 'play-state',
@@ -339,7 +342,7 @@ void main() {
     // stream as the play state they moved.
     final b = await _bind(
       serverPages: [
-        const ServerSyncPage(nextSince: 'scur-1'),
+        const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
         _reported('scur-2', finished: true),
       ],
     );
@@ -369,8 +372,9 @@ void main() {
     // server marks it on its own.
     final b = await _bind(
       serverPages: [
-        const ServerSyncPage(nextSince: 'scur-1'),
+        const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
         const ServerSyncPage(
+          userId: 'us-1',
           events: [ServerSyncEvent(kind: 'listens')],
           nextSince: 'scur-2',
         ),
@@ -414,8 +418,9 @@ void main() {
     // the user fan-out reads bookmarks.
     final b = await _bind(
       serverPages: [
-        const ServerSyncPage(nextSince: 'scur-1'),
+        const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
         ServerSyncPage(
+          userId: 'us-1',
           events: [
             ServerSyncEvent(
               kind: 'bookmarks',
@@ -449,8 +454,9 @@ void main() {
       // would refetch every open list for the length of it.
       final b = await _bind(
         serverPages: [
-          const ServerSyncPage(nextSince: 'scur-1'),
+          const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
           const ServerSyncPage(
+            userId: 'us-1',
             events: [ServerSyncEvent(kind: 'task-progress', pid: 'tk-1')],
             nextSince: 'scur-2',
           ),
@@ -512,8 +518,9 @@ void main() {
       // the scan.
       final b = await _bind(
         serverPages: [
-          const ServerSyncPage(nextSince: 'scur-1'),
+          const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
           const ServerSyncPage(
+            userId: 'us-1',
             events: [ServerSyncEvent(kind: 'job', pid: 'jb-1')],
             nextSince: 'scur-2',
           ),
@@ -539,8 +546,9 @@ void main() {
     () async {
       final b = await _bind(
         serverPages: [
-          const ServerSyncPage(nextSince: 'scur-1'),
+          const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
           const ServerSyncPage(
+            userId: 'us-1',
             events: [ServerSyncEvent(kind: 'health')],
             nextSince: 'scur-2',
           ),
@@ -565,8 +573,9 @@ void main() {
       'the user surfaces', () async {
     final b = await _bind(
       serverPages: [
-        const ServerSyncPage(nextSince: 'scur-1'),
+        const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
         const ServerSyncPage(
+          userId: 'us-1',
           events: [ServerSyncEvent(kind: 'server')],
           nextSince: 'scur-2',
         ),
@@ -606,8 +615,9 @@ void main() {
     () async {
       final b = await _bind(
         serverPages: [
-          const ServerSyncPage(nextSince: 'scur-1'),
+          const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
           const ServerSyncPage(
+            userId: 'us-1',
             events: [ServerSyncEvent(kind: 'libraries')],
             nextSince: 'scur-2',
           ),
@@ -632,8 +642,9 @@ void main() {
       'the managed libraries', () async {
     final b = await _bind(
       serverPages: [
-        const ServerSyncPage(nextSince: 'scur-1'),
+        const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
         const ServerSyncPage(
+          userId: 'us-1',
           events: [ServerSyncEvent(kind: 'libraries')],
           nextSince: 'scur-2',
         ),
@@ -823,8 +834,9 @@ void main() {
       // either way.
       final b = await _bind(
         serverPages: [
-          const ServerSyncPage(nextSince: 'scur-1'),
+          const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
           const ServerSyncPage(
+            userId: 'us-1',
             events: [ServerSyncEvent(kind: 'libraries')],
             nextSince: 'scur-2',
           ),
@@ -850,7 +862,7 @@ void main() {
       // a report that refetched every shelf of an open home.
       final b = await _bind(
         serverPages: [
-          const ServerSyncPage(nextSince: 'scur-1'),
+          const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
           _reported('scur-2', positionMs: 1000, minute: 1),
           _reported('scur-3', positionMs: 6000, minute: 2),
         ],
@@ -876,7 +888,7 @@ void main() {
     ) async {
       final b = await _bind(
         serverPages: [
-          const ServerSyncPage(nextSince: 'scur-1'),
+          const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
           _reported('scur-2', positionMs: 1000, minute: 1),
           _reported('scur-3', positionMs: 214000, finished: true, minute: 2),
         ],
@@ -900,8 +912,9 @@ void main() {
         'no shelf', (tester) async {
       final b = await _bind(
         serverPages: [
-          const ServerSyncPage(nextSince: 'scur-1'),
+          const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
           const ServerSyncPage(
+            userId: 'us-1',
             events: [ServerSyncEvent(kind: 'entity-state', pid: 'ar-1')],
             nextSince: 'scur-2',
           ),

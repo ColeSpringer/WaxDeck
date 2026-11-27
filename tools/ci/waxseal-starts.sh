@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Judges WaxSeal in a compose stack that is already up. The daemon turns
-# healthy once YouTube has served its browser a watch page and exits when
-# it has not (docs/upstream-requests.md), and YouTube does not serve every
-# runner's address. That refusal is a warning; everything else about the
-# daemon not coming up fails:
+# Judges WaxSeal in a compose stack that is already up. YouTube does not
+# serve every runner's address: a daemon it refuses at start serves anyway
+# and turns healthy (WaxSeal 1.6.0 and later), and an older one exits.
+# That refusal is a warning; everything else about the daemon not coming
+# up fails:
 #
 #   - no "startup checks failed" in its log: it never got past its flags,
 #     its port or its browser's launch
 #   - a startup failure that is not the refusal, or one that could not
-#     reach YouTube while this runner can
+#     reach YouTube while this runner can (for a daemon that serves
+#     anyway, its first background retry decides: a hiccup at boot that
+#     the retry clears is no failure)
 #   - a browser that cannot render a page with no network at all under
 #     the service's own limits (`doctor --stop-after-load`)
 #
@@ -38,7 +40,44 @@ failed=()
 while (( SECONDS < deadline )); do
   health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$id" 2> /dev/null || true)
   if [ "$health" = healthy ]; then
-    echo "WaxSeal is healthy"
+    # A daemon that serves after a refused warm-up has logged it by now
+    # (it logs the verdict before it serves), and retries it in the
+    # background: the first retry's verdict is what counts. It comes a
+    # retry's wait (15s at first) plus at most one attempt (120s) later.
+    refused=$(compose logs --no-color waxseal 2>&1 | grep -F 'startup warm-up failed; serving' | tail -n 1 || true)
+    if [ -z "$refused" ]; then
+      echo "WaxSeal is healthy"
+      exit 0
+    fi
+    verdict=
+    retry_deadline=$((SECONDS + 150))
+    while (( SECONDS < retry_deadline )); do
+      verdict=$(compose logs --no-color waxseal 2>&1 | grep -E 'background warm-up (attested a session|attempt failed|failed in the browser itself)' | tail -n 1 || true)
+      [ -n "$verdict" ] && break
+      sleep 2
+    done
+    case $verdict in
+      *'attested a session'*)
+        echo "WaxSeal is healthy: its warm-up failed at start and attested on a retry"
+        exit 0
+        ;;
+      '')
+        echo "::warning::WaxSeal serves, but YouTube did not serve it at start on this runner and no retry answered in time: ${refused##*err=}"
+        exit 0
+        ;;
+    esac
+    cause=${verdict##*err=}
+    case $cause in
+      *'net::ERR_'*)
+        # Host networking, as below: what the daemon cannot reach, the
+        # runner cannot.
+        if curl -sS -o /dev/null --max-time 15 https://www.youtube.com/; then
+          echo "::error::WaxSeal cannot reach YouTube and this runner can: $cause"
+          exit 1
+        fi
+        ;;
+    esac
+    echo "::warning::WaxSeal serves, but YouTube did not serve it on this runner: $cause"
     exit 0
   fi
   mapfile -t failed < <(compose logs --no-color waxseal 2>&1 | grep 'startup checks failed' || true)

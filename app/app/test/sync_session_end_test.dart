@@ -460,6 +460,190 @@ void main() {
     });
   });
 
+  group('what a request asks of a session in doubt', () {
+    testWidgets('with nothing in doubt it goes, and nothing is read', (
+      tester,
+    ) async {
+      final reads = _Reads();
+      final doubt = SessionDoubt(read: reads.call);
+
+      final passes = <bool>[];
+      doubt.pass().then(passes.add).ignore();
+      await tester.pump();
+
+      expect(passes, [true]);
+      expect(reads.made, 0);
+      doubt.dispose();
+    });
+
+    testWidgets('after a drop it waits for a read, and an answer that the '
+        'account stands lets it and every later one go', (tester) async {
+      final reads = _Reads()
+        ..answer = SessionRecheck.stands
+        ..gate = Completer<void>();
+      final doubt = SessionDoubt(read: reads.call)..suspect();
+
+      final passes = <bool>[];
+      doubt.pass().then(passes.add).ignore();
+      doubt.pass().then(passes.add).ignore();
+      await tester.pump(const Duration(seconds: 5));
+      expect(passes, isEmpty, reason: 'held while the read is out');
+      expect(reads.made, 1, reason: 'one read for both');
+
+      reads.gate!.complete();
+      reads.gate = null;
+      await tester.pump();
+      expect(passes, [true, true]);
+
+      doubt.pass().then(passes.add).ignore();
+      await tester.pump();
+      expect(passes, [true, true, true]);
+      expect(reads.made, 1, reason: 'the doubt is over');
+      doubt.dispose();
+    });
+
+    testWidgets('a read the server did not answer is a no at once, and the '
+        'next request reads again at once', (tester) async {
+      final reads = _Reads();
+      final doubt = SessionDoubt(read: reads.call)..suspect();
+
+      final passes = <bool>[];
+      doubt.pass().then(passes.add).ignore();
+      await tester.pump();
+      expect(passes, [false], reason: 'the request would not have gone either');
+      expect(reads.made, 1);
+
+      await tester.pump(const Duration(milliseconds: 200));
+      doubt.pass().then(passes.add).ignore();
+      await tester.pump();
+      expect(passes, [false, false]);
+      expect(reads.made, 2, reason: 'asked now, not when the doubt would');
+
+      reads.answer = SessionRecheck.stands;
+      doubt.pass().then(passes.add).ignore();
+      await tester.pump();
+      expect(passes, [false, false, true]);
+      doubt.dispose();
+    });
+
+    testWidgets('an account that left is a no, now and for good, with '
+        'nothing read again', (tester) async {
+      final reads = _Reads()..answer = SessionRecheck.left;
+      final doubt = SessionDoubt(read: reads.call);
+
+      final passes = <bool>[];
+      doubt.ask().ignore();
+      doubt.pass().then(passes.add).ignore();
+      await tester.pump();
+      doubt.pass().then(passes.add).ignore();
+      doubt.suspect();
+      doubt.pass().then(passes.add).ignore();
+      await tester.pump(const Duration(minutes: 1));
+
+      expect(passes, [false, false, false]);
+      expect(reads.made, 1);
+      doubt.dispose();
+    });
+
+    testWidgets('a drop while the read is out: what waited goes only on a '
+        'read sent after the drop, and the next request goes at once', (
+      tester,
+    ) async {
+      final reads = _Reads()
+        ..answer = SessionRecheck.stands
+        ..gate = Completer<void>();
+      final doubt = SessionDoubt(read: reads.call);
+
+      final passes = <bool>[];
+      doubt.ask().ignore();
+      doubt.pass().then(passes.add).ignore();
+      await tester.pump();
+      doubt.suspect();
+      // The read sent before the drop answers; the next one is held.
+      final again = Completer<void>();
+      final first = reads.gate!;
+      reads.gate = again;
+      first.complete();
+      await tester.pump();
+      expect(passes, isEmpty, reason: 'that answer predates the drop');
+      expect(reads.made, 2, reason: 'asked again, after the drop');
+
+      again.complete();
+      reads.gate = null;
+      await tester.pump();
+      expect(passes, [true]);
+
+      doubt.pass().then(passes.add).ignore();
+      await tester.pump();
+      expect(passes, [true, true]);
+      expect(reads.made, 2, reason: 'the doubt is over');
+      doubt.dispose();
+    });
+
+    testWidgets('a drop while the read is out, and the read after it finds '
+        'the account left: nothing that waited goes', (tester) async {
+      final reads = _Reads()
+        ..answer = SessionRecheck.stands
+        ..gate = Completer<void>();
+      final doubt = SessionDoubt(read: reads.call);
+
+      final passes = <bool>[];
+      doubt.ask().ignore();
+      doubt.pass().then(passes.add).ignore();
+      doubt.pass().then(passes.add).ignore();
+      await tester.pump();
+      doubt.suspect();
+      // Another tab signed in meanwhile: the read sent before the drop
+      // still says the account stands, the next one that it left.
+      reads.answer = SessionRecheck.left;
+      final first = reads.gate!;
+      reads.gate = null;
+      first.complete();
+      await tester.pump();
+
+      expect(passes, [false, false]);
+      expect(reads.made, 2);
+      doubt.dispose();
+    });
+
+    testWidgets('suspicions that keep coming faster than reads land: a '
+        'waiting request ends at the cap, a no, never held on', (tester) async {
+      final reads = _Reads()
+        ..answer = SessionRecheck.stands
+        ..gate = Completer<void>();
+      final doubt = SessionDoubt(read: reads.call)..suspect();
+
+      final passes = <bool>[];
+      doubt.pass().then(passes.add).ignore();
+      for (var made = 1; made <= 3; made++) {
+        await tester.pump();
+        expect(reads.made, made);
+        // Another drop before this read lands.
+        doubt.suspect();
+        final out = reads.gate!;
+        reads.gate = made < 3 ? Completer<void>() : null;
+        out.complete();
+      }
+      await tester.pump();
+
+      expect(passes, [false]);
+      expect(reads.made, 3);
+      doubt.dispose();
+    });
+
+    testWidgets('disposed, it is a no', (tester) async {
+      final reads = _Reads()..answer = SessionRecheck.stands;
+      final doubt = SessionDoubt(read: reads.call)..dispose();
+
+      final passes = <bool>[];
+      doubt.pass().then(passes.add).ignore();
+      await tester.pump();
+
+      expect(passes, [false]);
+      expect(reads.made, 0);
+    });
+  });
+
   test('a client that holds no session is not asked about one', () async {
     // The binder mounted over a client signed out, as a test of something
     // else may mount it, on a link that never comes up.

@@ -274,7 +274,8 @@ final mediaSessionFeedProvider = Provider.autoDispose<MediaSessionFeed>((ref) {
   final feed = MediaSessionFeed(
     session: ref.watch(mediaSessionProvider),
     artwork: (artUrl) => mediaSessionArtUri(store, artUrl),
-    stationLogoUrl: ref.watch(repositoryProvider).radioLogoUrlFor,
+    // A URL, no call: the client's, which no account change moves.
+    stationLogoUrl: ref.watch(apiClientProvider).radioLogoUrlFor,
     standInTitle: ref.read(offTreeL10nProvider).autoQueuedItem,
   );
 

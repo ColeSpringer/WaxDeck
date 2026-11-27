@@ -319,5 +319,7 @@ final playlistDetailProvider =
 
 /// The rule vocabulary, fetched once per session and on invalidation.
 final ruleFieldsProvider = FutureProvider<RuleFields>((ref) {
+  // Keyed on the account: its tag keys are those of what it may see.
+  ref.watch(signedInAccountProvider);
   return ref.watch(repositoryProvider).getRuleFields();
 }, retry: retryUnlessRefused);

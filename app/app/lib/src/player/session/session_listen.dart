@@ -60,8 +60,9 @@ extension _SessionListen on PlaybackSession {
       // reconcile server-side, flushOutbox drops permanent rejections,
       // and a transient auth failure would otherwise silently lose the
       // position. Without an engine (web), best effort stands and the
-      // next checkpoint catches up.
-      await sync?.queueCheckpoint(item.pid, positionMs);
+      // next checkpoint catches up. Waits for this session's account,
+      // whoever the engine sends for by now.
+      await sync?.queueCheckpoint(item.pid, positionMs, owner: _account);
     }
   }
 
@@ -119,7 +120,7 @@ extension _SessionListen on PlaybackSession {
     } on WaxDeckApiException catch (error) {
       final engine = sync;
       if (engine != null) {
-        await engine.queueListen(session);
+        await engine.queueListen(session, owner: _account);
       } else if (!error.isRefusal) {
         // A refusal is the server's answer (a session signed out mid-flight
         // answers 401), not a report waiting for the server to come back.

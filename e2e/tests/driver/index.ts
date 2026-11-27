@@ -9,7 +9,7 @@
 // listener. The driver uses text of its own only where a control
 // carries no identifier, and says so where it does.
 
-import { Locator, Page, WebSocketRoute, expect } from '@playwright/test';
+import { Locator, Page, Route, WebSocketRoute, expect } from '@playwright/test';
 import { Account } from '../accounts';
 import { SemanticsIds, sem } from '../semantics-ids';
 import { Api } from './api';
@@ -122,13 +122,17 @@ export class App {
   /// requests and refuses its upgrades (a CDP session on the page alone,
   /// because the context's `setOffline` takes the other tab of a two-tab
   /// scenario down too) and drops the sockets it holds, which network
-  /// emulation leaves open; `on()` puts it back. `sockets` says, per
+  /// emulation leaves open; `on()` puts it back, and the page hears that
+  /// it is online again as it does on a real network. `sockets` says, per
   /// socket in the order they were opened, when the server took it (the
   /// page's first frame, which it sends once it is open), if it did.
+  /// `holdNext(path)` holds the first request to an API path the page
+  /// sends once it is back on, until released.
   async network(): Promise<PageNetwork> {
     const page = this.page;
     const open = new Set<WebSocketRoute>();
     const sockets: { acceptedAt?: number }[] = [];
+    let online = true;
     // A routed socket is still the browser's own, opened by the page, so
     // the cookie and the emulated network apply to it as to any other.
     await page.routeWebSocket(
@@ -152,15 +156,59 @@ export class App {
     return {
       sockets,
       off: async () => {
+        online = false;
         await cdp.send('Network.emulateNetworkConditions', { offline: true, ...link });
         for (const ws of open) await ws.close({ code: 1001, reason: 'offline' }).catch(() => {});
         open.clear();
       },
       on: async () => {
+        online = true;
         await cdp.send('Network.emulateNetworkConditions', { offline: false, ...link });
+        // That hands `navigator.onLine` back to the browser's own reading,
+        // which stays offline where the browser has no network but loopback
+        // (a sandbox), so the page would never hear `online`. Set online
+        // here, it fires wherever the page last read offline. All-default
+        // values clear the state instead of setting it.
+        await cdp.send('Network.overrideNetworkState', {
+          offline: false,
+          latency: 1,
+          downloadThroughput: 1e9,
+          uploadThroughput: 1e9,
+          connectionType: 'ethernet',
+        });
+      },
+      holdNext: async (path: string) => {
+        let release = () => {};
+        const released = new Promise<void>((resolve) => (release = resolve));
+        const held: HeldRequest = {
+          release: async () => release(),
+        };
+        // What goes while the page is off fails as it would have; the
+        // first once it is on waits, and every later one goes.
+        await page.route(`**/api/v1${path}`, async (route: Route) => {
+          if (!online || held.sentAt !== undefined) return route.continue();
+          held.sentAt = Date.now();
+          await released;
+          await route.continue();
+        });
+        return held;
       },
     };
   }
+}
+
+/// The API path a request URL names (`/auth/session`), or undefined for
+/// anything that is not an API request.
+export function apiPath(url: string): string | undefined {
+  const path = new URL(url).pathname;
+  return path.startsWith('/api/v1/') ? path.slice('/api/v1'.length) : undefined;
+}
+
+/// A request `PageNetwork.holdNext` holds: when the page sent it, once it
+/// has, and the hand that lets it go.
+export interface HeldRequest {
+  sentAt?: number;
+  release(): Promise<void>;
 }
 
 /// A page's network in a test's hand; see `App.network`.
@@ -168,6 +216,7 @@ export interface PageNetwork {
   readonly sockets: readonly { readonly acceptedAt?: number }[];
   off(): Promise<void>;
   on(): Promise<void>;
+  holdNext(path: string): Promise<HeldRequest>;
 }
 
 export function createApp(ctx: Ctx): App {

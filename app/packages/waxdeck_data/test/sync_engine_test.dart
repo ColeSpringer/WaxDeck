@@ -42,6 +42,13 @@ class ScriptedRepository implements WaxDeckRepository {
   int duplicateListens = 0;
   int failNextMutations = 0;
 
+  /// What each of [failNextMutations] fails with.
+  WaxDeckApiException mutationFailure = const WaxDeckApiException(
+    code: 'internal',
+    message: 'transient',
+    statusCode: 500,
+  );
+
   ItemSummary item(
     String pid,
     String title, {
@@ -176,7 +183,7 @@ class ScriptedRepository implements WaxDeckRepository {
       );
     }
     if (serverPages.isEmpty) {
-      return const ServerSyncPage(nextSince: 'scur-0');
+      return const ServerSyncPage(userId: 'us-1', nextSince: 'scur-0');
     }
     return serverPages.removeAt(0);
   }
@@ -331,11 +338,7 @@ class ScriptedRepository implements WaxDeckRepository {
   void _maybeFail() {
     if (failNextMutations > 0) {
       failNextMutations--;
-      throw const WaxDeckApiException(
-        code: 'internal',
-        message: 'transient',
-        statusCode: 500,
-      );
+      throw mutationFailure;
     }
   }
 
@@ -4365,10 +4368,13 @@ void main() {
   });
 
   test('server deltas hydrate mirrored play states', () async {
-    repo.serverPages.addAll([const ServerSyncPage(nextSince: 'scur-1')]);
+    repo.serverPages.addAll([
+      const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
+    ]);
     await engine.pullServer(); // mints
     repo.serverPages.add(
       const ServerSyncPage(
+        userId: 'us-1',
         events: [
           ServerSyncEvent(
             kind: 'play-state',
@@ -4399,12 +4405,15 @@ void main() {
     // What the announcement is for is reacting to the state, and a
     // listener that had to read the mirror back for it paid a read per
     // checkpoint, every few seconds a player runs.
-    repo.serverPages.addAll([const ServerSyncPage(nextSince: 'scur-1')]);
+    repo.serverPages.addAll([
+      const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
+    ]);
     await engine.pullServer(); // mints
     final announced = <PlayStateChange>[];
     final sub = engine.playStateChanged.listen(announced.add);
     repo.serverPages.add(
       const ServerSyncPage(
+        userId: 'us-1',
         events: [
           ServerSyncEvent(
             kind: 'play-state',
@@ -4432,12 +4441,15 @@ void main() {
   });
 
   test('entity-state markers announce their pid without mirroring', () async {
-    repo.serverPages.addAll([const ServerSyncPage(nextSince: 'scur-1')]);
+    repo.serverPages.addAll([
+      const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
+    ]);
     await engine.pullServer(); // mints
     final announced = <PlayStateChange>[];
     final sub = engine.playStateChanged.listen(announced.add);
     repo.serverPages.add(
       const ServerSyncPage(
+        userId: 'us-1',
         events: [
           ServerSyncEvent(kind: 'entity-state', pid: 'al-A'),
           ServerSyncEvent(kind: 'entity-state', pid: 'ar-B'),
@@ -4459,10 +4471,13 @@ void main() {
   });
 
   test('subscription and book-settings events are skipped cleanly', () async {
-    repo.serverPages.addAll([const ServerSyncPage(nextSince: 'scur-1')]);
+    repo.serverPages.addAll([
+      const ServerSyncPage(userId: 'us-1', nextSince: 'scur-1'),
+    ]);
     await engine.pullServer(); // mints
     repo.serverPages.add(
       ServerSyncPage(
+        userId: 'us-1',
         events: [
           ServerSyncEvent(
             kind: 'subscription',
@@ -4532,6 +4547,28 @@ void main() {
     await pumpEventQueue();
 
     expect(live.current.connection, isNot(SyncConnection.connected));
+  });
+
+  test('a call refused for an account the client no longer holds leaves the '
+      'link up, and what it carried waits', () async {
+    // The flush outlived the account it began for; the socket is the next
+    // account's.
+    final live = SyncEngine(
+      db: db,
+      repository: repo,
+      channelFactory: _connects(),
+    )..account = _owner;
+    addTearDown(live.dispose);
+    await live.queueCheckpoint('tr-A', 1000);
+    repo
+      ..failNextMutations = 1
+      ..mutationFailure = const AccountNotHeldException();
+
+    await live.start();
+    await pumpEventQueue();
+
+    expect(live.current.connection, SyncConnection.connected);
+    expect(await db.select(db.outboxMutations).get(), hasLength(1));
   });
 
   test('what one account left waiting is sent only for it', () async {

@@ -10,8 +10,11 @@ import '../providers.dart';
 /// says it moved (the pid-less `server` sync marker): an engine going
 /// away or coming back changes what the settings, the console and the
 /// shell offer while somebody is looking at them.
+///
+/// The same for every account, so it reads through the client rather than
+/// an account's view: an account change reads nothing again.
 final serverHealthProvider = FutureProvider<ServerHealth>(
-  (ref) => ref.watch(repositoryProvider).health(),
+  (ref) => ref.watch(apiClientProvider).health(),
 );
 
 /// The streaming engine as the server last said, null until it has said

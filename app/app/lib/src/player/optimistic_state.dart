@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
+import '../auth/auth_controller.dart';
 import '../sync/sync_providers.dart';
 
 /// Whether [next] is a rejected mutation: the failure the protocol emits
@@ -30,7 +31,9 @@ bool rejectedMutation<T>(AsyncValue<T>? previous, AsyncValue<T> next) =>
 ///    overlay the pending intents onto what they fetch.
 ///  - An unreachable server is not a rejection: the change queues in
 ///    the outbox and the optimistic value stands until the flush
-///    announces the winner through sync.
+///    announces the winner through sync. It queues for the account it
+///    was made for: one refused because that account has left waits for
+///    it, and leaves the screen it was made on.
 ///  - A rejection emits the failure and then restores the pre-tap value
 ///    in the same turn, so widgets only ever render real state.
 ///  - Settlement is a `finally`, never a per-path call: a throw outside
@@ -64,11 +67,12 @@ abstract class OptimisticStateController<T> extends AsyncNotifier<T> {
   }
 
   /// Applies [optimistic] at once, runs [call], and settles on its
-  /// result; [queue] takes over when the server is unreachable.
+  /// result; [queue] takes over when the server is unreachable, for the
+  /// account the write was made for.
   Future<void> mutate({
     required T Function(T) optimistic,
     required Future<T> Function() call,
-    required Future<void> Function(SyncEngine engine) queue,
+    required Future<void> Function(SyncEngine engine, String? owner) queue,
   }) async {
     final previous = state;
     final current = state.value;
@@ -81,6 +85,8 @@ abstract class OptimisticStateController<T> extends AsyncNotifier<T> {
     // limits (the mounted guards below).
     final intents = pendingIntents;
     final engine = ref.read(syncEngineProvider);
+    // Whose the write is: the account whose view [call] goes through.
+    final owner = ref.read(signedInAccountProvider);
     intents.putIfAbsent(pid, () => []).add(optimistic);
     void settle() {
       final list = intents[pid];
@@ -95,7 +101,10 @@ abstract class OptimisticStateController<T> extends AsyncNotifier<T> {
       // overlaid, which is exactly the value the server just stored.
     } on WaxDeckApiException catch (e, st) {
       if (engine != null && e.unreachable) {
-        await queue(engine);
+        await queue(engine, owner);
+        // Refused unsent for an account that has left: it waits for that
+        // account, and the screens it was made on are gone.
+        if (e is AccountNotHeldException && ref.mounted) state = previous;
         return;
       }
       if (!ref.mounted) {

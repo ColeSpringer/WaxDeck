@@ -546,6 +546,32 @@ func TestSyncServerFlow(t *testing.T) {
 	resp.Body.Close()
 }
 
+// A page names the account whose changes it carries, the minting one
+// included: a browser tab whose cookie another tab signed into another
+// account reads that account's stream, and only the page can say so.
+func TestSyncServerPageNamesItsAccount(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{"username": "watcher", "password": "watcher-pass"})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create user status = %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+	wToken := loginAs(t, h.ts, "watcher", "watcher-pass").Token
+
+	for _, token := range []string{h.token, wToken} {
+		me := decode[SessionInfo](t, get(t, h.ts, "/api/v1/auth/session", token))
+		if me.User == nil || me.User.Id == "" {
+			t.Fatalf("session = %+v, want a user", me)
+		}
+		mint := decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server", token))
+		page := decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server?since="+mint.NextSince, token))
+		if mint.UserId != me.User.Id || page.UserId != me.User.Id {
+			t.Fatalf("pages name %q and %q, want %q", mint.UserId, page.UserId, me.User.Id)
+		}
+	}
+}
+
 func TestOfflineReplayGuards(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)

@@ -361,7 +361,7 @@
   },
   "reviewHeaderFactsBy": "{count, plural, =1{1 track, {origin} by {who}} other{{count} tracks, {origin} by {who}}}",
   "@reviewHeaderFactsBy": {
-    "description": "The same line where the entry was uploaded by a named account. {origin} is already worded by the caller; {who} is a username.",
+    "description": "The same line where the submitting account has a name. {origin} is already worded by the caller; {who} is the account's display name or username.",
     "placeholders": {
       "count": {
         "type": "int",

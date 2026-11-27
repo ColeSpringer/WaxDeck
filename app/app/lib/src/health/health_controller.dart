@@ -13,8 +13,11 @@ import '../tools/tool_tasks_provider.dart';
 /// sweep or a fix lands.
 class HealthController extends AsyncNotifier<HealthSummary> {
   @override
-  Future<HealthSummary> build() =>
-      ref.watch(repositoryProvider).getLibraryHealth();
+  Future<HealthSummary> build() {
+    // Keyed on the account: scored over what it may see.
+    ref.watch(signedInAccountProvider);
+    return ref.watch(repositoryProvider).getLibraryHealth();
+  }
 }
 
 final healthProvider = AsyncNotifierProvider<HealthController, HealthSummary>(

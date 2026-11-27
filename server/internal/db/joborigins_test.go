@@ -93,3 +93,44 @@ func TestJobOriginGetDoesNotClaim(t *testing.T) {
 		t.Fatalf("claiming after a read: %v", err)
 	}
 }
+
+// A cancel asked of a job is kept on its origin until the origin goes, and
+// read by every claim of it, a later process's included.
+func TestJobOriginCancelAskedRidesTheClaim(t *testing.T) {
+	ctx := context.Background()
+	d := openTest(t)
+	for _, pid := range []string{"asked", "plain"} {
+		if err := d.InsertJobOrigin(ctx, JobOrigin{PID: pid, UserID: "u1", CreatedAtNS: 1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := d.AskJobOriginCancel(ctx, "asked"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.AskJobOriginCancel(ctx, "none"); err != nil {
+		t.Fatalf("asking the cancel of a job with no origin = %v, want nothing to record", err)
+	}
+	if o, err := d.JobOriginGet(ctx, "asked"); err != nil || !o.CancelAsked {
+		t.Fatalf("read = %+v (%v), want the cancel recorded", o, err)
+	}
+	listed, err := d.JobOrigins(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range listed {
+		if want := o.PID == "asked"; o.CancelAsked != want {
+			t.Fatalf("listed %s CancelAsked = %v, want %v", o.PID, o.CancelAsked, want)
+		}
+	}
+	for range 2 {
+		if o, err := d.ClaimJobOrigin(ctx, "asked", 100); err != nil || !o.CancelAsked {
+			t.Fatalf("claim = %+v (%v), want the cancel recorded", o, err)
+		}
+		if o, err := d.ClaimJobOrigin(ctx, "plain", 100); err != nil || o.CancelAsked {
+			t.Fatalf("claim = %+v (%v), want no cancel", o, err)
+		}
+		if err := d.ReleaseJobOriginClaims(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

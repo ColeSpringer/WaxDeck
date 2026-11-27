@@ -520,6 +520,8 @@ Future<void> uploadPickedFiles(
             batchId: batchId,
             identify: choice.identify,
             acceptBestMatch: choice.acceptBestMatch,
+            // The account that picked them: a swap stops the run.
+            through: repository,
           );
       if (accepted) uploaded++;
     } on WaxDeckApiException catch (e) {

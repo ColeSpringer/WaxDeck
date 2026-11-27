@@ -46,9 +46,63 @@ abstract interface class ServerAnswers {
   abstract void Function()? onNextAnswer;
 }
 
+/// A repository whose credentials follow the account the app shows, as
+/// [WaxDeckClient]'s do: a session read that answers for another account
+/// than the one held lends that account's credentials to nothing until the
+/// app [shows] it, and a request made for one account is sent only while
+/// the client still holds that account.
+abstract interface class AccountCredentials {
+  /// The account the credentials lent now are for, null with none: whom a
+  /// request made now through the client itself is made for.
+  String? get heldAccount;
+
+  /// The account every call through this repository is made for, as
+  /// [forAccount] bound it; null for the client itself.
+  String? get boundAccount;
+
+  /// The client as [account]'s: the same transport and credentials, and
+  /// every call made through it made for [account], so none of it is sent
+  /// once the client holds another. The same one each time, until the
+  /// client holds another account.
+  WaxDeckRepository forAccount(String account);
+
+  /// The app shows [session] from now: what a session read found for its
+  /// account is lent from here on, and nothing made for the account held
+  /// before is sent.
+  void shows(SessionState session);
+
+  /// Ends [sessionId], a session a sign-out still owes, with the CSRF token
+  /// of the session the cookie holds as the last session read found it,
+  /// another account's held back from every other request included: the
+  /// server lets the cookie's account end only its own sessions, and says
+  /// another's is not found, so that token proves the cookie and no more. A
+  /// revoke owed reads the session for exactly this. Made for no account.
+  Future<void> revokeOwedSession(String sessionId);
+}
+
+/// Runs [work] so that every request it makes through the client itself is
+/// made for [account], in place of the account held when it is made: work
+/// whose account is its own (an outbox row's owner) sends nothing once the
+/// client holds another. A view's calls are its own account's whatever
+/// runs them. Null runs [work] as it is.
+T madeFor<T>(String? account, T Function() work) => account == null
+    ? work()
+    : runZoned(work, zoneValues: {_madeForKey: account});
+
+final _madeForKey = Object();
+
 /// Carries the credentials a call presents in place of those held when it
 /// is sent: a `(bearer, csrf)` record, either null. Set through `extra`.
 const String _presenting = 'waxdeck-presenting';
+
+/// Carries the account a call was made for ([AccountCredentials]), as it
+/// enters the transport. Set through `extra`.
+const String _madeFor = 'waxdeck-made-for';
+
+/// Marks the request [AccountCredentials.revokeOwedSession] sends, in its
+/// `RequestOptions.extra`: a transport that holds requests while the
+/// session is in doubt lets the revoke a sign-out owes go.
+const String owedRevokeRequest = 'waxdeck-owed-revoke';
 
 /// Marks a call whose server side does its whole job before the
 /// response line, so the ordinary receive budget would call a healthy
@@ -60,11 +114,26 @@ const String _longOperation = 'waxdeck-long-operation';
 /// the above.
 const String _chunkSend = 'waxdeck-chunk-send';
 
+/// What a client and every view of it share: the credentials, whom they are
+/// lent for, and who hears the server's next answer.
+final class _Held {
+  String? authToken;
+  String? csrfToken;
+  String? holder;
+  (String, String?)? found;
+  var credentials = 0;
+  var signOuts = 0;
+  void Function()? onNextAnswer;
+  final views = <String, WaxDeckClient>{};
+}
+
 /// The Dio the generated calls send through, with the deadlines and the
 /// credentials every request carries.
 abstract class _WaxDeckTransport {
   _WaxDeckTransport(this._baseUrl, this._dio)
-    : _wire = WireContext(baseUrl: _baseUrl) {
+    : _wire = WireContext(baseUrl: _baseUrl),
+      _held = _Held(),
+      _bound = null {
     _dio.options.baseUrl = '$_baseUrl/api/v1';
     _dio.transformer = _AnswerTransformer();
     // Deadlines, so a request that never lands becomes an error instead
@@ -103,6 +172,13 @@ abstract class _WaxDeckTransport {
               ..connectTimeout = Duration.zero
               ..receiveTimeout = Duration.zero;
           }
+          // Made for an account this client no longer holds: what it
+          // would carry now is another account's.
+          if (options.extra[_madeFor] case final String account
+              when account != _holder) {
+            handler.reject(_notHeld(options));
+            return;
+          }
           if (options.extra[_presenting] case (
             final String? bearer,
             final String? csrf,
@@ -117,28 +193,69 @@ abstract class _WaxDeckTransport {
     );
   }
 
+  /// [of] as [_bound]'s: its transport and its credentials, shared.
+  _WaxDeckTransport._view(_WaxDeckTransport of, this._bound)
+    : _baseUrl = of._baseUrl,
+      _dio = of._dio,
+      _wire = of._wire,
+      _held = of._held;
+
   final String _baseUrl;
   final Dio _dio;
 
   /// What the codec resolves media URLs against.
   final WireContext _wire;
 
-  String? _authToken;
-  String? _csrfToken;
+  final _Held _held;
+
+  /// The account every call through this one is made for: a view's. Null
+  /// for the client itself.
+  final String? _bound;
+
+  String? get _authToken => _held.authToken;
+  set _authToken(String? token) => _held.authToken = token;
+  String? get _csrfToken => _held.csrfToken;
+  set _csrfToken(String? token) => _held.csrfToken = token;
+
+  /// The account the credentials lent are for: a sign-in's, or a session
+  /// read's for the account held or when none was. Null with none.
+  String? get _holder => _held.holder;
+  set _holder(String? account) {
+    _held.holder = account;
+    // An account no longer held keeps no view here; work that captured one
+    // keeps it, and it is refused.
+    _held.views.removeWhere((bound, _) => bound != account);
+  }
+
+  /// A session read's answer for another account than [_holder]: that
+  /// account and its CSRF token, lent once the app shows it.
+  (String, String?)? get _found => _held.found;
+  set _found((String, String?)? found) => _held.found = found;
+
+  /// What a call made for an account no longer held fails with, unsent:
+  /// [AccountNotHeldException], once mapped.
+  static DioException _notHeld(RequestOptions options) => DioException(
+    requestOptions: options,
+    type: DioExceptionType.connectionError,
+    error: const AccountNotHeldException(),
+  );
 
   /// Moves at every sign-in and sign-out, and whenever the bearer is set
   /// to another, so a session probe that was out across one keeps its
   /// answer's CSRF token, the old session's, to itself, and a rotation
   /// keeps its token.
-  var _credentials = 0;
+  int get _credentials => _held.credentials;
+  set _credentials(int count) => _held.credentials = count;
 
   /// Moves at every sign-out: the bearer dropped, or [logout] asked. A
   /// sign-in sent before one is answered and not taken up: its session is
   /// nobody's to present.
-  var _signOuts = 0;
+  int get _signOuts => _held.signOuts;
+  set _signOuts(int count) => _held.signOuts = count;
 
   /// [ServerAnswers.onNextAnswer].
-  void Function()? onNextAnswer;
+  void Function()? get onNextAnswer => _held.onNextAnswer;
+  set onNextAnswer(void Function()? hear) => _held.onNextAnswer = hear;
 
   void _answerHeard() {
     final hear = onNextAnswer;
@@ -204,6 +321,12 @@ abstract class _WaxDeckTransport {
     bool Function(int?)? validateStatus,
     ResponseType? responseType,
   }) async {
+    // Whom this call is made for: the account this view is for, else the
+    // work that made it says, else the account held now. A call that
+    // presents its own credentials is made for none.
+    final madeFor = extra?[_presenting] != null
+        ? null
+        : _bound ?? Zone.current[_madeForKey] as String? ?? _holder;
     final response = await _dio.request<dynamic>(
       path,
       data: body,
@@ -213,7 +336,7 @@ abstract class _WaxDeckTransport {
       options: Options(
         method: method,
         headers: headers,
-        extra: extra,
+        extra: madeFor == null ? extra : {...?extra, _madeFor: madeFor},
         contentType: contentType,
         validateStatus: validateStatus,
         responseType: responseType,
@@ -283,7 +406,7 @@ abstract class _WaxDeckTransport {
 /// [WaxDeckRepository] over the calls generated from the API spec, one
 /// mixin per tag, with the methods the generator leaves to hand.
 class WaxDeckClient extends _WaxDeckCalls
-    implements WaxDeckRepository, ServerAnswers {
+    implements WaxDeckRepository, ServerAnswers, AccountCredentials {
   /// [baseUrl] is the server origin. On web builds pass an empty string:
   /// relative URLs resolve against the single origin serving the SPA.
   ///
@@ -319,6 +442,11 @@ class WaxDeckClient extends _WaxDeckCalls
     this._chunkStall,
     this._wholeRequestCut,
   );
+
+  WaxDeckClient._view(WaxDeckClient of, String account)
+    : _chunkStall = of._chunkStall,
+      _wholeRequestCut = of._wholeRequestCut,
+      super._view(of, account);
 
   /// How long a call marked as a long operation may take to answer; an
   /// upload's seal is one.
@@ -388,10 +516,53 @@ class WaxDeckClient extends _WaxDeckCalls
     final result = decodeLoginResult(json, _wire);
     _credentials++;
     _csrfToken = csrfToken;
+    _holder = result.user.id;
+    _found = null;
     if (!_isWebBuild) {
       _authToken = result.token;
     }
     return result;
+  }
+
+  @override
+  String? get heldAccount => _holder;
+
+  @override
+  String? get boundAccount => _bound;
+
+  @override
+  WaxDeckClient forAccount(String account) =>
+      _held.views[account] ??= WaxDeckClient._view(this, account);
+
+  @override
+  void shows(SessionState session) {
+    final account = session.user?.id;
+    if (account == null || account == _holder) return;
+    final found = _found;
+    _found = null;
+    _holder = account;
+    // Shown with no read's token for it, it is lent none until one
+    // answers for it.
+    _csrfToken = found != null && found.$1 == account ? found.$2 : null;
+  }
+
+  /// Takes up what a session read answered: the CSRF token of the account
+  /// held, or of one when none is, is lent at once; another account's
+  /// waits for [shows].
+  void _heard(SessionState session, String? csrf) {
+    final account = session.authenticated ? session.user?.id : null;
+    if (account == null) {
+      // Unauthenticated probes carry no CSRF token; dropping a stale one is
+      // correct because the session it belonged to is gone.
+      _csrfToken = csrf;
+      _found = null;
+    } else if (_holder == null || _holder == account) {
+      _holder = account;
+      _csrfToken = csrf;
+      _found = null;
+    } else {
+      _found = (account, csrf);
+    }
   }
 
   /// A sign-in's answer, taken up unless a sign-out was asked since the
@@ -458,9 +629,7 @@ class WaxDeckClient extends _WaxDeckCalls
         wireString,
       );
       final session = decodeSessionState(json, _wire);
-      // Unauthenticated probes carry no CSRF token; dropping a stale one is
-      // correct because the session it belonged to is gone.
-      if (asked == _credentials) _csrfToken = csrfToken;
+      if (asked == _credentials) _heard(session, csrfToken);
       return session;
     });
   }, heard: false);
@@ -492,11 +661,32 @@ class WaxDeckClient extends _WaxDeckCalls
   Future<void> logout() => _guard(() async {
     final token = _authToken;
     final csrf = _csrfToken;
+    final holder = _holder;
     _signOuts++;
     await _logout(extra: {_presenting: (token, csrf)});
     _credentials++;
     if (_authToken == token) _authToken = null;
     if (_csrfToken == csrf) _csrfToken = null;
+    if (_holder == holder) {
+      _holder = null;
+      _found = null;
+    }
+  });
+
+  @override
+  Future<void> revokeSession(String sessionId) => _guard(() async {
+    await _revokeSession(sessionId);
+  });
+
+  @override
+  Future<void> revokeOwedSession(String sessionId) => _guard(() async {
+    await _revokeSession(
+      sessionId,
+      extra: {
+        _presenting: (_authToken, _found?.$2 ?? _csrfToken),
+        owedRevokeRequest: true,
+      },
+    );
   });
 
   @override
@@ -1071,6 +1261,10 @@ class WaxDeckClient extends _WaxDeckCalls
     ListenSession? listen,
     List<String> timelinePids = const <String>[],
   }) {
+    // Made for an account the client no longer holds, there is nothing to
+    // send: what they would carry is another account's.
+    final madeFor = _bound ?? Zone.current[_madeForKey] as String?;
+    if (madeFor != null && madeFor != _holder) return const <ExitRequest>[];
     // Whatever the interceptor would have added, added by the same
     // code: these go out through the browser rather than through Dio,
     // and building them here is the only way to have a credential on
@@ -1209,6 +1403,7 @@ Object? _jsonOrNull(String text) {
 /// that is no error object, one that did not parse as JSON included, is
 /// `transport` with the status it came with.
 WaxDeckApiException apiExceptionFromDio(DioException e) {
+  if (e.error case final AccountNotHeldException refused) return refused;
   // A deadline first, and by type rather than by body: there is no
   // response to read a code out of, and callers that tell a timeout
   // from a refusal need a name for it rather than the generic

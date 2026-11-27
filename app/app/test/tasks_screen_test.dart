@@ -1661,7 +1661,7 @@ void main() {
     expect(
       find.descendant(of: _job('jb-6'), matching: find.text('Stopped')),
       findsOneWidget,
-      reason: 'nobody cancels a job; the server stopped under it',
+      reason: 'a canceled job reads as stopped',
     );
     expect(
       _job('jb-3'),
@@ -2822,6 +2822,71 @@ void main() {
       expect(repo.listToolTasksCalls, reads);
     });
 
+    testWidgets('a reply that lands after a newer read leaves that read', (
+      tester,
+    ) async {
+      final repo = FakeRepository();
+      repo.toolTasksById['tt-a'] = task('tt-a');
+      final container = appContainer(repo: repo);
+      await mountApp(tester, const TasksScreen(), container: container);
+      await advance(tester);
+      final held = Completer<void>();
+      repo.cancelToolTaskHeld = held.future;
+
+      await tester.tap(cancelControl('tt-a'));
+      await advance(tester);
+      // The end's marker reads the list before the reply comes back.
+      repo.toolTasksById['tt-a'] = task('tt-a', state: 'canceled');
+      container.invalidate(toolTasksProvider);
+      await advance(tester);
+      expect(inRow('tt-a', 'Canceled'), findsOneWidget);
+
+      held.complete();
+      await advance(tester);
+      expect(inRow('tt-a', 'Canceled'), findsOneWidget);
+      expect(inRow('tt-a', 'Canceling'), findsNothing);
+    });
+
+    testWidgets('a read the server answered before it took the cancel keeps '
+        'Canceling when it lands after the reply; a read showing the end '
+        'shows the end', (tester) async {
+      final repo = FakeRepository();
+      repo.toolTasksById['tt-a'] = task('tt-a', type: 'genre-normalize');
+      final container = appContainer(repo: repo);
+      await mountApp(tester, const TasksScreen(), container: container);
+      await advance(tester);
+      final held = Completer<void>();
+      repo.cancelToolTaskHeld = held.future;
+
+      await tester.tap(cancelControl('tt-a'));
+      await advance(tester);
+      // A read begun while the cancel is out, answered before the server
+      // took it.
+      final stale = repo.listToolTasksGate = Completer<void>();
+      container.invalidate(toolTasksProvider);
+      await advance(tester);
+      held.complete();
+      await advance(tester);
+      expect(inRow('tt-a', 'Canceling'), findsOneWidget);
+
+      repo.toolTasksById['tt-a'] = task('tt-a', type: 'genre-normalize');
+      stale.complete();
+      repo.listToolTasksGate = null;
+      await advance(tester);
+      expect(inRow('tt-a', 'Canceling'), findsOneWidget);
+      expect(cancelControl('tt-a'), findsNothing);
+
+      repo.toolTasksById['tt-a'] = task(
+        'tt-a',
+        type: 'genre-normalize',
+        state: 'canceled',
+      );
+      container.invalidate(toolTasksProvider);
+      await advance(tester);
+      expect(inRow('tt-a', 'Canceled'), findsOneWidget);
+      expect(inRow('tt-a', 'Canceling'), findsNothing);
+    });
+
     testWidgets('a waiting task cancels from its row and winds down', (
       tester,
     ) async {
@@ -3086,6 +3151,325 @@ void main() {
         shellMessageText(raisedMessage(tester)),
         es.errorToolTaskCommitted,
       );
+    });
+  });
+
+  group('canceling a library job', () {
+    final started = DateTime.utc(2026, 9, 29, 10);
+    Job job(
+      String pid, {
+      String kind = 'scan',
+      String state = 'running',
+      bool cancelable = false,
+      bool cancelRequested = false,
+      String? error,
+    }) => Job(
+      pid: pid,
+      kind: kind,
+      state: state,
+      cancelable: cancelable,
+      cancelRequested: cancelRequested,
+      error: error,
+      progress: state == 'running' ? 0.3 : null,
+      startedAt: started,
+      finishedAt: state == 'running' ? null : started,
+    );
+
+    Finder cancelControl(String pid) =>
+        find.bySemanticsIdentifier(SemanticsIds.jobCancel(pid));
+    Finder confirm() =>
+        find.bySemanticsIdentifier(SemanticsIds.jobCancelConfirm);
+    Finder inRow(String pid, String text) =>
+        find.descendant(of: _job(pid), matching: find.text(text));
+
+    // No pumpAndSettle: a running row's bar animates.
+    Future<void> advance(WidgetTester tester) async {
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    Future<(FakeRepository, ProviderContainer)> show(
+      WidgetTester tester,
+      List<Job> jobs, {
+      Locale locale = const Locale('en'),
+    }) async {
+      final repo = FakeRepository(
+        sessionState: const SessionState(authenticated: true, user: _admin),
+      )..jobs = jobs;
+      final container = appContainer(repo: repo);
+      await mountApp(
+        tester,
+        const TasksScreen(),
+        container: container,
+        locale: locale,
+      );
+      await advance(tester);
+      return (repo, container);
+    }
+
+    testWidgets('is offered on a running job the server can cancel only', (
+      tester,
+    ) async {
+      await show(tester, [
+        job('jb-scan', cancelable: true),
+        job('jb-kind', kind: 'set-kind'),
+        job('jb-winding', kind: 'enrich', cancelRequested: true),
+        job('jb-done', state: 'done'),
+        job('jb-canceled', state: 'canceled'),
+      ]);
+
+      expect(cancelControl('jb-scan'), findsOneWidget);
+      expect(
+        tester.getSemantics(cancelControl('jb-scan')).label,
+        'Cancel Library scan',
+      );
+      for (final pid in ['jb-kind', 'jb-winding', 'jb-done', 'jb-canceled']) {
+        expect(cancelControl(pid), findsNothing, reason: pid);
+      }
+      expect(inRow('jb-winding', 'Canceling'), findsOneWidget);
+      expect(inRow('jb-canceled', 'Stopped'), findsOneWidget);
+    });
+
+    testWidgets('asks first, saying what stays, and keeping it posts nothing', (
+      tester,
+    ) async {
+      final (repo, _) = await show(tester, [job('jb-a', cancelable: true)]);
+
+      await tester.tap(cancelControl('jb-a'));
+      await advance(tester);
+      expect(find.text('Cancel this job?'), findsOneWidget);
+      expect(
+        find.text(
+          'What it has done stays, and its next run carries on from '
+          'there. A forced run does not resume: start it again.',
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Keep running'));
+      await advance(tester);
+      expect(find.text('Cancel this job?'), findsNothing);
+      expect(repo.cancelJobCalls, isEmpty);
+      expect(cancelControl('jb-a'), findsOneWidget);
+    });
+
+    testWidgets(
+      'confirmed, the row reads Canceling, and Stopped once it ends',
+      (tester) async {
+        final (repo, container) = await show(tester, [
+          job('jb-a', kind: 'analyze', cancelable: true),
+        ]);
+        final reads = repo.jobReads;
+
+        await tester.tap(cancelControl('jb-a'));
+        await advance(tester);
+        await tester.tap(confirm());
+        await advance(tester);
+
+        expect(repo.cancelJobCalls, ['jb-a']);
+        expect(
+          repo.jobReads,
+          reads,
+          reason: 'the cancel\'s reply stands in until the next read',
+        );
+        expect(inRow('jb-a', 'Canceling'), findsOneWidget);
+        expect(inRow('jb-a', 'Running · 30%'), findsNothing);
+        expect(cancelControl('jb-a'), findsNothing);
+        expect(
+          find.descendant(
+            of: _job('jb-a'),
+            matching: find.byType(WaxProgressBar),
+          ),
+          findsOneWidget,
+        );
+        expect(raisedMessage(tester), isNull);
+
+        // Its end is the job marker's news, which reads the list again. The
+        // state says it stopped; the catalog's own sentence is not drawn,
+        // while a failure keeps its error.
+        repo.jobs = [
+          job(
+            'jb-a',
+            kind: 'analyze',
+            state: 'canceled',
+            error: 'interrupted before it finished',
+          ),
+          job('jb-f', state: 'failed', error: 'the disk went away'),
+        ];
+        container.invalidate(adminJobsProvider);
+        await advance(tester);
+        expect(inRow('jb-a', 'Stopped'), findsOneWidget);
+        expect(inRow('jb-a', 'interrupted before it finished'), findsNothing);
+        expect(inRow('jb-f', 'the disk went away'), findsOneWidget);
+        expect(cancelControl('jb-a'), findsNothing);
+      },
+    );
+
+    testWidgets('the cancel\'s reply reads at once, before any reload', (
+      tester,
+    ) async {
+      final (repo, _) = await show(tester, [
+        job('jb-a', kind: 'enrich', cancelable: true),
+        job('jb-b', cancelable: true),
+      ]);
+      final reads = repo.jobReads;
+
+      repo.cancelJobAnswer = job('jb-a', kind: 'enrich', cancelRequested: true);
+      await tester.tap(cancelControl('jb-a'));
+      await advance(tester);
+      await tester.tap(confirm());
+      await advance(tester);
+      expect(repo.jobReads, reads, reason: 'nothing read the list again');
+      expect(inRow('jb-a', 'Canceling'), findsOneWidget);
+      expect(cancelControl('jb-a'), findsNothing);
+
+      // One that ended before the reply answers as it ended.
+      repo.cancelJobAnswer = job(
+        'jb-b',
+        state: 'canceled',
+        error: 'interrupted before it finished',
+      );
+      await tester.tap(cancelControl('jb-b'));
+      await advance(tester);
+      await tester.tap(confirm());
+      await advance(tester);
+      expect(repo.jobReads, reads, reason: 'nothing read the list again');
+      expect(inRow('jb-b', 'Stopped'), findsOneWidget);
+      expect(cancelControl('jb-b'), findsNothing);
+    });
+
+    testWidgets('a reply that lands after a newer read leaves that read', (
+      tester,
+    ) async {
+      final (repo, container) = await show(tester, [
+        job('jb-a', kind: 'enrich', cancelable: true),
+      ]);
+      final held = Completer<void>();
+      repo
+        ..cancelJobHeld = held.future
+        ..cancelJobAnswer = job('jb-a', kind: 'enrich', cancelRequested: true);
+
+      await tester.tap(cancelControl('jb-a'));
+      await advance(tester);
+      await tester.tap(confirm());
+      await advance(tester);
+      // The end's marker reads the list before the reply comes back.
+      repo.jobs = [job('jb-a', kind: 'enrich', state: 'canceled')];
+      container.invalidate(adminJobsProvider);
+      await advance(tester);
+      expect(inRow('jb-a', 'Stopped'), findsOneWidget);
+
+      held.complete();
+      await advance(tester);
+      expect(inRow('jb-a', 'Stopped'), findsOneWidget);
+      expect(inRow('jb-a', 'Canceling'), findsNothing);
+    });
+
+    testWidgets('a read the server answered before it took the cancel keeps '
+        'Canceling when it lands after the reply; a read showing the end '
+        'shows the end', (tester) async {
+      final (repo, container) = await show(tester, [
+        job('jb-a', kind: 'enrich', cancelable: true),
+      ]);
+      final held = Completer<void>();
+      repo
+        ..cancelJobHeld = held.future
+        ..cancelJobAnswer = job('jb-a', kind: 'enrich', cancelRequested: true);
+
+      await tester.tap(cancelControl('jb-a'));
+      await advance(tester);
+      await tester.tap(confirm());
+      await advance(tester);
+      // A read begun while the cancel is out, answered before the server
+      // took it.
+      final stale = repo.listJobsGate = Completer<void>();
+      container.invalidate(adminJobsProvider);
+      await advance(tester);
+      held.complete();
+      await advance(tester);
+      expect(inRow('jb-a', 'Canceling'), findsOneWidget);
+
+      stale.complete();
+      repo.listJobsGate = null;
+      await advance(tester);
+      expect(inRow('jb-a', 'Canceling'), findsOneWidget);
+      expect(cancelControl('jb-a'), findsNothing);
+
+      repo.jobs = [job('jb-a', kind: 'enrich', state: 'canceled')];
+      container.invalidate(adminJobsProvider);
+      await advance(tester);
+      expect(inRow('jb-a', 'Stopped'), findsOneWidget);
+      expect(inRow('jb-a', 'Canceling'), findsNothing);
+    });
+
+    testWidgets('a job gone before its cancel leaves the list, unexplained', (
+      tester,
+    ) async {
+      final (repo, _) = await show(tester, [
+        job('jb-a', cancelable: true),
+        job('jb-b', cancelable: true),
+      ]);
+      repo.cancelJobError = const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no job with pid jb-a',
+        statusCode: 404,
+      );
+
+      await tester.tap(cancelControl('jb-a'));
+      await advance(tester);
+      await tester.tap(confirm());
+      await advance(tester);
+      expect(_job('jb-a'), findsNothing);
+      expect(_job('jb-b'), findsOneWidget);
+      expect(raisedMessage(tester), isNull);
+    });
+
+    testWidgets('a cancel the server refuses says why and keeps the control', (
+      tester,
+    ) async {
+      final (repo, _) = await show(tester, [job('jb-a', cancelable: true)]);
+      repo.cancelJobError = const WaxDeckApiException(
+        code: 'conflict',
+        message: 'not held',
+        statusCode: 409,
+        params: {'reason': 'job-not-held'},
+      );
+
+      await tester.tap(cancelControl('jb-a'));
+      await advance(tester);
+      await tester.tap(confirm());
+      await advance(tester);
+
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'This server holds no way to stop this job: it was started from the '
+        'command line, or it runs inside other work. It runs to its end.',
+      );
+      expect(cancelControl('jb-a'), findsOneWidget);
+    });
+
+    testWidgets('reads in Spanish', (tester) async {
+      final es = AppLocalizationsEs();
+      final (repo, _) = await show(tester, [
+        job('jb-a', cancelable: true),
+        job('jb-b', kind: 'enrich', cancelRequested: true),
+      ], locale: const Locale('es'));
+
+      expect(inRow('jb-b', es.toolsStateCanceling), findsOneWidget);
+      await tester.tap(cancelControl('jb-a'));
+      await advance(tester);
+      expect(find.text(es.toolsJobCancelTitle), findsOneWidget);
+      expect(find.text(es.toolsJobCancelBody), findsOneWidget);
+      repo.cancelJobError = const WaxDeckApiException(
+        code: 'conflict',
+        message: 'runs to its end',
+        statusCode: 409,
+        params: {'reason': 'job-runs-to-end'},
+      );
+      await tester.tap(find.text(es.toolsJobCancelAction));
+      await advance(tester);
+      expect(shellMessageText(raisedMessage(tester)), es.errorJobRunsToEnd);
     });
   });
 }

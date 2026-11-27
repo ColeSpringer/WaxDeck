@@ -249,6 +249,125 @@ void main() {
       expect(next.speed, isNull);
       expect(next.trimSilence, isTrue);
     });
+
+    test('Job.withCancelRequested sets the flag and keeps every field', () {
+      final at = DateTime.utc(2026, 9, 29, 10);
+      final base = Job(
+        pid: 'jb-1',
+        kind: 'enrich',
+        state: 'running',
+        cancelable: true,
+        progress: 0.3,
+        message: 'reading tags',
+        error: 'one file unreadable',
+        startedAt: at,
+        finishedAt: at,
+        result: const {'items': 3},
+        target: const JobTarget(type: 'item', pid: 'tr-1', name: 'Song'),
+      );
+
+      final next = base.withCancelRequested();
+
+      expect(next.cancelRequested, isTrue);
+      expect(
+        [
+          next.pid,
+          next.kind,
+          next.state,
+          next.cancelable,
+          next.progress,
+          next.message,
+          next.error,
+          next.startedAt,
+          next.finishedAt,
+          next.result,
+          next.target,
+        ],
+        [
+          base.pid,
+          base.kind,
+          base.state,
+          base.cancelable,
+          base.progress,
+          base.message,
+          base.error,
+          base.startedAt,
+          base.finishedAt,
+          base.result,
+          base.target,
+        ],
+      );
+    });
+
+    test(
+      'ToolTask.withCancelRequested sets the flag and keeps every field',
+      () {
+        final at = DateTime.utc(2026, 9, 29, 10);
+        final base = ToolTask(
+          id: 'tt-1',
+          type: 'acquire',
+          state: 'running',
+          createdAt: at,
+          itemPid: 'tr-1',
+          itemTitle: 'Song',
+          progressPct: 40,
+          activity: ToolTaskActivity(phase: 'downloading', at: at),
+          error: 'slow',
+          errorCode: 'rate-limited',
+          errorParams: const {'reason': 'busy'},
+          waitReason: 'rate-limited',
+          retryAt: at,
+          bookInTrash: true,
+          resultPids: const ['tr-2'],
+          finishedAt: at,
+          summary: const {'n': 1},
+        );
+
+        final next = base.withCancelRequested();
+
+        expect(next.cancelRequested, isTrue);
+        expect(
+          [
+            next.id,
+            next.type,
+            next.state,
+            next.createdAt,
+            next.itemPid,
+            next.itemTitle,
+            next.progressPct,
+            next.activity,
+            next.error,
+            next.errorCode,
+            next.errorParams,
+            next.waitReason,
+            next.retryAt,
+            next.bookInTrash,
+            next.resultPids,
+            next.finishedAt,
+            next.summary,
+          ],
+          [
+            base.id,
+            base.type,
+            base.state,
+            base.createdAt,
+            base.itemPid,
+            base.itemTitle,
+            base.progressPct,
+            base.activity,
+            base.error,
+            base.errorCode,
+            base.errorParams,
+            base.waitReason,
+            base.retryAt,
+            base.bookInTrash,
+            base.resultPids,
+            base.finishedAt,
+            base.summary,
+          ],
+        );
+      },
+    );
   });
 
   test(

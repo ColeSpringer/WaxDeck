@@ -1238,22 +1238,25 @@ class SyncEngine {
     String? owner,
   ) => owner == null ? column.isNull() : column.isNull() | column.equals(owner);
 
-  /// Queues a position checkpoint (also applied to the local mirror so
-  /// offline UI reflects it immediately).
-  Future<void> queueCheckpoint(String pid, int positionMs) =>
+  /// Queues a position checkpoint for [owner], [account] by default (also
+  /// applied to the local mirror so offline UI reflects it immediately,
+  /// when it is the account's whose marks the mirror holds).
+  Future<void> queueCheckpoint(String pid, int positionMs, {String? owner}) =>
       _outboxWrite(() async {
-        await _coalesce('position', pid, account);
+        final whose = owner ?? account;
+        await _coalesce('position', pid, whose);
         await db
             .into(db.outboxMutations)
             .insert(
               OutboxMutationsCompanion.insert(
                 kind: 'position',
                 pid: pid,
-                owner: Value(account),
+                owner: Value(whose),
                 positionMs: Value(positionMs),
                 recordedAt: DateTime.now(),
               ),
             );
+        if (whose != account) return;
         await db.customStatement(
           'INSERT INTO mirror_play_states (pid, position_ms) VALUES (?, ?) '
           'ON CONFLICT(pid) DO UPDATE SET position_ms = excluded.position_ms',
@@ -1261,61 +1264,72 @@ class SyncEngine {
         );
       });
 
-  Future<void> queueStar(String pid, bool starred) => _outboxWrite(() async {
-    await _coalesce('star', pid, account);
-    await db
-        .into(db.outboxMutations)
-        .insert(
-          OutboxMutationsCompanion.insert(
-            kind: 'star',
-            pid: pid,
-            owner: Value(account),
-            starred: Value(starred),
-            recordedAt: DateTime.now(),
-          ),
+  /// Queues a star for [owner], [account] by default; applied to the
+  /// mirror only when it is [account]'s, as [queueCheckpoint] is.
+  Future<void> queueStar(String pid, bool starred, {String? owner}) =>
+      _outboxWrite(() async {
+        final whose = owner ?? account;
+        await _coalesce('star', pid, whose);
+        await db
+            .into(db.outboxMutations)
+            .insert(
+              OutboxMutationsCompanion.insert(
+                kind: 'star',
+                pid: pid,
+                owner: Value(whose),
+                starred: Value(starred),
+                recordedAt: DateTime.now(),
+              ),
+            );
+        if (whose != account) return;
+        await db.customStatement(
+          'INSERT INTO mirror_play_states (pid, starred) VALUES (?, ?) '
+          'ON CONFLICT(pid) DO UPDATE SET starred = excluded.starred',
+          [pid, starred ? 1 : 0],
         );
-    await db.customStatement(
-      'INSERT INTO mirror_play_states (pid, starred) VALUES (?, ?) '
-      'ON CONFLICT(pid) DO UPDATE SET starred = excluded.starred',
-      [pid, starred ? 1 : 0],
-    );
-  });
+      });
 
-  Future<void> queueRating(String pid, int? rating) => _outboxWrite(() async {
-    await _coalesce('rating', pid, account);
-    await db
-        .into(db.outboxMutations)
-        .insert(
-          OutboxMutationsCompanion.insert(
-            kind: 'rating',
-            pid: pid,
-            owner: Value(account),
-            rating: Value(rating),
-            recordedAt: DateTime.now(),
-          ),
+  /// Queues a rating for [owner]; see [queueStar].
+  Future<void> queueRating(String pid, int? rating, {String? owner}) =>
+      _outboxWrite(() async {
+        final whose = owner ?? account;
+        await _coalesce('rating', pid, whose);
+        await db
+            .into(db.outboxMutations)
+            .insert(
+              OutboxMutationsCompanion.insert(
+                kind: 'rating',
+                pid: pid,
+                owner: Value(whose),
+                rating: Value(rating),
+                recordedAt: DateTime.now(),
+              ),
+            );
+        if (whose != account) return;
+        await db.customStatement(
+          'INSERT INTO mirror_play_states (pid, rating) VALUES (?, ?) '
+          'ON CONFLICT(pid) DO UPDATE SET rating = excluded.rating',
+          [pid, rating],
         );
-    await db.customStatement(
-      'INSERT INTO mirror_play_states (pid, rating) VALUES (?, ?) '
-      'ON CONFLICT(pid) DO UPDATE SET rating = excluded.rating',
-      [pid, rating],
-    );
-  });
+      });
 
-  /// Queues a star on a catalog entity (an artist or an album).
+  /// Queues a star on a catalog entity (an artist or an album), for
+  /// [owner], [account] by default.
   ///
   /// No mirror write: mirror_play_states is the item play-state cache,
   /// and an entity star is its own fact, not a member's. The winning
   /// value comes back through the server stream on reconnect.
-  Future<void> queueEntityStar(String pid, bool starred) =>
+  Future<void> queueEntityStar(String pid, bool starred, {String? owner}) =>
       _outboxWrite(() async {
-        await _coalesce('entity-star', pid, account);
+        final whose = owner ?? account;
+        await _coalesce('entity-star', pid, whose);
         await db
             .into(db.outboxMutations)
             .insert(
               OutboxMutationsCompanion.insert(
                 kind: 'entity-star',
                 pid: pid,
-                owner: Value(account),
+                owner: Value(whose),
                 starred: Value(starred),
                 recordedAt: DateTime.now(),
               ),
@@ -1323,16 +1337,17 @@ class SyncEngine {
       });
 
   /// Queues a rating on a catalog entity; see [queueEntityStar].
-  Future<void> queueEntityRating(String pid, int? rating) =>
+  Future<void> queueEntityRating(String pid, int? rating, {String? owner}) =>
       _outboxWrite(() async {
-        await _coalesce('entity-rating', pid, account);
+        final whose = owner ?? account;
+        await _coalesce('entity-rating', pid, whose);
         await db
             .into(db.outboxMutations)
             .insert(
               OutboxMutationsCompanion.insert(
                 kind: 'entity-rating',
                 pid: pid,
-                owner: Value(account),
+                owner: Value(whose),
                 rating: Value(rating),
                 recordedAt: DateTime.now(),
               ),
@@ -1400,10 +1415,12 @@ class SyncEngine {
   /// path: for a caller with reason to think the server answers while
   /// the socket is down. A refusal is settled as a flush settles one;
   /// any other failure is thrown, the patch still waiting.
-  Future<void> sendPrefs(String owner) => _serialized(() async {
-    final row = await _prefsRow(owner);
-    if (row != null) await _flushPrefs(row);
-  });
+  Future<void> sendPrefs(String owner) => _serialized(
+    () => madeFor(owner, () async {
+      final row = await _prefsRow(owner);
+      if (row != null) await _flushPrefs(row);
+    }),
+  );
 
   static Map<String, Object?>? _payloadOf(String? payload) {
     if (payload == null) return null;
@@ -1592,6 +1609,10 @@ class SyncEngine {
   Future<void> sendBookmarks(String bookPid) => _serialized(() async {
     final owner = account;
     if (owner == null) return;
+    await madeFor(owner, () => _sendBookmarksOf(bookPid, owner));
+  });
+
+  Future<void> _sendBookmarksOf(String bookPid, String owner) async {
     final waiting =
         await (db.select(db.outboxMutations)
               ..where(
@@ -1610,7 +1631,7 @@ class SyncEngine {
       _handleApiFailure(e);
       rethrow;
     }
-  });
+  }
 
   Future<void> _queueBookmarkWrite(
     String kind,
@@ -1727,39 +1748,50 @@ class SyncEngine {
         ),
       );
 
-  /// Queues a finished listen session; the session id is the
-  /// idempotency key, so a duplicate flush can never double-count.
-  Future<void> queueListen(ListenSession session) => _outboxWrite(() async {
-    await db
-        .into(db.outboxListens)
-        .insert(
-          OutboxListensCompanion.insert(
-            sessionId: session.sessionId,
-            pid: session.pid,
-            startedAt: session.startedAt,
-            msPlayed: session.msPlayed,
-            finished: Value(session.finished),
-            client: Value(session.client ?? ''),
-            skippedMs: Value(session.skippedMs),
-            owner: Value(account),
-          ),
-          mode: InsertMode.insertOrIgnore,
-        );
-  });
+  /// Queues a finished listen session for [owner], [account] by default;
+  /// the session id is the idempotency key, so a duplicate flush can never
+  /// double-count.
+  Future<void> queueListen(ListenSession session, {String? owner}) =>
+      _outboxWrite(() async {
+        await db
+            .into(db.outboxListens)
+            .insert(
+              OutboxListensCompanion.insert(
+                sessionId: session.sessionId,
+                pid: session.pid,
+                startedAt: session.startedAt,
+                msPlayed: session.msPlayed,
+                finished: Value(session.finished),
+                client: Value(session.client ?? ''),
+                skippedMs: Value(session.skippedMs),
+                owner: Value(owner ?? account),
+              ),
+              mode: InsertMode.insertOrIgnore,
+            );
+      });
 
   /// Replays the queues in recorded order. Mutations carry their
   /// recorded times; the server reconciles per medium and the winning
   /// state comes back through [pullServer]. Entries are deleted only
   /// after their replay succeeds, so a crash mid-flush retries safely.
-  Future<void> flushOutbox() async {
+  ///
+  /// Made for the account it began for, which is whose rows it sends: what
+  /// is left of it once the client holds another is refused unsent, and
+  /// waits for its own account.
+  Future<void> flushOutbox() {
+    final flushing = account;
+    return madeFor(flushing, () => _flushOutboxFor(flushing));
+  }
+
+  Future<void> _flushOutboxFor(String? flushing) async {
     final mutations = await (db.select(
       db.outboxMutations,
     )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
     for (final m in mutations) {
       // What an account queued waits for it; see [account].
-      if (m.owner != null && m.owner != account) continue;
+      if (m.owner != null && m.owner != flushing) continue;
       if (m.kind == _prefsKind) {
-        if (m.pid == account) await _flushPrefs(m);
+        if (m.pid == flushing) await _flushPrefs(m);
         continue;
       }
       if (m.kind == _bookmarkCreate || m.kind == _bookmarkDelete) {
@@ -1811,7 +1843,7 @@ class SyncEngine {
 
     final listens = await (db.select(
       db.outboxListens,
-    )..where((t) => _heldBy(t.owner, account))).get();
+    )..where((t) => _heldBy(t.owner, flushing))).get();
     if (listens.isNotEmpty) {
       for (var i = 0; i < listens.length; i += 500) {
         final batch = listens.sublist(i, math.min(i + 500, listens.length));
@@ -1920,6 +1952,9 @@ class SyncEngine {
   }
 
   void _handleApiFailure(WaxDeckApiException e) {
+    // Work made for an account the client no longer holds, refused unsent:
+    // the link is the next account's and is fine.
+    if (e is AccountNotHeldException) return;
     // The server words every 401 of its own so; one in no words of its own
     // is something in front of it, and as transient as any other failure.
     if (e.code == 'unauthenticated') {

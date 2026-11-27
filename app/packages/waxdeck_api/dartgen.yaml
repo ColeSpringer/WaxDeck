@@ -198,6 +198,11 @@ models:
       hasArtwork: {default: false}
       hasOwnArtwork: {default: false}
       writeBackIssues: {default: []}
+  Job:
+    fields:
+      # The constructor's default only: decode still requires both.
+      cancelable: {default: false}
+      cancelRequested: {default: false}
   KindFields:
     fields:
       creditRoles: {default: []}
@@ -792,6 +797,9 @@ operations:
   revokeAppPassword:
     params:
       appPasswordId: {as: id}
+  # Hand-written for the raw call's extra: the owed road's revoke
+  # (revokeOwedSession) presents the token the last session read found.
+  revokeSession: {hand: true}
   runEnrichment:
     unwrap: jobPid
     params:

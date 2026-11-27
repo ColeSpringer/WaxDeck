@@ -186,8 +186,9 @@ String? _invalidRequest(AppLocalizations l, WaxDeckApiException e) =>
       };
 
 /// The sentence for a `conflict` whose params say which refusal it is: a
-/// file tool refused before it was queued. Null for any other, which
-/// the table's `conflict` sentence answers.
+/// file tool refused before it was queued, or a cancel the server cannot
+/// give. Null for any other, which the table's `conflict` sentence
+/// answers.
 String? _conflict(AppLocalizations l, WaxDeckApiException e) {
   final p = e.params ?? const <String, String>{};
   return switch (p['reason']) {
@@ -210,6 +211,8 @@ String? _conflict(AppLocalizations l, WaxDeckApiException e) {
       _ => l.errorBookToolCopyElsewhere(p['copy'] ?? ''),
     },
     'task-committed' => l.errorToolTaskCommitted,
+    'job-runs-to-end' => l.errorJobRunsToEnd,
+    'job-not-held' => l.errorJobNotHeld,
     'task-running' => l.errorToolTaskRunning,
     'task-parked' => l.errorToolTaskParked,
     'parts-in-trash' => l.errorBookToolPartsInTrash(

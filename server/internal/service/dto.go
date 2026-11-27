@@ -147,6 +147,9 @@ type Job struct {
 	RemoveRoot *RemoveRootTallyDTO
 	// Target is what a targeted job ran on; nil for a whole pass.
 	Target *JobTargetDTO
+	// Cancelable says a cancel would stop the running job now;
+	// CancelRequested that one was asked for and it is winding down.
+	Cancelable, CancelRequested bool
 }
 
 // JobTargetDTO names a targeted job's target: its type (item, artist,

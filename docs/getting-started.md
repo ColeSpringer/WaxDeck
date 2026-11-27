@@ -78,7 +78,7 @@ services:
       WAXFLOW_ADDR: 0.0.0.0:4418
   waxseal:
     network_mode: !reset null
-    command: ["server", "--host", "0.0.0.0", "--tenant-keys", "${WAXDECK_SEAL_KEY:-${WAXDECK_INTERNAL_KEY:-}}"]
+    command: ["server", "--host", "0.0.0.0"]
 ```
 
 ## Run from source

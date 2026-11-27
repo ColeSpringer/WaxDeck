@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/asked_from.dart';
@@ -178,9 +179,11 @@ class _TimezoneDialogState extends ConsumerState<_TimezoneDialog> {
 
 /// Coverage of the sonic-similarity surface, for administrators
 /// deciding whether sonic affordances have data behind them.
-final similarityStatusProvider = FutureProvider<SimilarityStatus>(
-  (ref) => ref.watch(repositoryProvider).getSimilarityStatus(),
-);
+final similarityStatusProvider = FutureProvider<SimilarityStatus>((ref) {
+  // Keyed on the account: counted over what it may see.
+  ref.watch(signedInAccountProvider);
+  return ref.watch(repositoryProvider).getSimilarityStatus();
+});
 
 /// Admin-only status row for the sonic-similarity worker.
 class SimilarityStatusSection extends ConsumerWidget {

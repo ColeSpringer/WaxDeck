@@ -61,7 +61,7 @@ ProviderContainer appContainer({
       if (server != null)
         httpAdapterProvider.overrideWithValue(server)
       else
-        repositoryProvider.overrideWithValue(repo ?? FakeRepository()),
+        apiClientProvider.overrideWithValue(repo ?? FakeRepository()),
       audioEngineProvider.overrideWithValue(engine ?? FakeEngine()),
       credentialStoreProvider.overrideWithValue(
         credentials ?? InMemoryCredentialStore(),

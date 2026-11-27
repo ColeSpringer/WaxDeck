@@ -550,7 +550,8 @@ components:
         uploadedBy:
           type: string
           description: >
-            The uploader's user pid, present on upload-origin entries.
+            The submitting account's user pid, present on upload and
+            acquisition entries.
         identifying:
           type: boolean
           description: >
@@ -813,6 +814,14 @@ components:
                 `similarityPct` inside a tie band.
               items:
                 $ref: "#/components/schemas/ReviewCandidate"
+            uploadedByName:
+              type: string
+              description: >
+                The submitting account's display name, or its username
+                when it has none. Present on upload and acquisition
+                entries while the account still exists; absent once it
+                is deleted. Readable by whoever may read the entry: its
+                submitter and administrators.
             identifyDeclined:
               type: boolean
               default: false

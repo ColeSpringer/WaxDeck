@@ -178,6 +178,26 @@ class _SealAndReadLost extends _SealsThenDrops {
   }
 }
 
+/// Refuses the seal and every read after it unsent, as a client that no
+/// longer holds the account they were made for does; [onRead] runs at
+/// each read.
+class _SealRefusedUnsent extends FakeRepository {
+  _SealRefusedUnsent({this.onRead});
+
+  final void Function()? onRead;
+
+  @override
+  Future<UploadSession> completeUpload(String uploadId) async =>
+      throw const AccountNotHeldException();
+
+  @override
+  Future<UploadSession> getUpload(String uploadId) async {
+    getUploadCalls++;
+    onRead?.call();
+    throw const AccountNotHeldException();
+  }
+}
+
 /// A link that cannot move a chunk over [fits] bytes inside the stall:
 /// the client cuts such a send as `transport-timeout`. Records every PUT's
 /// size, cut or taken, and runs [onTaken] after each one taken.
@@ -835,6 +855,30 @@ void main() {
       );
     });
 
+    test('a chunk refused for an account this client no longer holds stops '
+        'at once', () async {
+      final repo = FakeRepository();
+      final container = host(repo);
+      await container.read(uploadsProvider.future);
+      var puts = 0;
+      repo.onPutUploadData = () {
+        if (++puts == 2) repo.uploadError = const AccountNotHeldException();
+      };
+
+      await expectLater(
+        start(container),
+        throwsA(isA<AccountNotHeldException>()),
+      );
+
+      final id = repo.uploadsById.keys.single;
+      expect(puts, 2, reason: 'no try after the refusal');
+      expect(repo.getUploadCalls, 0);
+      expect(
+        container.read(liveTransfersProvider)[id]?.status,
+        TransferStatus.stopped,
+      );
+    });
+
     const conflict = WaxDeckApiException(
       code: 'conflict',
       message: 'offset does not match; resume there',
@@ -1156,6 +1200,31 @@ void main() {
         isA<UploadSettled>().having((p) => p.state, 'state', 'staged'),
       );
       expect(repo.reads, 4);
+    });
+
+    test('stops at once when the read after it is refused for an account '
+        'this client no longer holds', () async {
+      var now = Duration.zero;
+      final repo = _SealRefusedUnsent(
+        onRead: () => now += const Duration(minutes: 10),
+      );
+      final c = host(repo, monotonic: () => now);
+      await c.read(uploadsProvider.future);
+      final unreachable = <bool>[];
+      c.listen(liveTransfersProvider, (_, live) {
+        for (final row in c.read(uploadsProvider).value?.uploads ?? []) {
+          if (uploadPhaseOf(row, live[row.id]) case UploadSealing(
+            unreachable: final u,
+          )) {
+            unreachable.add(u);
+          }
+        }
+      });
+
+      await expectLater(upload(c), throwsA(isA<AccountNotHeldException>()));
+      expect(repo.getUploadCalls, 1, reason: 'one read, no wait');
+      expect(unreachable, isNot(contains(true)));
+      expect(phase(c), isA<UploadStalled>());
     });
 
     test('stops for Retry once the seal\'s budget runs out unread', () async {

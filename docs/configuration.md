@@ -61,9 +61,8 @@ Read by compose itself, not the server. Paths resolve beside
   long random string; `make up` generates one, and the stack refuses
   to start without it.
 - `WAXDECK_SEAL_KEY`: a key of WaxSeal's own, used in place of the shared
-  one for that sidecar. WaxSeal takes its key on the command line, where
-  any local user can read it, so on a host with other users a separate
-  key keeps the engine's key out of sight.
+  one for that sidecar, so the WaxSeal container never holds the key
+  that opens the engine.
 - `WAXDECK_ENGINE` and `WAXDECK_SEAL` (default `1`): how many of the
   engine and of WaxSeal run, `1` or `0`. See [What runs beside the
   server](#what-runs-beside-the-server).
@@ -391,8 +390,9 @@ root).
   `WAXDECK_SEAL_URL=http://waxseal:4416` in `.env`, and `0` with an
   empty URL runs without it; the key is the stack's `WAXDECK_INTERNAL_KEY`
   (or `WAXDECK_SEAL_KEY` when set),
-  which compose gives to the daemon as its only tenant key and to
-  WaxDeck as the key it sends, so the two cannot drift apart. Without
+  which compose gives to the daemon as its only tenant key (in
+  `WAXSEAL_TENANT_KEYS`, so `ps` does not show it) and to WaxDeck as
+  the key it sends, so the two cannot drift apart. Without
   the URL acquisitions stay on the key-free path. The container's
   health is the image's own probe, which since WaxSeal v1.3.0 needs no
   key: it
@@ -400,12 +400,15 @@ root).
   from before that answers a keyed daemon 401 and reports unhealthy
   until `docker compose pull waxseal`; the sidecar still serves.
   A daemon YouTube refuses at start, which a datacenter address can
-  meet, restarts without end (its log says `ytcfg visitor_data not
-  available`), and `make up` or `docker compose up -d --wait` then
-  reports it unhealthy with the rest of the stack running; turn it off
-  as above.
+  meet, serves anyway and retries the session in the background (its
+  log says `startup warm-up failed; serving`), and stays healthy while
+  it has none. An image from before WaxSeal 1.6.0 restarts without end
+  instead (`ytcfg visitor_data not available`), which `make up` or
+  `docker compose up -d --wait` reports as unhealthy with the rest of
+  the stack running: `docker compose pull waxseal`, or turn it off as
+  above.
   Compose runs `waxseal:latest`; this release was run against WaxSeal
-  1.5.0.
+  1.6.0.
 
 
   The daemon keeps 12 seconds between an in-page mint and establishing

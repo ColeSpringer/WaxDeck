@@ -185,6 +185,14 @@
   "@errorInvalidRequest": {
     "description": "Error sentence for the spec code `invalid-request`."
   },
+  "errorJobNotHeld": "This server holds no way to stop this job: it was started from the command line, or it runs inside other work. It runs to its end.",
+  "@errorJobNotHeld": {
+    "description": "Error sentence for a cancel refused with `conflict` and the params' reason job-not-held: a running library job this server cannot stop, because the command line submitted it or it runs inline inside a request or another task (one item's enrichment, a watched folder's scan)."
+  },
+  "errorJobRunsToEnd": "This job runs to its end, so it cannot be canceled.",
+  "@errorJobRunsToEnd": {
+    "description": "Error sentence for a cancel refused with `conflict` and the params' reason job-runs-to-end: a library job that always finishes once started (a kind change, a library removal, an organize run, or the rescan that applies a library's new media type)."
+  },
   "errorLocalChannelOffline": "WaxDeck lost its live connection to the server. It reconnects on its own; try again in a moment.",
   "@errorLocalChannelOffline": {
     "description": "Error sentence for the client's own `local-channel-offline` code: the event socket this device controls playback over is down. Nothing outside WaxDeck failed."

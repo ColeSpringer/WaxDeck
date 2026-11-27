@@ -187,8 +187,10 @@ class PrefsController extends AsyncNotifier<Prefs> {
     bool validated = false,
   }) {
     // The account the write is for: whoever the session names now, which
-    // runs ahead of this provider across an account change.
+    // runs ahead of this provider across an account change. Its PUT goes
+    // through that account's repository, whenever its turn comes.
     final signedIn = ref.read(authControllerProvider).value?.user?.id;
+    final repository = ref.read(repositoryProvider);
     // Published here, synchronously with the call, and not only from
     // the body below. The body is deferred, and an invalidation can
     // arrive before it has started - the server's echo of the previous
@@ -273,7 +275,7 @@ class PrefsController extends AsyncNotifier<Prefs> {
             }
           }
           try {
-            final stored = await ref.read(repositoryProvider).putPrefs(next);
+            final stored = await repository.putPrefs(next);
             // An answer for an account that has gone is not this one's
             // confirmed document.
             if (_storedFor != account) return;

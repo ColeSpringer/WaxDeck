@@ -388,6 +388,10 @@ final catalogRule = CatalogRule(
         },
       ),
       'clearFinishedJobs': 'clears finished jobs from the caller\'s list',
+      'cancelJob':
+          'stops a scan, an analysis or an enrichment between files: what '
+          'it wrote before it stopped reaches the client through the '
+          'server\'s catalog hints, as a finished one\'s does',
       ..._each(_serverSetting, {
         'putAdminSettings',
         'putTranscodingLimits',

@@ -1001,6 +1001,29 @@ func (s *Server) GetJob(ctx context.Context, req GetJobRequestObject) (GetJobRes
 	return GetJob200JSONResponse(jobJSON(job)), nil
 }
 
+// CancelJob asks a catalog job to stop and answers it as it then stands;
+// a refusal (another's, a job that runs to its end) is the service's. A
+// timeline measurement answers its owner as getJob does, and runs to its
+// end.
+func (s *Server) CancelJob(ctx context.Context, req CancelJobRequestObject) (CancelJobResponseObject, error) {
+	uc := userCtx(ctx)
+	p, _ := principalFromContext(ctx)
+	if s.bridge != nil {
+		if state, ok := s.bridge.TimelineJob(ctx, p.User.ID, req.Pid); ok {
+			if state == "queued" || state == "running" {
+				return nil, refuseParams(http.StatusConflict, "conflict", "a timeline measurement runs to its end",
+					map[string]string{"reason": "job-runs-to-end"})
+			}
+			return CancelJob200JSONResponse(Job{Pid: req.Pid, Kind: "timeline", State: state}), nil
+		}
+	}
+	job, err := s.svc.Jobs.CancelFor(ctx, uc, req.Pid)
+	if err != nil {
+		return nil, err
+	}
+	return CancelJob200JSONResponse(jobJSON(job)), nil
+}
+
 // --- playback --------------------------------------------------------------------
 
 func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) (GetPlayInfoResponseObject, error) {
@@ -1367,7 +1390,7 @@ func itemJSON(d service.ItemDetail) Item {
 }
 
 func jobJSON(j service.Job) Job {
-	out := Job{Pid: j.PID, Kind: j.Kind, State: j.State}
+	out := Job{Pid: j.PID, Kind: j.Kind, State: j.State, Cancelable: j.Cancelable, CancelRequested: j.CancelRequested}
 	if j.Progress > 0 {
 		out.Progress = ptr(j.Progress)
 	}

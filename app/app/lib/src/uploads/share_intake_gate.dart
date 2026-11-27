@@ -66,6 +66,8 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
     // and its `ref`, away. The messenger keeps the session that shared.
     final container = ProviderScope.containerOf(context, listen: false);
     final messenger = container.read(shellMessengerProvider);
+    // The sharing account's, for every file: a swap stops the run.
+    final repository = container.read(repositoryProvider);
     // Held beside the messenger and for the same reason: the loop below
     // outlives this frame.
     final l10n = context.l10n;
@@ -92,13 +94,11 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
     String? batchId;
     if (files.length > 1) {
       try {
-        final batch = await container
-            .read(repositoryProvider)
-            .createUploadBatch(
-              grouping: UploadGrouping.auto,
-              mediaType: kind.wireName,
-              libraryPid: libraryPid,
-            );
+        final batch = await repository.createUploadBatch(
+          grouping: UploadGrouping.auto,
+          mediaType: kind.wireName,
+          libraryPid: libraryPid,
+        );
         batchId = batch.id;
       } on WaxDeckApiException catch (e) {
         messenger.show(explainError(l10n, e), channel: ShellChannel.uploads);
@@ -124,6 +124,7 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
               libraryPid: libraryPid,
               batchId: batchId,
               sizeBytes: size,
+              through: repository,
             );
       } on WaxDeckApiException catch (e) {
         messenger.show(
@@ -142,7 +143,7 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
     }
     if (batchId != null) {
       try {
-        await container.read(repositoryProvider).completeUploadBatch(batchId);
+        await repository.completeUploadBatch(batchId);
       } on WaxDeckApiException catch (e) {
         messenger.show(explainError(l10n, e), channel: ShellChannel.uploads);
       }

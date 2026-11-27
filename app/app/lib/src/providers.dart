@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
+import 'auth/auth_controller.dart';
 import 'auth/credential_store.dart';
 import 'connectivity/connectivity_port.dart';
 import 'fonts_warmup.dart';
+import 'sync/session_gate.dart';
 import 'sync/test_env/test_env.dart';
 import 'auth/loopback/loopback.dart';
 import 'auth/oidc_flow.dart';
@@ -120,16 +122,29 @@ final serverConfiguredProvider = Provider<bool>(
   (ref) => kIsWeb || ref.watch(serverAddressProvider) != null,
 );
 
-/// The one API repository. Tests override this with a fake.
+/// Where a browser's session holds the API transport while it is in
+/// doubt; bound by the sync binder there, and by nothing natively.
+final sessionGateProvider = Provider<SessionGate>((_) => SessionGate());
+
+/// The one API client: the transport and the credentials every repository
+/// view sends through, and what the session's own road calls (the sign-in
+/// routes, the session reads, the revoke a sign-out owes), which no one
+/// account's view carries. Tests override this with a fake.
 ///
 /// The transport carries the font-warmup interceptor: every response is
 /// where library metadata first arrives, so the deferred script faces
 /// (the deferred scripts) start loading before any screen lays the
-/// text out, with no per-screen wiring to forget. Rebuilt whenever the
-/// server address moves; everything downstream watches this and
-/// cascades.
-final repositoryProvider = Provider<WaxDeckRepository>((ref) {
-  final dio = Dio()..interceptors.add(FontWarmupInterceptor());
+/// text out, with no per-screen wiring to forget. It carries the session
+/// gate too, ahead of the client's own credentials, so a request it held
+/// goes with the credentials of the session that answered. Rebuilt
+/// whenever the server address moves; everything downstream watches this
+/// and cascades.
+final apiClientProvider = Provider<WaxDeckRepository>((ref) {
+  final dio = Dio()
+    ..interceptors.addAll([
+      FontWarmupInterceptor(),
+      SessionGateInterceptor(ref.watch(sessionGateProvider)),
+    ]);
   final adapter = ref.watch(httpAdapterProvider);
   if (adapter != null) dio.httpClientAdapter = adapter;
   // A rebuild (the server address moved) replaces the transport; the
@@ -137,6 +152,21 @@ final repositoryProvider = Provider<WaxDeckRepository>((ref) {
   // adapter is its owner's, and the next build uses it again.
   if (adapter == null) ref.onDispose(dio.close);
   return WaxDeckClient(baseUrl: ref.watch(serverBaseUrlProvider), dio: dio);
+});
+
+/// The repository signed-in code reads: the client as the signed-in
+/// account's view, so every call made through it carries that account, and
+/// what work that outlives the account sends through it (a loop carried on
+/// past a swap, a write queued behind a slow one) is refused unsent once
+/// the client holds another. Signed out, the client itself; a repository
+/// that lends no account's credentials (a test's fake) as it is.
+final repositoryProvider = Provider<WaxDeckRepository>((ref) {
+  final client = ref.watch(apiClientProvider);
+  if (client case final AccountCredentials credentials) {
+    final account = ref.watch(signedInAccountProvider);
+    if (account != null) return credentials.forAccount(account);
+  }
+  return client;
 });
 
 /// What the API transport sends through: null is Dio's own, which every
@@ -218,7 +248,7 @@ final shareIntakeProvider = Provider<ShareIntakePort>(
 /// The OIDC client flow with its platform ports plugged in.
 final oidcFlowProvider = Provider<OidcLoginFlow>(
   (ref) => OidcLoginFlow(
-    repository: ref.watch(repositoryProvider),
+    repository: ref.watch(apiClientProvider),
     urlOpener: ref.watch(urlOpenerProvider),
     deepLinks: ref.watch(deepLinkProvider),
     bindLoopbackReceiver: bindLoopbackReceiver,

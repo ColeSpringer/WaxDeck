@@ -13,6 +13,7 @@ import '../providers.dart';
 import '../queue/queue_persistence.dart';
 import '../radio/radio_controller.dart';
 import '../search/search_controller.dart';
+import '../sync/session_gate.dart';
 import 'credential_store.dart';
 import 'oidc_flow.dart';
 import 'owed_revoke.dart';
@@ -27,7 +28,7 @@ final bootstrapStatusProvider = FutureProvider<BootstrapStatus>((ref) {
   if (!ref.watch(serverConfiguredProvider)) {
     return const BootstrapStatus(required: false);
   }
-  return ref.watch(repositoryProvider).bootstrapStatus();
+  return ref.watch(apiClientProvider).bootstrapStatus();
 }, retry: retryUnlessRefused);
 
 /// Whether the server is waiting for its first administrator.
@@ -162,7 +163,7 @@ class AuthController extends AsyncNotifier<SessionState> {
     if (!ref.watch(serverConfiguredProvider)) {
       return const SessionState(authenticated: false);
     }
-    final repo = ref.watch(repositoryProvider);
+    final repo = ref.watch(apiClientProvider);
     final store = ref.watch(credentialStoreProvider);
     final rotation = _rotation;
     var restored = false;
@@ -207,6 +208,9 @@ class AuthController extends AsyncNotifier<SessionState> {
         if (!_current(built)) return _overtaken();
         _unconfirmed = true;
         _listenForAnswer(built);
+        // The bearer restored is that account's: what its screens send is
+        // made for it.
+        _shows(remembered);
         ref.read(playbackHeldProvider.notifier).release();
         return remembered;
       }
@@ -257,9 +261,19 @@ class AuthController extends AsyncNotifier<SessionState> {
     // a sign-in does: a build can land in the middle of a swap and drop
     // the tail that would have.
     if (session.authenticated) {
+      _shows(session);
       ref.read(playbackHeldProvider.notifier).release();
     }
     return session;
+  }
+
+  /// Tells the client [session] shows from now: what a session read found
+  /// for its account is lent from here on, and nothing made for the
+  /// account before goes out.
+  void _shows(SessionState session) {
+    if (ref.read(apiClientProvider) case final AccountCredentials client) {
+      client.shows(session);
+    }
   }
 
   /// Whether the build, sign-in or swap that counted [taken] is still the
@@ -329,7 +343,7 @@ class AuthController extends AsyncNotifier<SessionState> {
   /// cookie, is never kept.
   void _remember(SessionState session) {
     if (kIsWeb) return;
-    final token = ref.read(repositoryProvider).authToken;
+    final token = ref.read(apiClientProvider).authToken;
     if (token == null) return;
     _keep(ref.read(credentialStoreProvider), token, session);
   }
@@ -350,7 +364,7 @@ class AuthController extends AsyncNotifier<SessionState> {
   /// a server, and a proxy can pass requests and not the upgrade. A
   /// session read's own answer is not such a request.
   void _listenForAnswer(int asked) {
-    if (ref.read(repositoryProvider) case final ServerAnswers server) {
+    if (ref.read(apiClientProvider) case final ServerAnswers server) {
       _listening = server;
       server.onNextAnswer = () {
         if (!_awaited(asked)) return;
@@ -423,7 +437,7 @@ class AuthController extends AsyncNotifier<SessionState> {
     _noLongerUnconfirmed();
     unawaited(
       _rotateStoredToken(
-        ref.read(repositoryProvider),
+        ref.read(apiClientProvider),
         ref.read(credentialStoreProvider),
       ),
     );
@@ -506,7 +520,7 @@ class AuthController extends AsyncNotifier<SessionState> {
   /// could start its leaving a second time.
   Future<SessionRecheck> refreshSession() async {
     if (_leaving > 0) return SessionRecheck.left;
-    final repo = ref.read(repositoryProvider);
+    final repo = ref.read(apiClientProvider);
     return _settle(
       repo.getSession,
       _account,
@@ -547,6 +561,7 @@ class AuthController extends AsyncNotifier<SessionState> {
         if (!await _swapTo(session)) return _holding(askedFor);
         return SessionRecheck.left;
       }
+      _shows(session);
       state = AsyncData(session);
       _answered(session);
       return SessionRecheck.stands;
@@ -581,6 +596,9 @@ class AuthController extends AsyncNotifier<SessionState> {
     // awaited, as [_remember]'s write is not.
     if (!kIsWeb) ref.read(credentialStoreProvider).clearSession().ignore();
     if (!await _seenOut(adopting)) return false;
+    // Only now: what the leaving account's screens sent until here went
+    // with its own credentials, which the server refuses.
+    _shows(session);
     ref.read(playbackHeldProvider.notifier).release();
     state = AsyncData(session);
     _answered(session);
@@ -723,13 +741,17 @@ class AuthController extends AsyncNotifier<SessionState> {
     if (_revoking case final out?) {
       return out.then<void>((_) => ref.mounted ? _owedRevoke() : null);
     }
-    return _sending(_revoke(owed, ref.read(repositoryProvider)));
+    final repo = ref.read(apiClientProvider);
+    return _sending(() => _revoke(owed, repo));
   }
 
-  /// [revoke], as the one on its way until it lands.
-  Future<void> _sending(Future<void> revoke) {
+  /// [revoke], as the one on its way until it lands. Session work, as a
+  /// sign-in's ask is: a session read joins either. A sign-out under way
+  /// it never joins (`_signOut` moves [_account] and [_leaving] as it
+  /// starts, which a read checks before it signs out): that is unmarked.
+  Future<void> _sending(Future<void> Function() revoke) {
     late final Future<void> out;
-    out = revoke.whenComplete(() {
+    out = asSessionWork(revoke).whenComplete(() {
       if (identical(_revoking, out)) _revoking = null;
     });
     return _revoking = out;
@@ -758,7 +780,11 @@ class AuthController extends AsyncNotifier<SessionState> {
         if (presented.authenticated) {
           final held = presented.sessionId;
           heldElsewhere = held != null && held != named;
-          await repo.revokeSession(named);
+          if (repo case final AccountCredentials client) {
+            await client.revokeOwedSession(named);
+          } else {
+            await repo.revokeSession(named);
+          }
         }
         owed.release(named);
       }
@@ -788,7 +814,7 @@ class AuthController extends AsyncNotifier<SessionState> {
     final mark = owed.mark;
     if (mark == null || owed.session != null) return;
     try {
-      final presented = await ref.read(repositoryProvider).getSession();
+      final presented = await ref.read(apiClientProvider).getSession();
       if (!ref.mounted || owed.mark != mark) return;
       owed.hold(presented.sessionId);
       if (!presented.authenticated) {
@@ -814,7 +840,7 @@ class AuthController extends AsyncNotifier<SessionState> {
     bool delivered = false,
   }) async {
     final owed = ref.read(owedRevokeProvider);
-    final repo = ref.read(repositoryProvider);
+    final repo = ref.read(apiClientProvider);
     final revoke = delivered ? null : _owedRevoke();
     if (revoke != null) {
       try {
@@ -830,7 +856,7 @@ class AuthController extends AsyncNotifier<SessionState> {
     final bool undone;
     _signIns++;
     try {
-      result = await ask();
+      result = await asSessionWork(ask);
       // A sign-out pressed while this was out is the later intent: the
       // session this made goes too.
       undone = _presses != pressed;
@@ -887,7 +913,7 @@ class AuthController extends AsyncNotifier<SessionState> {
       // The client takes up no sign-in a sign-out was asked across, and
       // one not pressed (a session the server ended, a stored token found
       // dead) does not undo this one.
-      ref.read(repositoryProvider).authToken = result.token;
+      ref.read(apiClientProvider).authToken = result.token;
       // The token, then who the server said it is, kept as that token's.
       // Two writes, and either can fail alone: a session one of them left
       // from the last token is not read as this one's. Overtaken at
@@ -906,6 +932,7 @@ class AuthController extends AsyncNotifier<SessionState> {
     final way = _wayFor(adopting, session);
     if (way != null) await way;
     if (!_current(adopting)) return false;
+    _shows(session);
     // Not before: a play started from screens on their way out would
     // outlive them.
     ref.read(playbackHeldProvider.notifier).release();
@@ -919,7 +946,7 @@ class AuthController extends AsyncNotifier<SessionState> {
   Future<bool> login({required String username, required String password}) =>
       _signIn(
         () => ref
-            .read(repositoryProvider)
+            .read(apiClientProvider)
             .login(
               username: username,
               password: password,
@@ -934,7 +961,7 @@ class AuthController extends AsyncNotifier<SessionState> {
     String? displayName,
   }) => _signIn(
     () => ref
-        .read(repositoryProvider)
+        .read(apiClientProvider)
         .bootstrap(
           username: username,
           password: password,
@@ -1006,7 +1033,7 @@ class AuthController extends AsyncNotifier<SessionState> {
   Future<void> logout() async {
     _presses++;
     final owed = ref.read(owedRevokeProvider);
-    final repo = ref.read(repositoryProvider);
+    final repo = ref.read(apiClientProvider);
     final Future<void> heard;
     if (owed.keeps) {
       // A browser's session is the server's cookie, which only the server
@@ -1015,7 +1042,8 @@ class AuthController extends AsyncNotifier<SessionState> {
       // when that is known, which it is not while a sign-in is out, since
       // its answer may replace the cookie at any moment.
       final mark = owed.owe(_signIns > 0 ? null : owed.held);
-      heard = _sending(_signOutHeard(repo, owed, mark, _revoking));
+      final before = _revoking;
+      heard = _sending(() => _signOutHeard(repo, owed, mark, before));
     } else {
       // Asked before the local sign-out drops the token it presents.
       heard = repo.logout();
@@ -1073,7 +1101,7 @@ class AuthController extends AsyncNotifier<SessionState> {
     _leaving++;
     try {
       _noLongerUnconfirmed();
-      ref.read(repositoryProvider).authToken = null;
+      ref.read(apiClientProvider).authToken = null;
       if (!kIsWeb) {
         await ref.read(credentialStoreProvider).clearToken();
       }

@@ -573,15 +573,15 @@ func TestAFixTaskThatGaveUpTellsItsStarter(t *testing.T) {
 func TestAFixJobThatCouldNotRecheckSaysSo(t *testing.T) {
 	t.Parallel()
 	done := Job{State: string(model.JobDone)}
-	if got := healthFixJobBody(done, healthRecheck{passing: 3, failing: 1}, nil); got != "Filled 3 of 4; 1 still missing" {
+	if got := healthFixJobBody(done, healthRecheck{passing: 3, failing: 1}, nil, false); got != "Filled 3 of 4; 1 still missing" {
 		t.Errorf("landed = %q", got)
 	}
-	got := healthFixJobBody(done, healthRecheck{}, errors.New("the catalog went away"))
+	got := healthFixJobBody(done, healthRecheck{}, errors.New("the catalog went away"), false)
 	if strings.Contains(got, "Filled") || !strings.Contains(got, "could not be re-checked") {
 		t.Errorf("unchecked = %q, want the failed re-check and no counts", got)
 	}
 	failed := Job{State: string(model.JobFailed), Error: "the disk went away"}
-	if got := healthFixJobBody(failed, healthRecheck{passing: 1}, nil); !strings.HasPrefix(got, "The enrichment pass failed (the disk went away). ") {
+	if got := healthFixJobBody(failed, healthRecheck{passing: 1}, nil, false); !strings.HasPrefix(got, "The enrichment pass failed (the disk went away). ") {
 		t.Errorf("failed = %q", got)
 	}
 }

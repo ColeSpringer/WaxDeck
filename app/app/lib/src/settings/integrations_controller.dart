@@ -106,9 +106,10 @@ final appPasswordsProvider =
       AppPasswordsController.new,
     );
 
-/// The notification event catalog, for the per-target checklist.
+/// The notification event catalog, for the per-target checklist: the
+/// server's, the same for every account, so read through the client.
 final notifyEventCatalogProvider = FutureProvider<List<NotifyEvent>>(
-  (ref) => ref.watch(repositoryProvider).listNotificationEvents(),
+  (ref) => ref.watch(apiClientProvider).listNotificationEvents(),
 );
 
 /// The mutation surface a notification target list drives, shared by

@@ -24,7 +24,8 @@ import 'upload_phase.dart';
 final uploadFormatSetsProvider = FutureProvider<UploadFormatSets>(
   retry: (_, _) => null,
   (ref) async {
-    final health = await ref.watch(repositoryProvider).health();
+    // The client, not an account's view: the same for every account.
+    final health = await ref.watch(apiClientProvider).health();
     return UploadFormatSets(
       accepted: switch (health.uploadFormats) {
         final formats? when formats.isNotEmpty => formats.toSet(),
@@ -398,7 +399,9 @@ class UploadsController extends AsyncNotifier<UploadsState>
   /// submission's identification choice, which a batch overrides with
   /// its own; [acceptBestMatch] likewise, and only music identified can
   /// act on it. Answers false for one discarded while it was sent, which
-  /// is no failure and was not uploaded.
+  /// is no failure and was not uploaded. [through] is the repository of
+  /// the run it belongs to, whose account every call of it is made for;
+  /// without one, the signed-in account's.
   Future<bool> uploadPicked(
     PickedAudioFile file, {
     required String mediaType,
@@ -406,6 +409,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
     String? batchId,
     bool? identify,
     bool? acceptBestMatch,
+    WaxDeckRepository? through,
   }) async {
     final path = file.path;
     if (path != null) {
@@ -419,6 +423,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
         sizeBytes: file.size,
         identify: identify,
         acceptBestMatch: acceptBestMatch,
+        through: through,
       );
     }
     final openRead = file.openRead;
@@ -435,6 +440,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
       batchPath: file.relativeDir,
       identify: identify,
       acceptBestMatch: acceptBestMatch,
+      through: through,
     );
   }
 
@@ -445,6 +451,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
   /// failure itself propagates to the caller since no row exists yet.
   /// [sizeBytes] skips a redundant stat when the pick already measured
   /// the file. Answers false for one discarded while it was sent.
+  /// [through] is [uploadPicked]'s.
   Future<bool> uploadFromPath({
     required String fileName,
     required String path,
@@ -455,9 +462,13 @@ class UploadsController extends AsyncNotifier<UploadsState>
     int? sizeBytes,
     bool? identify,
     bool? acceptBestMatch,
+    WaxDeckRepository? through,
   }) async {
+    final WaxDeckRepository repository =
+        through ?? ref.read(repositoryProvider);
     final size = sizeBytes ?? await localFileLength(path);
     final session = await _open(
+      repository,
       fileName: fileName,
       size: size,
       mediaType: mediaType,
@@ -471,7 +482,14 @@ class UploadsController extends AsyncNotifier<UploadsState>
     ref.read(_retryPathsProvider)[session.id] = path;
     return _asSend(
       session.id,
-      (send) => _transferFromPath(session.id, path, size, from: 0, send: send),
+      (send) => _transferFromPath(
+        repository,
+        session.id,
+        path,
+        size,
+        from: 0,
+        send: send,
+      ),
     );
   }
 
@@ -479,7 +497,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
   /// and streams it up in [chunkBytes] windows pulled lazily from the
   /// accessor - only the window in flight materializes. Failure
   /// handling matches [uploadFromPath], with the accessor retained
-  /// for [retry].
+  /// for [retry]. [through] is [uploadPicked]'s.
   Future<bool> uploadFromReader({
     required String fileName,
     required int size,
@@ -490,8 +508,12 @@ class UploadsController extends AsyncNotifier<UploadsState>
     String? batchPath,
     bool? identify,
     bool? acceptBestMatch,
+    WaxDeckRepository? through,
   }) async {
+    final WaxDeckRepository repository =
+        through ?? ref.read(repositoryProvider);
     final session = await _open(
+      repository,
       fileName: fileName,
       size: size,
       mediaType: mediaType,
@@ -505,15 +527,22 @@ class UploadsController extends AsyncNotifier<UploadsState>
     ref.read(_retryReadersProvider)[session.id] = openRead;
     return _asSend(
       session.id,
-      (send) =>
-          _transferFromReader(session.id, openRead, size, from: 0, send: send),
+      (send) => _transferFromReader(
+        repository,
+        session.id,
+        openRead,
+        size,
+        from: 0,
+        send: send,
+      ),
     );
   }
 
   /// Creates a session, counted in [uploadCreatesProvider] until its
   /// transfer has started: before that the row has no live entry, and the
   /// server's event for the create can list it first.
-  Future<UploadSession> _open({
+  Future<UploadSession> _open(
+    WaxDeckRepository repository, {
     required String fileName,
     required int size,
     required String mediaType,
@@ -530,18 +559,16 @@ class UploadsController extends AsyncNotifier<UploadsState>
         for (final u in state.value?.uploads ?? const <UploadSession>[]) u.id,
       ]);
     try {
-      final session = await ref
-          .read(repositoryProvider)
-          .createUpload(
-            fileName: fileName,
-            sizeBytes: size,
-            mediaType: mediaType,
-            libraryPid: libraryPid,
-            batchId: batchId,
-            batchPath: _cleanBatchPath(batchId, batchPath),
-            identify: identify,
-            acceptBestMatch: acceptBestMatch,
-          );
+      final session = await repository.createUpload(
+        fileName: fileName,
+        sizeBytes: size,
+        mediaType: mediaType,
+        libraryPid: libraryPid,
+        batchId: batchId,
+        batchPath: _cleanBatchPath(batchId, batchPath),
+        identify: identify,
+        acceptBestMatch: acceptBestMatch,
+      );
       _emit(session.id, const TransferStarted(0));
       return session;
     } finally {
@@ -576,8 +603,9 @@ class UploadsController extends AsyncNotifier<UploadsState>
       _emit(uploadId, TransferStarted(live?.sent ?? 0));
       final UploadSession session;
       final int size;
+      final repository = ref.read(repositoryProvider);
       try {
-        session = await ref.read(repositoryProvider).getUpload(uploadId);
+        session = await repository.getUpload(uploadId);
         if (session.state != 'receiving') {
           _forgetSource(uploadId);
           _emit(uploadId, const Ended());
@@ -606,6 +634,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
       if (!_sending(uploadId, send)) return false;
       return path != null
           ? _transferFromPath(
+              repository,
               uploadId,
               path,
               size,
@@ -613,6 +642,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
               send: send,
             )
           : _transferFromReader(
+              repository,
               uploadId,
               openRead!,
               size,
@@ -644,12 +674,14 @@ class UploadsController extends AsyncNotifier<UploadsState>
   }
 
   Future<bool> _transferFromPath(
+    WaxDeckRepository repository,
     String uploadId,
     String path,
     int size, {
     required int from,
     required Object send,
   }) => _transferWindows(
+    repository,
     uploadId,
     size,
     from: from,
@@ -659,12 +691,14 @@ class UploadsController extends AsyncNotifier<UploadsState>
   );
 
   Future<bool> _transferFromReader(
+    WaxDeckRepository repository,
     String uploadId,
     Stream<List<int>> Function([int? start, int? end]) openRead,
     int size, {
     required int from,
     required Object send,
   }) => _transferWindows(
+    repository,
     uploadId,
     size,
     from: from,
@@ -682,6 +716,7 @@ class UploadsController extends AsyncNotifier<UploadsState>
   /// away, and the loop stops with it: nothing more is sent or applied,
   /// and it answers false.
   Future<bool> _transferWindows(
+    WaxDeckRepository repository,
     String uploadId,
     int size, {
     required int from,
@@ -690,7 +725,6 @@ class UploadsController extends AsyncNotifier<UploadsState>
     required Object send,
   }) async {
     bool sending() => _sending(uploadId, send);
-    final repository = ref.read(repositoryProvider);
     final backoff = ref.read(uploadRetryBackoffProvider);
     final clock = ref.read(monotonicClockProvider);
     _emit(uploadId, TransferStarted(from));
@@ -809,8 +843,11 @@ class UploadsController extends AsyncNotifier<UploadsState>
   }
 
   /// Whether a chunk failure is the wire rather than an answer: no
-  /// response, a server error, or a busy catalog.
+  /// response, a server error, or a busy catalog. A request refused unsent
+  /// for an account this client no longer holds is none: it can never go,
+  /// so the row stops as failed, and leaves with that account's list.
   static bool _transient(Object e) => switch (e) {
+    AccountNotHeldException() => false,
     WaxDeckApiException(statusCode: null) => true,
     WaxDeckApiException(statusCode: final status?) when status >= 500 => true,
     WaxDeckApiException(:final code) when code == 'catalog-busy' => true,

@@ -522,6 +522,18 @@
   "@toolsJobAnalyze": {
     "description": "Name of a catalog job that fingerprints files and measures their loudness."
   },
+  "toolsJobCancelAction": "Cancel job",
+  "@toolsJobCancelAction": {
+    "description": "Confirm button of the dialog that asks before canceling a running library job (a scan, an audio analysis or an enrichment pass)."
+  },
+  "toolsJobCancelBody": "What it has done stays, and its next run carries on from there. A forced run does not resume: start it again.",
+  "@toolsJobCancelBody": {
+    "description": "Body of the dialog that asks before canceling a running library job: what a cancel keeps. A canceled scan, analysis or enrichment keeps what it did. An ordinary run is carried on by the next one; a forced run (a rescan that re-reads every file, an enrichment that asks again) is not resumed, so the administrator starts it again to finish it."
+  },
+  "toolsJobCancelTitle": "Cancel this job?",
+  "@toolsJobCancelTitle": {
+    "description": "Title of the dialog that asks before canceling a running library job."
+  },
   "toolsJobDelete": "Delete",
   "@toolsJobDelete": {
     "description": "Name of a catalog job that deletes files from the library."
@@ -681,11 +693,11 @@
   },
   "toolsStateCanceled": "Stopped",
   "@toolsStateCanceled": {
-    "description": "State of a job the server stopped before it finished, as it shut down or restarted. Agrees with the word for a task in this language."
+    "description": "State of a job that stopped before it finished: an administrator canceled it, or the server shut down or restarted. Agrees with the word for a task in this language."
   },
   "toolsStateCanceling": "Canceling",
   "@toolsStateCanceling": {
-    "description": "State of a running task that was asked to cancel and is winding down. It then ends canceled, or done when it finished first."
+    "description": "State of a running task or library job that was asked to cancel and is winding down. A task then ends canceled, a library job stopped, or either done when it finished first."
   },
   "toolsStateCrashed": "Crashed",
   "@toolsStateCrashed": {

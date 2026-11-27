@@ -319,6 +319,28 @@ extension ToolTaskX on ToolTask {
       state == 'failed' ||
       state == 'canceled' ||
       state == 'parked';
+
+  /// The task as asked to stop, all else as it is.
+  ToolTask withCancelRequested() => ToolTask(
+    id: id,
+    type: type,
+    state: state,
+    createdAt: createdAt,
+    cancelRequested: true,
+    itemPid: itemPid,
+    itemTitle: itemTitle,
+    progressPct: progressPct,
+    activity: activity,
+    error: error,
+    errorCode: errorCode,
+    errorParams: errorParams,
+    waitReason: waitReason,
+    retryAt: retryAt,
+    bookInTrash: bookInTrash,
+    resultPids: resultPids,
+    finishedAt: finishedAt,
+    summary: summary,
+  );
 }
 
 extension SignupResultX on SignupResult {
@@ -359,6 +381,22 @@ extension JobX on Job {
     'done' || 'failed' || 'crashed' || 'canceled' => true,
     _ => false,
   };
+
+  /// The job as asked to stop, all else as it is.
+  Job withCancelRequested() => Job(
+    pid: pid,
+    kind: kind,
+    state: state,
+    cancelable: cancelable,
+    cancelRequested: true,
+    progress: progress,
+    message: message,
+    error: error,
+    startedAt: startedAt,
+    finishedAt: finishedAt,
+    result: result,
+    target: target,
+  );
 }
 
 extension DeleteItemsResultX on DeleteItemsResult {

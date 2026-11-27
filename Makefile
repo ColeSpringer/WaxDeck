@@ -375,7 +375,7 @@ up: deploy/.env preflight images
 	   echo "make up: this Docker cannot share the host network; the stack runs on the project network (no cast discovery)"; \
 	   printf '%s\n' 'services:' '  waxdeck:' '    network_mode: !reset null' '    extra_hosts: !reset []' '    ports: ["4420:4420"]' \
 	     '  waxflow:' '    network_mode: !reset null' '    environment:' '      WAXFLOW_ADDR: 0.0.0.0:4418' \
-	     '  waxseal:' '    network_mode: !reset null' '    command: ["server", "--host", "0.0.0.0", "--tenant-keys", "$${WAXDECK_SEAL_KEY:-$${WAXDECK_INTERNAL_KEY:-}}"]' \
+	     '  waxseal:' '    network_mode: !reset null' '    command: ["server", "--host", "0.0.0.0"]' \
 	     | env $$ids $(DEV_TAGS) $(COMPOSE) -f - up -d --wait; \
 	 else \
 	   env $$ids $(DEV_TAGS) $(COMPOSE) up -d --wait; \

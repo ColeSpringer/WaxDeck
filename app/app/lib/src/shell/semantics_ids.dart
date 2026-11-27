@@ -1038,6 +1038,8 @@ abstract final class SemanticsIds {
       'yir-top-$kind-$index';
 
   // tools: Long-running tools and their progress rows.
+  static String jobCancel(Object pid) => 'job-cancel-$pid';
+  static const String jobCancelConfirm = 'job-cancel-confirm';
   static String jobRow(Object pid) => 'job-row-$pid';
   static const String openTasks = 'open-tasks';
   static String taskCancel(Object id) => 'task-cancel-$id';

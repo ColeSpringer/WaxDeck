@@ -35,8 +35,11 @@ bool _sameArtSource(ArtSource? a, ArtSource? b) {
 
 class RadioStationsController extends AsyncNotifier<List<RadioStation>> {
   @override
+  // The client, not an account's view: every account lists the same
+  // stations, so an account change reads nothing again. Writes go as the
+  // account that made them.
   Future<List<RadioStation>> build() =>
-      ref.watch(repositoryProvider).listRadioStations();
+      ref.watch(apiClientProvider).listRadioStations();
 
   /// Adds a station and reloads. Errors propagate so dialogs surface the
   /// server's message (duplicate stream URLs, refused private hosts).
@@ -785,6 +788,8 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
     final held = state;
     final wasSaved = held.nowPlayingSaved;
     final heldPid = held.nowPlayingSavedPid;
+    // The tapping account's, past the wait below.
+    final repository = ref.read(repositoryProvider);
     state = held.withSaved(saved: !wasSaved);
     try {
       if (wasSaved) {
@@ -795,13 +800,14 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
         // stays kept - the opposite of what the last tap asked for.
         final pid = heldPid ?? await _pendingSavePID(line);
         if (pid != null) {
-          await ref.read(repositoryProvider).deleteRadioSavedSong(pid);
+          await repository.deleteRadioSavedSong(pid);
           _noteSavedList((list) => list.noteRemoved(pid));
         }
       } else {
-        final save = ref
-            .read(repositoryProvider)
-            .saveRadioSong(stationPid: station.pid, nowPlaying: line);
+        final save = repository.saveRadioSong(
+          stationPid: station.pid,
+          nowPlaying: line,
+        );
         _pendingSave = (line: line, save: save);
         try {
           final song = await save;

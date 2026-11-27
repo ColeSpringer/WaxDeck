@@ -215,7 +215,13 @@ info:
       stays; and a cancel of a book merge or split, or a CUE split, that
       has started moving library files carries `reason: task-committed`:
       it can no longer be canceled, and finishes, or puts things back, on
-      its own. Under `source-refused`, `reason` says why, one of
+      its own; and a cancel of a running catalog job this server cannot
+      stop carries `reason: job-runs-to-end` (a job that always runs to
+      its end: one of a kind that does, or a library's rescan after its
+      media changed) or `reason: job-not-held` (a job this server
+      process holds no way to stop: one the command line submitted, or
+      one run inside a request or another task). Under `source-refused`,
+      `reason` says why, one of
       `playlist-unavailable` (private or deleted), `playlist-empty`,
       `video-private` (sign-in required), `video-unavailable` (removed),
       `age-restricted`, `region-blocked`, `members-only`, `live`,

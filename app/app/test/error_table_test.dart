@@ -285,6 +285,8 @@ void main() {
         ('no-sheet', en.errorCueSplitNoSheet),
         ('task-running', en.errorToolTaskRunning),
         ('task-parked', en.errorToolTaskParked),
+        ('job-runs-to-end', en.errorJobRunsToEnd),
+        ('job-not-held', en.errorJobNotHeld),
       ]) {
         expect(explainError(en, refusal({'reason': reason})), sentence);
       }

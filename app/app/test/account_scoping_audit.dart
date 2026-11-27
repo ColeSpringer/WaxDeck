@@ -6,13 +6,15 @@ import 'analysis_host.dart';
 /// A kept-alive provider that fetches per-account rows must be keyed on the
 /// account.
 ///
-/// The repository moves only with the server, so a second account signing
-/// in on the same server leaves every kept-alive provider holding the
-/// first one's rows unless its build watches `signedInAccountProvider`.
+/// The app's client is viewed per account, but a fake repository moves only
+/// with the server, as does a provider that reads the repository rather
+/// than watching it: a second account signing in on the same server leaves
+/// such a kept-alive provider holding the first one's rows unless its build
+/// watches `signedInAccountProvider`.
 /// Nothing in the compiler says so, and `account_reads_test.dart` only
 /// covers the providers somebody remembered. This scan reads every
 /// top-level provider in `lib`, and fails one that is kept alive, reaches
-/// `repositoryProvider` from its build and does not watch the account,
+/// the repository from its build and does not watch the account,
 /// unless [_sameForEveryAccount] names it with the reason its rows are the
 /// same for every account. A provider that is exempt but no longer needs
 /// to be fails too, so the map cannot rot.
@@ -60,7 +62,6 @@ const Map<String, String> _sameForEveryAccount = <String, String>{
   'diagnosticsProvider': _serverWide,
   'duplicatesProvider': _serverWide,
   'genreTreeProvider': _serverWide,
-  'healthProvider': _serverWide,
   'invitesProvider': _serverWide,
   'libraryCountsProvider': _serverWide,
   'libraryMatchingProvider': _serverWide,
@@ -72,7 +73,6 @@ const Map<String, String> _sameForEveryAccount = <String, String>{
   'serverHealthProvider': _serverWide,
   'serverNotificationTargetsProvider': _serverWide,
   'signupRequestsProvider': _serverWide,
-  'similarityStatusProvider': _serverWide,
   'stagedRestoreProvider': _serverWide,
   'thumbnailCacheProvider': _serverWide,
   'transcodingActivityProvider': _serverWide,
@@ -80,7 +80,6 @@ const Map<String, String> _sameForEveryAccount = <String, String>{
   'trashProvider': _serverWide,
   'upgradesProvider': _serverWide,
   // The server's own vocabulary and capabilities.
-  'ruleFieldsProvider': _serverVocabulary,
   'uploadFormatSetsProvider': _serverVocabulary,
   // Stations are shared by all users, as the API spec says.
   'radioStationsProvider': _serverWide,
@@ -108,8 +107,8 @@ const Map<String, String> _sameForEveryAccount = <String, String>{
   // Plumbing that outlives an account: the repository itself, and the
   // pieces whose account is set once per session by their binder.
   'discordCoversProvider': _infrastructure,
+  'apiClientProvider': _infrastructure,
   'downloadManagerProvider': _infrastructure,
-  'repositoryProvider': _infrastructure,
   'syncEngineProvider': _infrastructure,
   // Whether the server takes the compound save: a capability of the server.
   'compoundSaveProvider': _serverVocabulary,

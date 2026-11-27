@@ -55,7 +55,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final inviteToken = _inviteToken.text.trim();
     try {
       final result = await ref
-          .read(repositoryProvider)
+          .read(apiClientProvider)
           .signup(
             username: username,
             password: _password.text,

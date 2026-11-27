@@ -56,7 +56,7 @@ final reachAgainProvider = Provider.autoDispose<void>((ref) {
     asking = true;
     var answered = true;
     try {
-      await ref.read(repositoryProvider).bootstrapStatus();
+      await ref.read(apiClientProvider).bootstrapStatus();
     } on WaxDeckApiException catch (error) {
       // A refusal in the server's own words is an answer too.
       answered = !error.unreachable;

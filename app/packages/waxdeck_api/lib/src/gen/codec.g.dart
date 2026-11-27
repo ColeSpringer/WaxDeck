@@ -4167,6 +4167,8 @@ Job decodeJob(Map<String, Object?> json, WireContext ctx) {
     pid: readRequired(json, 'pid', type, wireString),
     kind: readRequired(json, 'kind', type, wireString),
     state: readRequired(json, 'state', type, wireString),
+    cancelable: readRequired(json, 'cancelable', type, wireBool),
+    cancelRequested: readRequired(json, 'cancelRequested', type, wireBool),
     progress: readOptional(json, 'progress', type, wireDouble),
     message: readOptional(json, 'message', type, wireString),
     error: readOptional(json, 'error', type, wireString),
@@ -4186,6 +4188,8 @@ Map<String, Object?> encodeJob(Job value) => {
   'pid': value.pid,
   'kind': value.kind,
   'state': value.state,
+  'cancelable': value.cancelable,
+  'cancelRequested': value.cancelRequested,
   'progress': ?value.progress,
   'message': ?value.message,
   'error': ?value.error,
@@ -8082,6 +8086,7 @@ ReviewEntryDetail decodeReviewEntryDetail(
         (e, at) => decodeReviewCandidate(wireObject(e, at), ctx),
       ),
     ),
+    uploadedByName: readOptional(json, 'uploadedByName', type, wireString),
     identifyDeclined:
         readOptional(json, 'identifyDeclined', type, wireBool) ?? false,
     acceptBestWithheld: readOptional(
@@ -8126,6 +8131,7 @@ Map<String, Object?> encodeReviewEntryDetail(ReviewEntryDetail value) => {
   'decidedBy': ?value.decidedBy,
   'tracks': [for (final e in value.tracks) encodeReviewTrack(e)],
   'candidates': [for (final e in value.candidates) encodeReviewCandidate(e)],
+  'uploadedByName': ?value.uploadedByName,
   'identifyDeclined': value.identifyDeclined,
   'acceptBestWithheld': ?value.acceptBestWithheld,
   'mediumFixed': value.mediumFixed,
@@ -8732,6 +8738,7 @@ ServerSyncPage decodeServerSyncPage(
 ) {
   const type = 'ServerSyncPage';
   return ServerSyncPage(
+    userId: readRequired(json, 'userId', type, wireString),
     events: readRequired(
       json,
       'events',
@@ -8748,6 +8755,7 @@ ServerSyncPage decodeServerSyncPage(
 }
 
 Map<String, Object?> encodeServerSyncPage(ServerSyncPage value) => {
+  'userId': value.userId,
   'events': [for (final e in value.events) encodeServerSyncEvent(e)],
   'nextSince': value.nextSince,
   'more': value.more,

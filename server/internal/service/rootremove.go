@@ -250,13 +250,12 @@ func (l *Roots) removedLibraryName(ctx context.Context, apiLib string) string {
 // scan takes back. A catalog busy with another job leaves them to the
 // library's next scan.
 func (l *Roots) rescanKeptLibrary(lib model.PID) {
-	pid, err := l.lib.StartScan(l.procCtx, waxbin.ScanRequest{LibraryPID: lib})
-	if err != nil {
+	if _, err := l.Jobs.startCancelable(l.procCtx, wdb.JobOrigin{}, func(ctx context.Context) (model.PID, error) {
+		return l.lib.StartScan(ctx, waxbin.ScanRequest{LibraryPID: lib})
+	}); err != nil {
 		l.log.Warn("scanning a library a removal left; its next scan takes back what the removal let go of",
 			"library", apiPID(PrefixLibrary, lib), "err", err)
-		return
 	}
-	l.Jobs.followJob(pid)
 }
 
 // settleUnrecordedRemoval follows up a removal no origin records: the

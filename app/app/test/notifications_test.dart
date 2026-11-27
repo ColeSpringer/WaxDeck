@@ -688,11 +688,13 @@ void main() {
 
       repo.pages = <ServerSyncPage>[
         ServerSyncPage(
+          userId: 'us-ann',
           events: <ServerSyncEvent>[_marker('review')],
           nextSince: 'c1',
           more: true,
         ),
         ServerSyncPage(
+          userId: 'us-ann',
           events: <ServerSyncEvent>[_marker('upload', pid: 'up-1')],
           nextSince: 'c2',
         ),
@@ -702,7 +704,11 @@ void main() {
 
       // And it resumes from where it stopped rather than re-reading.
       repo.pages = <ServerSyncPage>[
-        const ServerSyncPage(events: <ServerSyncEvent>[], nextSince: 'c3'),
+        const ServerSyncPage(
+          userId: 'us-ann',
+          events: <ServerSyncEvent>[],
+          nextSince: 'c3',
+        ),
       ];
       await puller.pull();
       expect(repo.sinceCalls.last, 'c2');
@@ -718,6 +724,7 @@ void main() {
       // were reported, so the cursor has to have moved past them.
       repo.pages = <ServerSyncPage>[
         ServerSyncPage(
+          userId: 'us-ann',
           events: <ServerSyncEvent>[_marker('review')],
           nextSince: 'c1',
           more: true,
@@ -728,7 +735,11 @@ void main() {
       expect(seen.map((e) => e.kind), <String>['review']);
 
       repo.pages = <ServerSyncPage>[
-        const ServerSyncPage(events: <ServerSyncEvent>[], nextSince: 'c2'),
+        const ServerSyncPage(
+          userId: 'us-ann',
+          events: <ServerSyncEvent>[],
+          nextSince: 'c2',
+        ),
       ];
       await puller.pull();
       expect(
@@ -751,6 +762,7 @@ void main() {
       unawaited(puller.pull());
       repo.pages = <ServerSyncPage>[
         ServerSyncPage(
+          userId: 'us-ann',
           events: <ServerSyncEvent>[_marker('upload', pid: 'up-1')],
           nextSince: 'c1',
         ),
@@ -787,6 +799,7 @@ void main() {
 
         repo.pages = <ServerSyncPage>[
           ServerSyncPage(
+            userId: 'us-ann',
             events: <ServerSyncEvent>[_marker('review')],
             nextSince: 'c1',
           ),
@@ -812,10 +825,71 @@ void main() {
       // Back to minting: the next pull asks with no cursor.
       repo.failWith = null;
       repo.pages = <ServerSyncPage>[
-        const ServerSyncPage(events: <ServerSyncEvent>[], nextSince: 'fresh'),
+        const ServerSyncPage(
+          userId: 'us-ann',
+          events: <ServerSyncEvent>[],
+          nextSince: 'fresh',
+        ),
       ];
       await puller.pull();
       expect(repo.sinceCalls.last, isNull);
+    });
+
+    test('a page that answers for another account is dropped: nothing is '
+        'reported, the cursor stays where it was, and the session is '
+        'suspected; a page for the walk\'s own account goes on', () async {
+      final repo = _SyncRepository();
+      final seen = <ServerSyncEvent>[];
+      var suspected = 0;
+      final puller = UserEventPuller(
+        repository: repo,
+        onEvent: seen.add,
+        account: 'us-ann',
+        onAnotherAccount: () => suspected++,
+      );
+      await puller.pull();
+
+      // The cookie another tab signed Ben in over: the walk reads his.
+      repo.pages = <ServerSyncPage>[
+        ServerSyncPage(
+          userId: 'us-ben',
+          events: <ServerSyncEvent>[_marker('account')],
+          nextSince: 'c1',
+          more: true,
+        ),
+      ];
+      await puller.pull();
+      expect(seen, isEmpty);
+      expect(suspected, 1);
+
+      repo.pages = <ServerSyncPage>[
+        ServerSyncPage(
+          userId: 'us-ann',
+          events: <ServerSyncEvent>[_marker('review')],
+          nextSince: 'c2',
+        ),
+      ];
+      await puller.pull();
+      expect(repo.sinceCalls, <String?>[null, 'c0', 'c0']);
+      expect(seen.map((e) => e.kind), <String>['review']);
+      expect(suspected, 1);
+    });
+
+    test('a mint that answers for another account takes no cursor', () async {
+      final repo = _SyncRepository()..account = 'us-ben';
+      var suspected = 0;
+      final puller = UserEventPuller(
+        repository: repo,
+        onEvent: (_) {},
+        account: 'us-ann',
+        onAnotherAccount: () => suspected++,
+      );
+      await puller.pull();
+      expect(suspected, 1);
+
+      repo.account = 'us-ann';
+      await puller.pull();
+      expect(repo.sinceCalls, <String?>[null, null]);
     });
   });
 
@@ -1483,6 +1557,9 @@ void main() {
 class _SyncRepository extends FakeRepository {
   final List<String?> sinceCalls = <String?>[];
 
+  /// The account the pages it makes up answer for.
+  String account = 'us-ann';
+
   /// Pages to answer, consumed in order. An exhausted list answers an
   /// empty final page.
   List<ServerSyncPage> pages = <ServerSyncPage>[];
@@ -1526,10 +1603,15 @@ class _SyncRepository extends FakeRepository {
       _served++;
     }
     if (since == null) {
-      return const ServerSyncPage(events: <ServerSyncEvent>[], nextSince: 'c0');
+      return ServerSyncPage(
+        userId: account,
+        events: const <ServerSyncEvent>[],
+        nextSince: 'c0',
+      );
     }
     if (pages.isEmpty) {
       return ServerSyncPage(
+        userId: account,
         events: const <ServerSyncEvent>[],
         nextSince: since,
       );

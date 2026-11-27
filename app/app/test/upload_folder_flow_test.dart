@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/l10n/formats.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/uploads/add_to_library.dart';
@@ -391,6 +393,53 @@ void main() {
     expect(repo.uploadsById.values.map((u) => u.fileName), ['b.flac']);
     expect(repo.completedBatchIds, hasLength(1));
     expect(raised.last, contains('Uploaded 1 file'));
+  });
+
+  testWidgets('a run carried on past an account change sends the rest of '
+      'its files as the account that picked them, never the next one', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final ann = _repo()..createUploadGate = gate;
+    final ben = _repo();
+    // One repository per account, as the app's client hands out a view per
+    // account: what the next account's view is asked is what it would send.
+    final container = appContainer(
+      repo: ann,
+      extra: [
+        repositoryProvider.overrideWith(
+          (ref) => ref.watch(signedInAccountProvider) == 'us-ben' ? ben : ann,
+        ),
+      ],
+    );
+    await container.read(uploadsProvider.future);
+    await _mountOpener(
+      tester,
+      container,
+      (context, ref) =>
+          uploadPickedFiles(context, ref, [_file('a.flac'), _file('b.flac')]),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    // Ben's session takes Ann's place while her first file is opening.
+    ann.sessionState = const SessionState(
+      authenticated: true,
+      user: WaxDeckUser(id: 'us-ben', username: 'ben', roles: ['admin']),
+    );
+    container.read(authControllerProvider.notifier).refreshSession().ignore();
+    await tester.pumpAndSettle();
+    expect(container.read(signedInAccountProvider), 'us-ben');
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(ben.uploadsById, isEmpty);
+    expect(ben.putUploadDataCalls, isEmpty);
+    expect(ann.uploadsById.values.map((u) => u.fileName), ['a.flac', 'b.flac']);
   });
 
   testWidgets('a link queued after its host left still says so', (

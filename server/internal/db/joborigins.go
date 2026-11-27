@@ -8,13 +8,16 @@ import (
 )
 
 // JobOrigin is who started a catalog job; Rule is set for a health fix,
-// Detail is what settling its end needs that the job does not keep.
+// Detail is what settling its end needs that the job does not keep, and
+// CancelAsked whether somebody asked the job to cancel (read, never
+// inserted).
 type JobOrigin struct {
 	PID         string
 	UserID      string
 	Rule        string
 	Detail      string
 	CreatedAtNS int64
+	CancelAsked bool
 }
 
 // InsertJobOrigin records who started a job.
@@ -37,8 +40,8 @@ func (d *DB) ClaimJobOrigin(ctx context.Context, pid string, nowNS int64) (JobOr
 	var o JobOrigin
 	err := d.w.QueryRowContext(ctx, `
 		UPDATE job_origins SET settling_at_ns = ? WHERE pid = ? AND settling_at_ns = 0
-		RETURNING pid, user_id, rule, detail, created_at_ns`, nowNS, pid).Scan(
-		&o.PID, &o.UserID, &o.Rule, &o.Detail, &o.CreatedAtNS)
+		RETURNING pid, user_id, rule, detail, created_at_ns, cancel_asked`, nowNS, pid).Scan(
+		&o.PID, &o.UserID, &o.Rule, &o.Detail, &o.CreatedAtNS, &o.CancelAsked)
 	if errors.Is(err, sql.ErrNoRows) {
 		return JobOrigin{}, ErrNotFound
 	}
@@ -46,6 +49,16 @@ func (d *DB) ClaimJobOrigin(ctx context.Context, pid string, nowNS int64) (JobOr
 		return JobOrigin{}, fmt.Errorf("db: claiming job origin: %w", err)
 	}
 	return o, nil
+}
+
+// AskJobOriginCancel records on a job's origin that somebody asked the
+// job to cancel; a job with no origin has nothing to record.
+func (d *DB) AskJobOriginCancel(ctx context.Context, pid string) error {
+	if _, err := d.w.ExecContext(ctx, `
+		UPDATE job_origins SET cancel_asked = 1 WHERE pid = ?`, pid); err != nil {
+		return fmt.Errorf("db: recording a job's cancel: %w", err)
+	}
+	return nil
 }
 
 // ReleaseJobOriginClaims lets go of every job end taken in hand. A start
@@ -113,8 +126,8 @@ func (d *DB) SettleJobOrigin(ctx context.Context, pid string, audit *AuditEvent)
 func (d *DB) JobOriginGet(ctx context.Context, pid string) (JobOrigin, error) {
 	var o JobOrigin
 	err := d.r.QueryRowContext(ctx, `
-		SELECT pid, user_id, rule, detail, created_at_ns FROM job_origins WHERE pid = ?`, pid).Scan(
-		&o.PID, &o.UserID, &o.Rule, &o.Detail, &o.CreatedAtNS)
+		SELECT pid, user_id, rule, detail, created_at_ns, cancel_asked FROM job_origins WHERE pid = ?`, pid).Scan(
+		&o.PID, &o.UserID, &o.Rule, &o.Detail, &o.CreatedAtNS, &o.CancelAsked)
 	if errors.Is(err, sql.ErrNoRows) {
 		return JobOrigin{}, ErrNotFound
 	}
@@ -156,7 +169,7 @@ func (d *DB) JobOriginRules(ctx context.Context) ([]string, error) {
 // JobOrigins lists every origin whose job's end is still to be told.
 func (d *DB) JobOrigins(ctx context.Context) ([]JobOrigin, error) {
 	rows, err := d.r.QueryContext(ctx, `
-		SELECT pid, user_id, rule, detail, created_at_ns FROM job_origins ORDER BY created_at_ns, pid`)
+		SELECT pid, user_id, rule, detail, created_at_ns, cancel_asked FROM job_origins ORDER BY created_at_ns, pid`)
 	if err != nil {
 		return nil, fmt.Errorf("db: listing job origins: %w", err)
 	}
@@ -164,7 +177,7 @@ func (d *DB) JobOrigins(ctx context.Context) ([]JobOrigin, error) {
 	var out []JobOrigin
 	for rows.Next() {
 		var o JobOrigin
-		if err := rows.Scan(&o.PID, &o.UserID, &o.Rule, &o.Detail, &o.CreatedAtNS); err != nil {
+		if err := rows.Scan(&o.PID, &o.UserID, &o.Rule, &o.Detail, &o.CreatedAtNS, &o.CancelAsked); err != nil {
 			return nil, fmt.Errorf("db: scanning job origin: %w", err)
 		}
 		out = append(out, o)

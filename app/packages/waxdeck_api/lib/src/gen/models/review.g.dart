@@ -379,7 +379,8 @@ class ReviewEntry {
   /// The library the unit belongs (or will import) to.
   final String? libraryPid;
 
-  /// The uploader's user pid, present on upload-origin entries.
+  /// The submitting account's user pid, present on upload and acquisition
+  /// entries.
   final String? uploadedBy;
 
   /// True while the identify pipeline still runs for this entry; candidates and
@@ -424,6 +425,7 @@ class ReviewEntryDetail extends ReviewEntry {
     super.decidedBy,
     this.tracks = const [],
     this.candidates = const [],
+    this.uploadedByName,
     this.identifyDeclined = false,
     this.acceptBestWithheld,
     this.mediumFixed = false,
@@ -442,6 +444,12 @@ class ReviewEntryDetail extends ReviewEntry {
   /// release over a compilation), so the list is not strictly sorted by
   /// `similarityPct` inside a tie band.
   final List<ReviewCandidate> candidates;
+
+  /// The submitting account's display name, or its username when it has none.
+  /// Present on upload and acquisition entries while the account still exists;
+  /// absent once it is deleted. Readable by whoever may read the entry: its
+  /// submitter and administrators.
+  final String? uploadedByName;
 
   /// The submission asked not to be identified, so the entry never entered the
   /// match queue. Absent means it did. What it tells a reader is why

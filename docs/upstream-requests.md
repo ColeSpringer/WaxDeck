@@ -172,9 +172,10 @@ note.
   every listing leaves the trash out, so an album or series holding a
   trashed member advertises one more than it lists. Wanted: the counts
   over members not in the trash, or a trashed count beside them.
-  Shipped workaround: a series detail counts the books it lists; the
-  album read, the series listing and the entity cards carry the
-  catalog's numbers.
+  Shipped workaround: a series detail counts the books it lists, and an
+  artist card the tracks or books it opens; the album read, the series
+  listing and the album and release-group cards carry the catalog's
+  numbers.
 - **A failed permanent delete does not say whether the file left the
   disk.** `trash.Service.apply` removes the file and then detaches it,
   and a store error at the detach is a `Failure` like any other, so a
@@ -316,8 +317,9 @@ note.
   is planned WaxDeck writes one identity into its staged parts where a
   tag is missing or disagrees across them: the album (the album title
   typed for it, else an album every part shares, else the folder it was
-  sent from or the list it was acquired from, else what its file names
-  share, else "Untitled audiobook"; never a chapter's title), the author
+  sent from or the list it was acquired from, unless that names a format
+  or a container, else what its file names share, else "Untitled
+  audiobook" and a short code; never a chapter's title), the author
   as artist and album artist, and each part's place. An audiobook batch
   keeps a book's parts in one unit (by album, else by folder) and an
   audiobook list is one unit, so the parts reach that step together. A
@@ -855,17 +857,19 @@ note.
   caller must not write: each such edit leaves an info-level
   `tag_write_owed` row for `mbid` on the file, which the diagnostics
   dashboard lists for good.
-- **A catalog job cannot be canceled.** A job the facade starts
-  (`StartScan`, `StartAnalyze`, `StartEnrich`, `StartSetItemKind`,
-  `StartRemoveRoot`) runs under the server's own lifetime context
-  (`startJob`), and the facade has no call that stops one job:
-  `jobs.Run` ends a job canceled only when that context is, which is
-  the server stopping. A long scan or enrich pass started by mistake
-  runs to its end. Wanted: `CancelJob(ctx, pid)`, which
-  cancels the job's context so it ends `canceled` with what it finished
-  kept, as a shutdown leaves it. Shipped workaround: WaxDeck's own tool
-  tasks cancel (`POST /tools/tasks/{taskId}/cancel`); the catalog's jobs
-  under `/jobs` offer no cancel.
+- **A catalog job a command line submits cannot be canceled.** A job
+  started through the proxy WaxDeck hosts (`Library.Serve`) runs under
+  WaxBin's own lifetime context (`startJob` runs a job under the
+  context its caller passes), and the facade has no call that stops one
+  job: `jobs.Run` ends a job canceled only when that context is, which
+  for such a job is the server stopping. A long scan or enrich pass a
+  command line started by mistake runs to its end. Wanted:
+  `CancelJob(ctx, pid)`, which cancels the job's context so it ends
+  `canceled` with what it finished kept, as a shutdown leaves it.
+  Shipped workaround: WaxDeck runs each scan, analysis and enrichment
+  it starts itself under a context of its own and cancels those
+  (`POST /jobs/{pid}/cancel`); a command line's job answers `conflict`
+  (`job-not-held`) and runs to its end.
 - **A book part lands in its book only by its file's tags.**
   `AcquiredMeta`'s track and book placement carries a profile, copy and
   duplicate policy, and no album, book or part number, so
@@ -931,30 +935,6 @@ note.
   that one runs past the 200-entry cap. Wanted: the header's video count
   on `Playlist`, a one-item `Enumerate` included. Shipped workaround:
   none; a list is named without a count.
-
-## WaxSeal
-
-- **Tenant keys from the environment or a file.** `--tenant-keys` is
-  the only way in, so the key sits in the daemon's argv, where `ps`
-  shows it to every local user; on a host with other users that is the
-  stack's shared key, and with it the engine on `127.0.0.1:4418`.
-  Wanted: a `WAXSEAL_TENANT_KEYS` variable or a key file. Shipped
-  workaround: `WAXDECK_SEAL_KEY` gives WaxSeal a key of its own, so what
-  `ps` shows opens WaxSeal alone.
-- **A daemon YouTube refuses at boot exits.** `waxseal server` warms a
-  session before it serves and ends the process when that fails, so on
-  an address YouTube answers without an identity (`ytcfg visitor_data
-  not available before deadline`, which a datacenter address gets on
-  some days), or one that cannot reach it, the container restarts for
-  good: a new browser and a new request every half minute, never
-  healthy, and `docker compose up -d --wait` fails for the whole stack.
-  A serving daemon already outlives the same refusal: it answers with a
-  retry-after and tries again. Wanted: serve after a failed warm-up and
-  treat it the same way. Shipped workaround: CI waits on the server and
-  the engine only and takes a refused WaxSeal as a warning once
-  `waxseal doctor --stop-after-load` passes under the same service; an
-  operator on a refused address turns WaxSeal off (`WAXDECK_SEAL=0`
-  and an empty `WAXDECK_SEAL_URL`).
 
 ## WaxFlow
 
@@ -1027,8 +1007,6 @@ note.
   exported (`Master` and `Media`, or a `SegmentPlan` method that writes
   the media playlist). Shipped workaround: `fixtures/presentation.go`
   writes both in the engine's form, and its test pins their shape.
-- A merge that does not re-encode same-codec members, if WaxDeck keeps its "without re-encoding"
-  promise rather than documenting the transcode (BK-05).
 - Stop logging a client disconnect as WARN "live stream truncated" (PLAY-26 side note).
 - refuse legacy RIFF-wrapped WavPack streams if not supported.
 

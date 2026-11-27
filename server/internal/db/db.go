@@ -998,14 +998,16 @@ const baselineSchema = `
 	-- Who started a catalog job, and for a health fix the rule it fixes:
 	-- the job's end is announced to them. A row lives until that
 	-- announcement, so a restart between the two still makes it;
-	-- settling_at_ns is when a process took the job's end in hand.
+	-- settling_at_ns is when a process took the job's end in hand, and
+	-- cancel_asked is set once somebody asked the job to cancel.
 	CREATE TABLE job_origins (
 		pid            TEXT    PRIMARY KEY,
 		user_id        TEXT    NOT NULL,
 		rule           TEXT    NOT NULL DEFAULT '',
 		detail         TEXT    NOT NULL DEFAULT '',
 		created_at_ns  INTEGER NOT NULL,
-		settling_at_ns INTEGER NOT NULL DEFAULT 0
+		settling_at_ns INTEGER NOT NULL DEFAULT 0,
+		cancel_asked   INTEGER NOT NULL DEFAULT 0
 	);
 	CREATE TABLE health_index (
 		item_pid    TEXT    PRIMARY KEY,

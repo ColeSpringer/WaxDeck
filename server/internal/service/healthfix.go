@@ -916,7 +916,7 @@ func (l *Health) stillFails(ctx context.Context, rule string, it *model.ItemView
 // re-checked, the administrator who started it hears what it filled, and
 // the rule stops reading as fixing. A stop during the re-check leaves the
 // origin for the next start to finish.
-func (l *Health) finishHealthFixJob(ctx context.Context, o wdb.JobOrigin, j Job) {
+func (l *Health) finishHealthFixJob(ctx context.Context, o wdb.JobOrigin, j Job, asked bool) {
 	res, err := l.recheckHealthRule(ctx, o.Rule, nil)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -926,7 +926,7 @@ func (l *Health) finishHealthFixJob(ctx context.Context, o wdb.JobOrigin, j Job)
 	}
 	ctx = context.WithoutCancel(ctx)
 	l.Integrations.EmitNotificationFor(ctx, "health-fix-finished", healthFixTitle(o.Rule),
-		healthFixJobBody(j, res, err), j.PID, []string{o.UserID})
+		healthFixJobBody(j, res, err, asked), j.PID, []string{o.UserID})
 	l.Jobs.dropJobOrigin(ctx, o.PID)
 	l.Jobs.emitEveryoneEvent(ctx, eventHealth)
 }
@@ -951,13 +951,17 @@ func (l *Health) fixingRules(ctx context.Context) (map[string]bool, error) {
 }
 
 // healthFixJobBody says what a pass-backed fix did: what its re-check
-// found, or that the re-check failed, after why the pass did not finish.
-func healthFixJobBody(j Job, res healthRecheck, recheckErr error) string {
+// found, or that the re-check failed, after why the pass did not finish,
+// which a cancel the starter asked for (asked) words as theirs.
+func healthFixJobBody(j Job, res healthRecheck, recheckErr error, asked bool) string {
 	body := fmt.Sprintf("Filled %d of %d; %d still missing", res.passing, res.passing+res.failing, res.failing)
 	if recheckErr != nil {
 		body = "The rule could not be re-checked (" + recheckErr.Error() + "); its count moves at the next sweep"
 	}
-	if model.JobState(j.State) != model.JobDone {
+	switch {
+	case asked:
+		body = "The enrichment pass was canceled. " + body
+	case model.JobState(j.State) != model.JobDone:
 		body = "The enrichment pass failed (" + jobFailure(j) + "). " + body
 	}
 	return body

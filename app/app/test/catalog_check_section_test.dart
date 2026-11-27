@@ -93,7 +93,7 @@ Future<Future<void> Function()> _pumpSwitching(
   final container = ProviderContainer(
     overrides: [
       bootServerAddressProvider.overrideWithValue(a.baseUrl),
-      repositoryProvider.overrideWith(
+      apiClientProvider.overrideWith(
         (ref) => ref.watch(serverBaseUrlProvider) == a.baseUrl ? a : b,
       ),
       credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),

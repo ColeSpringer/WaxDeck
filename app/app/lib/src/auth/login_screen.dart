@@ -18,7 +18,7 @@ import 'reach_again.dart';
 /// Configured single-sign-on providers, for rendering login buttons. An
 /// unreachable server hides the buttons rather than erroring the form.
 final oidcProvidersProvider = FutureProvider<List<OidcProvider>>(
-  (ref) => ref.watch(repositoryProvider).oidcProviders(),
+  (ref) => ref.watch(apiClientProvider).oidcProviders(),
 );
 
 /// Username and password form, plus one button per configured SSO

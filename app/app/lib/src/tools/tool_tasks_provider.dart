@@ -31,6 +31,10 @@ class ToolTasksController extends AsyncNotifier<ToolTasksState> {
 
   var _generation = 0;
 
+  /// The tasks whose cancel the server answered, until a read shows them
+  /// finished or gone.
+  final _canceled = <String>{};
+
   @override
   Future<ToolTasksState> build() async {
     _generation++;
@@ -40,7 +44,14 @@ class ToolTasksController extends AsyncNotifier<ToolTasksState> {
     final page = await ref
         .watch(repositoryProvider)
         .listToolTasks(limit: pageSize);
-    return ToolTasksState(tasks: page.tasks, nextCursor: page.nextCursor);
+    // Only a read to the list's end says a task is gone.
+    if (page.nextCursor == null) {
+      _canceled.retainWhere((id) => page.tasks.any((task) => task.id == id));
+    }
+    return ToolTasksState(
+      tasks: _keepCancels(page.tasks),
+      nextCursor: page.nextCursor,
+    );
   }
 
   Future<void> loadMore() async {
@@ -55,7 +66,7 @@ class ToolTasksController extends AsyncNotifier<ToolTasksState> {
       if (generation != _generation) return;
       state = AsyncData(
         ToolTasksState(
-          tasks: [...current.tasks, ...page.tasks],
+          tasks: [...current.tasks, ..._keepCancels(page.tasks)],
           nextCursor: page.nextCursor,
         ),
       );
@@ -110,7 +121,12 @@ class ToolTasksController extends AsyncNotifier<ToolTasksState> {
   /// `running` with `cancelRequested` while a run winds down, or the task
   /// as it had already ended. A task the server no longer has leaves the
   /// list. Other refusals propagate; the row's control answers for them.
+  /// A read begun while the cancel was out is newer than its answer, which
+  /// then only keeps the cancel asked for on its row; so does every read
+  /// until one shows the task finished, as one the server answered before
+  /// it took the cancel does not.
   Future<void> cancel(String taskId) async {
+    final generation = _generation;
     ToolTask? answered;
     try {
       answered = await ref.read(repositoryProvider).cancelToolTask(taskId);
@@ -118,18 +134,43 @@ class ToolTasksController extends AsyncNotifier<ToolTasksState> {
       if (e.statusCode != 404) rethrow;
     }
     if (!ref.mounted) return;
+    if (answered == null) {
+      _canceled.remove(taskId);
+    } else {
+      _canceled.add(taskId);
+    }
     final current = state.value;
     if (current == null) return;
+    final tasks = generation == _generation
+        ? [
+            for (final task in current.tasks)
+              if (task.id != taskId) task else ?answered,
+          ]
+        : _keepCancels(current.tasks);
+    if (identical(tasks, current.tasks)) return;
     state = AsyncData(
       ToolTasksState(
-        tasks: [
-          for (final task in current.tasks)
-            if (task.id != taskId) task else ?answered,
-        ],
+        tasks: tasks,
         nextCursor: current.nextCursor,
         loadingMore: current.loadingMore,
       ),
     );
+  }
+
+  /// [tasks] with the cancel asked for on each unfinished row whose cancel
+  /// the server answered; a row that shows its task finished lets it go.
+  /// [tasks] itself when nothing changes.
+  List<ToolTask> _keepCancels(List<ToolTask> tasks) {
+    _canceled.removeAll([
+      for (final task in tasks)
+        if (task.finished) task.id,
+    ]);
+    bool owed(ToolTask task) =>
+        !task.cancelRequested && _canceled.contains(task.id);
+    if (!tasks.any(owed)) return tasks;
+    return [
+      for (final task in tasks) owed(task) ? task.withCancelRequested() : task,
+    ];
   }
 
   /// Sweeps the caller's own finished rows, or with [all] everyone's

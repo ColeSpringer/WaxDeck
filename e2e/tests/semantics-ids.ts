@@ -983,6 +983,8 @@ export const SemanticsIds = {
   yirTopEntry: (kind: string | number, index: string | number) => `yir-top-${kind}-${index}`,
 
   // tools: Long-running tools and their progress rows.
+  jobCancel: (pid: string | number) => `job-cancel-${pid}`,
+  jobCancelConfirm: 'job-cancel-confirm',
   jobRow: (pid: string | number) => `job-row-${pid}`,
   openTasks: 'open-tasks',
   taskCancel: (id: string | number) => `task-cancel-${id}`,
@@ -1354,6 +1356,7 @@ export const SemanticsIdPrefixes = {
   yirTopEntry: 'yir-top-',
 
   // tools: Long-running tools and their progress rows.
+  jobCancel: 'job-cancel-',
   jobRow: 'job-row-',
   taskCancel: 'task-cancel-',
   taskDismiss: 'task-dismiss-',

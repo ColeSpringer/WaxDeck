@@ -38,8 +38,8 @@ Future<void> main() async {
   // to shrink; no-op off the desktops.
   ensureDesktopWindowInitialized();
   // The server address has to be known before the container exists:
-  // repositoryProvider builds from it, and everything builds from the
-  // repository. Read from the credential store on native; a no-op null
+  // apiClientProvider builds from it, and everything builds from the
+  // client. Read from the credential store on native; a no-op null
   // on web, which talks to its own origin.
   final bootAddress = await resolveBootServerAddress(
     const SecureCredentialStore(),

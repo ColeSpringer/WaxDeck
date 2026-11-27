@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
 import '../providers.dart';
 import 'sync_providers.dart';
 
@@ -20,6 +21,8 @@ class UserEventPuller {
     required this.repository,
     required this.onEvent,
     this.onReset,
+    this.account,
+    this.onAnotherAccount,
   });
 
   final WaxDeckRepository repository;
@@ -29,12 +32,29 @@ class UserEventPuller {
   /// cursor and the fresh one are gone.
   final void Function()? onReset;
 
+  /// The account the walk is for. A page that answers for another is
+  /// another account's stream: the cookie changed hands.
+  final String? account;
+
+  /// Called with the page dropped for answering for another account.
+  final void Function()? onAnotherAccount;
+
   String? _since;
   bool _running = false;
   bool _pending = false;
   bool _stopped = false;
 
   void stop() => _stopped = true;
+
+  /// Whether [page] answers for another account than the walk's, which is
+  /// then said: its events are not this walk's news, nor its cursor this
+  /// walk's place.
+  bool _another(ServerSyncPage page) {
+    final mine = account;
+    if (mine == null || page.userId == mine) return false;
+    onAnotherAccount?.call();
+    return true;
+  }
 
   /// Reads everything after the held cursor. A hint arriving mid-walk is
   /// remembered rather than dropped: the first call only mints the
@@ -60,12 +80,14 @@ class UserEventPuller {
     var since = _since;
     try {
       if (since == null) {
-        _since = (await repository.syncServer()).nextSince;
+        final mint = await repository.syncServer();
+        if (_another(mint)) return;
+        _since = mint.nextSince;
         return;
       }
       while (true) {
         final page = await repository.syncServer(since: since);
-        if (_stopped) return;
+        if (_stopped || _another(page)) return;
         for (final event in page.events) {
           onEvent(event);
         }
@@ -101,12 +123,17 @@ class UserEventPuller {
 class ServerEventBus {
   final _events = StreamController<ServerSyncEvent>.broadcast();
   final _resets = StreamController<void>.broadcast();
+  final _strangers = StreamController<void>.broadcast();
 
   Stream<ServerSyncEvent> get events => _events.stream;
 
   /// The walk lost its place, so events went unreported: a consumer
   /// refreshes everything it holds.
   Stream<void> get resets => _resets.stream;
+
+  /// The walk read another account's stream: the browser's cookie names
+  /// another account than the session shown.
+  Stream<void> get anotherAccount => _strangers.stream;
 
   void add(ServerSyncEvent event) {
     if (_events.isClosed) return;
@@ -118,9 +145,15 @@ class ServerEventBus {
     _resets.add(null);
   }
 
+  void heardAnotherAccount() {
+    if (_strangers.isClosed) return;
+    _strangers.add(null);
+  }
+
   Future<void> dispose() async {
     await _events.close();
     await _resets.close();
+    await _strangers.close();
   }
 }
 
@@ -148,9 +181,15 @@ final serverEventBusProvider = Provider.autoDispose<ServerEventBus>((ref) {
   }
   if (!kIsWeb) return bus;
   final puller = UserEventPuller(
-    repository: ref.watch(repositoryProvider),
+    // Read, not watched: this relies on every account change passing
+    // through signed out, which unmounts the signed-in scope and the bus.
+    // With the scope kept up, the walk would go on through a view the
+    // client refuses, and the next account would hear none of its events.
+    repository: ref.read(repositoryProvider),
+    account: ref.read(signedInAccountProvider),
     onEvent: bus.add,
     onReset: bus.reset,
+    onAnotherAccount: bus.heardAnotherAccount,
   );
   // Minted immediately, so the first change after a launch is reported
   // rather than swallowed by the mint it would have paid for.

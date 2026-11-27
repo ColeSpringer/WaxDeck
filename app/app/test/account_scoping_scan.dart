@@ -26,7 +26,8 @@
 /// build the scan cannot determine.
 ///
 /// A provider reads the repository when its build refers to the
-/// `repositoryProvider` of `lib/src/providers.dart`, itself or through
+/// `repositoryProvider` of `lib/src/providers.dart`, or the
+/// `apiClientProvider` beside it that the repository views, itself or through
 /// anything of this package it refers to, however deep: functions,
 /// methods, getters, setters, operators and constructors, called, torn off
 /// or read, with everything inside their closures and local functions, a
@@ -44,7 +45,8 @@
 /// member of the class and of its supertypes and mixins this package
 /// declares, since the object is the provider and outlives accounts. The
 /// class is the one its callback creates, else the provider's value type
-/// argument. `repositoryProvider` itself reads the repository.
+/// argument. `repositoryProvider` and `apiClientProvider` themselves read the
+/// repository.
 ///
 /// A provider is keyed on the account only by `watch`, on its own `Ref`, of
 /// the `signedInAccountProvider` of `lib/src/auth/auth_controller.dart`, or
@@ -254,7 +256,7 @@ typedef _Ref = ({
 });
 
 class _Scan {
-  _Scan(this.host, this.files, this._repository, this._account);
+  _Scan(this.host, this.files, this._repositories, this._account);
 
   static Future<_Scan> open(AnalysisHost host, Iterable<String> files) async {
     Future<TopLevelVariableElement> variable(String uri, String name) async {
@@ -270,10 +272,16 @@ class _Scan {
     return _Scan(
       host,
       files.toList(),
-      await variable(
-        'package:waxdeck/src/providers.dart',
-        'repositoryProvider',
-      ),
+      {
+        await variable(
+          'package:waxdeck/src/providers.dart',
+          'repositoryProvider',
+        ),
+        await variable(
+          'package:waxdeck/src/providers.dart',
+          'apiClientProvider',
+        ),
+      },
       await variable(
         'package:waxdeck/src/auth/auth_controller.dart',
         'signedInAccountProvider',
@@ -283,7 +291,7 @@ class _Scan {
 
   final AnalysisHost host;
   final List<String> files;
-  final TopLevelVariableElement _repository;
+  final Set<TopLevelVariableElement> _repositories;
   final TopLevelVariableElement _account;
   final _libraries = <LibraryElement, Future<ResolvedLibraryResult>>{};
   final _locals = <Element, FunctionDeclaration>{};
@@ -334,7 +342,7 @@ class _Scan {
         unknown: null,
         breach:
             (!autoDispose || reached.keepsAlive) &&
-            (variable == _repository || reached.reads) &&
+            (_repositories.contains(variable) || reached.reads) &&
             !await keyed(build),
       ));
     }
@@ -488,7 +496,7 @@ class _Scan {
       if (!seen.add((item.node, item.self, item.holder))) continue;
       for (final ref in _visit(item, ranOnly: false).refs) {
         final element = ref.element;
-        reads = reads || _variableOf(element) == _repository;
+        reads = reads || _repositories.contains(_variableOf(element));
         keepsAlive =
             keepsAlive || element.name == 'keepAlive' && _isRiverpod(element);
         queue.addAll(await _follow(ref, item, build.chain, keys: false));

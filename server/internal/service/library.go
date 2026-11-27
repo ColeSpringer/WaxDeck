@@ -584,11 +584,12 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 
 	if cfg.ScanOnStart {
 		group.GoOnce(ctx, "startup-scan", func(ctx context.Context) error {
-			pid, err := l.lib.StartScan(ctx, waxbin.ScanRequest{})
+			pid, err := l.Jobs.startCancelable(ctx, wdb.JobOrigin{}, func(ctx context.Context) (model.PID, error) {
+				return l.lib.StartScan(ctx, waxbin.ScanRequest{})
+			})
 			if err != nil {
 				return err
 			}
-			l.Jobs.followJob(pid)
 			log.Info("startup scan launched", "job", string(pid))
 			return nil
 		})
@@ -656,11 +657,12 @@ func (l *Library) startScan(ctx context.Context, userID string, force bool) (Job
 			return Job{}, err
 		}
 	}
-	pid, err := l.lib.StartScan(l.procCtx, waxbin.ScanRequest{Force: force})
+	pid, err := l.Jobs.startCancelable(l.procCtx, wdb.JobOrigin{UserID: userID}, func(ctx context.Context) (model.PID, error) {
+		return l.lib.StartScan(ctx, waxbin.ScanRequest{Force: force})
+	})
 	if err != nil {
 		return Job{}, classify(err)
 	}
-	l.Jobs.followStarted(ctx, pid, userID)
 	return l.Jobs.Status(ctx, apiPID(PrefixJob, pid))
 }
 
@@ -688,11 +690,12 @@ func (l *Library) AnalyzeFor(ctx context.Context, uc *UserCtx) (Job, error) {
 }
 
 func (l *Library) startAnalyze(ctx context.Context, userID string) (Job, error) {
-	pid, err := l.lib.StartAnalyze(l.procCtx, waxbin.AnalyzeOptions{})
+	pid, err := l.Jobs.startCancelable(l.procCtx, wdb.JobOrigin{UserID: userID}, func(ctx context.Context) (model.PID, error) {
+		return l.lib.StartAnalyze(ctx, waxbin.AnalyzeOptions{})
+	})
 	if err != nil {
 		return Job{}, classify(err)
 	}
-	l.Jobs.followStarted(ctx, pid, userID)
 	return l.Jobs.Status(ctx, apiPID(PrefixJob, pid))
 }
 

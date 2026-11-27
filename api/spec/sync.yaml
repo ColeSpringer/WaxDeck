@@ -469,8 +469,14 @@ components:
     ServerSyncPage:
       type: object
       description: One page of the caller's server-side state changes.
-      required: [events, nextSince]
+      required: [events, nextSince, userId]
       properties:
+        userId:
+          type: string
+          description: >
+            The account whose changes the page carries: the caller's, as
+            `User.id` names it.
+          example: us-01JZX5N8QW3F4V9T2B7KD3M9R6
         events:
           type: array
           description: State changes, coalesced within the page.

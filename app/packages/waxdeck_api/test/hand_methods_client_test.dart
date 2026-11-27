@@ -203,7 +203,13 @@ void main() {
   });
 
   group('rescanLibrary', () {
-    const job = {'pid': 'jb-1', 'kind': 'scan', 'state': 'queued'};
+    const job = {
+      'pid': 'jb-1',
+      'kind': 'scan',
+      'state': 'queued',
+      'cancelable': true,
+      'cancelRequested': false,
+    };
 
     test('a plain rescan posts no body', () async {
       final adapter = RecordingAdapter(body: job);

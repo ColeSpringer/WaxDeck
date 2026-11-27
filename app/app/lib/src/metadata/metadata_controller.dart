@@ -29,14 +29,15 @@ class MetadataSaveOutcome {
 /// Whether this server has the compound save. It starts true, and goes
 /// false for good the first time the route answers 404.
 ///
-/// Keyed to the repository, which is rebuilt whenever the server
-/// address moves, so a different server is asked again rather than
-/// inheriting the last one's answer. One flag rather than one per item:
+/// Keyed to the client, which is rebuilt whenever the server address
+/// moves, so a different server is asked again rather than inheriting
+/// the last one's answer; not to an account's view, as every account
+/// gets the same one. One flag rather than one per item:
 /// the route either exists on a server or it does not.
 class CompoundSaveSupport extends Notifier<bool> {
   @override
   bool build() {
-    ref.watch(repositoryProvider);
+    ref.watch(apiClientProvider);
     return true;
   }
 

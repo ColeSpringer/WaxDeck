@@ -40,6 +40,9 @@ mixin FakeSync on FakeRepositoryState implements SyncApi {
   @override
   Future<ServerSyncPage> syncServer({String? since, int? limit}) async {
     if (serverPages.isNotEmpty) return serverPages.removeAt(0);
-    return const ServerSyncPage(nextSince: 'fake-server-cursor');
+    return const ServerSyncPage(
+      userId: 'us-1',
+      nextSince: 'fake-server-cursor',
+    );
   }
 }

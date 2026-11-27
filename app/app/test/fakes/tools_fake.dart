@@ -97,6 +97,10 @@ mixin FakeTools on FakeRepositoryState implements ToolsApi {
   /// (`cancelRequested`), or with this false the stop is at once.
   bool cancelWindsDown = true;
 
+  /// Awaited by [cancelToolTask] once it has its answer, when set: a
+  /// reply still on the wire while the list is read again.
+  Future<void>? cancelToolTaskHeld;
+
   @override
   Future<ToolTask> cancelToolTask(String taskId) async {
     cancelToolTaskCalls.add(taskId);
@@ -118,6 +122,7 @@ mixin FakeTools on FakeRepositoryState implements ToolsApi {
       finishedAt: windsDown ? null : task.createdAt,
     );
     toolTasksById[taskId] = answered;
+    await cancelToolTaskHeld;
     return answered;
   }
 

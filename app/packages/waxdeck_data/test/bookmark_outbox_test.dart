@@ -204,6 +204,7 @@ void main() {
       );
       repo.serverPages.add(
         ServerSyncPage(
+          userId: 'us-1',
           nextSince: 'scur-2',
           events: [
             ServerSyncEvent(

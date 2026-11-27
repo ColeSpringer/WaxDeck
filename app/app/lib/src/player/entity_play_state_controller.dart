@@ -35,14 +35,16 @@ class EntityPlayStateController
   Future<void> setStarred(bool starred) => mutate(
     optimistic: (s) => _copy(s, starred: starred),
     call: () => ref.read(repositoryProvider).setEntityStar(pid, starred),
-    queue: (engine) => engine.queueEntityStar(pid, starred),
+    queue: (engine, owner) =>
+        engine.queueEntityStar(pid, starred, owner: owner),
   );
 
   /// Rates the entity 0 to 100, or clears the rating with null.
   Future<void> rate(int? rating) => mutate(
     optimistic: (s) => _copy(s, rating: rating, setRating: true),
     call: () => ref.read(repositoryProvider).setEntityRating(pid, rating),
-    queue: (engine) => engine.queueEntityRating(pid, rating),
+    queue: (engine, owner) =>
+        engine.queueEntityRating(pid, rating, owner: owner),
   );
 
   /// A field-level copy; a nullable rating needs an explicit set flag to

@@ -38,6 +38,7 @@ import 'catalog_reads.dart';
 import 'catalog_writes.dart';
 import 'live_invalidations.dart';
 import 'network_back/network_back.dart';
+import 'page_resume/page_resume.dart';
 import 'refresh_in_place.dart';
 import 'refresh_pacing.dart';
 import 'server_event_bus.dart';
@@ -66,11 +67,29 @@ final networkReturnsProvider = Provider<Stream<void>>(
   (ref) => networkReturns(),
 );
 
+/// Each time the browser thaws this page (resumed from frozen, or restored
+/// from the back/forward cache); never, natively.
+final pageResumesProvider = Provider<Stream<void>>((ref) => pageResumes());
+
+/// The session a binder left in doubt as it went.
+final _doubtCarriedProvider = Provider<_DoubtCarried>((ref) => _DoubtCarried());
+
+class _DoubtCarried {
+  String? session;
+
+  /// Whether [now] is the session left in doubt, forgetting it either way.
+  bool take(String? now) {
+    final carried = session != null && session == now;
+    session = null;
+    return carried;
+  }
+}
+
 /// The sockets that listener opens, for as long as its binder lives.
 final liveChannelFactoryProvider = Provider.autoDispose<EventsChannelFactory>((
   ref,
 ) {
-  final repository = ref.watch(repositoryProvider);
+  final repository = ref.watch(apiClientProvider);
   return eventsChannelFactory(
     baseUrl: ref.watch(serverBaseUrlProvider),
     token: () => repository.authToken,
@@ -553,6 +572,16 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       return ref.read(authControllerProvider.notifier).refreshSession();
     },
   );
+  // A rebuild (a provider this binder watches moved) does not end a
+  // doubt: the same session is still unanswered for, so the next binder
+  // for it starts in doubt. An account that left, or a new session (a
+  // sign-in here since), carries nothing.
+  final carried = ref.read(_doubtCarriedProvider);
+  final session = ref.read(authControllerProvider).value?.sessionId;
+  if (carried.take(session)) doubt.suspect();
+  ref.onDispose(() {
+    if (doubt.inDoubt) carried.session = session;
+  });
   ref.onDispose(doubt.dispose);
 
   // The platform says the network came back. A socket that outlived the
@@ -621,6 +650,13 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   ref.onDispose(eventSub.cancel);
   final resetSub = bus.resets.listen((_) => everyStateTopic());
   ref.onDispose(resetSub.cancel);
+  // The walk read another account's events: the cookie changed hands. The
+  // session is read again, and what this tab sends meanwhile waits on it.
+  final strangerSub = bus.anotherAccount.listen((_) {
+    doubt.suspect();
+    doubt.ask().ignore();
+  });
+  ref.onDispose(strangerSub.cancel);
   final connect = ref.watch(connectBinderProvider);
   // What makes the radio invalidation addressed rather than broadcast:
   // the server holds the station per connection and wakes only the
@@ -852,9 +888,25 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     live.onPlayer = connect.onPlayerInvalidate;
     live.onRadio = radio.hint;
     // The web listener has no status of its own to read, so it reports
-    // one: the shell's reconnecting banner is downstream of this.
-    live.onConnectionChanged = (connected) =>
-        ref.read(liveLinkProvider.notifier).report(connected: connected);
+    // one: the shell's reconnecting banner is downstream of this. A drop
+    // puts the session in doubt: another tab can sign in over the cookie
+    // while this one is away.
+    live.onConnectionChanged = (connected) {
+      if (!connected) doubt.suspect();
+      ref.read(liveLinkProvider.notifier).report(connected: connected);
+    };
+    // A page the browser froze ran nothing meanwhile, so on its thaw it
+    // can send before it handles its socket's close: thawed, it asks.
+    final thaws = ref.watch(pageResumesProvider).listen((_) => doubt.suspect());
+    ref.onDispose(() => unawaited(thaws.cancel()));
+    // Whatever this tab sends for the account while the session is in
+    // doubt waits for the answer, and goes only for an account that
+    // stands: a Riverpod retry, a first read or a tap sent before it
+    // could go out through a cookie another account holds.
+    final gate = ref.read(sessionGateProvider);
+    final pass = doubt.pass;
+    gate.bind(pass);
+    ref.onDispose(() => gate.unbind(pass));
     // Held, not read from the callback below: a disposal callback may
     // not touch `ref` at all - the element is already marked disposed
     // and the container swallows what that throws, so the reset would

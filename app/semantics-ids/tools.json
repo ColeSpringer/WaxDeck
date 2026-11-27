@@ -1,6 +1,8 @@
 {
   "doc": "Long-running tools and their progress rows.",
   "ids": {
+    "jobCancel": "job-cancel-{pid}",
+    "jobCancelConfirm": "job-cancel-confirm",
     "jobRow": "job-row-{pid}",
     "openTasks": "open-tasks",
     "taskCancel": "task-cancel-{id}",

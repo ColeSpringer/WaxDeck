@@ -808,8 +808,14 @@ mixin FakeAdmin on FakeRepositoryState implements AdminApi {
   @override
   Future<List<Job>> listJobs() async {
     jobReads++;
-    return _listedJobs();
+    final listed = _listedJobs();
+    if (listJobsGate case final gate?) await gate.future;
+    return listed;
   }
+
+  /// Holds each listing's answer, read as it is asked, until it opens,
+  /// while set: a read the server answered before what came after it.
+  Completer<void>? listJobsGate;
 
   /// The server's listing: a finished targeted job is left out, so a
   /// burst of one-item runs does not bury the passes, except a kind
@@ -828,6 +834,44 @@ mixin FakeAdmin on FakeRepositoryState implements AdminApi {
                 job.kind == 'remove-root'))
           job,
     ];
+  }
+
+  /// Every pid [cancelJob] was asked to stop, refusals included.
+  final List<String> cancelJobCalls = [];
+
+  /// Thrown by [cancelJob] when set.
+  WaxDeckApiException? cancelJobError;
+
+  /// Answered by [cancelJob] when set, leaving [jobs] as they were: a
+  /// reply the list has not caught up with.
+  Job? cancelJobAnswer;
+
+  /// Awaited by [cancelJob] before it answers, when set: a reply still on
+  /// the wire while the list is read again.
+  Future<void>? cancelJobHeld;
+
+  /// The server's cancel: a running job winds down, read as running with
+  /// the cancel asked for; an ended one answers unchanged.
+  @override
+  Future<Job> cancelJob(String pid) async {
+    cancelJobCalls.add(pid);
+    if (cancelJobHeld case final held?) await held;
+    if (cancelJobError case final error?) throw error;
+    if (cancelJobAnswer case final answer?) return answer;
+    final i = jobs.indexWhere((job) => job.pid == pid);
+    if (i < 0) return getJob(pid);
+    final job = jobs[i];
+    if (job.state != 'running') return job;
+    return jobs[i] = Job(
+      pid: job.pid,
+      kind: job.kind,
+      state: job.state,
+      cancelRequested: true,
+      progress: job.progress,
+      message: job.message,
+      startedAt: job.startedAt,
+      target: job.target,
+    );
   }
 
   /// How many single-job reads were made.

@@ -22,6 +22,7 @@ import (
 	"github.com/colespringer/waxbin/read"
 	waxlabel "github.com/colespringer/waxlabel"
 
+	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/genre"
 	"github.com/colespringer/waxdeck/server/internal/providers"
 )
@@ -520,12 +521,9 @@ func (l *Enrichment) startEnrichJob(ctx context.Context, uc *UserCtx, opts waxbi
 	// one is fixed at open and the catalog ORs the two, so per-run is what
 	// lets the admin toggle work without a restart.
 	opts.WriteTags = l.Settings.enrichWritesTags(ctx)
-	pid, err := l.lib.StartEnrich(l.procCtx, opts)
-	if err != nil {
-		return "", err
-	}
-	l.Jobs.adoptJob(ctx, pid, uc.ID, rule)
-	return pid, nil
+	return l.Jobs.startCancelable(l.procCtx, wdb.JobOrigin{UserID: uc.ID, Rule: rule}, func(ctx context.Context) (model.PID, error) {
+		return l.lib.StartEnrich(ctx, opts)
+	})
 }
 
 // explainEnrichRefusal words the catalog's refusal of a run for a WaxDeck
@@ -566,15 +564,13 @@ const scheduledEnrichLimit = 2000
 // so entities already enriched are left alone, and capped; the job row
 // carries the outcome the status surface reads.
 func (l *Enrichment) RunScheduledEnrichment(ctx context.Context) error {
-	pid, err := l.lib.StartEnrich(l.procCtx, waxbin.EnrichOptions{
-		WriteTags: l.Settings.enrichWritesTags(ctx),
-		Limit:     scheduledEnrichLimit,
-	})
-	if err != nil {
+	opts := waxbin.EnrichOptions{WriteTags: l.Settings.enrichWritesTags(ctx), Limit: scheduledEnrichLimit}
+	// Followed: its pictures move the artwork epoch when it ends.
+	if _, err := l.Jobs.startCancelable(l.procCtx, wdb.JobOrigin{}, func(ctx context.Context) (model.PID, error) {
+		return l.lib.StartEnrich(ctx, opts)
+	}); err != nil {
 		return classify(err)
 	}
-	// Its pictures move the artwork epoch when it ends.
-	l.Jobs.followJob(pid)
 	return nil
 }
 

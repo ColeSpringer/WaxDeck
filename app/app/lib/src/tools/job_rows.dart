@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:clock/clock.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../admin/admin_providers.dart';
 import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 
 /// A summary counter as a whole number, or null when absent.
 int? summaryCount(Object? value) => value is num ? value.toInt() : null;
@@ -150,11 +153,15 @@ String _jobLabel(AppLocalizations l10n, String kind) => switch (kind) {
 };
 
 /// One catalog job: what it is, how far along, what it said, and once
-/// finished what it did.
-class JobRow extends StatelessWidget {
+/// finished what it did. A running one the server can stop has a cancel.
+class JobRow extends ConsumerWidget {
   const JobRow({super.key, required this.job});
 
   final Job job;
+
+  /// A running job that was asked to stop and has not yet: it ends
+  /// stopped, or done when it finished first.
+  bool get _winding => job.state == 'running' && job.cancelRequested;
 
   /// A kind's mark, never a glyph a control draws: nothing presses a row.
   WaxGlyph get _glyph => switch (job.kind) {
@@ -173,6 +180,7 @@ class JobRow extends StatelessWidget {
 
   String _stateLabel(AppLocalizations l10n) {
     final progress = job.progress;
+    if (_winding) return l10n.toolsStateCanceling;
     return switch (job.state) {
       'running' =>
         progress == null
@@ -187,6 +195,7 @@ class JobRow extends StatelessWidget {
   }
 
   Color _stateColor(WaxColors colors) => switch (job.state) {
+    _ when _winding => colors.textSecondary,
     'done' => colors.success,
     'failed' || 'crashed' => colors.error,
     'running' => colors.accent,
@@ -281,12 +290,48 @@ class JobRow extends StatelessWidget {
     ];
   }
 
+  /// Asks first, saying what a cancel keeps: a scan, an analysis or an
+  /// enrichment keeps what it did, and its next run carries on unless it
+  /// was forced.
+  Future<void> _cancel(BuildContext context, WidgetRef ref) async {
+    final messenger = ref.read(shellMessengerProvider);
+    final jobs = ref.read(adminJobsProvider.notifier);
+    final l10n = context.l10n;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.toolsJobCancelTitle),
+        content: WaxProse(l10n.toolsJobCancelBody),
+        actions: <Widget>[
+          WaxButton(
+            label: l10n.toolsCancelKeep,
+            kind: WaxButtonKind.text,
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+          ),
+          WaxButton(
+            label: l10n.toolsJobCancelAction,
+            semanticsId: SemanticsIds.jobCancelConfirm,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await jobs.cancel(job.pid);
+    } on WaxDeckApiException catch (e) {
+      messenger.show(explainError(l10n, e), channel: ShellChannel.tasks);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final message = job.message;
-    final error = job.error;
+    // A stopped job's state says it; the catalog's sentence for it is
+    // English in every locale.
+    final error = job.state == 'canceled' ? null : job.error;
     final result = _resultLine(l10n);
     final runs = _runLines(l10n);
     // Its lines stay nodes of their own, as a task row's do, rather than
@@ -384,6 +429,15 @@ class JobRow extends StatelessWidget {
                 ],
               ),
             ),
+            if (job.cancelable && !_winding) ...<Widget>[
+              const SizedBox(width: WaxSpace.s8),
+              WaxIconButton(
+                glyph: WaxIcons.stop,
+                label: l10n.toolsCancelTask(_jobTitle(l10n, job)),
+                semanticsId: SemanticsIds.jobCancel(job.pid),
+                onPressed: () => unawaited(_cancel(context, ref)),
+              ),
+            ],
           ],
         ),
       ),

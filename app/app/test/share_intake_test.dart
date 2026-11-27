@@ -297,6 +297,75 @@ void main() {
     expect(raised, isEmpty, reason: 'nothing for the next session to hear');
   });
 
+  testWidgets('a share whose account changes before its files go sends '
+      'them as the account that shared them, never the next one', (
+    tester,
+  ) async {
+    final dir = Directory.systemTemp.createTempSync('share-intake-test');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final files = [
+      for (final name in ['a.flac', 'b.flac'])
+        SharedFile(
+          path: (File(
+            '${dir.path}/share-$name',
+          )..writeAsBytesSync([1, 2])).path,
+          name: name,
+        ),
+    ];
+    final gate = Completer<void>();
+    final ann = FakeRepository(sessionState: testUploaderSession())
+      ..listUploadsGate = gate;
+    final ben = FakeRepository(sessionState: testUploaderSession());
+    final port = FakeShareIntake(intake: SharedFilesIntake(files));
+    // One repository per account, as the app's client hands out a view per
+    // account: what the next account's view is asked is what it would send.
+    final container = appContainer(
+      repo: ann,
+      extra: [
+        shareIntakeProvider.overrideWithValue(port),
+        repositoryProvider.overrideWith(
+          (ref) => ref.watch(signedInAccountProvider) == 'us-ben' ? ben : ann,
+        ),
+      ],
+    );
+    await tester.runAsync(() async {
+      await mountApp(
+        tester,
+        const ShareIntakeGate(child: Scaffold(body: Text('library'))),
+        container: container,
+      );
+      for (var waited = 0; waited < 5000; waited += 10) {
+        if (ann.batchesById.isNotEmpty) break;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(ann.batchesById, hasLength(1));
+      // Ben's session takes Ann's place while her run waits to start.
+      ann.sessionState = const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(
+          id: 'us-ben',
+          username: 'ben',
+          roles: ['user'],
+          uploadEnabled: true,
+        ),
+      );
+      await container.read(authControllerProvider.notifier).refreshSession();
+      expect(container.read(signedInAccountProvider), 'us-ben');
+      gate.complete();
+      for (var waited = 0; waited < 5000; waited += 10) {
+        if (ann.uploadsById.length == 2 || ben.uploadsById.isNotEmpty) break;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    await tester.pumpAndSettle();
+
+    expect(ben.uploadsById, isEmpty);
+    expect(
+      ann.uploadsById.values.map((u) => u.fileName),
+      unorderedEquals(['a.flac', 'b.flac']),
+    );
+  });
+
   testWidgets('a shared file over the whole allowance is worded as a '
       'picked one is', (tester) async {
     // Staged on disk for the reason the test above gives; the share

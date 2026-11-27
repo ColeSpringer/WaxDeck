@@ -69,11 +69,11 @@ void main() {
   test('a rebuilt client leaves the adapter a test injected open', () {
     final server = _Server();
     final container = appContainer(server: server);
-    container.read(repositoryProvider);
+    container.read(apiClientProvider);
 
     // What adopting an address does: the client is built again.
-    container.invalidate(repositoryProvider);
-    container.read(repositoryProvider);
+    container.invalidate(apiClientProvider);
+    container.read(apiClientProvider);
 
     expect(server.closed, 0);
   });

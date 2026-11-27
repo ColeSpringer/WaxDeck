@@ -403,10 +403,15 @@ class ServerSyncEvent {
 /// One page of the caller's server-side state changes.
 class ServerSyncPage {
   const ServerSyncPage({
+    required this.userId,
     this.events = const [],
     required this.nextSince,
     this.more = false,
   });
+
+  /// The account whose changes the page carries: the caller's, as `User.id`
+  /// names it.
+  final String userId;
 
   /// State changes, coalesced within the page.
   final List<ServerSyncEvent> events;

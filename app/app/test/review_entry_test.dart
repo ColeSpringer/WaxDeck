@@ -1156,6 +1156,42 @@ void main() {
     expect(repo.decideReviewCalls.single.action, 'discard');
   });
 
+  group('the header names who sent the entry in', () {
+    const pid = 'us-01M8D46NB7C2TGX9V59KNDFG4V';
+    ReviewEntryDetail submitted({String? name}) => ReviewEntryDetail(
+      id: 'rv-1',
+      kind: 'import',
+      status: 'pending',
+      mediaType: MediaType.music,
+      origin: 'acquisition',
+      title: 'Neon Meridian',
+      trackCount: 1,
+      uploadedBy: pid,
+      uploadedByName: name,
+      createdAt: DateTime.utc(2026, 7, 1),
+      candidates: const [],
+      tracks: const [
+        ReviewTrack(path: 'a.flac', title: 'a', durationMs: 200000),
+      ],
+    );
+
+    testWidgets('by the submitter\'s name', (tester) async {
+      await _pump(tester, _repoWith(submitted(name: 'Ada Admin')));
+
+      expect(find.text('1 track, Acquired by Ada Admin'), findsOneWidget);
+      expect(find.textContaining(pid), findsNothing);
+    });
+
+    testWidgets('without a by clause when the account has no name', (
+      tester,
+    ) async {
+      await _pump(tester, _repoWith(submitted()));
+
+      expect(find.text('1 track, Acquired'), findsOneWidget);
+      expect(find.textContaining(pid), findsNothing);
+    });
+  });
+
   testWidgets('a unit the library already holds says so and offers a copy', (
     tester,
   ) async {

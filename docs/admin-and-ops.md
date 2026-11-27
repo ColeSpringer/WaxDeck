@@ -107,7 +107,12 @@ signed in on the same browser meanwhile, as that account, starting
 clean. A browser, which cannot tell a refused reconnect from a dead
 network and whose cookie another tab can sign in over, also reads its
 session after each failed reconnect and when its socket comes back,
-before it catches up on what it missed. Media URLs
+before it catches up on what it missed. Until that read answers, the
+tab sends nothing else: a request made after its socket dropped, after
+the network came back, or after the browser froze the tab in the
+background waits for the answer, goes out once the session stands, and
+is never sent once the session has ended or another account holds the
+cookie. Media URLs
 (streams, downloads, artwork for casts) re-check on every fetch: one
 minted under a session that has ended, an app password that was
 revoked, or an account that lost the item stops opening, though a
@@ -601,9 +606,10 @@ choice, which asks first and then scans the library to apply it. Onto
 **Music** or **Mixed** the scan re-reads every file, which takes longer:
 in Music a book its parts' tags do not make is read as tracks again,
 while in Mixed a book whose parts already make one keeps them. Items
-whose kind was set by hand, or by an upload, keep it. When another
-catalog job is running the change waits for a rescan, which the message
-says (with **Re-read unchanged files** on, unless the move was onto
+whose kind was set by hand, or by an upload, keep it. That scan runs
+to its end and cannot be canceled. When another catalog job is running
+the change waits for a rescan, which the message says (with **Re-read
+unchanged files** on, unless the move was onto
 Books). A root named in `WAXDECK_AUDIOBOOK_ROOTS` is always Books and
 cannot be changed here.
 
@@ -869,6 +875,44 @@ scans notify nobody). Task and job progress streams live over the
 WebSocket channel; `GET /api/v1/tools/tasks/{id}/events` serves a task's
 lifecycle as server-sent events for anything that prefers a plain HTTP
 stream.
+
+An administrator can cancel a running scan, analysis or enrichment pass
+that this server started, whoever or whatever started it (an
+administrator, the schedule, the startup scan, a health fix): its row
+has a stop control, which asks first. A canceled job reads Canceling
+while it winds down and Stopped once it ends, or Done when it finished
+first. It keeps what it did before it stopped (the files it scanned or
+analyzed, the lookups it stored). An ordinary run's next pass carries
+on from there; a forced one (a rescan that reads every file again, an
+enrichment that asks again) is not resumed, so start it again to finish
+it. A cancel somebody asked for files no notification for anyone, the
+job's starter included, except a health fix: it still files its notice,
+which says its pass was canceled and what its re-check found. A job the
+server's shutdown stopped still tells its starter. Every other job runs
+to its end: a kind change, a library removal, an organize run or its
+undo, the rescan a library's media change starts (stopped part way, it
+would leave files in the old class), the per-request jobs (an upload's
+imports, deletes, restores, emptying the trash, purges), and any job
+this server process holds no way to stop: one submitted from the
+`waxbin` command line, or one run inside other work, such as a single
+item's enrichment or the watcher's scan of a folder
+(`POST /api/v1/jobs/{pid}/cancel` answers these with `conflict`).
+
+A task that has not finished has a stop control too, for its owner and
+for an administrator. A queued task, or one waiting to try again, is
+canceled at once; a running one reads Canceling while it winds down and
+then Canceled, or Done when it finished first. What a cancel keeps
+depends on the task: an acquisition or a playlist sync keeps the review
+entries it already opened; a genre normalize, a health fix, a catalog
+repair and a migration import stop between items and keep what they
+did, which their summary counts; a book merge or split, or a CUE split,
+removes what it made when canceled before it starts moving library
+files, and from then on cannot be canceled: it finishes, or puts things
+back, on its own. The stop control asks first only for an acquisition
+or a playlist sync that has already finished an item, saying those
+entries stay in the review queue; any other task cancels at once. A
+canceled task files no notification
+(`POST /api/v1/tools/tasks/{id}/cancel`).
 
 A book merge or split, or a CUE split, waiting out a passing failure
 reads Waiting rather than running: why (the catalog busy, a library

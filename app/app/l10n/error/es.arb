@@ -38,6 +38,8 @@
   "errorInternal": "El servidor ha encontrado un problema que no ha podido resolver.",
   "errorInvalidAddress": "El servidor no puede descargar de esa dirección: tiene que ser un enlace http o https cuyo servidor exista.",
   "errorInvalidRequest": "El servidor no ha podido procesar esa petición.",
+  "errorJobNotHeld": "Este servidor no tiene forma de detener este trabajo: se inició desde la línea de órdenes o forma parte de otro trabajo. Sigue hasta el final.",
+  "errorJobRunsToEnd": "Este trabajo sigue hasta el final, así que no se puede cancelar.",
   "errorLocalChannelOffline": "WaxDeck ha perdido la conexión en directo con el servidor. Se reconectará solo; inténtalo de nuevo en un momento.",
   "errorLocalCommandTimeout": "El servidor no ha respondido a ese comando a tiempo. Inténtalo de nuevo.",
   "errorLocalUnregistered": "Este dispositivo todavía no está listo como reproductor. Inténtalo de nuevo en un momento.",

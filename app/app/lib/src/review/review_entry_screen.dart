@@ -1006,7 +1006,7 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
-    final uploadedBy = detail.uploadedBy;
+    final submitter = detail.uploadedByName;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -1025,7 +1025,7 @@ class _Header extends StatelessWidget {
                 ),
               const SizedBox(height: WaxSpace.s4),
               Text(
-                uploadedBy == null
+                submitter == null || submitter.isEmpty
                     ? l10n.reviewHeaderFacts(
                         detail.trackCount,
                         reviewOriginLabel(l10n, detail.origin),
@@ -1033,7 +1033,7 @@ class _Header extends StatelessWidget {
                     : l10n.reviewHeaderFactsBy(
                         detail.trackCount,
                         reviewOriginLabel(l10n, detail.origin),
-                        uploadedBy,
+                        submitter,
                       ),
                 style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),

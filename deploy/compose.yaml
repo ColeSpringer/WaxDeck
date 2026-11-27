@@ -73,7 +73,10 @@ services:
     deploy:
       replicas: ${WAXDECK_SEAL:-1}
     network_mode: host
-    command: ["server", "--host", "127.0.0.1", "--tenant-keys", "${WAXDECK_SEAL_KEY:-${WAXDECK_INTERNAL_KEY:-}}"]
+    command: ["server", "--host", "127.0.0.1"]
+    # From the environment rather than argv, which ps shows every local user.
+    environment:
+      WAXSEAL_TENANT_KEYS: ${WAXDECK_SEAL_KEY:-${WAXDECK_INTERNAL_KEY:-}}
     shm_size: "1gb"
     stop_grace_period: 70s
     cap_drop: [ALL]

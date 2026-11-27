@@ -25,6 +25,8 @@ class AdminSettingsController extends AsyncNotifier<AdminSettings> {
   /// The answer is the whole stored document.
   Future<void> edit(AdminSettingsChange change) {
     final ahead = _pending;
+    // The asking account's, whenever its turn comes.
+    final repository = ref.read(repositoryProvider);
     final run = () async {
       if (ahead != null) {
         try {
@@ -33,9 +35,7 @@ class AdminSettingsController extends AsyncNotifier<AdminSettings> {
           // A failure ahead in the queue is that caller's to report.
         }
       }
-      final stored = await ref
-          .read(repositoryProvider)
-          .putAdminSettings(change);
+      final stored = await repository.putAdminSettings(change);
       if (ref.mounted) state = AsyncData(stored);
     }();
     _pending = run;
@@ -162,10 +162,76 @@ final backupsProvider = AsyncNotifierProvider<BackupsController, List<Backup>>(
 /// the tasks screen is where one is watched; the sync binder refetches
 /// it on every job marker. An administrator's: anyone else is refused,
 /// and a refusal is not retried.
-final adminJobsProvider = FutureProvider<List<Job>>(
-  (ref) => ref.watch(repositoryProvider).listJobs(),
+final adminJobsProvider = AsyncNotifierProvider<AdminJobsController, List<Job>>(
+  AdminJobsController.new,
   retry: retryUnlessRefused,
 );
+
+class AdminJobsController extends AsyncNotifier<List<Job>> {
+  /// Counts the list's reads, so a reply knows whether one came after it.
+  int _reads = 0;
+
+  /// The jobs whose cancel the server answered, until a read shows them
+  /// ended or gone.
+  final _canceled = <String>{};
+
+  @override
+  Future<List<Job>> build() async {
+    _reads++;
+    final jobs = await ref.watch(repositoryProvider).listJobs();
+    _canceled.retainWhere((pid) => jobs.any((job) => job.pid == pid));
+    return _keepCancels(jobs);
+  }
+
+  /// Asks a job to stop, and puts the server's answer in its row until
+  /// the list's next read: running with the cancel asked for, or as it
+  /// ended. A job gone since leaves the list. A read begun while the
+  /// cancel was out is newer than its answer, which then only keeps the
+  /// cancel asked for on its row; so does every read until one shows the
+  /// job ended, as one the server answered before it took the cancel
+  /// does not.
+  Future<void> cancel(String pid) async {
+    final reads = _reads;
+    Job? answered;
+    try {
+      answered = await ref.read(repositoryProvider).cancelJob(pid);
+    } on WaxDeckApiException catch (e) {
+      if (e.statusCode != 404) rethrow;
+    }
+    if (!ref.mounted) return;
+    if (answered == null) {
+      _canceled.remove(pid);
+    } else {
+      _canceled.add(pid);
+    }
+    final current = state.value;
+    if (current == null) return;
+    if (_reads == reads) {
+      state = AsyncData([
+        for (final job in current)
+          if (job.pid != pid) job else ?answered,
+      ]);
+      return;
+    }
+    final kept = _keepCancels(current);
+    if (!identical(kept, current)) state = AsyncData(kept);
+  }
+
+  /// [jobs] with the cancel asked for on each unended row whose cancel the
+  /// server answered; a row that shows its job ended lets it go. [jobs]
+  /// itself when nothing changes.
+  List<Job> _keepCancels(List<Job> jobs) {
+    _canceled.removeAll([
+      for (final job in jobs)
+        if (job.ended) job.pid,
+    ]);
+    bool owed(Job job) => !job.cancelRequested && _canceled.contains(job.pid);
+    if (!jobs.any(owed)) return jobs;
+    return [
+      for (final job in jobs) owed(job) ? job.withCancelRequested() : job,
+    ];
+  }
+}
 
 /// Whether a library scan is running, as far as the job list knows. A
 /// scan covers every root, so every scan trigger reads this one.
@@ -216,6 +282,8 @@ class LibraryMatchingController extends AsyncNotifier<LibraryMatching> {
   /// from it would silently undo what another admin stored since.
   Future<void> _update(LibraryMatching Function(LibraryMatching) change) {
     final ahead = _pending;
+    // The asking account's, whenever its turn comes.
+    final repo = ref.read(repositoryProvider);
     final run = () async {
       if (ahead != null) {
         try {
@@ -225,7 +293,6 @@ class LibraryMatchingController extends AsyncNotifier<LibraryMatching> {
           // this write still starts from what the server holds.
         }
       }
-      final repo = ref.read(repositoryProvider);
       final current = await repo.getLibraryMatching(libraryPid);
       final stored = await repo.setLibraryMatching(libraryPid, change(current));
       state = AsyncData(stored);

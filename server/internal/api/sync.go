@@ -102,7 +102,7 @@ func (s *Server) SyncServer(ctx context.Context, req SyncServerRequestObject) (S
 			return nil, err
 		}
 		return SyncServer200JSONResponse(ServerSyncPage{
-			Events: []ServerSyncEvent{}, NextSince: cursor,
+			Events: []ServerSyncEvent{}, NextSince: cursor, UserId: uc.ID,
 		}), nil
 	}
 
@@ -110,7 +110,11 @@ func (s *Server) SyncServer(ctx context.Context, req SyncServerRequestObject) (S
 	if err != nil {
 		return nil, err
 	}
-	out := ServerSyncPage{Events: make([]ServerSyncEvent, 0, len(delta.Events)), NextSince: delta.NextSince}
+	out := ServerSyncPage{
+		Events:    make([]ServerSyncEvent, 0, len(delta.Events)),
+		NextSince: delta.NextSince,
+		UserId:    uc.ID,
+	}
 	if delta.More {
 		out.More = ptr(true)
 	}

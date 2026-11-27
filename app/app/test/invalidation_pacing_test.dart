@@ -1639,7 +1639,7 @@ void main() {
       // laid over the rows held would keep the last account's tail.
       server.rows = server.rows.take(2 * _page + 100).toList();
       container.read(catalogFanOutProvider).sweep(CatalogRefresh.head);
-      container.invalidate(repositoryProvider);
+      container.invalidate(apiClientProvider);
       final state = await _landed(container);
 
       expect(_pids(state.items), _pids(server.rows.take(_page)));
@@ -1900,6 +1900,7 @@ void main() {
       repo.reviewEntries = repo.reviewEntries.skip(1).toList();
       repo.serverPages.add(
         const ServerSyncPage(
+          userId: 'us-1',
           events: [ServerSyncEvent(kind: 'review', pid: 'rv-0')],
           nextSince: 'scur-1',
         ),
@@ -1955,6 +1956,7 @@ void main() {
       ];
       repo.serverPages.add(
         const ServerSyncPage(
+          userId: 'us-1',
           events: [ServerSyncEvent(kind: 'review', pid: decided)],
           nextSince: 'scur-1',
         ),

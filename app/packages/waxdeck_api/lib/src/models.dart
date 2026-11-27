@@ -89,6 +89,18 @@ class WaxDeckApiException implements Exception {
   String toString() => 'WaxDeckApiException($code, $statusCode): $message';
 }
 
+/// A request made for an account the client no longer holds, refused
+/// unsent: `transport`, as a request that never left is, but nothing is
+/// wrong with the link. The work that made it
+/// outlived its account, so what it carried waits for that account.
+class AccountNotHeldException extends WaxDeckApiException {
+  const AccountNotHeldException()
+    : super(
+        code: 'transport',
+        message: 'not sent: made for an account this client no longer holds',
+      );
+}
+
 /// The spec's `Error` object as the exception, or null for anything that
 /// is not one: an object whose `code` and `message` are both strings.
 /// What is not one is the caller's to word, as the fallback it has.

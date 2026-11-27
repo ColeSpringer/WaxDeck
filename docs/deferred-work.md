@@ -118,11 +118,12 @@ Every entry carries a gate tag saying what actually blocks it:
 
 - `[in-repo]` **A persistent server error on an outbox entry makes the
   sync socket flap.** Reconcile drops the channel on any failure but a
-  401, and the backoff resets on every successful connect, so an entry
-  the server keeps answering with a 5xx reconnects the engine about every
-  second for as long as it keeps failing, and each reconnect reads as
-  the server coming back: the screens leave their offline state and the
-  player takes it as a return, once an attempt. Whether such an entry
+  401, and the backoff resets only on a walk that gets through, so an
+  entry the server keeps answering with a 5xx reconnects the engine on
+  waits that double from a second to a minute, for as long as it keeps
+  failing, and each reconnect reads as the server coming back: the
+  screens leave their offline state and the player takes it as a
+  return, once an attempt. Whether such an entry
   should drop the socket at all, or be parked and retried on its own
   clock, is the open question.
 
@@ -180,10 +181,11 @@ Every entry carries a gate tag saying what actually blocks it:
   the operator's order: it is built once at boot, Deezer first for speed
   and the archive behind it for coverage and licensing.
 
-- `[hardware]` **Android UnifiedPush distributor integration.** The server, API,
+- `[in-repo]` **Android UnifiedPush distributor integration.** The server, API,
   and settings surface shipped; the client still needs the
-  distributor plugin wrapped behind a WaxDeck-owned interface and a
-  real device to verify against. Blocked on hardware access.
+  distributor plugin wrapped behind a WaxDeck-owned interface. An
+  emulator with a distributor app installed (ntfy's, say) is enough to
+  verify it against; no device is needed.
 - `[in-repo]` **The Android Auto tree draws no covers.** Its entries
   carry an id, a title and a subtitle. The offline mirror now hands each
   summary the cover pinned for it, so the tree has a picture to offer
@@ -504,7 +506,7 @@ Every entry carries a gate tag saying what actually blocks it:
   are slow rather than hung. Blocked on the owner's call on that
   trade-off.
 
-- `[in-repo]` **The Android build turns Kotlin's incremental compiler
+- `[third-party]` **The Android build turns Kotlin's incremental compiler
   off on Windows, and should stop having to.** Kotlin 2.3.20 opens a
   cache file it already holds open while closing it, and every module
   with Kotlin in it fails to compile: "Could not close incremental
@@ -517,8 +519,8 @@ Every entry carries a gate tag saying what actually blocks it:
   an explicit `-Pkotlin.incremental`. Retire it at the next Kotlin bump
   that fixes the cache double-registration: delete the block, build an
   APK on Windows, and if it survives the flag is no longer needed. The
-  Kotlin version it is pinned against sits ten lines above it in the
-  same file.
+  Kotlin version it is pinned against sits just above it in the same
+  file.
 
 - `[third-party]` **Skwasm runs single-threaded until a Flutter release
   carries its heap-race fix.** Multi-threaded skwasm corrupts its shared

@@ -28,14 +28,14 @@ class PlayStateController extends OptimisticStateController<PlayState> {
   Future<void> setStarred(bool starred) => mutate(
     optimistic: (s) => _copy(s, starred: starred),
     call: () => ref.read(repositoryProvider).setStar(pid, starred),
-    queue: (engine) => engine.queueStar(pid, starred),
+    queue: (engine, owner) => engine.queueStar(pid, starred, owner: owner),
   );
 
   /// Rates the item 0 to 100, or clears the rating with null.
   Future<void> rate(int? rating) => mutate(
     optimistic: (s) => _copy(s, rating: rating, setRating: true),
     call: () => ref.read(repositoryProvider).setRating(pid, rating),
-    queue: (engine) => engine.queueRating(pid, rating),
+    queue: (engine, owner) => engine.queueRating(pid, rating, owner: owner),
   );
 
   /// A field-level copy; PlayState has no copyWith because a nullable

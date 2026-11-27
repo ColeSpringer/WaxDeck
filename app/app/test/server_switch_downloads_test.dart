@@ -174,18 +174,18 @@ void main() {
       overrides: [
         bootServerAddressProvider.overrideWithValue(a.baseUrl),
         credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-        repositoryProvider.overrideWith(
+        apiClientProvider.overrideWith(
           (ref) => ref.watch(serverBaseUrlProvider) == a.baseUrl ? a : b,
         ),
         audioEngineProvider.overrideWithValue(FakeEngine()),
         mirrorDatabaseProvider.overrideWithValue(db),
         artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
         // As the app builds both, bar the socket: the engine follows the
-        // repository, and the downloads manager outlives a server change.
+        // client, and the downloads manager outlives a server change.
         syncEngineProvider.overrideWith((ref) {
           final engine = SyncEngine(
             db: db,
-            repository: ref.watch(repositoryProvider),
+            repository: ref.watch(apiClientProvider),
             channelFactory: deadChannelFactory(),
           );
           ref.onDispose(engine.dispose);

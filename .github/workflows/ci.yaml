@@ -118,7 +118,7 @@ jobs:
 
   server:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -141,12 +141,14 @@ jobs:
       - name: Body-limit lint
         run: cd server && go run ./cmd/bodylint ./...
       # internal/service and internal/api build a full harness (fresh
-      # migrated DB, catalog, service stack) per test and run for about
-      # ten minutes each under -race here, with modernc's checkptr
-      # exemption below: too close to go test's default 10m per-package
-      # cap, so the cap is set to twice that. The harnesses are kept
-      # cheap: test-weakened argon2, memoized fixture encodes, parallel
-      # tests.
+      # migrated DB, catalog, service stack) per test and run for twelve
+      # to twenty minutes each under -race here, side by side, with
+      # modernc's checkptr exemption below; a runner can be half again as
+      # slow as another on the same code. go test's default 10m
+      # per-package cap is far too close, so the cap is 30m, and the
+      # job's sits above it so a timeout keeps its dump. The harnesses are
+      # kept cheap: test-weakened argon2, memoized fixture encodes,
+      # parallel tests.
       #
       # -race also turns on checkptr, which validates unsafe.Pointer
       # conversions. modernc's transpiled SQLite makes them on nearly
@@ -162,7 +164,7 @@ jobs:
       # dump included, is the artifact below; the last such dump ran to
       # eight thousand lines with the one line that mattered inside it.
       - name: Test (race)
-        run: cd server && bash ../tools/ci/go-test.sh "$RUNNER_TEMP/go-test.log" -race -gcflags='modernc.org/...=-d=checkptr=0' -timeout 20m ./...
+        run: cd server && bash ../tools/ci/go-test.sh "$RUNNER_TEMP/go-test.log" -race -gcflags='modernc.org/...=-d=checkptr=0' -timeout 30m ./...
       - uses: actions/upload-artifact@v7
         if: failure() || cancelled()
         with:
@@ -439,10 +441,10 @@ jobs:
           done
           echo "::error::the server never connected to the engine"
           exit 1
-      # WaxSeal alone needs something outside the runner: YouTube has to
-      # serve its browser a watch page, and does not serve every address.
-      # The script takes that refusal as a warning and fails on anything
-      # else that keeps the daemon from coming up.
+      # WaxSeal alone needs something outside the runner: YouTube, which
+      # does not serve every address. The script takes that refusal as a
+      # warning and fails on anything else that keeps the daemon from
+      # coming up.
       - name: WaxSeal starts
         run: tools/ci/waxseal-starts.sh deploy/compose.yaml
       # The same readiness idiom run-desktop.sh uses: bootstrap the first

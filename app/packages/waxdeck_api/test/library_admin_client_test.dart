@@ -56,6 +56,8 @@ void main() {
         'pid': 'jb-1',
         'kind': 'remove-root',
         'state': 'running',
+        'cancelable': false,
+        'cancelRequested': false,
         'target': <String, Object?>{'type': 'library', 'pid': 'lb-2'},
       },
     );

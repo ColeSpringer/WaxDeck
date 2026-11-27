@@ -97,6 +97,9 @@ func reviewDetailJSON(d service.ReviewDetailDTO) ReviewEntryDetail {
 		Tracks:         make([]ReviewTrack, 0, len(d.Tracks)),
 		Candidates:     make([]ReviewCandidate, 0, len(d.Candidates)),
 	}
+	if d.UploadedByName != "" {
+		out.UploadedByName = ptr(d.UploadedByName)
+	}
 	if d.IdentifyDeclined {
 		out.IdentifyDeclined = ptr(true)
 	}

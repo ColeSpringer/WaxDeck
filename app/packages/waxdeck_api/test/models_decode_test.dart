@@ -625,7 +625,9 @@ void main() {
           },
         ],
         'nextSince': 'scur-1',
+        'userId': 'us-1',
       }, _noBase);
+      expect(events.userId, 'us-1');
       expect(events.events.single.kind, 'book-settings');
       expect(events.events.single.bookSettings?.speed, 2.0);
     });
@@ -633,6 +635,7 @@ void main() {
     test('a bookmarks event carries the book\'s list, empty included', () {
       final page = decodeServerSyncPage(<String, Object?>{
         'nextSince': 'scur-2',
+        'userId': 'us-1',
         'events': <Object?>[
           <String, Object?>{
             'kind': 'bookmarks',
@@ -755,10 +758,24 @@ void main() {
         'pid': 'jb-01JZX5N8QW3F4V9T2B7KDEXAMPL',
         'kind': 'scan',
         'state': 'running',
+        'cancelable': true,
+        'cancelRequested': false,
         'progress': ?progress,
       }, _noBase);
       expect(running(0.42).progress, 0.42);
       expect(running(null).progress, isNull);
+    });
+
+    test('a job says whether it can be canceled and whether it was asked', () {
+      final winding = decodeJob({
+        'pid': 'jb-01JZX5N8QW3F4V9T2B7KDEXAMPL',
+        'kind': 'enrich',
+        'state': 'running',
+        'cancelable': true,
+        'cancelRequested': true,
+      }, _noBase);
+      expect(winding.cancelable, isTrue);
+      expect(winding.cancelRequested, isTrue);
     });
 
     test('a finished job carries when it ran and what it did', () {
@@ -766,6 +783,8 @@ void main() {
         'pid': 'jb-01JZX5N8QW3F4V9T2B7KDEXAMPL',
         'kind': 'scan',
         'state': 'done',
+        'cancelable': false,
+        'cancelRequested': false,
         'startedAt': '2026-09-29T10:00:00Z',
         'finishedAt': '2026-09-29T10:02:00Z',
         'result': {'created': 3, 'errored': 0},
@@ -794,6 +813,8 @@ void main() {
         'pid': 'jb-01JZX5N8QW3F4V9T2B7KDEXAMPL',
         'kind': 'enrich',
         'state': 'running',
+        'cancelable': true,
+        'cancelRequested': false,
         'target': {
           'type': 'item',
           'pid': 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPL',

@@ -23,7 +23,9 @@ final mirrorDatabaseProvider = Provider<MirrorDatabase?>((ref) {
 final syncEngineProvider = Provider<SyncEngine?>((ref) {
   final db = ref.watch(mirrorDatabaseProvider);
   if (db == null) return null;
-  final repository = ref.watch(repositoryProvider);
+  // The client, not an account's view: the engine holds every account's
+  // queued writes, and sends each made for the account that queued it.
+  final repository = ref.watch(apiClientProvider);
   final engine = SyncEngine(
     db: db,
     repository: repository,
@@ -62,7 +64,7 @@ final downloadManagerProvider = Provider<DownloadManagerPort?>((ref) {
 /// paused.
 void tellOfServerChanges(Ref ref, BackgroundDownloadManager manager) {
   final address = ref.container.listen(
-    repositoryProvider,
+    apiClientProvider,
     (_, _) => manager.serverChanged(),
   );
   ref.onDispose(address.close);

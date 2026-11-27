@@ -5259,6 +5259,14 @@
   "@errorInvalidRequest": {
     "description": "Error sentence for the spec code `invalid-request`."
   },
+  "errorJobNotHeld": "This server holds no way to stop this job: it was started from the command line, or it runs inside other work. It runs to its end.",
+  "@errorJobNotHeld": {
+    "description": "Error sentence for a cancel refused with `conflict` and the params' reason job-not-held: a running library job this server cannot stop, because the command line submitted it or it runs inline inside a request or another task (one item's enrichment, a watched folder's scan)."
+  },
+  "errorJobRunsToEnd": "This job runs to its end, so it cannot be canceled.",
+  "@errorJobRunsToEnd": {
+    "description": "Error sentence for a cancel refused with `conflict` and the params' reason job-runs-to-end: a library job that always finishes once started (a kind change, a library removal, an organize run, or the rescan that applies a library's new media type)."
+  },
   "errorLocalChannelOffline": "WaxDeck lost its live connection to the server. It reconnects on its own; try again in a moment.",
   "@errorLocalChannelOffline": {
     "description": "Error sentence for the client's own `local-channel-offline` code: the event socket this device controls playback over is down. Nothing outside WaxDeck failed."
@@ -13584,7 +13592,7 @@
   },
   "reviewHeaderFactsBy": "{count, plural, =1{1 track, {origin} by {who}} other{{count} tracks, {origin} by {who}}}",
   "@reviewHeaderFactsBy": {
-    "description": "The same line where the entry was uploaded by a named account. {origin} is already worded by the caller; {who} is a username.",
+    "description": "The same line where the submitting account has a name. {origin} is already worded by the caller; {who} is the account's display name or username.",
     "placeholders": {
       "count": {
         "type": "int",
@@ -16954,6 +16962,18 @@
   "@toolsJobAnalyze": {
     "description": "Name of a catalog job that fingerprints files and measures their loudness."
   },
+  "toolsJobCancelAction": "Cancel job",
+  "@toolsJobCancelAction": {
+    "description": "Confirm button of the dialog that asks before canceling a running library job (a scan, an audio analysis or an enrichment pass)."
+  },
+  "toolsJobCancelBody": "What it has done stays, and its next run carries on from there. A forced run does not resume: start it again.",
+  "@toolsJobCancelBody": {
+    "description": "Body of the dialog that asks before canceling a running library job: what a cancel keeps. A canceled scan, analysis or enrichment keeps what it did. An ordinary run is carried on by the next one; a forced run (a rescan that re-reads every file, an enrichment that asks again) is not resumed, so the administrator starts it again to finish it."
+  },
+  "toolsJobCancelTitle": "Cancel this job?",
+  "@toolsJobCancelTitle": {
+    "description": "Title of the dialog that asks before canceling a running library job."
+  },
   "toolsJobDelete": "Delete",
   "@toolsJobDelete": {
     "description": "Name of a catalog job that deletes files from the library."
@@ -17113,11 +17133,11 @@
   },
   "toolsStateCanceled": "Stopped",
   "@toolsStateCanceled": {
-    "description": "State of a job the server stopped before it finished, as it shut down or restarted. Agrees with the word for a task in this language."
+    "description": "State of a job that stopped before it finished: an administrator canceled it, or the server shut down or restarted. Agrees with the word for a task in this language."
   },
   "toolsStateCanceling": "Canceling",
   "@toolsStateCanceling": {
-    "description": "State of a running task that was asked to cancel and is winding down. It then ends canceled, or done when it finished first."
+    "description": "State of a running task or library job that was asked to cancel and is winding down. A task then ends canceled, a library job stopped, or either done when it finished first."
   },
   "toolsStateCrashed": "Crashed",
   "@toolsStateCrashed": {
