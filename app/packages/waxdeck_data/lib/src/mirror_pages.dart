@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+
 import 'database.dart';
 
 /// Offline listing over the local mirror, shaped like the server's item

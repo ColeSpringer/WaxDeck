@@ -451,9 +451,11 @@ void main() {
       expect(index.domain, BrowseDomain.books);
       expect(index.dimension, MusicDimension.genres);
       expect(
-        GoRouter.of(
-          tester.element(find.byType(MusicIndexScreen)),
-        ).routerDelegate.currentConfiguration.uri.path,
+        GoRouter.of(tester.element(find.byType(MusicIndexScreen)))
+            .routerDelegate
+            .currentConfiguration
+            .uri
+            .path,
         WaxRoute.bookIndex(BookDimension.genres),
       );
     });

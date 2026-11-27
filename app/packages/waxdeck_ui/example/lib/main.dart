@@ -37,9 +37,8 @@ class _CatalogAppState extends State<CatalogApp> {
   @override
   void initState() {
     super.initState();
-    SampleArt.generate(
-      SampleArt.seeds,
-    ).then((art) => setState(() => _art = art));
+    SampleArt.generate(SampleArt.seeds)
+        .then((art) => setState(() => _art = art));
   }
 
   @override
@@ -65,9 +64,8 @@ class _CatalogAppState extends State<CatalogApp> {
       ],
       home: Builder(
         builder: (context) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(_textScale)),
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(_textScale)),
           child: _art == null
               ? const ColoredBox(color: Color(0xFF16130F))
               : _CatalogShell(

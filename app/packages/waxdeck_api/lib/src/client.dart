@@ -1161,9 +1161,8 @@ class WaxDeckClient extends _WaxDeckCalls
   /// answer is a no.
   Future<bool> _stillReading(String uploadId) async {
     try {
-      final session = await getUpload(
-        uploadId,
-      ).timeout(_chunkStall < _readingCheck ? _chunkStall : _readingCheck);
+      final session = await getUpload(uploadId)
+          .timeout(_chunkStall < _readingCheck ? _chunkStall : _readingCheck);
       return session.state == 'receiving' && session.idle == Duration.zero;
     } on Object {
       return false;

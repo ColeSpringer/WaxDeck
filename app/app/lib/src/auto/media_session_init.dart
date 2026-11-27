@@ -77,9 +77,8 @@ Future<void> initMediaSession(ProviderContainer container) async {
       onPlayFromMediaId: queue.playItem,
       // The device's language rather than the app's: the channel is
       // listed in the system's own settings.
-      channelName: l10nFor(
-        container.read(systemLocalesProvider),
-      ).autoPlaybackChannel,
+      channelName: l10nFor(container.read(systemLocalesProvider))
+          .autoPlaybackChannel,
       controlLabels: mediaControlLabels(container.read(offTreeL10nProvider)),
       onSkipToQueueItem: queue.jumpTo,
       // Passed from here because this is the side of the boundary that

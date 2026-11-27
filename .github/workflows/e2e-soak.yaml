@@ -26,9 +26,9 @@ env:
 jobs:
   soak:
     runs-on: ubuntu-latest
-    # Three passes of about five minutes each, and the config caps a
-    # pass at twenty (globalTimeout), so a stalled pass ends with its
-    # report written and the next one still runs; this is the backstop.
+    # Three passes, each capped at twenty minutes by the config
+    # (globalTimeout), so a stalled pass ends with its report written and
+    # the next one still runs; this is the backstop.
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -46,7 +46,7 @@ jobs:
       # Built here rather than downloaded: this workflow does not run
       # beside the CI build that publishes the web-dist artifact.
       - name: Build web (wasm)
-        run: cd app/app && flutter build web --wasm
+        run: tools/build-web.sh
       - name: Stage the web bundle for embedding
         run: |
           mkdir -p server/internal/web/dist
@@ -62,17 +62,29 @@ jobs:
         run: cd e2e && npm ci --no-audit --no-fund
       - name: Typecheck and conform
         run: cd e2e && npm run typecheck && npm run conform
+      # WebKit and Firefox join the soak: their projects are the newest
+      # in the suite, and a soak is where an unreliable one shows.
       - name: Cache Playwright browsers
         id: browser-cache
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
-      - name: Install Playwright browser
+          key: playwright-all-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
+      - name: Install Playwright browsers
         if: steps.browser-cache.outputs.cache-hit != 'true'
-        run: cd e2e && npx playwright install chromium
+        run: cd e2e && npx playwright install chromium webkit firefox
       - name: Playwright system dependencies
-        run: tools/ci/playwright-deps.sh
+        run: tools/ci/playwright-deps.sh chromium webkit firefox
+      # Headless Firefox has no WebGL without a GPU, and skwasm needs it:
+      # Firefox runs headed, on a virtual display.
+      - name: Virtual display
+        run: command -v xvfb-run >/dev/null || tools/ci/apt-install.sh xvfb
+      # Neither engine plays without an audio output, and a runner has no
+      # sound device.
+      - name: Null audio sink
+        run: |
+          server=$(tools/ci/null-audio-sink.sh)
+          echo "WAXDECK_E2E_PULSE_SERVER=$server" >> "$GITHUB_ENV"
       # The whole suite, N times over, rather than `--repeat-each=N`.
       # Two reasons, and both were found by trying the other way.
       #
@@ -100,6 +112,8 @@ jobs:
         env:
           E2E_RETRIES: "0"
           E2E_QUARANTINE: include
+          WAXDECK_E2E_ENGINES: webkit,firefox
+          WAXDECK_E2E_FIREFOX_HEADED: "1"
           REPEAT: ${{ inputs.repeat || '3' }}
         run: |
           cd e2e
@@ -110,7 +124,7 @@ jobs:
             # first pass with a problem answers less than it was asked,
             # and the later passes are the ones running against a stack
             # that has been used - which is half of what this is for.
-            npx playwright test --output="test-results/pass-$pass" || status=1
+            xvfb-run -a npx playwright test --output="test-results/pass-$pass" || status=1
             if [ -f test-results/report.json ]; then
               mv test-results/report.json "test-results/pass-$pass-report.json"
             fi

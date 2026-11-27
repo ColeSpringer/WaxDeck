@@ -1309,9 +1309,8 @@ void main() {
           resultPids: ending == 'done' ? const [bookPid] : const [],
           createdAt: queued.createdAt,
         );
-        ProviderScope.containerOf(
-          tester.element(find.byType(BookScreen)),
-        ).invalidate(toolTasksProvider);
+        ProviderScope.containerOf(tester.element(find.byType(BookScreen)))
+            .invalidate(toolTasksProvider);
         await tester.pumpAndSettle();
 
         expect(find.textContaining(' parts'), findsNothing);
@@ -1334,9 +1333,8 @@ void main() {
       final queued = repo.toolTasksById.values.single;
       repo.books[bookPid] = testBook(bookPid, partCount: 1);
       repo.toolTasksById.remove(queued.id);
-      ProviderScope.containerOf(
-        tester.element(find.byType(BookScreen)),
-      ).invalidate(toolTasksProvider);
+      ProviderScope.containerOf(tester.element(find.byType(BookScreen)))
+          .invalidate(toolTasksProvider);
       await tester.pumpAndSettle();
 
       expect(find.textContaining(' parts'), findsNothing);

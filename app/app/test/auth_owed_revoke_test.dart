@@ -465,9 +465,8 @@ void main() {
       final page = await _annLeftUnheard();
       final container = page.container;
 
-      final took = await _auth(
-        container,
-      ).login(username: 'ben', password: 'pw');
+      final took = await _auth(container)
+          .login(username: 'ben', password: 'pw');
       await pumpEventQueue();
       expect(took, isTrue);
       expect(page.server.asked.take(2), ['revoke', 'sign-in']);
@@ -487,9 +486,8 @@ void main() {
       final container = page.container;
       page.server.revokeRefusal = _broken;
 
-      final took = await _auth(
-        container,
-      ).login(username: 'ben', password: 'pw');
+      final took = await _auth(container)
+          .login(username: 'ben', password: 'pw');
       await pumpEventQueue();
       expect(took, isTrue);
       expect(page.server.asked.take(2), ['revoke', 'sign-in']);

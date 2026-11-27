@@ -3613,14 +3613,13 @@ void main() {
 
       /// A server whose catalog stands at [head]: a cursor there is told
       /// nothing changed, an older one that an artist did.
-      _Link serving(String Function() head) =>
-          _Link()
-            ..answerFor = (since) => since == head()
-                ? {'unchanged': true, 'since': head()}
-                : {
-                    'pids': ['ar-G'],
-                    'since': head(),
-                  };
+      _Link serving(String Function() head) => _Link()
+        ..answerFor = (since) => since == head()
+            ? {'unchanged': true, 'since': head()}
+            : {
+                'pids': ['ar-G'],
+                'since': head(),
+              };
 
       test('is the one whose answer was lost when the socket before it went '
           'before its answer came', () async {

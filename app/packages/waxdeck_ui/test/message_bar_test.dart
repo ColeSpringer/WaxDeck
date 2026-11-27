@@ -137,9 +137,9 @@ void main() {
     );
     expect(ground.color, WaxColors.dark.surface3);
     expect(
-      DefaultTextStyle.of(
-        tester.element(find.text('Scan started')),
-      ).style.color,
+      DefaultTextStyle.of(tester.element(find.text('Scan started')))
+          .style
+          .color,
       WaxColors.dark.textPrimary,
     );
     expect(tester.binding.hasScheduledFrame, isFalse);

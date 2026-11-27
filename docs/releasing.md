@@ -82,7 +82,7 @@ binary. Measured on Flutter 3.50.1, `make web`, WasmGC target:
 
 | First paint | Raw | gzip |
 |---|---|---|
-| `main.dart.wasm` (the app) | 6.28 MB | 2.25 MB |
+| `main.dart.wasm` (the app) | 6.27 MB | 2.25 MB |
 | `canvaskit/skwasm.wasm` (the renderer) | 3.45 MB | 1.48 MB |
 | Eager fonts (Archivo, Inter, Spline Sans Mono, two Phosphor subsets) | 1.34 MB | 634 KB |
 | The engine's default Roboto and the Material icon subset | 64 KB | 63 KB |
@@ -90,17 +90,19 @@ binary. Measured on Flutter 3.50.1, `make web`, WasmGC target:
 | Brand emblem and favicon | 84 KB | 84 KB |
 | **Total** | **11.4 MB** | **4.54 MB** |
 
-Nothing else is fetched to draw the first screen. What is on disk and
-not in that total:
+Nothing else is fetched to draw the first screen. Firefox runs the same
+wasm build, drawn by `skwasm_heavy.wasm` (4.99 MB, 2.19 MB gzipped) in
+place of `skwasm.wasm`: it lacks the codecs and break iterators the
+smaller renderer leans on. What is on disk and not in that total:
 
-- **`main.dart.js`, 6.69 MB** (1.89 MB gzipped). The JS fallback for
-  browsers that cannot run the wasm build, fetched *instead of* the
-  wasm, never beside it.
+- **`main.dart.js`, 6.73 MB** (1.90 MB gzipped). The JS build, for
+  Safari (kept on it, see docs/deferred-work.md) and for browsers that
+  cannot run the wasm build, fetched *instead of* the wasm, never beside
+  it.
 - **The rest of `canvaskit/`, 33 MB.** Every renderer variant Flutter
   ships: CanvasKit with its Chromium and WebParagraph builds,
-  `skwasm_heavy` (for browsers without Chromium's codecs and break
-  iterators), WIMP, and the `.symbols` files for each. One is loaded,
-  and the loader picks it. They are embedded because the engine
+  `skwasm_heavy`, WIMP, and the `.symbols` files for each. One is
+  loaded, and the loader picks it. They are embedded because the engine
   resolves them at runtime from this origin and a LAN-only instance
   cannot reach Google's CDN.
 - **On-demand fonts.** Twenty deferred faces, about 34 MB in all -
@@ -116,6 +118,13 @@ The whole embedded tree is about 86 MB, which is what a server binary
 gains from `-tags withweb`. Note that WaxDeck serves these
 uncompressed; a reverse proxy that compresses is worth roughly the
 gzip column on every cold load.
+
+A warm load fetches almost none of it. The build names the entrypoints
+and everything under `assets/` after their content
+(`tools/build-web.sh`), and the server answers a file whose name
+carries its own hash with a year's `immutable` caching. Everything else,
+`index.html` and `flutter_bootstrap.js` first, is revalidated against
+its ETag, so a deploy is picked up on the next load.
 
 Re-measure when the engine version moves or when a font joins the eager
 chain.

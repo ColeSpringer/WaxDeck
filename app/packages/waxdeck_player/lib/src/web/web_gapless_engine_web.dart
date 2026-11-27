@@ -73,9 +73,8 @@ class WebGaplessEngine implements TimelineAudioEngine {
       Stream<EngineProcessingState>.multi((listener) {
         listener.add(processingState);
         final subscriptions = <StreamSubscription<Object?>>[
-          _merged<EngineProcessingState>(
-            (e) => e.processingStateStream,
-          ).listen((_) => listener.add(processingState)),
+          _merged<EngineProcessingState>((e) => e.processingStateStream)
+              .listen((_) => listener.add(processingState)),
           _moves.stream.listen(
             (_) => listener.add(processingState),
             onDone: listener.close,

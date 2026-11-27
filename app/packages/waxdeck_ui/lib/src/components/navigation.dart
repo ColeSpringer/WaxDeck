@@ -559,9 +559,8 @@ class WaxNavBar extends StatelessWidget {
   /// scale until the labels drop.
   static double heightFor(BuildContext context) {
     if (!_tabLabelsFit(context)) return WaxSpace.touchTarget + WaxSpace.s8;
-    final label = MediaQuery.textScalerOf(
-      context,
-    ).scale(WaxType.caption.fontSize ?? 12);
+    final label = MediaQuery.textScalerOf(context)
+        .scale(WaxType.caption.fontSize ?? 12);
     return WaxSpace.touchTarget + WaxSpace.s8 + label + 2;
   }
 

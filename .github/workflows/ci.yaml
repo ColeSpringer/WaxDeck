@@ -265,7 +265,7 @@ jobs:
         timeout-minutes: 10
         run: cd app/app && flutter test --platform chrome test/*_web_test.dart
       - name: Build web (wasm)
-        run: cd app/app && flutter build web --wasm
+        run: tools/build-web.sh
       - uses: actions/upload-artifact@v7
         with:
           name: web-dist
@@ -724,3 +724,71 @@ jobs:
           path: e2e/test-results
           retention-days: 14
           if-no-files-found: ignore
+
+  # The journeys that say whether WebKit and Firefox run WaxDeck, each on
+  # the build index.html hands it. A job of its own, so the Chromium
+  # suite's run and its reports stay as they were.
+  e2e-engines:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [flutter]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: server/go.sum
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-dist
+          path: server/internal/web/dist
+      - name: Build server with embedded web
+        run: cd server && go build -tags withweb -o waxdeck ./cmd/waxdeck
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install e2e dependencies
+        run: cd e2e && npm ci --no-audit --no-fund
+      # Chromium as well: the bootstrap these projects depend on runs in
+      # it. Keyed apart from the e2e job's, which holds Chromium alone.
+      - name: Cache Playwright browsers
+        id: browser-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-all-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
+      - name: Install Playwright browsers
+        if: steps.browser-cache.outputs.cache-hit != 'true'
+        run: cd e2e && npx playwright install chromium webkit firefox
+      # Unlike Chromium's, their libraries are not in the runner image.
+      - name: Playwright system dependencies
+        run: tools/ci/playwright-deps.sh chromium webkit firefox
+      # Headless Firefox has no WebGL without a GPU, and skwasm needs it:
+      # Firefox runs headed, on a virtual display.
+      - name: Virtual display
+        run: command -v xvfb-run >/dev/null || tools/ci/apt-install.sh xvfb
+      # Neither engine plays without an audio output, and a runner has no
+      # sound device.
+      - name: Null audio sink
+        run: |
+          server=$(tools/ci/null-audio-sink.sh)
+          echo "WAXDECK_E2E_PULSE_SERVER=$server" >> "$GITHUB_ENV"
+      - name: Playwright e2e (WebKit, Firefox)
+        env:
+          WAXDECK_E2E_ENGINES: webkit,firefox
+          WAXDECK_E2E_FIREFOX_HEADED: "1"
+        run: cd e2e && xvfb-run -a npx playwright test --project=webkit --project=firefox
+      - name: Surface flaky tests
+        id: flaky
+        if: always()
+        run: node e2e/tools/flaky-summary.mjs e2e/test-results/report.json
+      - uses: actions/upload-artifact@v7
+        if: failure() || cancelled() || steps.flaky.outputs.flaky == 'true'
+        with:
+          name: playwright-report-engines
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 14

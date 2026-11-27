@@ -721,9 +721,10 @@ void main() {
           pinnedAt: DateTime.utc(2030),
         ),
       );
-      final paths = (await pins.pinsFor(
-        _pid,
-      )).where((p) => p.sizePx != 512).map((p) => p.localPath).toList();
+      final paths = (await pins.pinsFor(_pid))
+          .where((p) => p.sizePx != 512)
+          .map((p) => p.localPath)
+          .toList();
 
       await store.unpinExact(_pid, listed);
 

@@ -59,9 +59,8 @@ Future<ValueNotifier<ThemeMode>> _mount(
         themeMode: mode.value,
         themeAnimationStyle: AnimationStyle.noAnimation,
         builder: (context, app) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(disableAnimations: reduceMotion),
+          data: MediaQuery.of(context)
+              .copyWith(disableAnimations: reduceMotion),
           child: app!,
         ),
         home: Material(

@@ -12,9 +12,9 @@ void main() {
       // whatever the framework last decided - which under a dark app on
       // a light-themed phone is dark glyphs on a dark band.
       for (final variant in WaxThemeVariant.values) {
-        final style = buildWaxTheme(
-          variant: variant,
-        ).appBarTheme.systemOverlayStyle;
+        final style = buildWaxTheme(variant: variant)
+            .appBarTheme
+            .systemOverlayStyle;
         expect(style, isNotNull, reason: '${variant.name} declares nothing');
         expect(style!.statusBarColor, Colors.transparent);
         final light = variant == WaxThemeVariant.light;
@@ -56,9 +56,8 @@ void main() {
     test('turned off zeroes the token in every variant', () {
       for (final variant in WaxThemeVariant.values) {
         expect(
-          _colorsOf(
-            buildWaxTheme(variant: variant, artworkGlow: false),
-          ).glowOpacity,
+          _colorsOf(buildWaxTheme(variant: variant, artworkGlow: false))
+              .glowOpacity,
           0,
           reason: '${variant.name} still glows',
         );

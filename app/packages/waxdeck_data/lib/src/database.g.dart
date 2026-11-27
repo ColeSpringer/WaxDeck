@@ -7677,34 +7677,32 @@ typedef $$QueueEntriesTableProcessedTableManager =
       QueueEntry,
       PrefetchHooks Function()
     >;
-typedef $$QueueMetaTableCreateCompanionBuilder =
-    QueueMetaCompanion Function({
-      Value<int> id,
-      Value<int> currentIndex,
-      Value<bool> shuffled,
-      Value<String> repeat,
-      Value<String> sourceKind,
-      Value<String> sourceLabel,
-      Value<String?> sourcePid,
-      Value<bool> sourceRolling,
-      Value<int> nextQueueId,
-      required DateTime updatedAt,
-      Value<String> sourceCursor,
-    });
-typedef $$QueueMetaTableUpdateCompanionBuilder =
-    QueueMetaCompanion Function({
-      Value<int> id,
-      Value<int> currentIndex,
-      Value<bool> shuffled,
-      Value<String> repeat,
-      Value<String> sourceKind,
-      Value<String> sourceLabel,
-      Value<String?> sourcePid,
-      Value<bool> sourceRolling,
-      Value<int> nextQueueId,
-      Value<DateTime> updatedAt,
-      Value<String> sourceCursor,
-    });
+typedef $$QueueMetaTableCreateCompanionBuilder = QueueMetaCompanion Function({
+  Value<int> id,
+  Value<int> currentIndex,
+  Value<bool> shuffled,
+  Value<String> repeat,
+  Value<String> sourceKind,
+  Value<String> sourceLabel,
+  Value<String?> sourcePid,
+  Value<bool> sourceRolling,
+  Value<int> nextQueueId,
+  required DateTime updatedAt,
+  Value<String> sourceCursor,
+});
+typedef $$QueueMetaTableUpdateCompanionBuilder = QueueMetaCompanion Function({
+  Value<int> id,
+  Value<int> currentIndex,
+  Value<bool> shuffled,
+  Value<String> repeat,
+  Value<String> sourceKind,
+  Value<String> sourceLabel,
+  Value<String?> sourcePid,
+  Value<bool> sourceRolling,
+  Value<int> nextQueueId,
+  Value<DateTime> updatedAt,
+  Value<String> sourceCursor,
+});
 
 class $$QueueMetaTableFilterComposer
     extends Composer<_$MirrorDatabase, $QueueMetaTable> {
@@ -8357,13 +8355,11 @@ class $$ClientSettingsTableTableManager
               $$ClientSettingsTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$ClientSettingsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> key = const Value.absent(),
-                Value<String> value = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) =>
-                  ClientSettingsCompanion(key: key, value: value, rowid: rowid),
+          updateCompanionCallback: ({
+            Value<String> key = const Value.absent(),
+            Value<String> value = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) => ClientSettingsCompanion(key: key, value: value, rowid: rowid),
           createCompanionCallback:
               ({
                 required String key,

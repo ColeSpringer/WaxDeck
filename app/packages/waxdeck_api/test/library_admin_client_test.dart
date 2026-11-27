@@ -41,9 +41,8 @@ void main() {
         'path': '/srv/later',
       },
     );
-    final created = await clientOn(
-      adapter,
-    ).createLibrary(name: 'later', path: '/srv/later', allowAbsent: true);
+    final created = await clientOn(adapter)
+        .createLibrary(name: 'later', path: '/srv/later', allowAbsent: true);
     expect(created.pid, 'lb-2');
     final sent = adapter.requests.single.data;
     expect((sent is String ? jsonDecode(sent) : sent)['allowAbsent'], isTrue);

@@ -23,9 +23,10 @@ Set<String> _specCatalog() {
   final last = spec.indexOf('`health-fix-finished`', start);
   final end = last < 0 ? -1 : spec.indexOf('.', last);
   if (end < 0) throw StateError('the catalog list no longer ends as it did');
-  return RegExp(
-    r'`([a-z][a-z-]*)`',
-  ).allMatches(spec.substring(start, end)).map((m) => m.group(1)!).toSet();
+  return RegExp(r'`([a-z][a-z-]*)`')
+      .allMatches(spec.substring(start, end))
+      .map((m) => m.group(1)!)
+      .toSet();
 }
 
 void main() {

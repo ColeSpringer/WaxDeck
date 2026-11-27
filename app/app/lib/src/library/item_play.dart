@@ -74,9 +74,8 @@ Future<void> showItemCardMenu(
 bool resumeInPlace(WidgetRef ref, String pid, {required bool finished}) {
   if (finished) return false;
   final playback = ref.read(nowPlayingProvider.notifier);
-  if (ref.read(nowPlayingSlotProvider) case ItemSlot(
-    :final now,
-  ) when now.entry?.pid == pid && (now.session != null || now.loading)) {
+  if (ref.read(nowPlayingSlotProvider) case ItemSlot(:final now)
+      when now.entry?.pid == pid && (now.session != null || now.loading)) {
     unawaited(playback.transportPlay());
     return true;
   }

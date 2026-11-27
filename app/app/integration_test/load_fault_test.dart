@@ -153,9 +153,8 @@ void main() {
 
   setUpAll(() async {
     dir = Directory.systemTemp.createTempSync('loadfault');
-    File(
-      '${dir.path}/garbage.mp3',
-    ).writeAsBytesSync(Uint8List.fromList(List<int>.filled(4096, 0x41)));
+    File('${dir.path}/garbage.mp3')
+        .writeAsBytesSync(Uint8List.fromList(List<int>.filled(4096, 0x41)));
     File('${dir.path}/truncated.mp3').writeAsBytesSync(
       Uint8List.fromList(<int>[0xFF, 0xFB, 0x90, 0x00, ...List.filled(64, 0)]),
     );

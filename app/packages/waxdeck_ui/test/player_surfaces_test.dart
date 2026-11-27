@@ -845,9 +845,8 @@ void main() {
                 alignment: Alignment.bottomCenter,
                 child: Builder(
                   builder: (context) => MediaQuery(
-                    data: MediaQuery.of(
-                      context,
-                    ).copyWith(disableAnimations: reduced),
+                    data: MediaQuery.of(context)
+                        .copyWith(disableAnimations: reduced),
                     child: const DeckBar(
                       now: loading,
                       sizeClass: WaxSizeClass.compact,
@@ -2456,9 +2455,8 @@ void main() {
           )
           .painter!;
       expect(
-        painterOf(
-          pressed,
-        ).shouldRepaint(painterOf(find.byKey(const Key('untouched')))),
+        painterOf(pressed)
+            .shouldRepaint(painterOf(find.byKey(const Key('untouched')))),
         isFalse,
         reason: 'the playhead is back where the data says it is',
       );

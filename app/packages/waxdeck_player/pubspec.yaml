@@ -8,7 +8,7 @@ publish_to: none
 resolution: workspace
 
 environment:
-  sdk: ^3.12.0
+  sdk: ^3.14.0
 
 # Exact pins, no ranges: these are the community plugins this package exists
 # to firewall. Bump them here deliberately, never implicitly.

@@ -60,10 +60,20 @@ type spaHandler struct {
 
 	// Content hashes for validators: embed.FS reports a zero ModTime, so
 	// without these every reload re-downloads the whole engine and font
-	// set (the CJK face alone is 16 MB). Computed on first serve, cached
-	// for the process's life; the embedded tree never changes underneath
-	// a running binary, and the dev tree changing at worst re-hashes.
-	etags sync.Map // name -> `"hex"`
+	// set (the CJK face alone is 16 MB). Computed on first serve and kept
+	// beside the size and time they were computed for, so a dev tree
+	// rebuilt underneath a running server is hashed again rather than
+	// answered from the old bytes.
+	hashes sync.Map // name -> contentHash
+}
+
+type contentHash struct {
+	size    int64
+	modTime int64
+	etag    string
+	// The name carries this content's own hash, so the URL can never
+	// answer other bytes.
+	immutable bool
 }
 
 func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -138,39 +148,63 @@ func (h *spaHandler) serveFile(w http.ResponseWriter, r *http.Request, name stri
 	}
 	// no-cache means "revalidate before reuse", not "do not store": with
 	// the ETag below, an unchanged file costs a conditional request and a
-	// 304 instead of a re-download. index.html must revalidate so
-	// deployments land; everything else is content-addressed in practice
-	// but revalidation is what makes that safe without trusting names.
-	w.Header().Set("Cache-Control", "no-cache")
+	// 304 instead of a re-download. index.html and flutter_bootstrap.js
+	// must revalidate so deployments land. What the build named after its
+	// own content can be kept outright, once the name is checked against
+	// the bytes.
+	cacheControl := "no-cache"
 	if rs, ok := f.(io.ReadSeeker); ok {
 		defer f.Close()
-		if etag := h.etagFor(name, rs); etag != "" {
-			w.Header().Set("ETag", etag)
+		if sum, ok := h.hashFor(name, info, rs); ok {
+			w.Header().Set("ETag", sum.etag)
+			if sum.immutable {
+				cacheControl = "public, max-age=31536000, immutable"
+			}
 		}
+		w.Header().Set("Cache-Control", cacheControl)
 		http.ServeContent(w, r, name, info.ModTime(), rs)
 		return true
 	}
 	// Regular file that is not seekable (not expected from embed.FS or
 	// os.DirFS): fall back to the file server, which reopens it.
 	f.Close()
+	w.Header().Set("Cache-Control", cacheControl)
 	http.ServeFileFS(w, r, h.files, name)
 	return true
 }
 
-// etagFor returns the strong validator for name, hashing the content on
-// first use and rewinding the reader for the serve that follows.
-func (h *spaHandler) etagFor(name string, rs io.ReadSeeker) string {
-	if cached, ok := h.etags.Load(name); ok {
-		return cached.(string)
+// hashFor returns the strong validator for this version of name, hashing
+// the content on first use and rewinding the reader for the serve that
+// follows. A changed file replaces its entry.
+func (h *spaHandler) hashFor(name string, info fs.FileInfo, rs io.ReadSeeker) (contentHash, bool) {
+	size, modTime := info.Size(), info.ModTime().UnixNano()
+	if cached, ok := h.hashes.Load(name); ok {
+		if sum := cached.(contentHash); sum.size == size && sum.modTime == modTime {
+			return sum, true
+		}
 	}
 	hash := sha256.New()
 	if _, err := io.Copy(hash, rs); err != nil {
-		return ""
+		return contentHash{}, false
 	}
 	if _, err := rs.Seek(0, io.SeekStart); err != nil {
-		return ""
+		return contentHash{}, false
 	}
-	etag := `"` + hex.EncodeToString(hash.Sum(nil)[:16]) + `"`
-	h.etags.Store(name, etag)
-	return etag
+	sum := hash.Sum(nil)
+	result := contentHash{
+		size:      size,
+		modTime:   modTime,
+		etag:      `"` + hex.EncodeToString(sum[:16]) + `"`,
+		immutable: namesOwnHash(path.Base(name), sum),
+	}
+	h.hashes.Store(name, result)
+	return result, true
+}
+
+// namesOwnHash reports whether base carries the first eight hex digits of
+// its content's SHA-256 as a dotted segment, the names `flutter build web
+// --web-content-hash` gives (main.dart.1a2b3c4d.wasm, NOTICES.1a2b3c4d).
+func namesOwnHash(base string, sum []byte) bool {
+	short := "." + hex.EncodeToString(sum[:4])
+	return strings.Contains(base, short+".") || strings.HasSuffix(base, short)
 }

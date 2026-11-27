@@ -350,8 +350,7 @@ class _ComponentsPageState extends State<ComponentsPage> {
               ),
               WaxSettingRow(
                 title: 'Prepare the next track',
-                help:
-                    'Only on wifi, so mobile data is spent on what you asked for',
+                help: 'Only on wifi, so mobile data is spent on what you asked for',
                 glyph: WaxIcons.downloads,
                 control: WaxSwitch(
                   value: true,

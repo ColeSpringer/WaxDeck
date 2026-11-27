@@ -1,6 +1,8 @@
 package web
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPlaceholderServed(t *testing.T) {
@@ -230,6 +233,137 @@ func TestConditionalRequestsRevalidate(t *testing.T) {
 	}
 	if len(body) != 0 {
 		t.Fatalf("304 carried a body of %d bytes", len(body))
+	}
+}
+
+// hashedName names content the way `flutter build web --web-content-hash`
+// does: the first eight hex digits of its SHA-256 before the extension.
+func hashedName(stem, ext string, content []byte) string {
+	sum := sha256.Sum256(content)
+	return stem + "." + hex.EncodeToString(sum[:4]) + ext
+}
+
+func TestOnlyContentHashedFilesAreImmutable(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name string, content []byte) {
+		t.Helper()
+		full := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("index.html", []byte("<html><title>WaxDeck shell</title></html>"))
+	write("flutter_bootstrap.js", []byte("_flutter.loader.load()"))
+	wasm := []byte("pretend this is the app's wasm")
+	wasmName := hashedName("main.dart", ".wasm", wasm)
+	write(wasmName, wasm)
+	face := []byte("pretend this is a font")
+	faceName := "assets/packages/waxdeck_ui/fonts/" + hashedName("Face", ".otf", face)
+	write(faceName, face)
+	// Hashed the same way, with no extension: NOTICES.
+	notices := []byte("licenses")
+	noticesName := "assets/" + hashedName("NOTICES", "", notices)
+	write(noticesName, notices)
+	// Eight hex digits that are not this content's: a name alone earns
+	// nothing.
+	write("main.dart.deadbeef.js", []byte("not what the name claims"))
+	write("canvaskit/skwasm.wasm", []byte("same name every build"))
+
+	ts := httptest.NewServer(mustHandler(t, dir))
+	defer ts.Close()
+
+	for _, tc := range []struct {
+		path string
+		want string
+	}{
+		{"/" + wasmName, "public, max-age=31536000, immutable"},
+		{"/" + faceName, "public, max-age=31536000, immutable"},
+		{"/" + noticesName, "public, max-age=31536000, immutable"},
+		{"/index.html", "no-cache"},
+		{"/flutter_bootstrap.js", "no-cache"},
+		{"/main.dart.deadbeef.js", "no-cache"},
+		{"/canvaskit/skwasm.wasm", "no-cache"},
+	} {
+		resp := get(t, ts.URL+tc.path, nil)
+		resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Fatalf("GET %s = %d", tc.path, resp.StatusCode)
+		}
+		if got := resp.Header.Get("Cache-Control"); got != tc.want {
+			t.Errorf("GET %s: Cache-Control = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}
+
+// A web dir is rebuilt under a running server; a validator kept from
+// before the rebuild would answer 304 for the old bytes.
+func TestAChangedWebDirFileGetsANewValidator(t *testing.T) {
+	dir := t.TempDir()
+	index := filepath.Join(dir, "index.html")
+	if err := os.WriteFile(index, []byte("<html>first build</html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(mustHandler(t, dir))
+	defer ts.Close()
+
+	first := get(t, ts.URL+"/index.html", nil)
+	first.Body.Close()
+	etag := first.Header.Get("ETag")
+	if etag == "" {
+		t.Fatal("no ETag")
+	}
+
+	if err := os.WriteFile(index, []byte("<html>the second build</html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(time.Minute)
+	if err := os.Chtimes(index, later, later); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := get(t, ts.URL+"/index.html", map[string]string{"If-None-Match": etag})
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.Contains(string(body), "the second build") {
+		t.Fatalf("after a rebuild: %d %q, want 200 with the new bytes", resp.StatusCode, body)
+	}
+	if got := resp.Header.Get("ETag"); got == etag {
+		t.Fatalf("ETag %s survived the rebuild", got)
+	}
+}
+
+// A rebuild replaces a file's validator rather than adding one, so a dev
+// server's cache stays the size of the tree however often it is rebuilt.
+func TestARebuiltFileReplacesItsValidator(t *testing.T) {
+	dir := t.TempDir()
+	index := filepath.Join(dir, "index.html")
+	if err := os.WriteFile(index, []byte("<html>first</html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := mustHandler(t, dir)
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+
+	for build := 1; build <= 3; build++ {
+		body := strings.Repeat("<html>build</html>", build)
+		if err := os.WriteFile(index, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		at := time.Now().Add(time.Duration(build) * time.Minute)
+		if err := os.Chtimes(index, at, at); err != nil {
+			t.Fatal(err)
+		}
+		resp := get(t, ts.URL+"/index.html", nil)
+		resp.Body.Close()
+	}
+
+	entries := 0
+	h.(*spaHandler).hashes.Range(func(any, any) bool { entries++; return true })
+	if entries != 1 {
+		t.Fatalf("%d validators cached for one file rebuilt three times, want 1", entries)
 	}
 }
 

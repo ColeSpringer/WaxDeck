@@ -148,9 +148,8 @@ void main() {
       backupKeepBytes: 50 * 1024 * 1024,
     );
     await tester.enterText(find.byKey(const Key('backup-keep-count')), '9');
-    ProviderScope.containerOf(
-      tester.element(find.byType(BackupsScreen)),
-    ).invalidate(adminSettingsProvider);
+    ProviderScope.containerOf(tester.element(find.byType(BackupsScreen)))
+        .invalidate(adminSettingsProvider);
     await tester.pumpAndSettle();
 
     expect(_boxText(tester, 'backup-keep-mb'), '50');

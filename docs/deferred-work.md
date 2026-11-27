@@ -400,6 +400,19 @@ Every entry carries a gate tag saying what actually blocks it:
 
 ## Infrastructure
 
+- `[third-party]` **Safari is handed the JavaScript build, not the wasm
+  one.** Firefox and Chromium run the wasm build; WebKit holds twice the
+  memory for it at the pixel ratio every Mac and iPhone has. Measured
+  2026-11-27 on Playwright's WebKit 26.6, one page on home, the web
+  process's resident size: 1.90 GB on the wasm build against 0.94 GB on
+  the JavaScript one at a device pixel ratio of 2, and 747 MB against
+  752 MB at 1. Firefox 155 at 2 showed 342 MB against 285 MB in its
+  content process, 1.24 GB against 1.28 GB in all. iOS reloads a tab that
+  outgrows its memory budget, and the wasm build's speed in Safari is
+  unmeasured, so `index.html` leaves `webkit` out of `wasmAllowList` and
+  `engines.spec.ts` holds Safari to the JavaScript build. Lifted by a
+  WebKit whose footprint at a ratio of 2 drops, measured the same way, or
+  by a measurement on a real iPhone that contradicts this one.
 - `[decision]` **CI runs the engine at the go.mod pin, not the image
   users pull** (2026-11-06). `deploy/compose.yaml` names WaxFlow's own
   image, which does not exist yet, so the compose job builds the stock

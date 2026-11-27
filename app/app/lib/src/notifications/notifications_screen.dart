@@ -110,9 +110,8 @@ class NotificationsScreen extends ConsumerWidget {
           ),
       ],
       body: Padding(
-        padding: WaxSizeClass.of(
-          context,
-        ).gutter.add(const EdgeInsets.only(bottom: WaxSpace.s32)),
+        padding: WaxSizeClass.of(context).gutter
+            .add(const EdgeInsets.only(bottom: WaxSpace.s32)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[

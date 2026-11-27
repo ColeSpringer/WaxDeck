@@ -685,9 +685,8 @@ void main() {
           )
           .painter!;
       expect(
-        painterOf(
-          scrubbed,
-        ).shouldRepaint(painterOf(find.byKey(const Key('untouched')))),
+        painterOf(scrubbed)
+            .shouldRepaint(painterOf(find.byKey(const Key('untouched')))),
         isFalse,
         reason: 'the scrub let go when the bar disabled',
       );

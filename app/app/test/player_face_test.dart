@@ -106,9 +106,8 @@ Future<void> _pumpAlbumTrack(
         ? (player) => localizedHost(
             Builder(
               builder: (context) => MediaQuery(
-                data: MediaQuery.of(
-                  context,
-                ).copyWith(disableAnimations: reducedMotion),
+                data: MediaQuery.of(context)
+                    .copyWith(disableAnimations: reducedMotion),
                 child: ticking == null
                     ? player
                     : ValueListenableBuilder<bool>(

@@ -609,9 +609,8 @@ void main() {
         tester,
         Builder(
           builder: (context) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: const TextScaler.linear(2)),
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2)),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
@@ -931,9 +930,8 @@ void main() {
             localizationsDelegates: waxLocalizationsDelegates,
             home: Builder(
               builder: (context) => MediaQuery(
-                data: MediaQuery.of(
-                  context,
-                ).copyWith(textScaler: const TextScaler.linear(2)),
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: const TextScaler.linear(2)),
                 child: WaxScaffold(
                   title: 'Rules',
                   largeTitle: false,
@@ -977,9 +975,8 @@ void main() {
         tester,
         Builder(
           builder: (context) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: const TextScaler.linear(2)),
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2)),
             // A column, as a page holds it: the pill's height is its own.
             child: Column(
               mainAxisSize: MainAxisSize.min,

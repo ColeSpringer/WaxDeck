@@ -23,11 +23,15 @@ const walkable = destinations.filter(
 );
 const gated = destinations.filter((d) => entry(d).walkNeeds !== undefined);
 
-test('every location serves its own screen cold', async ({ app }) => {
+test('every location serves its own screen cold', async ({ app, browserName }) => {
   // One app boot per destination, which is the price of proving each
   // location stands on its own - a stranger pasting the link gets the
-  // screen, with no in-memory payload behind it.
-  test.setTimeout(J.journey);
+  // screen, with no in-memory payload behind it. WebKit boots the
+  // JavaScript build, several seconds a boot, so each of its screens gets
+  // the nav tier and the walk a budget for thirty such boots.
+  const jsBoots = browserName === 'webkit';
+  const budget = jsBoots ? J.jsBoots : J.journey;
+  test.setTimeout(budget);
   const started = Date.now();
 
   // A fresh browser's first boot also pays every first-time cost (the
@@ -42,7 +46,7 @@ test('every location serves its own screen cold', async ({ app }) => {
     // left of the journey goes to naming the rest: one that no longer has
     // room for a boot that never comes is listed untried, rather than
     // started and cut off by the test's own timeout with the list unsaid.
-    if (unreachable.length > 0 && Date.now() - started > J.journey - T.fetch) {
+    if (unreachable.length > 0 && Date.now() - started > budget - T.fetch) {
       unreachable.push(`${dest} (${DEST[dest].path}): not tried, the journey ran out of budget`);
       continue;
     }
@@ -57,7 +61,7 @@ test('every location serves its own screen cold', async ({ app }) => {
       // one to seven seconds. Five seconds is generous for a screen once
       // the app is up; a destination that is merely slow shows up as a
       // failure here and is worth knowing about too.
-      await app.nav.enter(dest, { within: T.step });
+      await app.nav.enter(dest, { within: jsBoots ? T.nav : T.step });
       await app.nav.expectAt(dest);
     } catch (e) {
       unreachable.push(`${dest} (${DEST[dest].path}): ${String(e).split('\n')[0]}`);

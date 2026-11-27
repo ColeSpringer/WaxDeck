@@ -217,9 +217,11 @@ void main() {
     final create = find.bySemanticsIdentifier(SemanticsIds.inviteCreate);
     expect(create, findsOneWidget);
     expect(
-      GoRouter.of(
-        tester.element(create),
-      ).routerDelegate.currentConfiguration.uri.toString(),
+      GoRouter.of(tester.element(create))
+          .routerDelegate
+          .currentConfiguration
+          .uri
+          .toString(),
       WaxRoute.userInvites,
     );
   });

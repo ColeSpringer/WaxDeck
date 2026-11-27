@@ -285,9 +285,8 @@ void main() {
         testItem('bk-1', mediaType: MediaType.audiobook),
         testItem('ep-1', mediaType: MediaType.podcast),
       ];
-      final draw = await pagerOver(
-        repository,
-      ).draw(stamped(MediaType.audiobook));
+      final draw = await pagerOver(repository)
+          .draw(stamped(MediaType.audiobook));
 
       expect(draw!.pids, ['bk-1']);
     });
@@ -391,9 +390,8 @@ void main() {
       final restored = QueueState.fromStored(stored);
       expect(restored.source, source);
 
-      final draw = await pagerOver(
-        repository,
-      ).draw(restored.source, afterPid: restored.frontierPid);
+      final draw = await pagerOver(repository)
+          .draw(restored.source, afterPid: restored.frontierPid);
 
       expect(draw!.pids.first, 'tr-10');
     });

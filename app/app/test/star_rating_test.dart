@@ -129,9 +129,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      ProviderScope.containerOf(
-        tester.element(find.byType(ItemStarRatingRow)),
-      ).read(shellMessagesProvider),
+      ProviderScope.containerOf(tester.element(find.byType(ItemStarRatingRow)))
+          .read(shellMessagesProvider),
       isNull,
     );
   });

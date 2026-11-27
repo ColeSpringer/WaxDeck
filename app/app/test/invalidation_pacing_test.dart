@@ -2519,9 +2519,8 @@ void main() {
     });
 
     test('the browser suite waits by the same window', () {
-      final driver = File(
-        '../../e2e/tests/driver/surfaces/artwork.ts',
-      ).readAsStringSync();
+      final driver = File('../../e2e/tests/driver/surfaces/artwork.ts')
+          .readAsStringSync();
       final window = RegExp(
         r'^const catalogWindow = ([\d_]+);$',
         multiLine: true,

@@ -178,9 +178,11 @@ String get _album => WaxRoute.musicBucket(MusicDimension.albums, _albumPid);
 
 /// The push on top of the stack, however deep the shells nest it.
 ImperativeRouteMatch _topPush(ProviderContainer container) {
-  RouteMatchBase walker = _router(
-    container,
-  ).routerDelegate.currentConfiguration.matches.last;
+  RouteMatchBase walker = _router(container)
+      .routerDelegate
+      .currentConfiguration
+      .matches
+      .last;
   while (walker is ShellRouteMatch) {
     walker = walker.matches.last;
   }
@@ -799,12 +801,12 @@ void main() {
     var answered = false;
     Object? answer = 'unanswered';
     unawaited(
-      _router(container).push<String>(WaxRoute.episode(_episodePid)).then((
-        value,
-      ) {
-        answered = true;
-        answer = value;
-      }),
+      _router(container)
+          .push<String>(WaxRoute.episode(_episodePid))
+          .then((value) {
+            answered = true;
+            answer = value;
+          }),
     );
     await tester.pumpAndSettle();
     expect(find.byType(EpisodeScreen), findsOneWidget);
@@ -827,9 +829,9 @@ void main() {
       await _go(tester, container, WaxRoute.podcasts);
       final heard = <Object?>[];
       unawaited(
-        _router(
-          container,
-        ).push<String>(WaxRoute.episode(_episodePid)).then(heard.add),
+        _router(container)
+            .push<String>(WaxRoute.episode(_episodePid))
+            .then(heard.add),
       );
       await tester.pumpAndSettle();
       expect(container.read(waxHistoryProvider)!.heldAwaiters, hasLength(1));

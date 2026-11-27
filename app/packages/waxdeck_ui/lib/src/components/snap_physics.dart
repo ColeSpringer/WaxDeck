@@ -26,6 +26,14 @@ class SnapScrollPhysics extends ScrollPhysics {
     parent: buildParent(ancestor),
   );
 
+  /// A mounted scrollable keeps the physics it was built with unless this
+  /// says otherwise, and resized cards move the grid.
+  @override
+  bool shouldUpdate(SnapScrollPhysics old) =>
+      itemExtent != old.itemExtent ||
+      leadingInset != old.leadingInset ||
+      super.shouldUpdate(old);
+
   /// The landing nearest [offset], clamped to the scrollable range: the
   /// grid a flick settles on. Public so the shelf's paging chevrons aim
   /// at the same grid through the same formula, rather than through a

@@ -813,10 +813,12 @@ class _Scan {
         .whereType<Expression>()
         .firstOrNull
         ?.unParenthesized;
-    if (listened case MethodInvocation(
-      methodName: SimpleIdentifier(name: 'select', element: final select?),
-      :final target?,
-    ) when _isRiverpod(select)) {
+    if (listened
+        case MethodInvocation(
+          methodName: SimpleIdentifier(name: 'select', element: final select?),
+          :final target?,
+        )
+        when _isRiverpod(select)) {
       listened = target.unParenthesized;
     }
     return listened != null && _variableOf(_elementOf(listened)) == _account;

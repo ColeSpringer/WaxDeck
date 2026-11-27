@@ -102,9 +102,9 @@ Future<void> openStationHomepage(
 ) async {
   final homepage = station.homepageUrl;
   if (homepage == null) return;
-  await ProviderScope.containerOf(
-    context,
-  ).read(urlOpenerProvider).open(homepage);
+  await ProviderScope.containerOf(context)
+      .read(urlOpenerProvider)
+      .open(homepage);
 }
 
 /// Mutes or unmutes one station's scrobbling, and says which it did.

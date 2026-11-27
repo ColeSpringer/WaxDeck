@@ -1640,9 +1640,11 @@ void main() {
     expect(repo.setKindCalls.single.mediaType, 'audiobook');
     expect(repo.setKindCalls.single.writeBack, isFalse);
     expect(
-      GoRouter.of(
-        tester.element(find.byType(Navigator).first),
-      ).routerDelegate.currentConfiguration.uri.path,
+      GoRouter.of(tester.element(find.byType(Navigator).first))
+          .routerDelegate
+          .currentConfiguration
+          .uri
+          .path,
       WaxRoute.book('bk-1'),
     );
   });

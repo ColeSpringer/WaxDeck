@@ -1096,9 +1096,8 @@ void main() {
       await c.read(uploadsProvider.future);
 
       Object? thrown;
-      final run = upload(
-        c,
-      ).then<void>((_) {}, onError: (Object e) => thrown = e);
+      final run = upload(c)
+          .then<void>((_) {}, onError: (Object e) => thrown = e);
       await Future.any([repo.waiting.future, run]);
       expect(thrown, isNull, reason: 'the lost answer stopped the transfer');
       expect(phase(c), isA<UploadSealing>());
@@ -1141,9 +1140,8 @@ void main() {
       await c.read(uploadsProvider.future);
 
       Object? thrown;
-      final run = upload(
-        c,
-      ).then<void>((_) {}, onError: (Object e) => thrown = e);
+      final run = upload(c)
+          .then<void>((_) {}, onError: (Object e) => thrown = e);
       await Future.any([repo.waiting.future, run]);
       expect(thrown, isNull, reason: 'the reads stopped short of the seal');
       expect(phase(c), isA<UploadSealing>());
@@ -1388,9 +1386,8 @@ void main() {
       final container = host(repo);
       await container.read(uploadsProvider.future);
       Object? thrown;
-      final run = start(
-        container,
-      ).then<void>((_) {}, onError: (Object e) => thrown = e);
+      final run = start(container)
+          .then<void>((_) {}, onError: (Object e) => thrown = e);
       await repo.reached.future;
       final id = repo.uploadsById.keys.single;
 

@@ -435,9 +435,8 @@ void main() {
       // already-mounted shell, which is why the row uses `go` - and a
       // `go` is visible in the address the router reports either way.
       expect(
-        GoRouter.of(
-          tester.element(find.byType(MetadataScreen)),
-        ).state.uri.toString(),
+        GoRouter.of(tester.element(find.byType(MetadataScreen))).state.uri
+            .toString(),
         WaxRoute.metadata(_pid),
       );
     });

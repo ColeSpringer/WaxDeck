@@ -336,9 +336,8 @@ class _AuditRow extends StatelessWidget {
                   child: Text(
                     event.detail.isEmpty
                         ? l10n.adminAuditNoDetail
-                        : const JsonEncoder.withIndent(
-                            '  ',
-                          ).convert(event.detail),
+                        : const JsonEncoder.withIndent('  ')
+                              .convert(event.detail),
                     style: WaxType.monoData.copyWith(
                       color: colors.textSecondary,
                     ),

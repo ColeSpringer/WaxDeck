@@ -125,9 +125,8 @@ void main() {
 
     final gate = Completer<void>();
     repo.listToolTasksGate = gate;
-    ProviderScope.containerOf(
-      tester.element(find.byType(WaxScaffold).first),
-    ).invalidate(toolTasksProvider);
+    ProviderScope.containerOf(tester.element(find.byType(WaxScaffold).first))
+        .invalidate(toolTasksProvider);
     await tester.pump();
     await tester.pump();
 
@@ -2477,9 +2476,8 @@ void main() {
       expect(inRow('No activity for 9 min'), findsOneWidget);
 
       repo.toolTasksById['tt-a'] = running(phase('downloading'));
-      ProviderScope.containerOf(
-        tester.element(find.byType(TasksScreen)),
-      ).invalidate(toolTasksProvider);
+      ProviderScope.containerOf(tester.element(find.byType(TasksScreen)))
+          .invalidate(toolTasksProvider);
       await tester.pump();
       await tester.pump();
       expect(find.textContaining('No activity'), findsNothing);

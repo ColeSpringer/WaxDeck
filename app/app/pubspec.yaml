@@ -5,7 +5,7 @@ version: 0.1.0+1
 resolution: workspace
 
 environment:
-  sdk: ^3.12.0
+  sdk: ^3.14.0
 
 dependencies:
   flutter:
@@ -61,7 +61,7 @@ dependencies:
   # Pinned exact: the route table is the navigation contract, and a minor
   # bump has moved redirect semantics before. It finds each page's type
   # from material_ui's MaterialApp, so it moves with waxdeck_ui's pin.
-  go_router: 18.0.1
+  go_router: 18.1.4
   url_launcher: 6.3.2
   # The desktop mini player, behind MiniWindowPort. Frameless,
   # always-on-top, and positioned - three things a compositor is allowed

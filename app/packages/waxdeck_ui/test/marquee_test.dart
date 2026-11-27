@@ -402,9 +402,9 @@ void main() {
     await tester.pump();
     final drawn = _widthOf(
       _long,
-      DefaultTextStyle.of(
-        tester.element(find.byType(WaxMarqueeText)),
-      ).style.merge(own).copyWith(letterSpacing: 2),
+      DefaultTextStyle.of(tester.element(find.byType(WaxMarqueeText))).style
+          .merge(own)
+          .copyWith(letterSpacing: 2),
     );
 
     await _pumpToFarEnd(tester);
@@ -443,9 +443,8 @@ void main() {
     // One pixel wider than the line drawn without the override.
     final bare = _widthOf(
       _short,
-      DefaultTextStyle.of(
-        tester.element(find.byType(WaxMarqueeText)),
-      ).style.merge(own),
+      DefaultTextStyle.of(tester.element(find.byType(WaxMarqueeText))).style
+          .merge(own),
     );
     await pumpAt(bare + 1);
     await tester.pump();

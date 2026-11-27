@@ -891,9 +891,9 @@ Iterable<({String key, String suffix})> _slotKeysIn(String source) sync* {
   final code = _codeOnly(source);
   for (final (:call, :arg, :suffix) in _slots) {
     final values = call == null
-        ? RegExp(
-            '(?<![\\w.])$arg\\s*:',
-          ).allMatches(code).map((at) => _valueAt(code, at.end))
+        ? RegExp('(?<![\\w.])$arg\\s*:')
+              .allMatches(code)
+              .map((at) => _valueAt(code, at.end))
         : RegExp('\\b$call(?:\\.\\w+)?\\(')
               .allMatches(code)
               .map((at) => _namedArgs(code, at.end)[arg])

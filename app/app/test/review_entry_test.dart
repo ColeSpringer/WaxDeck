@@ -143,9 +143,12 @@ Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
   );
 }
 
-String _location(WidgetTester tester) => GoRouter.of(
-  tester.element(find.byType(Navigator).first),
-).routerDelegate.currentConfiguration.uri.path;
+String _location(WidgetTester tester) =>
+    GoRouter.of(tester.element(find.byType(Navigator).first))
+        .routerDelegate
+        .currentConfiguration
+        .uri
+        .path;
 
 /// The review surface open on the entry, settled.
 Future<void> _pumpSurface(WidgetTester tester, FakeRepository repo) => pumpApp(
@@ -1272,9 +1275,8 @@ void main() {
     expect(repo.decideReviewCalls.single.action, 'discard');
 
     // The decision left the page; the canned entry reads pending again.
-    GoRouter.of(
-      tester.element(find.byType(Navigator).first),
-    ).go(WaxRoute.reviewEntry('rv-1'));
+    GoRouter.of(tester.element(find.byType(Navigator).first))
+        .go(WaxRoute.reviewEntry('rv-1'));
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAddCopy));
     await tester.pumpAndSettle();
@@ -1612,9 +1614,8 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await _mountBlank(tester, repo);
-    GoRouter.of(
-      tester.element(find.byType(Scaffold).first),
-    ).go(WaxRoute.reviewEntry('rv-1'));
+    GoRouter.of(tester.element(find.byType(Scaffold).first))
+        .go(WaxRoute.reviewEntry('rv-1'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewApprove));

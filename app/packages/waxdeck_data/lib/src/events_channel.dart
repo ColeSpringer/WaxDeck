@@ -9,12 +9,11 @@ export 'ws_connect/upgrade_refused.dart';
 /// Builds one connection attempt to the server's event channel. The
 /// engine calls it for every (re)connect so each attempt gets a fresh
 /// socket and a fresh subscribe frame.
-typedef EventsChannelFactory =
-    EventsChannel Function({
-      required void Function(String frame) onFrame,
-      required void Function() onDone,
-      required Future<String> Function() subscribe,
-    });
+typedef EventsChannelFactory = EventsChannel Function({
+  required void Function(String frame) onFrame,
+  required void Function() onDone,
+  required Future<String> Function() subscribe,
+});
 
 /// The close code the server ends a socket with when the session that
 /// opened it ended (signed out, revoked, disabled): unlike a dropped link,

@@ -37,16 +37,51 @@ const retries = Number.isInteger(askedRetries) && askedRetries >= 0
     ? 1
     : 0;
 
-// A project's motion mode in one place; `metadata` is what the canary in
-// fixtures.ts reads. contextOptions is replaced whole, not merged, which
-// is why the mode is spread from here instead of written per project.
+// A Chromium project's browser and motion mode in one place; `metadata`
+// is what the canary in fixtures.ts reads. contextOptions is replaced
+// whole, not merged, which is why the mode is spread from here instead
+// of written per project.
 const motion = (mode: 'reduce' | 'no-preference') => ({
   metadata: { motion: mode },
   use: {
     ...devices['Desktop Chrome'],
+    // Full Chromium, not the default chrome-headless-shell: the shell
+    // segfaults on the wasm build (signal 11 in its skwasm worker),
+    // surfacing as an unexplained "Page crashed".
+    channel: 'chromium',
+    // Playback specs stream real audio; nothing asserts audible sound,
+    // so mute keeps the suite runnable on a workstation.
+    launchOptions: { args: ['--mute-audio'] },
     contextOptions: { reducedMotion: mode },
   },
 });
+
+// WebKit and Firefox. Their system libraries are not on every machine, so
+// they join on request: WAXDECK_E2E_ENGINES=webkit,firefox, as CI's
+// engines job sets it. WAXDECK_E2E_BROWSER_SERVER launches them in a
+// `playwright run-server` that has the libraries instead; its browsers
+// reach this machine's stack through the connection.
+const engineDevices = { webkit: 'Desktop Safari', firefox: 'Desktop Firefox' } as const;
+const engines = (process.env.WAXDECK_E2E_ENGINES ?? '')
+  .split(',')
+  .map((name) => name.trim())
+  .filter((name) => name !== '')
+  .map((name) => {
+    if (!Object.hasOwn(engineDevices, name)) {
+      throw new Error(`WAXDECK_E2E_ENGINES: no engine named ${name}`);
+    }
+    return name as keyof typeof engineDevices;
+  });
+const browserServer = process.env.WAXDECK_E2E_BROWSER_SERVER;
+// Headless Firefox has no WebGL without a GPU, and skwasm needs it, so
+// the loader would hand it the JavaScript build. Set to 1 or true, this
+// runs Firefox headed instead, on a display the caller provides: xvfb-run
+// in CI, never a desktop's own. Anything else leaves it headless.
+const firefoxHeaded = ['1', 'true'].includes(process.env.WAXDECK_E2E_FIREFOX_HEADED ?? '');
+
+// The journeys that say whether an engine runs WaxDeck at all.
+const crossEngine =
+  /[\\/](engines|ui|driver-smoke|fonts|url-strategy|music-search|prose)\.spec\.ts$/;
 
 export default defineConfig({
   testDir: './tests',
@@ -95,13 +130,6 @@ export default defineConfig({
     // would otherwise leave nothing to diagnose.
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    // Full Chromium, not the default chrome-headless-shell: the shell
-    // segfaults on the wasm build (signal 11 in its skwasm worker),
-    // surfacing as an unexplained "Page crashed".
-    channel: 'chromium',
-    // Playback specs stream real audio; nothing asserts audible sound,
-    // so mute keeps the suite runnable on a workstation.
-    launchOptions: { args: ['--mute-audio'] },
   },
   projects: [
     // Runs alone first: the one-shot bootstrap every other spec assumes.
@@ -214,6 +242,47 @@ export default defineConfig({
       dependencies: ['motion-smoke'],
       ...motion('reduce'),
     },
+    // Reduced motion, like every blocking project. Neither engine has a
+    // mute switch like Chromium's, and neither plays without an audio
+    // output: they get the PulseAudio server WAXDECK_E2E_PULSE_SERVER
+    // names, CI's null sink, and none otherwise, which fails the playback
+    // journeys but keeps a desktop silent. PipeWire, ALSA and JACK, where
+    // GStreamer turns next, are closed to them too, and Firefox's volume is
+    // zeroed besides. A browser server takes none of this (it keeps its own
+    // environment, and drops the preference unless started with --unsafe).
+    ...engines.map((name) => ({
+      name,
+      testMatch: crossEngine,
+      dependencies: ['setup'],
+      metadata: { motion: 'reduce' as const },
+      use: {
+        ...devices[engineDevices[name]],
+        // The scale every other project draws at; Desktop Safari's is 2,
+        // four times the pixels for WebKit to hold.
+        deviceScaleFactor: 1,
+        contextOptions: { reducedMotion: 'reduce' as const },
+        ...(name === 'firefox' && firefoxHeaded ? { headless: false } : {}),
+        launchOptions: {
+          ...(browserServer
+            ? {}
+            : {
+                env: {
+                  ...process.env,
+                  PULSE_SERVER:
+                    process.env.WAXDECK_E2E_PULSE_SERVER || 'unix:/nonexistent/wax-e2e-muted',
+                  PIPEWIRE_REMOTE: 'wax-e2e-muted',
+                  ALSA_CONFIG_PATH: '/dev/null',
+                  JACK_DEFAULT_SERVER: 'wax-e2e-muted',
+                  JACK_NO_START_SERVER: '1',
+                } as Record<string, string>,
+              }),
+          ...(name === 'firefox' ? { firefoxUserPrefs: { 'media.volume_scale': '0.0' } } : {}),
+        },
+        ...(browserServer
+          ? { connectOptions: { wsEndpoint: browserServer, exposeNetwork: '<loopback>' } }
+          : {}),
+      },
+    })),
     // The real third-party client; present only when FEISHIN_BASE_URL
     // names its container. Depends on setup so its bootstrap cannot race
     // the wizard's into a 409.

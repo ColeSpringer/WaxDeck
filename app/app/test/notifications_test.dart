@@ -1335,9 +1335,12 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    String location(WidgetTester tester) => GoRouter.of(
-      tester.element(find.byType(NotificationsScreen)),
-    ).routerDelegate.currentConfiguration.uri.toString();
+    String location(WidgetTester tester) =>
+        GoRouter.of(tester.element(find.byType(NotificationsScreen)))
+            .routerDelegate
+            .currentConfiguration
+            .uri
+            .toString();
 
     Finder rowOf(ServerNotification row) => find.bySemanticsIdentifier(
       SemanticsIds.notificationRow(row.event, row.id),

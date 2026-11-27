@@ -234,7 +234,8 @@ Set<String> _specNspCodes() {
   expect(start, isNonNegative, reason: 'the spec no longer says "$opening"');
   final end = spec.indexOf('.', start);
   expect(end, isNonNegative, reason: 'the code list no longer ends as it did');
-  return RegExp(
-    r'`([a-z_]+)`',
-  ).allMatches(spec.substring(start, end)).map((m) => m.group(1)!).toSet();
+  return RegExp(r'`([a-z_]+)`')
+      .allMatches(spec.substring(start, end))
+      .map((m) => m.group(1)!)
+      .toSet();
 }

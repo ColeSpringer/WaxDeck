@@ -159,9 +159,8 @@ void main() {
 
     for (final type in <String?>['text/plain', null]) {
       test('of JSON under ${type ?? 'no'} content type reads', () async {
-        final health = await clientOn(
-          _TextAdapter(_health, contentType: type),
-        ).health();
+        final health = await clientOn(_TextAdapter(_health, contentType: type))
+            .health();
         expect(health.status, 'ok');
         expect(health.apiVersion, 1);
       });
@@ -250,9 +249,8 @@ void main() {
 
     test('of text that is empty is empty text', () async {
       expect(
-        await clientOn(
-          _TextAdapter('', contentType: 'text/x-opml'),
-        ).exportOpml(),
+        await clientOn(_TextAdapter('', contentType: 'text/x-opml'))
+            .exportOpml(),
         isEmpty,
       );
     });

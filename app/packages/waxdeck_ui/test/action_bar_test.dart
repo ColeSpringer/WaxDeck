@@ -13,9 +13,8 @@ Future<void> _pump(WidgetTester tester, Widget child, {double scale = 1}) =>
         localizationsDelegates: waxLocalizationsDelegates,
         home: Builder(
           builder: (context) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(scale)),
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(scale)),
             child: Scaffold(body: Center(child: child)),
           ),
         ),

@@ -205,9 +205,8 @@ void main() {
     () async {
       final stock = _Stock(fails: true);
 
-      final seen = await TolerantConnectivity(
-        stock,
-      ).onConnectivityChanged.toList();
+      final seen = await TolerantConnectivity(stock).onConnectivityChanged
+          .toList();
 
       expect(seen, [
         [ConnectivityResult.ethernet],

@@ -546,9 +546,8 @@ void main() {
         SizedBox(width: 160, height: 400, child: card(playable: playable)),
       );
       // From the cover's top to the last caption line's bottom.
-      final content = cover(
-        tester,
-      ).expandToInclude(tester.getRect(find.text('Nightjar')));
+      final content = cover(tester)
+          .expandToInclude(tester.getRect(find.text('Nightjar')));
       final node = find.semantics
           .byLabel(RegExp('^Harbour FM, Nightjar'))
           .evaluate()

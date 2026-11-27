@@ -181,6 +181,35 @@ are the flake-prone tail, and a late failure there must not cost the one
 unreduced-motion pass. `feishin` and `sso-dex` join only when their
 containers are up (`FEISHIN_BASE_URL`, `WAXDECK_DEX_SSO`).
 
+`webkit` and `firefox` run the journeys that say whether an engine runs
+WaxDeck at all, on the build `index.html` hands each: Firefox the wasm
+build, as Chromium, and Safari the JavaScript one it is kept on:
+`engines.spec.ts` (which build was loaded), `ui`, `driver-smoke`,
+`fonts`, `url-strategy`, `music-search` and `prose`. They join when `WAXDECK_E2E_ENGINES=webkit,firefox` names them,
+which CI's `e2e-engines` job and the soak set, and need the browsers and
+their system libraries first (`npx playwright install --with-deps webkit
+firefox`).
+
+Neither engine has a mute switch, and neither plays without an audio
+output: they send audio to the PulseAudio server
+`WAXDECK_E2E_PULSE_SERVER` names, and to none when it is unset, which
+keeps a desktop silent and fails the playback journeys.
+`tools/ci/null-audio-sink.sh` starts a PulseAudio daemon of its own on a
+private socket, whose one output is a null sink, and prints the address
+for that variable: CI sets it so, and on a desktop it leaves the
+session's sound alone. Headless Firefox
+has no WebGL without a GPU, and skwasm needs it, so
+`WAXDECK_E2E_FIREFOX_HEADED=1` runs Firefox headed on a display the
+caller provides: CI runs it under `xvfb-run`. Never set it where that
+display is your desktop's.
+
+A machine without the libraries can point the engines at a `playwright
+run-server` that has them with `WAXDECK_E2E_BROWSER_SERVER=ws://host:port/`;
+the browsers there reach the local stack through the connection. Such a
+server keeps its own environment (and drops Firefox's volume preference
+unless started with `--unsafe`), so it needs its own null sink, and a
+virtual display for headed Firefox.
+
 ## Running
 
 `make e2e` brings the thing under test up to date itself: the Flutter web

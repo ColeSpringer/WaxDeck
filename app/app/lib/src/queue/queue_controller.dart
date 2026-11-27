@@ -414,9 +414,8 @@ class QueueController extends Notifier<QueueState> {
     // rather than by the target index: a set already contiguous at the
     // target arrives at the same arrangement whichever arithmetic got
     // it there.
-    if (Iterable<int>.generate(
-      entries.length,
-    ).every((i) => entries[i].queueId == state.entries[i].queueId)) {
+    if (Iterable<int>.generate(entries.length)
+        .every((i) => entries[i].queueId == state.entries[i].queueId)) {
       return;
     }
     // The source order follows the play order, as it does for a single

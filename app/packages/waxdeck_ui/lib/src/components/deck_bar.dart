@@ -1190,9 +1190,8 @@ class _ZonesLayout extends MultiChildLayoutDelegate {
     if (hasLevel) {
       sizes[_Control.volume] = layoutChild(
         _Control.volume,
-        BoxConstraints.tightFor(
-          width: levelWidth,
-        ).copyWith(maxHeight: size.height),
+        BoxConstraints.tightFor(width: levelWidth)
+            .copyWith(maxHeight: size.height),
       );
     }
     final (title, centre) = _split(size.width, end + _edge);

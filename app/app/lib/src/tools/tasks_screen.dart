@@ -1303,9 +1303,9 @@ class _TaskAccountState extends State<_TaskAccount> {
   @override
   Widget build(BuildContext context) {
     final style = widget.style;
-    final line = MediaQuery.textScalerOf(
-      context,
-    ).scale(style.fontSize! * (style.height ?? 1)).ceilToDouble();
+    final line = MediaQuery.textScalerOf(context)
+        .scale(style.fontSize! * (style.height ?? 1))
+        .ceilToDouble();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[

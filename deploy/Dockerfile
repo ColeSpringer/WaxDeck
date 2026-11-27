@@ -53,7 +53,8 @@ COPY app/ app/
 # The first pub get saw only pubspecs; this one mints the l10n classes,
 # which are not committed, from the sources just copied.
 RUN cd app && flutter pub get
-RUN cd app/app && flutter build web --wasm
+COPY tools/build-web.sh tools/
+RUN tools/build-web.sh
 
 ## --- stage 2: Go server build -------------------------------------------------
 # Cross-compiles from the build host (Go needs no emulation), so multi-arch

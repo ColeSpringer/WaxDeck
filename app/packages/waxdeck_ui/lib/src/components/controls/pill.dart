@@ -123,9 +123,8 @@ class WaxPill extends StatelessWidget {
                       color: foreground,
                       size: math.min(
                         16,
-                        MediaQuery.textScalerOf(
-                              context,
-                            ).scale(style.fontSize ?? 16) *
+                        MediaQuery.textScalerOf(context)
+                                .scale(style.fontSize ?? 16) *
                             (style.height ?? 1),
                       ),
                     ),

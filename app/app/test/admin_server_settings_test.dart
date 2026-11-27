@@ -305,24 +305,21 @@ void main() {
     expect(find.text('3 engine-backed sessions right now.'), findsOneWidget);
   });
 
-  test(
-    'the count and its gapless clause are one message in each language',
-    () async {
-      final es = await AppLocalizations.delegate.load(const Locale('es'));
-      expect(
-        es.adminServerActivityCount(3, 0),
-        '3 sesiones con motor ahora mismo.',
-      );
-      expect(
-        es.adminServerActivityCount(3, 1),
-        '3 sesiones con motor ahora mismo. Una de ellas es una cola sin pausas.',
-      );
-      expect(
-        es.adminServerActivityCount(3, 2),
-        '3 sesiones con motor ahora mismo. 2 de ellas son colas sin pausas.',
-      );
-    },
-  );
+  test('the count and its gapless clause are one message in each language', () async {
+    final es = await AppLocalizations.delegate.load(const Locale('es'));
+    expect(
+      es.adminServerActivityCount(3, 0),
+      '3 sesiones con motor ahora mismo.',
+    );
+    expect(
+      es.adminServerActivityCount(3, 1),
+      '3 sesiones con motor ahora mismo. Una de ellas es una cola sin pausas.',
+    );
+    expect(
+      es.adminServerActivityCount(3, 2),
+      '3 sesiones con motor ahora mismo. 2 de ellas son colas sin pausas.',
+    );
+  });
 
   testWidgets('the running count refreshes when asked, and only then', (
     tester,

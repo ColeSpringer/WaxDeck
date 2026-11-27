@@ -194,9 +194,8 @@ void main() {
     await tester.pump();
     swept.seen.clear();
 
-    await EpisodeActions(
-      ref: ref,
-    ).removeDownload(context, testEpisode(_episode));
+    await EpisodeActions(ref: ref)
+        .removeDownload(context, testEpisode(_episode));
 
     expect(repo.removeDownloadCalls, [_episode]);
     expect(swept.seen, _everyRead);

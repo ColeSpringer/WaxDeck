@@ -82,7 +82,7 @@ class _Reply implements ProbeReply {
   String? get contentType => _response.headers.get('content-type');
 
   @override
-  Stream<String> get lines => Stream.fromFuture(
-    _response.text().toDart,
-  ).expand((text) => LineSplitter.split(text.toDart));
+  Stream<String> get lines =>
+      Stream.fromFuture(_response.text().toDart)
+          .expand((text) => LineSplitter.split(text.toDart));
 }

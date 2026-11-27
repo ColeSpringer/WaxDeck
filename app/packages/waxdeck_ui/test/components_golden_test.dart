@@ -1437,9 +1437,8 @@ class _UnderInsets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MediaQuery(
-    data: MediaQuery.of(
-      context,
-    ).copyWith(size: size, padding: insets, viewPadding: insets),
+    data: MediaQuery.of(context)
+        .copyWith(size: size, padding: insets, viewPadding: insets),
     child: SizedBox.fromSize(
       size: size,
       child: Stack(

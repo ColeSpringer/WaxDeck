@@ -194,9 +194,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       slivers: <Widget>[
         SliverToBoxAdapter(
           child: Padding(
-            padding: WaxSizeClass.of(
-              context,
-            ).gutter.copyWith(bottom: WaxSpace.s12),
+            padding: WaxSizeClass.of(context).gutter
+                .copyWith(bottom: WaxSpace.s12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
@@ -621,9 +620,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (results.truncated) {
       slivers.add(
         SliverPadding(
-          padding: WaxSizeClass.of(
-            context,
-          ).gutter.copyWith(top: WaxSpace.s16, bottom: WaxSpace.s16),
+          padding: WaxSizeClass.of(context).gutter
+              .copyWith(top: WaxSpace.s16, bottom: WaxSpace.s16),
           sliver: SliverToBoxAdapter(
             child: Semantics(
               identifier: SemanticsIds.searchTruncated,

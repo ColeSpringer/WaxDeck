@@ -355,9 +355,10 @@ void main() {
         (
           'a playlist',
           playlistDetailProvider('pl-1'),
-          (c) async => (await c.read(
-            playlistDetailProvider('pl-1').future,
-          )).playlist.name,
+          (c) async =>
+              (await c.read(playlistDetailProvider('pl-1').future))
+                  .playlist
+                  .name,
           'ann',
           'ben',
         ),
@@ -473,9 +474,10 @@ void main() {
         (
           "an item's metadata and who may edit it",
           metadataControllerProvider('bk-1'),
-          (c) async => (await c.read(
-            metadataControllerProvider('bk-1').future,
-          )).metadata.mayCurate,
+          (c) async =>
+              (await c.read(metadataControllerProvider('bk-1').future))
+                  .metadata
+                  .mayCurate,
           true,
           false,
         ),

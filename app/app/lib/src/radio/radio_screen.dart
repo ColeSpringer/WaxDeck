@@ -203,9 +203,8 @@ class _SavedSongsDoor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: WaxSizeClass.of(
-        context,
-      ).gutter.copyWith(top: WaxSpace.s8, bottom: WaxSpace.s8),
+      padding: WaxSizeClass.of(context).gutter
+          .copyWith(top: WaxSpace.s8, bottom: WaxSpace.s8),
       child: WaxOptionRow(
         glyph: WaxIcons.heart,
         title: context.l10n.radioSavedTitle,
@@ -278,9 +277,8 @@ class _StationVolume extends ConsumerWidget {
     }
     final volume = ref.read(outputVolumeProvider.notifier);
     return Padding(
-      padding: WaxSizeClass.of(
-        context,
-      ).gutter.add(const EdgeInsets.only(bottom: WaxSpace.s16)),
+      padding: WaxSizeClass.of(context).gutter
+          .add(const EdgeInsets.only(bottom: WaxSpace.s16)),
       child: Align(
         // Centred, because the row belongs to the readout cluster above
         // it - station name, tune control, level - and that cluster is a

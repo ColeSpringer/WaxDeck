@@ -118,9 +118,8 @@ class DiscordIpcPresence implements DiscordPresencePort {
     if (_transport == null) {
       final id = _applicationId;
       if (id == null || activity == null) return;
-      final dial = _dialling ??= connect(
-        id,
-      ).whenComplete(() => _dialling = null);
+      final dial = _dialling ??= connect(id)
+          .whenComplete(() => _dialling = null);
       if (!await dial) return;
     }
     final nonce = '${++_nonce}';

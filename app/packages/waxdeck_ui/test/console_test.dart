@@ -707,9 +707,8 @@ void main() {
         tester,
         Builder(
           builder: (context) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(scale)),
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(scale)),
             child: Align(
               alignment: Alignment.topLeft,
               child: SizedBox(
@@ -804,9 +803,8 @@ void main() {
         tester,
         Builder(
           builder: (context) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: const TextScaler.linear(1.3)),
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.3)),
             child: Align(
               alignment: Alignment.topLeft,
               child: SizedBox(
@@ -1037,9 +1035,8 @@ void main() {
         tester,
         Builder(
           builder: (context) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(scale)),
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(scale)),
             child: const WaxStatGrid(
               tiles: <StatTile>[
                 StatTile(label: 'Glyph', value: '1', glyph: WaxIcons.albums),
@@ -1078,9 +1075,8 @@ void main() {
       tester,
       Builder(
         builder: (context) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(scale)),
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(scale)),
           child: WaxStatGrid(
             tiles: <StatTile>[
               for (var i = 0; i < 6; i++)

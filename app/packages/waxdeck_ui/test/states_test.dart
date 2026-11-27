@@ -531,9 +531,8 @@ void main() {
             size,
             Builder(
               builder: (context) => MediaQuery(
-                data: MediaQuery.of(
-                  context,
-                ).copyWith(textScaler: TextScaler.linear(scale)),
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: TextScaler.linear(scale)),
                 child: CustomScrollView(
                   controller: page,
                   slivers: <Widget>[

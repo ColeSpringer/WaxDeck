@@ -142,9 +142,8 @@ class UsersScreen extends StatelessWidget {
       slivers: <Widget>[
         SliverToBoxAdapter(
           child: Padding(
-            padding: WaxSizeClass.of(
-              context,
-            ).gutter.add(const EdgeInsets.only(top: WaxSpace.s8)),
+            padding: WaxSizeClass.of(context).gutter
+                .add(const EdgeInsets.only(top: WaxSpace.s8)),
             child: Align(
               alignment: AlignmentDirectional.centerStart,
               child: WaxSegmented(
@@ -217,9 +216,8 @@ class _UsersTab extends ConsumerWidget {
           return false;
         },
         child: ListView(
-          padding: WaxSizeClass.of(
-            context,
-          ).gutter.add(const EdgeInsets.symmetric(vertical: WaxSpace.s16)),
+          padding: WaxSizeClass.of(context).gutter
+              .add(const EdgeInsets.symmetric(vertical: WaxSpace.s16)),
           children: <Widget>[
             WaxTable<UserAccount>(
               rows: value.users,
@@ -394,9 +392,8 @@ class _RequestsTab extends ConsumerWidget {
         isEmpty: (value) => value.isEmpty,
         empty: (context, _) => Center(child: Text(l10n.adminUsersNoRequests)),
         builder: (context, value) => ListView(
-          padding: WaxSizeClass.of(
-            context,
-          ).gutter.add(const EdgeInsets.symmetric(vertical: WaxSpace.s16)),
+          padding: WaxSizeClass.of(context).gutter
+              .add(const EdgeInsets.symmetric(vertical: WaxSpace.s16)),
           children: [
             for (final user in value)
               WaxOptionRow(
@@ -559,9 +556,8 @@ class _InvitesTab extends ConsumerWidget {
           isEmpty: (value) => value.isEmpty,
           empty: (context, _) => Center(child: Text(l10n.adminInvitesEmpty)),
           builder: (context, value) => ListView(
-            padding: WaxSizeClass.of(
-              context,
-            ).gutter.add(const EdgeInsets.symmetric(vertical: WaxSpace.s16)),
+            padding: WaxSizeClass.of(context).gutter
+                .add(const EdgeInsets.symmetric(vertical: WaxSpace.s16)),
             children: [
               for (final invite in value)
                 _InviteRow(

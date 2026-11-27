@@ -268,9 +268,8 @@ const _quotaRefusal = WaxDeckApiException(
 
 /// The last message the shell was asked to show.
 String? _message(WidgetTester tester) => shellMessageText(
-  ProviderScope.containerOf(
-    tester.element(find.byType(UploadsScreen)),
-  ).read(shellMessagesProvider),
+  ProviderScope.containerOf(tester.element(find.byType(UploadsScreen)))
+      .read(shellMessagesProvider),
 );
 
 void main() {
@@ -675,9 +674,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.held, hasLength(1));
     // The server's event for the create lists the session first.
-    ProviderScope.containerOf(
-      tester.element(find.byType(UploadsScreen)),
-    ).invalidate(uploadsProvider);
+    ProviderScope.containerOf(tester.element(find.byType(UploadsScreen)))
+        .invalidate(uploadsProvider);
     await tester.pumpAndSettle();
     expect(
       find.descendant(
@@ -718,9 +716,8 @@ void main() {
     expect(repo.reached.isCompleted, isTrue);
     final id = repo.uploadsById.keys.single;
 
-    ProviderScope.containerOf(
-      tester.element(find.byType(UploadsScreen)),
-    ).invalidate(uploadsProvider);
+    ProviderScope.containerOf(tester.element(find.byType(UploadsScreen)))
+        .invalidate(uploadsProvider);
     await tester.pumpAndSettle();
 
     expect(
@@ -774,9 +771,8 @@ void main() {
 
     // The server's event for this session refreshes the list, which
     // answers the row as it stood before any chunk arrived.
-    ProviderScope.containerOf(
-      tester.element(find.byType(UploadsScreen)),
-    ).invalidate(uploadsProvider);
+    ProviderScope.containerOf(tester.element(find.byType(UploadsScreen)))
+        .invalidate(uploadsProvider);
     await tester.pumpAndSettle();
 
     final row = find.bySemanticsIdentifier(SemanticsIds.uploadRow(id));
@@ -1316,12 +1312,11 @@ void main() {
     ]);
     await _pump(tester, _container(repo, picker: picker));
     final shown = <String?>[];
-    ProviderScope.containerOf(
-      tester.element(find.byType(UploadsScreen)),
-    ).listen(
-      shellMessagesProvider,
-      (_, next) => shown.add(shellMessageText(next)),
-    );
+    ProviderScope.containerOf(tester.element(find.byType(UploadsScreen)))
+        .listen(
+          shellMessagesProvider,
+          (_, next) => shown.add(shellMessageText(next)),
+        );
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();

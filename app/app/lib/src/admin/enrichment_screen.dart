@@ -349,9 +349,8 @@ class _SourcesState extends ConsumerState<_Sources> {
 
   static bool _same(List<EnrichmentSource> a, List<EnrichmentSource> b) =>
       a.length == b.length &&
-      Iterable<int>.generate(
-        a.length,
-      ).every((i) => a[i].name == b[i].name && a[i].enabled == b[i].enabled);
+      Iterable<int>.generate(a.length)
+          .every((i) => a[i].name == b[i].name && a[i].enabled == b[i].enabled);
 
   bool get _dirty => _draft != null && !_same(_draft!, _served);
 

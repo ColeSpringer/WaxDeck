@@ -189,8 +189,7 @@ void main() {
       (
         OpmlImportOutcome(
           feedUrl: 'http://10.0.0.5/feed.xml',
-          error:
-              'This server does not fetch feeds from private or local network addresses.',
+          error: 'This server does not fetch feeds from private or local network addresses.',
           reason: 'blocked-address',
         ),
         'This server does not fetch from private or local network addresses.',

@@ -89,7 +89,7 @@ jobs:
       - name: Pub get (workspace root)
         run: cd app && flutter pub get
       - name: Build web bundle (once, embedded into every binary)
-        run: cd app/app && flutter build web --wasm
+        run: tools/build-web.sh
       - name: Stage web bundle into the embed dir
         run: |
           rm -rf server/internal/web/dist

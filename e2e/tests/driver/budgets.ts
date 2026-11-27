@@ -54,6 +54,10 @@ export const J = {
   /// An end-to-end journey whose steps each consume the last one's
   /// output - the shape the journey rule permits to stay whole.
   journey: 240_000,
+
+  /// Thirty cold boots of the JavaScript build, which WebKit runs: each
+  /// takes several seconds where the wasm build takes about one.
+  jsBoots: 480_000,
 } as const;
 
 export type Budget = (typeof T)[keyof typeof T];

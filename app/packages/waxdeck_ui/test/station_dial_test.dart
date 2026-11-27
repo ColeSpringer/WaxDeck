@@ -26,9 +26,8 @@ Future<void> _pump(
       theme: buildWaxTheme(),
       home: Builder(
         builder: (context) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(disableAnimations: reducedMotion),
+          data: MediaQuery.of(context)
+              .copyWith(disableAnimations: reducedMotion),
           child: Scaffold(body: Center(child: child)),
         ),
       ),

@@ -58,9 +58,8 @@ void main() {
         'nextCursor': 'c2',
       },
     );
-    final page = await clientOn(
-      adapter,
-    ).listEntityFolds(cursor: 'c1', limit: 50);
+    final page = await clientOn(adapter)
+        .listEntityFolds(cursor: 'c1', limit: 50);
     final query = adapter.requests.single.uri.queryParameters;
     expect(adapter.requests.single.uri.path, endsWith('/library/folds'));
     expect(query['cursor'], 'c1');

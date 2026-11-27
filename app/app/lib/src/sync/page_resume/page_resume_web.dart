@@ -6,9 +6,9 @@ import 'page_thaws.dart';
 /// Lifecycle `resume`), or one restored from the back/forward cache; not
 /// a hidden tab shown again.
 Stream<void> pageResumes() => pageThaws(
-  resumes: const web.EventStreamProvider<web.Event>(
-    'resume',
-  ).forTarget(web.document).map((_) {}),
+  resumes: const web.EventStreamProvider<web.Event>('resume')
+      .forTarget(web.document)
+      .map((_) {}),
   shows: web.EventStreamProviders.pageShowEvent
       .forTarget(web.window)
       .map((event) => (event as web.PageTransitionEvent).persisted),

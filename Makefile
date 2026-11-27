@@ -288,8 +288,9 @@ oasdiff:
 ## --- build -------------------------------------------------------------------
 
 # Flutter web build -> server embed dir (WasmGC target with JS fallback).
+# tools/build-web.sh holds the build's flags for every caller.
 web: app-deps
-	cd app/app && flutter build web --wasm
+	tools/build-web.sh
 	rm -rf $(WEB_DIST) && mkdir -p $(WEB_DIST)
 	cp -r $(APP_WEB_OUT)/. $(WEB_DIST)/
 
@@ -299,14 +300,16 @@ WEB_STAMP := $(WEB_DIST)/flutter_bootstrap.js
 # Everything the web build reads, so that none of it can change under a
 # bundle that stays: the Dart and the l10n bundles beside it, every font
 # and asset a pubspec declares, the pubspecs and the lockfile, the
-# licenses its NOTICES carry, and the page template with the files served
-# beside it. `make fonts`, `make brand` and a dependency bump each change
-# some of these without touching a line of Dart.
+# licenses its NOTICES carry, the page template with the files served
+# beside it, and the script that holds the build's flags. `make fonts`,
+# `make brand` and a dependency bump each change some of these without
+# touching a line of Dart.
 WEB_INPUTS := $(shell find app/app/lib app/app/web app/app/assets \
                 $(wildcard app/packages/*/lib app/packages/*/fonts app/packages/*/assets) \
                 -type f 2>/dev/null) \
               $(wildcard app/pubspec.yaml app/pubspec.lock app/app/pubspec.yaml app/app/l10n.yaml \
-                app/packages/*/pubspec.yaml app/packages/*/l10n.yaml app/app/LICENSE app/packages/*/LICENSE)
+                app/packages/*/pubspec.yaml app/packages/*/l10n.yaml app/app/LICENSE app/packages/*/LICENSE \
+                tools/build-web.sh)
 
 $(WEB_STAMP): $(WEB_INPUTS)
 	$(MAKE) web

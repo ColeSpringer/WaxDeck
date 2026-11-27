@@ -162,9 +162,8 @@ void main() {
 
     final gate = Completer<void>();
     repo.listItemsGate = gate;
-    ProviderScope.containerOf(
-      tester.element(find.byType(WaxScaffold).first),
-    ).invalidate(booksProvider);
+    ProviderScope.containerOf(tester.element(find.byType(WaxScaffold).first))
+        .invalidate(booksProvider);
     await tester.pump();
     await tester.pump();
 

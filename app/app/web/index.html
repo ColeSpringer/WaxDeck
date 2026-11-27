@@ -247,6 +247,11 @@
       },
       config: {
         canvasKitBaseUrl: "canvaskit",
+        // Firefox gets the wasm build too. Safari stays on the JavaScript
+        // one (it holds half the memory there: docs/deferred-work.md), as
+        // do Firefox before 147 and any browser missing a feature
+        // dart2wasm needs.
+        wasmAllowList: { gecko: true },
         // The engine's last-resort font machinery downloads from
         // fonts.gstatic.com by default: Roboto, its default face, as it
         // starts, and per-glyph Noto shards for characters nothing

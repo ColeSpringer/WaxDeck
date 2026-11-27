@@ -229,9 +229,8 @@ class _CuttableTone {
   Future<void> _answer(HttpRequest request) async {
     final response = request.response;
     final length = _bytes.length;
-    final asked = RegExp(
-      r'^bytes=(\d+)-(\d*)$',
-    ).firstMatch(request.headers.value(HttpHeaders.rangeHeader) ?? '');
+    final asked = RegExp(r'^bytes=(\d+)-(\d*)$')
+        .firstMatch(request.headers.value(HttpHeaders.rangeHeader) ?? '');
     final start = asked == null ? 0 : int.parse(asked[1]!);
     final end = asked == null || asked[2]!.isEmpty
         ? length

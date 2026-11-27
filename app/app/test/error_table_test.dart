@@ -690,9 +690,10 @@ Set<String> _specCodes() {
       outside.write(char);
     }
   }
-  return RegExp(
-    r'`([a-z][a-z-]*)`',
-  ).allMatches(outside.toString()).map((m) => m.group(1)!).toSet();
+  return RegExp(r'`([a-z][a-z-]*)`')
+      .allMatches(outside.toString())
+      .map((m) => m.group(1)!)
+      .toSet();
 }
 
 /// The reasons the committed bundle lists under `source-refused`, read out
@@ -716,9 +717,10 @@ Set<String> _specSourceRefusedReasons() {
       outside.write(char);
     }
   }
-  return RegExp(
-      r'`([a-z][a-z-]*)`',
-    ).allMatches(outside.toString()).map((m) => m.group(1)!).toSet()
+  return RegExp(r'`([a-z][a-z-]*)`')
+      .allMatches(outside.toString())
+      .map((m) => m.group(1)!)
+      .toSet()
     ..remove('reason')
     ..remove('source-refused');
 }
@@ -738,9 +740,10 @@ Set<String> _specHealthRules() {
   final last = spec.indexOf('`corrupt-audio`', start);
   final end = last < 0 ? -1 : spec.indexOf('.', last);
   expect(end, isNonNegative, reason: 'the rule list no longer ends as it did');
-  return RegExp(
-    r'`([a-z][a-z-]*)`',
-  ).allMatches(spec.substring(start, end)).map((m) => m.group(1)!).toSet();
+  return RegExp(r'`([a-z][a-z-]*)`')
+      .allMatches(spec.substring(start, end))
+      .map((m) => m.group(1)!)
+      .toSet();
 }
 
 /// The files whose `code:` literals are answers going out over the
@@ -758,8 +761,9 @@ const _wireCodeFiles = <String>[
 ];
 
 /// Every Dart source in the app, for the scan above.
-List<File> _appSources() => Directory('lib')
-    .listSync(recursive: true)
-    .whereType<File>()
-    .where((f) => f.path.endsWith('.dart'))
-    .toList();
+List<File> _appSources() =>
+    Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'))
+        .toList();

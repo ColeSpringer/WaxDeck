@@ -273,8 +273,8 @@ Future<String?> _destination(
   if (landed == null) return null;
   if (to == 'audiobook') return WaxRoute.book(landed);
   try {
-    final albumPid =
-        (await container.read(repositoryProvider).getItem(landed)).albumPid;
+    final albumPid = (await container.read(repositoryProvider).getItem(landed))
+        .albumPid;
     return albumPid == null
         ? WaxRoute.musicTracks
         : WaxRoute.musicBucket(MusicDimension.albums, albumPid);

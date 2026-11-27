@@ -204,11 +204,9 @@ void main() {
       label: 'Resume Cached Episode',
     );
     expect(queue, isEmpty, reason: 'no fresh start over the park');
-    final playback =
-        ProviderScope.containerOf(
-              tester.element(find.byType(HomeScreen)),
-            ).read(nowPlayingProvider.notifier)
-            as _RecordingNowPlaying;
+    final playback = ProviderScope.containerOf(
+      tester.element(find.byType(HomeScreen)),
+    ).read(nowPlayingProvider.notifier) as _RecordingNowPlaying;
     expect(playback.takenBack, hasLength(1));
     await engine.stop();
   });

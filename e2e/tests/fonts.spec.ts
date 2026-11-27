@@ -33,9 +33,11 @@ test('CJK metadata pulls its face from this origin and nothing leaves it', async
   await expect(app.playlists.row(pid)).toBeVisible();
 
   // The playlist listing carries a CJK name, so the deferred face must
-  // come down, and from this server.
+  // come down, and from this server: NotoSansCJK.otf, content-hashed
+  // or not.
+  const cjkFace = /assets\/fonts\/NotoSansCJK(\.[0-9a-f]{8})?\.otf$/;
   await expect
-    .poll(() => requested.some((u) => u.endsWith('assets/fonts/NotoSansCJK.otf')), {
+    .poll(() => requested.some((u) => cjkFace.test(u)), {
       message: 'the CJK face should be fetched on demand',
     })
     .toBeTruthy();
@@ -73,9 +75,9 @@ test('CJK metadata pulls its face from this origin and nothing leaves it', async
   expect(offOrigin, 'every request stays on the WaxDeck origin').toEqual([]);
 });
 
-// The face above is the one the wasm build asks for, the only build
-// Chromium runs. A browser without WasmGC is handed the JavaScript build
-// and its CanvasKit engine, which names its default face separately, so
+// The face above is the one the wasm build asks for. A browser that
+// cannot run that build is handed the JavaScript one and its CanvasKit
+// engine, which names its default face separately, so
 // this reads the face every build the bootstrap may hand out names and
 // asks this origin for each: an engine upgrade that moves either one
 // fails here, not in a browser nobody tests with.

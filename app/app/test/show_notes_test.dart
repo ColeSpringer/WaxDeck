@@ -178,18 +178,18 @@ void main() {
     // Whitespace between the breaks does not save them: the stretch is
     // read for the newlines it carries, not run by run.
     expect(
-      parseShowNotes(
-        'One<br>\n  <br>\t<br>Two',
-      ).single.runs.map((r) => r.text).join(),
+      parseShowNotes('One<br>\n  <br>\t<br>Two').single.runs
+          .map((r) => r.text)
+          .join(),
       'One\n\nTwo',
     );
 
     // Preformatted blocks keep every one: there the whitespace is the
     // content.
     expect(
-      parseShowNotes(
-        '<pre>a<br><br><br>b</pre>',
-      ).single.runs.map((r) => r.text).join(),
+      parseShowNotes('<pre>a<br><br><br>b</pre>').single.runs
+          .map((r) => r.text)
+          .join(),
       'a\n\n\nb',
     );
   });

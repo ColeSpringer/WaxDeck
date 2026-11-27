@@ -159,9 +159,9 @@ void main() {
 
     bool? took;
     unawaited(
-      _auth(
-        device.container,
-      ).login(username: 'ben', password: 'pw').then((answer) => took = answer),
+      _auth(device.container)
+          .login(username: 'ben', password: 'pw')
+          .then((answer) => took = answer),
     );
     await tester.pump();
     final ann = server.authToken;
@@ -194,9 +194,9 @@ void main() {
 
     bool? took;
     unawaited(
-      _auth(
-        device.container,
-      ).loginWithOidc(_sso).then((answer) => took = answer),
+      _auth(device.container)
+          .loginWithOidc(_sso)
+          .then((answer) => took = answer),
     );
     await tester.pump();
     expect(device.browser.opened, 1);
@@ -223,9 +223,9 @@ void main() {
 
     bool? took;
     unawaited(
-      _auth(
-        device.container,
-      ).loginWithOidc(_sso).then((answer) => took = answer),
+      _auth(device.container)
+          .loginWithOidc(_sso)
+          .then((answer) => took = answer),
     );
     await tester.pump();
     device.browser.comeBack();

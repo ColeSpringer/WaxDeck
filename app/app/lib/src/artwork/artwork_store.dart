@@ -151,9 +151,9 @@ List<String> coverUrlsOf(String artUrl) {
       else if (rest.isEmpty)
         '$key?role=${slot.role}'
       else
-        Uri.parse(
-          key,
-        ).replace(queryParameters: {...rest, 'role': slot.role}).toString(),
+        Uri.parse(key)
+            .replace(queryParameters: {...rest, 'role': slot.role})
+            .toString(),
   ];
 }
 

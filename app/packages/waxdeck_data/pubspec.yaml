@@ -5,8 +5,8 @@ publish_to: none
 resolution: workspace
 
 environment:
-  sdk: ^3.12.0
-  flutter: ">=3.44.0"
+  sdk: ^3.14.0
+  flutter: ">=3.50.1"
 
 # Community plugins are pinned exactly and wrapped behind WaxDeck-owned
 # interfaces (repo policy). sqlite3_flutter_libs is marked end-of-life

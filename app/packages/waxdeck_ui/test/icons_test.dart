@@ -6,9 +6,9 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 void main() {
   group('icon subsets', () {
-    final manifest =
-        jsonDecode(File('fonts/phosphor-subset.json').readAsStringSync())
-            as Map<String, dynamic>;
+    final manifest = jsonDecode(
+      File('fonts/phosphor-subset.json').readAsStringSync(),
+    ) as Map<String, dynamic>;
 
     Set<int> glyphsIn(String family) =>
         (manifest[family]! as List<dynamic>).cast<int>().toSet();

@@ -1197,21 +1197,18 @@ final listsProvider = AsyncNotifierProvider<Lists, Object>(Lists.new);
       });
     }
 
-    test(
-      'not through another provider it watches, which answers for itself',
-      () async {
-        expect(
-          await fixtures.scan({
-            'a.dart': lists(
-              before:
-                  'final rowsProvider = FutureProvider<Object>((ref) => $read);',
-              build: 'return ref.watch(rowsProvider.future);',
-            ),
-          }),
-          [unkeyed('rowsProvider')],
-        );
-      },
-    );
+    test('not through another provider it watches, which answers for itself', () async {
+      expect(
+        await fixtures.scan({
+          'a.dart': lists(
+            before:
+                'final rowsProvider = FutureProvider<Object>((ref) => $read);',
+            build: 'return ref.watch(rowsProvider.future);',
+          ),
+        }),
+        [unkeyed('rowsProvider')],
+      );
+    });
   });
 
   group('keys', () {

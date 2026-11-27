@@ -6,6 +6,7 @@
 !server
 !fixtures
 !LICENSE
+!tools/build-web.sh
 
 # Generated and per-machine trees inside the admitted paths, and the
 # test trees: not build inputs, and golden churn would bust the COPY

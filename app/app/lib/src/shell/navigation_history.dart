@@ -2667,9 +2667,8 @@ class PageRoutes extends NavigatorObserver {
   }
 
   static void _remove(Route<Object?>? route) {
-    if (route?.settings case Page<Object?>(
-      :final key?,
-    ) when identical(_routes[key], route)) {
+    if (route?.settings case Page<Object?>(:final key?)
+        when identical(_routes[key], route)) {
       _routes.remove(key);
     }
   }

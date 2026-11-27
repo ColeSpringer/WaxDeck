@@ -448,9 +448,8 @@ class _StartOfIndex extends StatelessWidget {
       semanticsId: SemanticsIds.indexRailStart,
       onPressed: onTap,
       child: Padding(
-        padding: WaxSizeClass.of(
-          context,
-        ).gutter.copyWith(top: WaxSpace.s12, bottom: WaxSpace.s12),
+        padding: WaxSizeClass.of(context).gutter
+            .copyWith(top: WaxSpace.s12, bottom: WaxSpace.s12),
         child: Row(
           children: <Widget>[
             WaxIcon(WaxIcons.expand, size: 16, color: colors.textTertiary),
@@ -488,9 +487,8 @@ class _Toolbar extends StatelessWidget {
     final colors = WaxColors.of(context);
     final loaded = count;
     return Padding(
-      padding: WaxSizeClass.of(
-        context,
-      ).gutter.copyWith(top: WaxSpace.s4, bottom: WaxSpace.s8),
+      padding: WaxSizeClass.of(context).gutter
+          .copyWith(top: WaxSpace.s4, bottom: WaxSpace.s8),
       child: Row(
         children: <Widget>[
           if (loaded != null)

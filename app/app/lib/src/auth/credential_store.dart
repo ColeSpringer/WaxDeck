@@ -47,10 +47,9 @@ String rememberedRecord(String token, String session) =>
 /// for another token's record, and for text that is no record.
 String? rememberedFor(String token, String record) {
   try {
-    if (jsonDecode(record) case {
-      'for': final String digest,
-      'session': final String session,
-    } when digest == _digest(token)) {
+    if (jsonDecode(record)
+        case {'for': final String digest, 'session': final String session}
+        when digest == _digest(token)) {
       return session;
     }
   } on FormatException {

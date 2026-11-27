@@ -968,8 +968,7 @@ void main() {
     final repo = FakeRepository()
       ..removeLibraryError = const WaxDeckApiException(
         code: 'catalog-busy',
-        message:
-            'a conflicting catalog job is already running; retry when it finishes',
+        message: 'a conflicting catalog job is already running; retry when it finishes',
         statusCode: 409,
       );
     repo.libraries.add(

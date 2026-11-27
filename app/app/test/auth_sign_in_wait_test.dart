@@ -440,9 +440,8 @@ void main() {
         final shown = _shown(container);
 
         var landed = false;
-        final arriving = signIn(
-          _auth(container),
-        ).whenComplete(() => landed = true);
+        final arriving = signIn(_auth(container))
+            .whenComplete(() => landed = true);
         await pumpEventQueue();
         expect(landed, isFalse);
         expect(shown, isEmpty);
@@ -610,9 +609,9 @@ void main() {
       final shown = _shown(container);
 
       bool? took;
-      final arriving = _auth(
-        container,
-      ).login(username: 'ben', password: 'pw').then((answer) => took = answer);
+      final arriving = _auth(container)
+          .login(username: 'ben', password: 'pw')
+          .then((answer) => took = answer);
       await pumpEventQueue();
       final building = _builtAgain(container);
       await pumpEventQueue();
@@ -641,9 +640,9 @@ void main() {
       await pumpEventQueue();
       client.server.next = _cid;
       bool? took;
-      final arriving = _auth(
-        container,
-      ).login(username: 'cid', password: 'pw').then((answer) => took = answer);
+      final arriving = _auth(container)
+          .login(username: 'cid', password: 'pw')
+          .then((answer) => took = answer);
       await pumpEventQueue();
       expect(shown, isNot(anyOf(contains('ben'), contains('cid'))));
 
@@ -703,9 +702,9 @@ void main() {
 
       final held = keychain.hold('writeToken');
       bool? took;
-      final arriving = _auth(
-        container,
-      ).login(username: 'ben', password: 'pw').then((answer) => took = answer);
+      final arriving = _auth(container)
+          .login(username: 'ben', password: 'pw')
+          .then((answer) => took = answer);
       await pumpEventQueue();
       final building = _builtAgain(container);
       await pumpEventQueue();
@@ -730,9 +729,8 @@ void main() {
         await container.read(authControllerProvider.future);
 
         final held = keychain.hold(write);
-        final arriving = _auth(
-          container,
-        ).login(username: 'ben', password: 'pw');
+        final arriving = _auth(container)
+            .login(username: 'ben', password: 'pw');
         await pumpEventQueue();
         container.dispose();
         held.complete();
@@ -755,9 +753,9 @@ void main() {
       final leaving = _auth(container).signOutLocally();
       await artwork.reached;
       bool? took;
-      final arriving = _auth(
-        container,
-      ).login(username: 'ben', password: 'pw').then((answer) => took = answer);
+      final arriving = _auth(container)
+          .login(username: 'ben', password: 'pw')
+          .then((answer) => took = answer);
       await pumpEventQueue();
       final meanwhile = [...shown];
 
@@ -841,9 +839,9 @@ void main() {
       final leaving = _auth(container).signOutLocally();
       await artwork.reached;
       bool? took;
-      final first = _auth(
-        container,
-      ).login(username: 'ben', password: 'pw').then((answer) => took = answer);
+      final first = _auth(container)
+          .login(username: 'ben', password: 'pw')
+          .then((answer) => took = answer);
       await pumpEventQueue();
       client.server.next = _cid;
       final second = _auth(container).login(username: 'cid', password: 'pw');
@@ -904,9 +902,9 @@ void main() {
       final shown = _shown(container);
 
       bool? took;
-      final arriving = _auth(
-        container,
-      ).login(username: 'ben', password: 'pw').then((answer) => took = answer);
+      final arriving = _auth(container)
+          .login(username: 'ben', password: 'pw')
+          .then((answer) => took = answer);
       await pumpEventQueue();
       expect(shown, ['out']);
       expect(artwork.wipes, 1);
@@ -955,9 +953,8 @@ void main() {
         keychain.onSessionWritten = null;
         container.invalidate(authControllerProvider);
       };
-      final took = await _auth(
-        container,
-      ).login(username: 'ben', password: 'pw');
+      final took = await _auth(container)
+          .login(username: 'ben', password: 'pw');
       expect(took, isFalse);
 
       await pumpEventQueue();
@@ -1024,9 +1021,9 @@ void main() {
       final shown = _shown(container);
 
       bool? took;
-      final first = _auth(
-        container,
-      ).login(username: 'ben', password: 'pw').then((answer) => took = answer);
+      final first = _auth(container)
+          .login(username: 'ben', password: 'pw')
+          .then((answer) => took = answer);
       await artwork.reached;
       client.server.next = _ann;
       final second = _auth(container).login(username: 'ann', password: 'pw');
@@ -1056,9 +1053,9 @@ void main() {
       final shown = _shown(container);
 
       bool? took;
-      final first = _auth(
-        container,
-      ).login(username: 'ben', password: 'pw').then((answer) => took = answer);
+      final first = _auth(container)
+          .login(username: 'ben', password: 'pw')
+          .then((answer) => took = answer);
       await pumpEventQueue();
       expect(shown, ['out']);
       client.server.next = _cid;
@@ -1422,9 +1419,9 @@ void main() {
     server.next = _ben;
     bool? took;
     unawaited(
-      _auth(
-        container,
-      ).login(username: 'ben', password: 'pw').then((answer) => took = answer),
+      _auth(container)
+          .login(username: 'ben', password: 'pw')
+          .then((answer) => took = answer),
     );
     final reads = server.reads;
     while (server.reads == reads && at < next + 4) {

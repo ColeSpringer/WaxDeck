@@ -32,9 +32,8 @@ void main() {
             localizationsDelegates: waxLocalizationsDelegates,
             home: Builder(
               builder: (context) => MediaQuery(
-                data: MediaQuery.of(
-                  context,
-                ).copyWith(textScaler: TextScaler.linear(scale)),
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: TextScaler.linear(scale)),
                 child: Scaffold(body: ComponentsPage(art: art)),
               ),
             ),

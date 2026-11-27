@@ -1185,9 +1185,9 @@ void main() {
         ),
       ),
     );
-    ProviderScope.containerOf(
-      tester.element(find.byType(ShellMessageHost)),
-    ).read(shellMessengerProvider).show('Scan started');
+    ProviderScope.containerOf(tester.element(find.byType(ShellMessageHost)))
+        .read(shellMessengerProvider)
+        .show('Scan started');
     await tester.pumpAndSettle();
 
     expect(find.byType(WaxMessageBar), findsOneWidget);
@@ -2657,9 +2657,8 @@ void main() {
       await pumpWholeApp(tester, container: container);
       expect(find.byType(WaxWordmark), findsOneWidget);
 
-      ShellMessenger.of(
-        tester.element(find.byType(WaxWordmark)),
-      ).show('Could not reach the server');
+      ShellMessenger.of(tester.element(find.byType(WaxWordmark)))
+          .show('Could not reach the server');
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('Could not reach the server'), findsOneWidget);
@@ -3253,9 +3252,8 @@ void main() {
 bool _within(Element element, String page) {
   var inside = false;
   element.visitAncestorElements((ancestor) {
-    if (ancestor.widget case Semantics(
-      :final properties,
-    ) when properties.identifier == page) {
+    if (ancestor.widget case Semantics(:final properties)
+        when properties.identifier == page) {
       inside = true;
     }
     return !inside;

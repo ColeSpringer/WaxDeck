@@ -893,9 +893,8 @@ class _OriginBlock extends StatelessWidget {
               WaxIcons.edit,
               // The caption's own size through the scaler, so the glyph
               // stays matched to the words under nonlinear scaling too.
-              size: MediaQuery.textScalerOf(
-                context,
-              ).scale(style.fontSize ?? 12),
+              size: MediaQuery.textScalerOf(context)
+                  .scale(style.fontSize ?? 12),
               color: colors.textTertiary,
             ),
           ],

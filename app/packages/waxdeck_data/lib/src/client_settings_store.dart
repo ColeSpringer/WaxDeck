@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'database.dart';
 
 /// Where a preference that belongs to this device - not to the account -

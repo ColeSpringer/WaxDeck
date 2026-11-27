@@ -143,9 +143,8 @@ class WaxCommand {
       whileTyping == other.whileTyping &&
       inPalette == other.inPalette &&
       activators.length == other.activators.length &&
-      Iterable<int>.generate(
-        activators.length,
-      ).every((i) => activators[i] == other.activators[i]);
+      Iterable<int>.generate(activators.length)
+          .every((i) => activators[i] == other.activators[i]);
 
   /// Whether two lists offer the same thing, in the same order.
   static bool sameOffers(List<WaxCommand> a, List<WaxCommand> b) {

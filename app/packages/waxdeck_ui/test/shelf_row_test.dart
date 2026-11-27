@@ -23,6 +23,8 @@ List<MediaTileData> _tiles(int count) => <MediaTileData>[
 Future<void> _pump(
   WidgetTester tester, {
   double width = 500,
+  double cardWidth = _cardWidth,
+  ThemeData? theme,
   int cards = 12,
   bool reducedMotion = false,
   TextDirection textDirection = TextDirection.ltr,
@@ -33,7 +35,7 @@ Future<void> _pump(
 }) async {
   await tester.pumpWidget(
     MaterialApp(
-      theme: buildWaxTheme(),
+      theme: theme ?? buildWaxTheme(),
       home: MediaQuery(
         // A real window size, not a bare MediaQueryData: WaxSizeClass
         // reads it, and a defaulted Size.zero would report compact
@@ -51,7 +53,7 @@ Future<void> _pump(
                 width: width,
                 child: ShelfRow(
                   title: 'Recently added',
-                  cardWidth: _cardWidth,
+                  cardWidth: cardWidth,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   items: _tiles(cards),
                   onTapItem: (tile) => _taps.add(tile.title),
@@ -118,6 +120,25 @@ void main() {
     await _pump(tester, width: 780);
     final wide = find.textContaining('Card ').evaluate().length;
     expect(wide, greaterThan(narrow));
+  });
+
+  testWidgets('a flick lands on the grid of the cards as they are now', (
+    tester,
+  ) async {
+    // Cards resized under a mounted shelf, as a window crossing a size
+    // class does: the next flick settles on their new pitch, not on the
+    // one the shelf was built with. One theme for both frames: a new one
+    // would rebuild the scroll position whatever its physics said.
+    final theme = buildWaxTheme();
+    await _pump(tester, theme: theme);
+    await _pump(tester, theme: theme, cardWidth: 160);
+    await tester.fling(_shelf, const Offset(-200, 0), 800);
+    await tester.pumpAndSettle();
+
+    const pitch = 160 + WaxShellMetrics.gridGap;
+    final landing = (_offset(tester) - 16) / pitch;
+    expect(landing, greaterThan(0));
+    expect(landing, moreOrLessEquals(landing.roundToDouble(), epsilon: 1e-6));
   });
 
   testWidgets('a mouse can drag the shelf', (tester) async {

@@ -91,9 +91,8 @@ Future<String?> resolveBootServerAddress(CredentialStorePort store) async {
   // stored", which lands on the connect screen - an app that asks again
   // beats one that never draws a frame.
   try {
-    return await _resolveBootServerAddress(
-      store,
-    ).timeout(const Duration(seconds: 5));
+    return await _resolveBootServerAddress(store)
+        .timeout(const Duration(seconds: 5));
   } on TimeoutException {
     return compileTimeBaseOverride.isNotEmpty ? compileTimeBaseOverride : null;
   }

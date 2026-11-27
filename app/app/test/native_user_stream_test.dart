@@ -602,9 +602,9 @@ void main() {
 
     expect(repo.serverHealthReads, server + 1);
     expect(
-      (await b.container.read(
-        serverHealthProvider.future,
-      )).streaming?.connected,
+      (await b.container.read(serverHealthProvider.future))
+          .streaming
+          ?.connected,
       isFalse,
     );
     expect(repo.prefsReads, prefs);

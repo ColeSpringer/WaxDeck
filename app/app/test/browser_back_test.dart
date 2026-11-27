@@ -1645,9 +1645,9 @@ void main() {
       await _go(tester, container, WaxRoute.podcasts);
       final heard = <Object?>[];
       unawaited(
-        _router(
-          container,
-        ).push<String>(WaxRoute.episode(_episodePid)).then(heard.add),
+        _router(container)
+            .push<String>(WaxRoute.episode(_episodePid))
+            .then(heard.add),
       );
       await tester.pumpAndSettle();
       expect(find.byType(EpisodeScreen), findsOneWidget);
@@ -2596,9 +2596,9 @@ void main() {
       await _go(tester, container, WaxRoute.podcasts);
       final heard = <Object?>[];
       unawaited(
-        _router(
-          container,
-        ).push<String>(WaxRoute.episode(_episodePid)).then(heard.add),
+        _router(container)
+            .push<String>(WaxRoute.episode(_episodePid))
+            .then(heard.add),
       );
       await tester.pumpAndSettle();
       expect(find.byType(EpisodeScreen), findsOneWidget);
@@ -2663,9 +2663,9 @@ void main() {
       await _go(tester, container, WaxRoute.podcasts);
       final heard = <Object?>[];
       unawaited(
-        _router(
-          container,
-        ).push<String>(WaxRoute.episode(_episodePid)).then(heard.add),
+        _router(container)
+            .push<String>(WaxRoute.episode(_episodePid))
+            .then(heard.add),
       );
       await tester.pumpAndSettle();
       expect(find.byType(EpisodeScreen), findsOneWidget);
@@ -3837,9 +3837,8 @@ void main() {
 
         await movedOn(tester, container, gate);
         expect(
-          _repo(container).playlistsByPid.values.where(
-            (playlist) => playlist.name == 'Best of',
-          ),
+          _repo(container).playlistsByPid.values
+              .where((playlist) => playlist.name == 'Best of'),
           hasLength(1),
         );
       });
@@ -3871,9 +3870,8 @@ void main() {
         );
         expect(find.byType(PlaylistsScreen), findsOneWidget);
         expect(
-          _repo(container).playlistsByPid.values.where(
-            (playlist) => playlist.name == 'Best of',
-          ),
+          _repo(container).playlistsByPid.values
+              .where((playlist) => playlist.name == 'Best of'),
           hasLength(1),
         );
       });
@@ -4805,9 +4803,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        _repo(
-          container,
-        ).playlistsByPid.values.where((playlist) => playlist.name == 'Best of'),
+        _repo(container).playlistsByPid.values
+            .where((playlist) => playlist.name == 'Best of'),
         hasLength(1),
       );
       expect(find.byType(RuleEditorScreen), findsNothing);
@@ -5913,9 +5910,9 @@ void main() {
         await tester.pumpAndSettle();
         final heard = <Object?>[];
         unawaited(
-          _router(
-            container,
-          ).push<Object?>(WaxRoute.notifications).then(heard.add),
+          _router(container)
+              .push<Object?>(WaxRoute.notifications)
+              .then(heard.add),
         );
         await tester.pumpAndSettle();
         gate.complete();
@@ -6670,9 +6667,9 @@ void main() {
       browser.kept = 1;
       final heard = <Object?>[];
       unawaited(
-        _router(
-          container,
-        ).push<String>(WaxRoute.episode(_episodePid)).then(heard.add),
+        _router(container)
+            .push<String>(WaxRoute.episode(_episodePid))
+            .then(heard.add),
       );
       await tester.pumpAndSettle();
       await _back(tester);
@@ -6727,9 +6724,9 @@ void main() {
       browser.kept = 1;
       final heard = <Object?>[];
       unawaited(
-        _router(
-          container,
-        ).push<String>(WaxRoute.episode(_episodePid)).then(heard.add),
+        _router(container)
+            .push<String>(WaxRoute.episode(_episodePid))
+            .then(heard.add),
       );
       await tester.pumpAndSettle();
       await _back(tester);
@@ -7381,9 +7378,9 @@ void main() {
         // As the fold does.
         var heard = 0;
         unawaited(
-          _router(
-            container,
-          ).push<void>(gonePage, extra: 'Old').then((_) => heard++),
+          _router(container)
+              .push<void>(gonePage, extra: 'Old')
+              .then((_) => heard++),
         );
         await tester.pumpAndSettle();
         await merge(tester, container);

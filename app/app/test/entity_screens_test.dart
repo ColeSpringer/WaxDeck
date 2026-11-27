@@ -859,9 +859,8 @@ void main() {
           _track('Two', track: 2),
         ];
       await _pump(tester, const Scaffold(), repository);
-      GoRouter.of(
-        tester.element(find.byType(Scaffold)),
-      ).go(WaxRoute.musicBucket(MusicDimension.albums, 'al-1'));
+      GoRouter.of(tester.element(find.byType(Scaffold)))
+          .go(WaxRoute.musicBucket(MusicDimension.albums, 'al-1'));
       await tester.pumpAndSettle();
       expect(find.byType(AlbumScreen), findsOneWidget);
       expect(
@@ -1103,8 +1102,7 @@ void main() {
       expect(
         _byId(SemanticsIds.itemMenuSheet('tr-One')),
         findsOneWidget,
-        reason:
-            'the row menu must actually open for the assertion below to mean anything',
+        reason: 'the row menu must actually open for the assertion below to mean anything',
       );
       expect(_byId(SemanticsIds.itemMenuDetach), findsNothing);
     });

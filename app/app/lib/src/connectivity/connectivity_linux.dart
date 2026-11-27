@@ -68,9 +68,9 @@ class TolerantConnectivity extends ConnectivityPlatform {
   Future<List<ConnectivityResult>> _probe() {
     final answer = Completer<List<ConnectivityResult>>();
     runZonedGuarded(
-      () => Future.sync(
-        _stock.checkConnectivity,
-      ).then(answer.complete, onError: answer.completeError),
+      () =>
+          Future.sync(_stock.checkConnectivity)
+              .then(answer.complete, onError: answer.completeError),
       (_, _) {},
     );
     return answer.future;

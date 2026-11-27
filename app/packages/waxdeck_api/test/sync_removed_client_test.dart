@@ -12,9 +12,8 @@ void main() {
       },
     );
 
-    final removed = await clientOn(
-      adapter,
-    ).syncCatalogRemoved(['tr-A', 'bk-B', 'ep-C']);
+    final removed = await clientOn(adapter)
+        .syncCatalogRemoved(['tr-A', 'bk-B', 'ep-C']);
 
     expect(removed, ['bk-B']);
     final request = adapter.requests.single;

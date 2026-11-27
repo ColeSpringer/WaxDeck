@@ -593,9 +593,8 @@ void main() {
       );
       expect((await db.select(db.queueEntries).getSingle()).pid, 'tr-Z');
       expect(
-        await DriftClientSettingsStore(
-          db,
-        ).read(ClientSettingKeys.sidebarCollapsed),
+        await DriftClientSettingsStore(db)
+            .read(ClientSettingKeys.sidebarCollapsed),
         'true',
       );
       // The mirror waits for that snapshot, rows and all, and no row is

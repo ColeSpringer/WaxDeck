@@ -40,9 +40,8 @@ Future<void> _fail(WidgetTester tester) async {
 /// state under test.
 Future<void> _refresh(WidgetTester tester) async {
   _Rows.next = Completer<List<String>>();
-  ProviderScope.containerOf(
-    tester.element(find.byType(CustomScrollView)),
-  ).invalidate(_rowsProvider);
+  ProviderScope.containerOf(tester.element(find.byType(CustomScrollView)))
+      .invalidate(_rowsProvider);
   await tester.pump();
 }
 
@@ -275,9 +274,8 @@ void main() {
       expect(retry(tester)!.busy, isFalse);
 
       _Rows.next = Completer<List<String>>();
-      ProviderScope.containerOf(
-        tester.element(find.byType(Consumer)),
-      ).invalidate(_rowsProvider);
+      ProviderScope.containerOf(tester.element(find.byType(Consumer)))
+          .invalidate(_rowsProvider);
       await tester.pump();
       expect(retry(tester)!.busy, isTrue);
       await _resolve(tester, const <String>[]);

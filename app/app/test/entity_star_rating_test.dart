@@ -24,9 +24,9 @@ Future<void> _pump(WidgetTester tester, FakeRepository repo, Widget home) =>
     );
 
 /// The message the row raised, if it raised one.
-ShellMessage? _raised(WidgetTester tester) => ProviderScope.containerOf(
-  tester.element(find.byType(EntityStarRatingRow)),
-).read(shellMessagesProvider);
+ShellMessage? _raised(WidgetTester tester) =>
+    ProviderScope.containerOf(tester.element(find.byType(EntityStarRatingRow)))
+        .read(shellMessagesProvider);
 
 /// A server that holds no artist or album by any pid it is asked about.
 class _NoEntities extends FakeRepository {

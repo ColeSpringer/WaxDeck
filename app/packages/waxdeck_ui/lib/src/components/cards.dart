@@ -1142,9 +1142,9 @@ class MediaListRow extends StatelessWidget {
       // a fixed one clips "Jul 12" to "Jul..." the moment the OS setting
       // moves, which is the whole readout gone.
       final Object value => SizedBox(
-        width: MediaQuery.textScalerOf(
-          context,
-        ).scale(leadingIndex != null ? 28 : 52).ceilToDouble(),
+        width: MediaQuery.textScalerOf(context)
+            .scale(leadingIndex != null ? 28 : 52)
+            .ceilToDouble(),
         child: playing
             ? const PlayingIndicator(playing: true, size: 14)
             : Text(

@@ -4,7 +4,14 @@ import { expect, Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Api } from '../api';
 import { T } from '../budgets';
-import { chooseFromMenu, clickThrough, clickToward, openMenu, typeInto } from '../gestures';
+import {
+  chooseFromMenu,
+  clickThrough,
+  clickToward,
+  openMenu,
+  rectAtRest,
+  typeInto,
+} from '../gestures';
 import { Surface } from '../context';
 
 /// Signing in and out.
@@ -164,6 +171,35 @@ export class Shell extends Surface {
   /// below rail width keep their own ids and come from `destination`.
   accountVerb(name: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.navAccountAction(name)));
+  }
+
+  /// Rests the pointer over [target]: what hover-driven state follows,
+  /// the browser menu's for one. Once it is at rest, since a rebuild can
+  /// replace its node and leave it no box for a moment.
+  async pointAt(target: Locator): Promise<void> {
+    await rectAtRest(target);
+    const box = await target.boundingBox();
+    expect(box, 'the target reports a box to point at').toBeTruthy();
+    await this.ctx.page.mouse.move(box!.x + Math.min(8, box!.width / 2), box!.y + box!.height / 2, {
+      steps: 4,
+    });
+  }
+
+  /// Rests the pointer on the page's bottom-left corner, over nothing
+  /// with a menu of its own.
+  async pointAway(): Promise<void> {
+    const height = this.ctx.page.viewportSize()?.height ?? 720;
+    await this.ctx.page.mouse.move(4, height - 4, { steps: 4 });
+  }
+
+  /// Whether the app holds the browser's own context menu off just now,
+  /// as it does while the pointer is over anything with a menu of its
+  /// own: the engine then cancels a contextmenu event.
+  async browserMenuHeld(): Promise<boolean> {
+    return this.ctx.page.evaluate(() => {
+      const view = document.querySelector('flutter-view') ?? document.body;
+      return !view.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    });
   }
 
   /// Opened, not clicked through: a menu closes under a retried trigger

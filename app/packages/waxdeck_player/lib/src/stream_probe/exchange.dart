@@ -29,8 +29,10 @@ const String probeRange = 'bytes=0-';
 /// What the engine asks about media that failed: [url] itself, or, given
 /// [segmentAt], the segment holding that position in the HLS presentation
 /// [url] names (see [askThrough]).
-typedef StreamAsk =
-    Future<ProbeAnswer> Function(String url, {Duration? segmentAt});
+typedef StreamAsk = Future<ProbeAnswer> Function(
+  String url, {
+  Duration? segmentAt,
+});
 
 /// One answer to a probe GET, as a half's transport reads it.
 abstract interface class ProbeReply {
