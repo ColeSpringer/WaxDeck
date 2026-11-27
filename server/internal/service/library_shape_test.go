@@ -44,7 +44,7 @@ func TestLibraryShape(t *testing.T) {
 	if !slices.IsSorted(libraryHooks) {
 		t.Error("libraryHooks is not sorted")
 	}
-	lt := reflect.TypeOf(Library{})
+	lt := reflect.TypeFor[Library]()
 	switch n := lt.NumField(); {
 	case n > libraryFields:
 		t.Errorf("Library has %d fields, above its %d: put the new state on the domain type that owns it "+

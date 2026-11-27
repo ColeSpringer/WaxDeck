@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -91,9 +92,7 @@ func createBatchMemberWith(t *testing.T, h *harness, token, path, mediaType, bat
 	if batchPath != "" {
 		body["batchPath"] = batchPath
 	}
-	for k, v := range extra {
-		body[k] = v
-	}
+	maps.Copy(body, extra)
 	resp := postJSONAs(t, h, token, "/api/v1/uploads", body)
 	if resp.StatusCode != 201 {
 		t.Fatalf("create member status = %d", resp.StatusCode)

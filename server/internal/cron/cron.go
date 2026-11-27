@@ -134,11 +134,11 @@ func (s *Schedule) firstOnDay(day, after time.Time) (time.Time, bool) {
 	loc := after.Location()
 	y, mo, d := day.Date()
 	var best time.Time
-	for h := 0; h < 24; h++ {
+	for h := range 24 {
 		if s.hour&(1<<h) == 0 {
 			continue
 		}
-		for m := 0; m < 60; m++ {
+		for m := range 60 {
 			if s.minute&(1<<m) == 0 {
 				continue
 			}
@@ -160,7 +160,7 @@ type field struct {
 
 func (f field) parse(s string) (uint64, error) {
 	var bits uint64
-	for _, part := range strings.Split(s, ",") {
+	for part := range strings.SplitSeq(s, ",") {
 		if part == "" {
 			return 0, fmt.Errorf("cron: %s: empty list element in %q", f.name, s)
 		}

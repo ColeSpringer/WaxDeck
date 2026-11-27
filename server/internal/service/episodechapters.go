@@ -192,8 +192,7 @@ func (l *Podcasts) readChapters(ctx context.Context, ep *model.Episode, rawURL s
 		if u, perr := url.Parse(key.url); perr == nil {
 			host = u.Host
 		}
-		var down *chaptersHostError
-		if errors.As(err, &down) {
+		if down, ok := errors.AsType[*chaptersHostError](err); ok {
 			host = down.host
 			l.chapterDocs.put(chaptersHostKey(down.host), nil)
 		}

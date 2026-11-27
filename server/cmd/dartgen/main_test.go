@@ -606,7 +606,7 @@ func TestHandHintCoversTheSchema(t *testing.T) {
 // dio and dart:async; a schema of the same name would make each use
 // ambiguous there. The package's own names come from its files.
 func TestClassNamesTheClientLibraryTakes(t *testing.T) {
-	for _, name := range strings.Fields("Dio Options InterceptorsWrapper DioExceptionType Timer") {
+	for name := range strings.FieldsSeq("Dio Options InterceptorsWrapper DioExceptionType Timer") {
 		t.Run(name, func(t *testing.T) {
 			_, err := generateMini(t, miniSpecHead+"    A:\n      type: object\n      properties:\n        x: {$ref: \"#/components/schemas/"+name+"\"}\n"+
 				"    "+name+":\n      type: object\n      properties:\n        y: {type: string}\n", "")

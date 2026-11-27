@@ -184,8 +184,7 @@ func (c *core) do(ctx context.Context, method, rawURL, contentType string, reqBo
 		// A transport failure is a *url.Error carrying the full URL
 		// inside its own message, so wrapping it verbatim would undo the
 		// stripping above; the inner cause is kept, the echo is not.
-		var uerr *url.Error
-		if errors.As(err, &uerr) {
+		if uerr, ok := errors.AsType[*url.Error](err); ok {
 			return nil, 0, fmt.Errorf("providers: request %s: %s: %w", safe, uerr.Op, uerr.Err)
 		}
 		return nil, 0, fmt.Errorf("providers: request %s: %w", safe, err)
@@ -380,8 +379,8 @@ func fetchImage(ctx context.Context, c *core, rawURL string) ([]byte, string, er
 // credentials. Byte-level on purpose - it must work on the URLs that do
 // not parse.
 func stripQuery(rawURL string) string {
-	if i := strings.IndexByte(rawURL, '?'); i >= 0 {
-		return rawURL[:i]
+	if before, _, ok := strings.Cut(rawURL, "?"); ok {
+		return before
 	}
 	return rawURL
 }

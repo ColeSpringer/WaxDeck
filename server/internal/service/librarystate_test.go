@@ -107,7 +107,7 @@ func TestAnUnreachableRootIsListedNamedAndLoggedOnce(t *testing.T) {
 	if n := strings.Count(logged.String(), said); n != 1 {
 		t.Errorf("the log says the root is unreachable %d times, want once:\n%s", n, logged.String())
 	}
-	for _, line := range strings.Split(logged.String(), "\n") {
+	for line := range strings.SplitSeq(logged.String(), "\n") {
 		if strings.Contains(line, said) && (!strings.Contains(line, "library=unmounted") || !strings.Contains(line, "path="+gone)) {
 			t.Errorf("the line %q does not name the library and its path", line)
 		}
@@ -169,7 +169,7 @@ func TestAnUnwritableManagedRootIsFlaggedAtBoot(t *testing.T) {
 	if n := strings.Count(logged.String(), said); n != 1 {
 		t.Errorf("the log warns %d times, want once:\n%s", n, logged.String())
 	}
-	for _, line := range strings.Split(logged.String(), "\n") {
+	for line := range strings.SplitSeq(logged.String(), "\n") {
 		if strings.Contains(line, said) && (!strings.Contains(line, "level=WARN") ||
 			!strings.Contains(line, "library=locked") || !strings.Contains(line, "path="+locked) || !strings.Contains(line, "err=")) {
 			t.Errorf("the warning %q does not name the library, path and error", line)

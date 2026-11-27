@@ -28,9 +28,9 @@ func assign(cost [][]float64) []int {
 	// More rows than columns: solve the transpose, then invert the
 	// mapping; unassigned rows get -1.
 	t := make([][]float64, m)
-	for j := 0; j < m; j++ {
+	for j := range m {
 		t[j] = make([]float64, n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			t[j][i] = cost[i][j]
 		}
 	}

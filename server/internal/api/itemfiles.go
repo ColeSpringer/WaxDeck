@@ -27,34 +27,34 @@ func (s *Server) GetItemFiles(ctx context.Context, req GetItemFilesRequestObject
 func itemFileJSON(f service.ItemFileDTO) ItemFile {
 	row := ItemFile{FilePid: service.FileAPIPID(f.FilePID), Role: f.Role, Name: f.Name}
 	if f.SizeBytes > 0 {
-		row.SizeBytes = ptr(f.SizeBytes)
+		row.SizeBytes = new(f.SizeBytes)
 	}
 	if f.Path != "" {
-		row.Path = ptr(f.Path)
+		row.Path = new(f.Path)
 	}
 	if f.Codec != "" {
-		row.Codec = ptr(f.Codec)
+		row.Codec = new(f.Codec)
 	}
 	if f.Container != "" {
-		row.Container = ptr(f.Container)
+		row.Container = new(f.Container)
 	}
 	if f.Bitrate > 0 {
-		row.Bitrate = ptr(f.Bitrate)
+		row.Bitrate = new(f.Bitrate)
 	}
 	if f.SampleRate > 0 {
-		row.SampleRate = ptr(f.SampleRate)
+		row.SampleRate = new(f.SampleRate)
 	}
 	if f.BitDepth > 0 {
-		row.BitDepth = ptr(f.BitDepth)
+		row.BitDepth = new(f.BitDepth)
 	}
 	if f.DurationMS > 0 {
-		row.DurationMs = ptr(f.DurationMS)
+		row.DurationMs = new(f.DurationMS)
 	}
 	if f.LibraryPID != "" {
-		row.LibraryPid = ptr(f.LibraryPID)
+		row.LibraryPid = new(f.LibraryPID)
 	}
 	if f.Reason != "" {
-		row.Reason = ptr(f.Reason)
+		row.Reason = new(f.Reason)
 	}
 	return row
 }

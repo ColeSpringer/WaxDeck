@@ -20,13 +20,13 @@ func settleCatalogFeed(t *testing.T, svc *Library) int64 {
 	last, stable := svc.CatalogTailSeq(), 0
 	for time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
-		switch now := svc.CatalogTailSeq(); {
-		case now == last:
-			if stable++; stable >= 5 {
-				return now
-			}
-		default:
+		now := svc.CatalogTailSeq()
+		if now != last {
 			last, stable = now, 0
+			continue
+		}
+		if stable++; stable >= 5 {
+			return now
 		}
 	}
 	t.Fatal("the catalog change feed never settled")

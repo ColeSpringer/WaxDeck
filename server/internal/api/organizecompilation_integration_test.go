@@ -17,7 +17,7 @@ func TestACompilationFolderRoundTripsInThreeStates(t *testing.T) {
 			cfg.Roots[i].Managed = true
 		}
 	})
-	want := map[string]*string{"unset": nil, "own": ptr(""), "mixes": ptr("Mixes")}
+	want := map[string]*string{"unset": nil, "own": new(""), "mixes": new("Mixes")}
 	for name, folder := range want {
 		body := map[string]any{}
 		if folder != nil {

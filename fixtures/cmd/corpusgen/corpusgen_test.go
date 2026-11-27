@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/colespringer/waxbin/model"
@@ -42,10 +43,8 @@ func TestCoverIsAFolderArtNameTheScannerKnows(t *testing.T) {
 	// The whole point of writing cover.png is that WaxBin's scanner
 	// discovers it; a rename that fell off the registry would leave a
 	// corpus that measures a library with no artwork again.
-	for _, name := range model.CoverArtNames {
-		if name == "cover.png" {
-			return
-		}
+	if slices.Contains(model.CoverArtNames, "cover.png") {
+		return
 	}
 	t.Fatal("cover.png is not in model.CoverArtNames")
 }
@@ -58,7 +57,7 @@ func TestCoversAreDistinctPerAlbum(t *testing.T) {
 	// under test here, and a full corpus of encodes is slow enough to be
 	// its own reason not to run this.
 	seen := map[[32]byte]int{}
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		img, ok := coverImage(i).(*image.RGBA)
 		if !ok {
 			t.Fatalf("cover %d is not an RGBA image", i)

@@ -248,7 +248,7 @@ func serveHLS(b *Bridge, u string) *httptest.ResponseRecorder {
 // names whose URI starts with prefix, on a line or in a URI attribute.
 func playlistChild(t *testing.T, body, prefix string) string {
 	t.Helper()
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		if strings.HasPrefix(line, prefix) {
 			return "/media/hls/" + line
 		}
@@ -489,7 +489,7 @@ func TestServeHLSSaysTheEngineIsBusyAsAStreamDoes(t *testing.T) {
 // URI attribute.
 func childURIs(body string) []string {
 	var out []string
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		switch {
 		case strings.Contains(line, `URI="`):
 			rest := line[strings.Index(line, `URI="`)+len(`URI="`):]

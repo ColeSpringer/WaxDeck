@@ -127,7 +127,7 @@ func topEntriesJSON(entries []service.TopEntry) []TopEntry {
 	for _, e := range entries {
 		te := TopEntry{Name: e.Name, Plays: e.Plays, Ms: e.Ms}
 		if e.PID != "" {
-			te.Pid = ptr(e.PID)
+			te.Pid = new(e.PID)
 		}
 		if e.ArtPID != "" {
 			// A station's picture comes from the logo proxy, not from
@@ -135,9 +135,9 @@ func topEntriesJSON(entries []service.TopEntry) []TopEntry {
 			// art route would answer 404 for every entry in a Top
 			// stations list.
 			if strings.HasPrefix(e.ArtPID, service.PrefixRadioStation+"-") {
-				te.ArtUrl = ptr("/api/v1/radio/stations/" + url.PathEscape(e.ArtPID) + "/logo")
+				te.ArtUrl = new("/api/v1/radio/stations/" + url.PathEscape(e.ArtPID) + "/logo")
 			} else {
-				te.ArtUrl = ptr("/api/v1/items/" + url.PathEscape(e.ArtPID) + "/art")
+				te.ArtUrl = new("/api/v1/items/" + url.PathEscape(e.ArtPID) + "/art")
 			}
 		}
 		out = append(out, te)
@@ -168,18 +168,18 @@ func (s *Server) ListListenLog(ctx context.Context, req ListListenLogRequestObje
 			Source:    ListenLogEntrySource(e.Source),
 		}
 		if e.Title != "" {
-			entry.Title = ptr(e.Title)
+			entry.Title = new(e.Title)
 		}
 		if e.Artist != "" {
-			entry.Artist = ptr(e.Artist)
+			entry.Artist = new(e.Artist)
 		}
 		if e.SkippedMs != 0 {
-			entry.SkippedMs = ptr(e.SkippedMs)
+			entry.SkippedMs = new(e.SkippedMs)
 		}
 		out.Sessions = append(out.Sessions, entry)
 	}
 	if res.Next != "" {
-		out.NextCursor = ptr(res.Next)
+		out.NextCursor = new(res.Next)
 	}
 	return ListListenLog200JSONResponse(out), nil
 }

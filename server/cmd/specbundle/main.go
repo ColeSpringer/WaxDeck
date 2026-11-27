@@ -19,9 +19,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -321,21 +323,14 @@ func trimBlank(lines []string) []string {
 }
 
 func kindKnown(k string) bool {
-	for _, known := range kindOrder {
-		if k == known {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(kindOrder, k)
 }
 
 // mergeDocs unions the decoded fragment documents under the root, and is
 // where cross-fragment duplicates are caught.
 func mergeDocs(root map[string]any, frags []*fragment) (map[string]any, error) {
 	merged := map[string]any{}
-	for k, v := range root {
-		merged[k] = v
-	}
+	maps.Copy(merged, root)
 	paths := map[string]any{}
 	pathOwner := map[string]string{}
 	comps := map[string]any{}

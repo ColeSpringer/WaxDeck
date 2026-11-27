@@ -25,7 +25,7 @@ func TestContentDuplicateByHash(t *testing.T) {
 	// The matching session is the oldest; newer non-matching sessions pile on
 	// top of it, so a recency- or count-bounded scan would miss it.
 	ins("up-match", "hashA", "imported", "tr-01KY0000000000000000000001", 100)
-	for i := int64(0); i < 5; i++ {
+	for i := range int64(5) {
 		ins("up-other-"+string(rune('a'+i)), "hashB", "imported", "tr-other", 200+i)
 	}
 

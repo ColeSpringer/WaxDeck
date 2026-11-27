@@ -96,7 +96,7 @@ func (s *Server) SearchPodcastDirectory(ctx context.Context, req SearchPodcastDi
 		setOpt(&w.ArtworkUrl, e.ArtworkURL)
 		setOpt(&w.Genre, e.Genre)
 		if e.EpisodeCount > 0 {
-			w.EpisodeCount = ptr(e.EpisodeCount)
+			w.EpisodeCount = new(e.EpisodeCount)
 		}
 		out.Entries = append(out.Entries, w)
 	}
@@ -433,15 +433,15 @@ func (s *Server) ListBookSeries(ctx context.Context, req ListBookSeriesRequestOb
 	for _, sr := range page.Series {
 		row := BookSeries{Pid: sr.PID, Name: sr.Name}
 		if sr.BookCount > 0 {
-			row.BookCount = ptr(sr.BookCount)
+			row.BookCount = new(sr.BookCount)
 		}
 		if sr.TotalDurationMS > 0 {
-			row.TotalDurationMs = ptr(sr.TotalDurationMS)
+			row.TotalDurationMs = new(sr.TotalDurationMS)
 		}
 		out.Series = append(out.Series, row)
 	}
 	if page.NextCursor != "" {
-		out.NextCursor = ptr(page.NextCursor)
+		out.NextCursor = new(page.NextCursor)
 	}
 	return ListBookSeries200JSONResponse(out), nil
 }
@@ -459,15 +459,15 @@ func (s *Server) GetBookSeries(ctx context.Context, req GetBookSeriesRequestObje
 		Books: make([]BookSeriesEntry, 0, len(detail.Books)),
 	}
 	if detail.BookCount > 0 {
-		out.BookCount = ptr(detail.BookCount)
+		out.BookCount = new(detail.BookCount)
 	}
 	if detail.TotalDurationMS > 0 {
-		out.TotalDurationMs = ptr(detail.TotalDurationMS)
+		out.TotalDurationMs = new(detail.TotalDurationMS)
 	}
 	for _, entry := range detail.Books {
 		row := BookSeriesEntry{Book: summaryJSON(entry.Book)}
 		if entry.Sequence != "" {
-			row.Sequence = ptr(entry.Sequence)
+			row.Sequence = new(entry.Sequence)
 		}
 		out.Books = append(out.Books, row)
 	}

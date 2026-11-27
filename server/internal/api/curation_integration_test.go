@@ -1752,9 +1752,7 @@ func acquireVideo(t *testing.T, h *harness, src *fakeAcquireSource, name, artist
 	url := "https://tube.example/watch?v=" + name
 	src.files[url] = paths[0]
 	body := map[string]any{"url": url, "mediaType": "music"}
-	for k, v := range extra {
-		body[k] = v
-	}
+	maps.Copy(body, extra)
 	task := decodeStatus[ToolTask](t, postJSONAs(t, h, h.token, "/api/v1/acquisitions", body), 202, "acquisition")
 	drainTools(t, h)
 	drainMatches(t, h)

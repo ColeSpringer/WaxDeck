@@ -563,7 +563,7 @@ func (l *Roots) mountsUnder(root, resolved string) map[string]string {
 		return nil
 	}
 	out := map[string]string{}
-	for _, line := range strings.Split(table, "\n") {
+	for line := range strings.SplitSeq(table, "\n") {
 		// mount ID, parent ID, major:minor, root, mount point, ...
 		f := strings.Fields(line)
 		if len(f) < 5 {
@@ -1268,12 +1268,7 @@ func (l *Roots) runWatchScans(ctx context.Context, due []string) {
 // watching or scanning under it would re-catalog the very file the
 // delete just removed.
 func underWatchTrash(path string) bool {
-	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
-		if part == model.TrashDirName {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Split(filepath.ToSlash(path), "/"), model.TrashDirName)
 }
 
 // takeWatchEvent takes one event in on the loop, without touching the

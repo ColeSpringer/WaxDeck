@@ -2,6 +2,7 @@ package api
 
 import (
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -213,9 +214,7 @@ func subscribeToChaptersFeed(t *testing.T, doc *docHost, wrap func(http.Handler)
 	t.Helper()
 	h := newPodcastHarness(t)
 	body := map[string]any{"url": newChaptersFeed(t, doc, wrap, pointer)}
-	for k, v := range creds {
-		body[k] = v
-	}
+	maps.Copy(body, creds)
 	resp := h.postJSON(t, "/api/v1/podcasts", body)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("subscribe status = %d", resp.StatusCode)

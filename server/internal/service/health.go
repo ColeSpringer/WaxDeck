@@ -1016,7 +1016,7 @@ func healthTitleDigest(title string) []byte {
 // back with the next request, and nothing of the row, its title's length
 // included, goes to anyone.
 func (l *Health) sealHealthCursor(count int, title, pid string) (string, error) {
-	if len(pid) != healthCursorPID || count < 0 || count > math.MaxUint32 {
+	if len(pid) != healthCursorPID || count < 0 || int64(count) > math.MaxUint32 {
 		return "", &Error{Kind: KindInternal, Msg: "an issues cursor cannot stand on row " + pid}
 	}
 	buf := make([]byte, healthCursorSize)

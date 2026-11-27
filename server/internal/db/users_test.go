@@ -62,7 +62,7 @@ func TestLastAdminGuardConcurrent(t *testing.T) {
 	// Race a disable of A against a delete of B, repeatedly. Whatever
 	// the interleaving, the guards must leave at least one enabled
 	// administrator; a count-then-write would let both through.
-	for round := 0; round < 25; round++ {
+	for round := range 25 {
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {
@@ -106,7 +106,7 @@ func TestBootstrapInsertGuard(t *testing.T) {
 	const racers = 8
 	errs := make([]error, racers)
 	var wg sync.WaitGroup
-	for i := 0; i < racers; i++ {
+	for i := range racers {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()

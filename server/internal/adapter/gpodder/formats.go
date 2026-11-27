@@ -189,7 +189,7 @@ func parseSubscriptionList(body []byte, format string) ([]string, error) {
 		return urls, nil
 	case "txt":
 		var urls []string
-		for _, line := range strings.Split(string(body), "\n") {
+		for line := range strings.SplitSeq(string(body), "\n") {
 			if line = strings.TrimSpace(line); line != "" {
 				urls = append(urls, line)
 			}

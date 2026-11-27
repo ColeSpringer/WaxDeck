@@ -16,7 +16,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -782,7 +781,7 @@ func TestMigrateWritesToTheTargetAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.svc.Identity.UpdateAccount(ctx, acct.User.ID, AccountUpdate{Disabled: ptrTo(true)}); err != nil {
+	if _, err := f.svc.Identity.UpdateAccount(ctx, acct.User.ID, AccountUpdate{Disabled: new(true)}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.svc.Migrate.StartMigration(ctx, f.uc, req); KindOf(err) != KindInvalid {
@@ -1170,7 +1169,7 @@ func TestMigrateLastfmImport(t *testing.T) {
 	for _, r := range rows {
 		at = append(at, r.StartedAt.Unix())
 	}
-	sort.Slice(at, func(i, j int) bool { return at[i] < at[j] })
+	slices.Sort(at)
 	if !slices.Equal(at, []int64{1767152645, 1767325445, 1767411845}) {
 		t.Fatalf("listen times = %v, want the source's own", at)
 	}
@@ -1315,7 +1314,7 @@ func TestMigrateListenBrainzImport(t *testing.T) {
 	for _, r := range rows {
 		at = append(at, r.StartedAt.Unix())
 	}
-	sort.Slice(at, func(i, j int) bool { return at[i] < at[j] })
+	slices.Sort(at)
 	if !slices.Equal(at, []int64{1767152645, 1767152645, 1767411845}) {
 		t.Fatalf("listen times = %v, want the source's own", at)
 	}

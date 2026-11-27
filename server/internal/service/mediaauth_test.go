@@ -199,11 +199,9 @@ func TestEpochsCountEveryBump(t *testing.T) {
 	for name, e := range epochs {
 		var wg sync.WaitGroup
 		for range bumps {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				e.bump(ctx, admin.ID)
-			}()
+			})
 		}
 		wg.Wait()
 		if got, err := e.read(ctx, admin.ID); err != nil || got != bumps {

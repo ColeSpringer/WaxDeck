@@ -71,7 +71,7 @@ func (s *Server) ListSignupRequests(ctx context.Context, req ListSignupRequestsR
 		out.Users = append(out.Users, userAccountJSON(acct))
 	}
 	if page.Next != "" {
-		out.NextCursor = ptr(page.Next)
+		out.NextCursor = new(page.Next)
 	}
 	return ListSignupRequests200JSONResponse(out), nil
 }
@@ -226,7 +226,7 @@ func permissionsJSON(p service.Permissions) Permissions {
 		ManagePodcasts:  p.ManagePodcasts,
 	}
 	if p.MaxTranscodeKbps > 0 {
-		out.MaxTranscodeKbps = ptr(int(p.MaxTranscodeKbps))
+		out.MaxTranscodeKbps = new(int(p.MaxTranscodeKbps))
 	}
 	if len(p.TagAllow) > 0 {
 		rules := tagRulesJSON(p.TagAllow)
@@ -244,7 +244,7 @@ func tagRulesJSON(rules []service.TagRule) []TagRule {
 	for _, r := range rules {
 		tr := TagRule{Key: r.Key}
 		if r.Value != "" {
-			tr.Value = ptr(r.Value)
+			tr.Value = new(r.Value)
 		}
 		out = append(out, tr)
 	}
@@ -265,13 +265,13 @@ func inviteJSON(iv service.InviteDTO) Invite {
 		out.Roles = append(out.Roles, Role(r))
 	}
 	if iv.Note != "" {
-		out.Note = ptr(iv.Note)
+		out.Note = new(iv.Note)
 	}
 	if iv.CreatedBy != "" {
-		out.CreatedBy = ptr(iv.CreatedBy)
+		out.CreatedBy = new(iv.CreatedBy)
 	}
 	if iv.ExpiresAtNS != 0 {
-		out.ExpiresAt = ptr(time.Unix(0, iv.ExpiresAtNS).UTC())
+		out.ExpiresAt = new(time.Unix(0, iv.ExpiresAtNS).UTC())
 	}
 	if iv.AccessMode != "" {
 		la := LibraryAccess{Mode: LibraryAccessMode(iv.AccessMode)}

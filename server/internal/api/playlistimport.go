@@ -48,7 +48,7 @@ func (s *Server) ImportPlaylist(ctx context.Context, req ImportPlaylistRequestOb
 		},
 	}
 	if res.PlaylistPID != "" {
-		out.PlaylistPid = ptr(res.PlaylistPID)
+		out.PlaylistPid = new(res.PlaylistPID)
 	}
 	for _, m := range res.Missing {
 		out.Missing = append(out.Missing, importMissJSON(m))
@@ -75,13 +75,13 @@ func (s *Server) ExportPlaylistPortable(ctx context.Context, req ExportPlaylistP
 func importMissJSON(m service.ImportMiss) PlaylistImportMiss {
 	miss := PlaylistImportMiss{Title: m.Title}
 	if m.Artist != "" {
-		miss.Artist = ptr(m.Artist)
+		miss.Artist = new(m.Artist)
 	}
 	if m.Album != "" {
-		miss.Album = ptr(m.Album)
+		miss.Album = new(m.Album)
 	}
 	if m.DurationMs > 0 {
-		miss.DurationMs = ptr(m.DurationMs)
+		miss.DurationMs = new(m.DurationMs)
 	}
 	return miss
 }
@@ -112,34 +112,34 @@ func refDTOFromWire(r PortableRef) service.PortableRefDTO {
 func refDTOToWire(r service.PortableRefDTO) PortableRef {
 	out := PortableRef{Kind: PortableRefKind(r.Kind), Title: r.Title}
 	if r.Essence != "" {
-		out.Essence = ptr(r.Essence)
+		out.Essence = new(r.Essence)
 	}
 	if len(r.Fingerprint) > 0 {
 		out.Fingerprint = &r.Fingerprint
 	}
 	if r.FingerprintAlgo != 0 {
-		out.FingerprintAlgo = ptr(r.FingerprintAlgo)
+		out.FingerprintAlgo = new(r.FingerprintAlgo)
 	}
 	if r.FingerprintBucket != 0 {
-		out.FingerprintBucket = ptr(r.FingerprintBucket)
+		out.FingerprintBucket = new(r.FingerprintBucket)
 	}
 	if r.MBID != "" {
-		out.Mbid = ptr(r.MBID)
+		out.Mbid = new(r.MBID)
 	}
 	if r.ASIN != "" {
-		out.Asin = ptr(r.ASIN)
+		out.Asin = new(r.ASIN)
 	}
 	if r.ISBN != "" {
-		out.Isbn = ptr(r.ISBN)
+		out.Isbn = new(r.ISBN)
 	}
 	if r.Artist != "" {
-		out.Artist = ptr(r.Artist)
+		out.Artist = new(r.Artist)
 	}
 	if r.Album != "" {
-		out.Album = ptr(r.Album)
+		out.Album = new(r.Album)
 	}
 	if r.DurationMs > 0 {
-		out.DurationMs = ptr(r.DurationMs)
+		out.DurationMs = new(r.DurationMs)
 	}
 	return out
 }

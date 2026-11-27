@@ -2,6 +2,7 @@ package api
 
 import (
 	"io"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -21,9 +22,7 @@ func subscribeToTranscriptFeed(t *testing.T, doc *docHost, wrap func(http.Handle
 	t.Helper()
 	h := newPodcastHarness(t)
 	body := map[string]any{"url": newTranscriptFeed(t, doc, wrap, pointer)}
-	for k, v := range creds {
-		body[k] = v
-	}
+	maps.Copy(body, creds)
 	sub := decodeStatus[Subscription](t, h.postJSON(t, "/api/v1/podcasts", body), http.StatusCreated, "subscribe")
 	eps := decode[EpisodePage](t, get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)).Items
 	if len(eps) != 1 || eps[0].HasTranscript == nil || !*eps[0].HasTranscript {

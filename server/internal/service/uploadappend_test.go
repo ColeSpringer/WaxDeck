@@ -70,12 +70,10 @@ func TestConcurrentAppendsAtOneOffsetLeaveExactlyOneWinner(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make([]error, len(chunks))
 	for i := range chunks {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			body := &meetReader{r: bytes.NewReader(chunks[i]), meeting: meet}
 			_, errs[i] = svc.Ingest.AppendUploadData(ctx, uc, sess.ID, 0, body)
-		}()
+		})
 	}
 	wg.Wait()
 

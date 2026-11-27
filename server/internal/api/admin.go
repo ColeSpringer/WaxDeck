@@ -36,7 +36,7 @@ func (s *Server) ListAuditEvents(ctx context.Context, req ListAuditEventsRequest
 		out.Events = append(out.Events, auditEventJSON(e))
 	}
 	if page.Next != "" {
-		out.NextCursor = ptr(page.Next)
+		out.NextCursor = new(page.Next)
 	}
 	return ListAuditEvents200JSONResponse(out), nil
 }
@@ -48,19 +48,19 @@ func auditEventJSON(e service.AuditEventDTO) AuditEvent {
 		CreatedAt: time.Unix(0, e.CreatedAtNS).UTC(),
 	}
 	if e.ActorID != "" {
-		out.ActorId = ptr(e.ActorID)
+		out.ActorId = new(e.ActorID)
 	}
 	if e.ActorName != "" {
-		out.ActorName = ptr(e.ActorName)
+		out.ActorName = new(e.ActorName)
 	}
 	if e.TargetKind != "" {
-		out.TargetKind = ptr(e.TargetKind)
+		out.TargetKind = new(e.TargetKind)
 	}
 	if e.TargetPID != "" {
-		out.TargetPid = ptr(e.TargetPID)
+		out.TargetPid = new(e.TargetPID)
 	}
 	if e.TargetName != "" {
-		out.TargetName = ptr(e.TargetName)
+		out.TargetName = new(e.TargetName)
 	}
 	if len(e.Detail) > 0 {
 		detail := e.Detail
@@ -111,13 +111,13 @@ func adminSettingsJSON(st service.AdminSettings) AdminSettings {
 	return AdminSettings{
 		SignupEnabled:       st.SignupEnabled,
 		ReadOnly:            st.ReadOnly,
-		SonicAnalysis:       ptr(st.SonicAnalysis),
+		SonicAnalysis:       new(st.SonicAnalysis),
 		BackupKeepCount:     st.BackupKeepCount,
 		BackupKeepBytes:     st.BackupKeepBytes,
-		TrashRetentionDays:  ptr(st.TrashRetentionDays),
-		TaskRetentionDays:   ptr(st.TaskRetentionDays),
-		EnrichmentWriteTags: ptr(st.EnrichmentWriteTags),
-		RadioExternalArt:    ptr(st.RadioExternalArt),
+		TrashRetentionDays:  new(st.TrashRetentionDays),
+		TaskRetentionDays:   new(st.TaskRetentionDays),
+		EnrichmentWriteTags: new(st.EnrichmentWriteTags),
+		RadioExternalArt:    new(st.RadioExternalArt),
 	}
 }
 
@@ -206,16 +206,16 @@ func scheduleJSON(row service.ScheduleDTO) Schedule {
 		Enabled: row.Enabled,
 	}
 	if row.LastRunNS > 0 {
-		out.LastRunAt = ptr(time.Unix(0, row.LastRunNS).UTC())
+		out.LastRunAt = new(time.Unix(0, row.LastRunNS).UTC())
 	}
 	if row.LastStatus != "" {
-		out.LastStatus = ptr(row.LastStatus)
+		out.LastStatus = new(row.LastStatus)
 	}
 	if row.LastError != "" {
-		out.LastError = ptr(row.LastError)
+		out.LastError = new(row.LastError)
 	}
 	if row.NextRunNS > 0 {
-		out.NextRunAt = ptr(time.Unix(0, row.NextRunNS).UTC())
+		out.NextRunAt = new(time.Unix(0, row.NextRunNS).UTC())
 	}
 	return out
 }
@@ -245,16 +245,16 @@ func (s *Server) ListTrash(ctx context.Context, req ListTrashRequestObject) (Lis
 			TrashedAt: time.Unix(0, e.TrashedAtNS).UTC(),
 		}
 		if e.ItemPID != "" {
-			row.ItemPid = ptr(e.ItemPID)
+			row.ItemPid = new(e.ItemPID)
 		}
 		if e.RestoredNS > 0 {
-			row.RestoredAt = ptr(time.Unix(0, e.RestoredNS).UTC())
+			row.RestoredAt = new(time.Unix(0, e.RestoredNS).UTC())
 		}
 		if e.LibraryPID != "" {
-			row.LibraryPid = ptr(e.LibraryPID)
+			row.LibraryPid = new(e.LibraryPID)
 		}
 		if e.LibraryName != "" {
-			row.LibraryName = ptr(e.LibraryName)
+			row.LibraryName = new(e.LibraryName)
 		}
 		out.Entries = append(out.Entries, row)
 	}
@@ -329,10 +329,10 @@ func (s *Server) GetThumbnailCache(ctx context.Context, _ GetThumbnailCacheReque
 	// Both timestamps are zero together on an empty cache, and an empty
 	// cache has no oldest entry rather than one at the epoch.
 	if rep.OldestAtNS != 0 {
-		out.OldestAt = ptr(time.Unix(0, rep.OldestAtNS).UTC())
+		out.OldestAt = new(time.Unix(0, rep.OldestAtNS).UTC())
 	}
 	if rep.NewestAtNS != 0 {
-		out.NewestAt = ptr(time.Unix(0, rep.NewestAtNS).UTC())
+		out.NewestAt = new(time.Unix(0, rep.NewestAtNS).UTC())
 	}
 	for _, r := range rep.Rungs {
 		out.Rungs = append(out.Rungs, ThumbnailRung{Size: r.Size, Rows: r.Rows, Bytes: r.Bytes})
@@ -382,8 +382,8 @@ func enrichmentCacheReport(rep service.EnrichCacheDTO) EnrichmentCacheReport {
 		Kinds: make([]EnrichmentCacheKind, 0, len(rep.Kinds)),
 	}
 	if rep.Rows > 0 {
-		out.OldestAt = ptr(time.Unix(0, rep.OldestAtNS).UTC())
-		out.NewestAt = ptr(time.Unix(0, rep.NewestAtNS).UTC())
+		out.OldestAt = new(time.Unix(0, rep.OldestAtNS).UTC())
+		out.NewestAt = new(time.Unix(0, rep.NewestAtNS).UTC())
 	}
 	for _, k := range rep.Kinds {
 		out.Kinds = append(out.Kinds, EnrichmentCacheKind{Kind: k.Kind, Rows: k.Rows, Bytes: k.Bytes, Exempt: k.Exempt})
@@ -435,25 +435,25 @@ func deleteResultJSON(res service.DeleteItemsResultDTO) DeleteItemsResult {
 	out := DeleteItemsResult{Applied: res.Applied, Mode: res.Mode,
 		Entries: make([]DeletePlanEntry, 0, len(res.Entries))}
 	for _, e := range res.Entries {
-		row := DeletePlanEntry{Pid: e.PID, Files: e.Files, Bytes: e.Bytes, ItemSurvives: ptr(e.ItemSurvives)}
+		row := DeletePlanEntry{Pid: e.PID, Files: e.Files, Bytes: e.Bytes, ItemSurvives: new(e.ItemSurvives)}
 		if e.Name != "" {
-			row.Name = ptr(e.Name)
+			row.Name = new(e.Name)
 		}
 		if len(e.Paths) > 0 {
-			row.Paths = ptr(append([]string{}, e.Paths...))
+			row.Paths = new(append([]string{}, e.Paths...))
 		}
 		if len(e.Sidecars) > 0 {
-			row.Sidecars = ptr(append([]string{}, e.Sidecars...))
+			row.Sidecars = new(append([]string{}, e.Sidecars...))
 		}
 		if e.Failed > 0 {
-			row.Failed, row.Error = ptr(e.Failed), ptr(e.Error)
+			row.Failed, row.Error = new(e.Failed), new(e.Error)
 		}
 		if len(e.FileList) > 0 {
 			files := make([]DeletePlanFile, 0, len(e.FileList))
 			for _, f := range e.FileList {
 				file := DeletePlanFile{FilePid: service.FileAPIPID(f.FilePID), Name: f.Name, Role: f.Role}
 				if f.SizeBytes > 0 {
-					file.SizeBytes = ptr(f.SizeBytes)
+					file.SizeBytes = new(f.SizeBytes)
 				}
 				files = append(files, file)
 			}
@@ -465,8 +465,8 @@ func deleteResultJSON(res service.DeleteItemsResultDTO) DeleteItemsResult {
 		out.Warnings = &res.Warnings
 	}
 	if res.Applied {
-		out.Trashed, out.Deleted, out.Failed = ptr(res.Trashed), ptr(res.Deleted), ptr(res.Failed)
-		out.DirsPruned, out.ReclaimedBytes = ptr(res.DirsPruned), ptr(res.ReclaimedBytes)
+		out.Trashed, out.Deleted, out.Failed = new(res.Trashed), new(res.Deleted), new(res.Failed)
+		out.DirsPruned, out.ReclaimedBytes = new(res.DirsPruned), new(res.ReclaimedBytes)
 	}
 	return out
 }
@@ -518,7 +518,7 @@ func (s *Server) SetLibraryReadOnly(ctx context.Context, req SetLibraryReadOnlyR
 	if err := s.svc.Settings.LibraryReadOnlySet(ctx, uc, req.Pid, req.Body.ReadOnly); err != nil {
 		return nil, err
 	}
-	return SetLibraryReadOnly200JSONResponse(LibraryReadOnly{ReadOnly: req.Body.ReadOnly, LibraryPid: ptr(req.Pid)}), nil
+	return SetLibraryReadOnly200JSONResponse(LibraryReadOnly{ReadOnly: req.Body.ReadOnly, LibraryPid: new(req.Pid)}), nil
 }
 
 func (s *Server) SetLibraryFolderFallback(ctx context.Context, req SetLibraryFolderFallbackRequestObject) (SetLibraryFolderFallbackResponseObject, error) {
@@ -533,7 +533,7 @@ func (s *Server) SetLibraryFolderFallback(ctx context.Context, req SetLibraryFol
 		return nil, err
 	}
 	return SetLibraryFolderFallback200JSONResponse(LibraryFolderFallback{
-		FolderFallback: req.Body.FolderFallback, LibraryPid: ptr(req.Pid),
+		FolderFallback: req.Body.FolderFallback, LibraryPid: new(req.Pid),
 	}), nil
 }
 
@@ -620,9 +620,9 @@ func libraryCreatedJSON(lib service.LibraryInfo) LibraryCreated {
 		Writable:       base.Writable,
 	}
 	if lib.StreamingWarning != "" {
-		out.StreamingWarning = ptr(lib.StreamingWarning)
+		out.StreamingWarning = new(lib.StreamingWarning)
 	}
-	out.ScanStarted = ptr(lib.ScanStarted)
+	out.ScanStarted = new(lib.ScanStarted)
 	return out
 }
 
@@ -653,27 +653,27 @@ func libraryMediaChangedJSON(lib service.LibraryInfo) LibraryMediaChanged {
 // create), so a client can tell "nothing here yet" from "not asked".
 func libraryDTO(lib service.LibraryInfo) Library {
 	out := Library{Pid: lib.PID, Name: lib.Name, ReadOnly: lib.ReadOnly, Managed: lib.Managed,
-		FolderFallback: ptr(lib.FolderFallback)}
+		FolderFallback: new(lib.FolderFallback)}
 	if lib.Managed && lib.Profile != "" {
-		out.Profile = ptr(lib.Profile)
+		out.Profile = new(lib.Profile)
 	}
 	if lib.Media != "" {
-		out.Media = ptr(lib.Media)
+		out.Media = new(lib.Media)
 	}
 	if lib.MediaDeclared {
-		out.MediaDeclared = ptr(true)
+		out.MediaDeclared = new(true)
 	}
 	if lib.Path != "" {
-		out.Path = ptr(lib.Path)
+		out.Path = new(lib.Path)
 	}
 	if lib.ItemCount > 0 {
-		out.ItemCount = ptr(lib.ItemCount)
+		out.ItemCount = new(lib.ItemCount)
 	}
 	if lib.Configured {
-		out.Configured = ptr(true)
+		out.Configured = new(true)
 	}
 	if lib.Unreachable {
-		out.Unreachable = ptr(true)
+		out.Unreachable = new(true)
 	}
 	out.Writable = lib.Writable
 	return out
@@ -777,10 +777,10 @@ func genreTreeJSON(d service.GenreTreeDTO) GenreTree {
 	for _, n := range d.Genres {
 		node := GenreNode{Name: n.Name}
 		if n.Parent != "" {
-			node.Parent = ptr(n.Parent)
+			node.Parent = new(n.Parent)
 		}
 		if len(n.Aliases) > 0 {
-			node.Aliases = ptr(append([]string{}, n.Aliases...))
+			node.Aliases = new(append([]string{}, n.Aliases...))
 		}
 		out.Genres = append(out.Genres, node)
 	}
@@ -1110,13 +1110,13 @@ func backupJSON(b service.Backup) Backup {
 		CreatedAt: time.Unix(0, b.CreatedAtNS).UTC(),
 	}
 	if b.SizeBytes > 0 {
-		out.SizeBytes = ptr(b.SizeBytes)
+		out.SizeBytes = new(b.SizeBytes)
 	}
 	if b.Error != "" {
-		out.Error = ptr(b.Error)
+		out.Error = new(b.Error)
 	}
 	if b.FinishedAtNS > 0 {
-		out.FinishedAt = ptr(time.Unix(0, b.FinishedAtNS).UTC())
+		out.FinishedAt = new(time.Unix(0, b.FinishedAtNS).UTC())
 	}
 	return out
 }
@@ -1170,7 +1170,7 @@ func scrobblingConfigJSON(cfg service.LastfmServerConfig) ScrobblingAdminConfig 
 		LastfmSecretSet:  cfg.SecretSet,
 	}
 	if cfg.Configured {
-		out.LastfmApiKey = ptr(cfg.APIKey)
+		out.LastfmApiKey = new(cfg.APIKey)
 	}
 	return out
 }

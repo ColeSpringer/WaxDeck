@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -43,9 +44,7 @@ func openRecordingFixture(t *testing.T, extra map[string]string) recordingFixtur
 func openRecordingFixtureWith(t *testing.T, extra map[string]string, mutate func(*Config)) recordingFixture {
 	t.Helper()
 	tags := map[string]string{"TITLE": "Stray", "ARTIST": "Nomad", "ALBUM": "Wander", "TRACKNUMBER": "1"}
-	for k, v := range extra {
-		tags[k] = v
-	}
+	maps.Copy(tags, extra)
 	var root string
 	var paths []string
 	ctx, svc, uc := openEnrichFixture(t, func(c *Config) {

@@ -742,15 +742,12 @@ func (h *Handler) getCoverArt(w http.ResponseWriter, r *http.Request, uc *servic
 		}
 		pid = tracks[0].PID
 	}
-	size := formInt(r, "size", 0)
 	// The protocol lets a client name any size, and a size past the top
 	// of the ladder is served as asked rather than rounded - so an
 	// arbitrary one would mint a bespoke derivative row per client whim.
 	// Clamped to the ceiling the first-party endpoint enforces, which is
 	// the top rung.
-	if size > maxCoverArtSize {
-		size = maxCoverArtSize
-	}
+	size := min(formInt(r, "size", 0), maxCoverArtSize)
 	// Subsonic has no artwork-slot concept; it always serves the front cover.
 	blob, err := h.svc.Reads.Art(r.Context(), uc, pid, "", size)
 	if err != nil {

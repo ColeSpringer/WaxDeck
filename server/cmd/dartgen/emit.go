@@ -181,7 +181,7 @@ func docLines(text, indent string) []string {
 func docWords(para string) []string {
 	var out []string
 	open := false
-	for _, w := range strings.Fields(para) {
+	for w := range strings.FieldsSeq(para) {
 		if open {
 			out[len(out)-1] += " " + w
 		} else {
@@ -199,7 +199,7 @@ func docWords(para string) []string {
 
 func paragraphs(text string) []string {
 	var out, cur []string
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		if strings.TrimSpace(line) == "" {
 			if len(cur) > 0 {
 				out = append(out, strings.Join(cur, " "))

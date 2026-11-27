@@ -435,7 +435,8 @@ LAN address.
 - `WAXDECK_CAST_DISCOVERY` (default `true`): discover Chromecast and
   DLNA devices on the LAN (mDNS and SSDP).
 - `WAXDECK_CAST_DEVICES`: static cast devices as `name=host:port`
-  pairs, comma separated (networks without multicast).
+  pairs, comma separated (networks without multicast); an entry that is
+  not one refuses to start.
 - `WAXDECK_DLNA_DEVICES`: static DLNA renderer description URLs, comma
   separated.
 - `WAXDECK_JUKEBOX` (default `false`): play out the server's own audio

@@ -125,7 +125,7 @@ func (s *fakeToolJobStore) createMerge(w http.ResponseWriter, srcs, titles []str
 	total := 8*time.Second + time.Duration(n)*90*time.Millisecond
 	per := total / time.Duration(members)
 	chapters := make([]fixtures.Chapter, 0, members)
-	for i := 0; i < members; i++ {
+	for i := range members {
 		title := fmt.Sprintf("Chapter %d", i+1)
 		if i < len(titles) && titles[i] != "" {
 			title = titles[i]
@@ -170,10 +170,7 @@ func (s *fakeToolJobStore) createSplit(w http.ResponseWriter, format string, cut
 	}
 	outs := make([][]byte, 0, pieces)
 	for i := 0; i < pieces; i++ {
-		d := time.Duration(i+1)*1100*time.Millisecond + time.Duration(n)*70*time.Millisecond
-		if d > 9500*time.Millisecond {
-			d = 9500 * time.Millisecond
-		}
+		d := min(time.Duration(i+1)*1100*time.Millisecond+time.Duration(n)*70*time.Millisecond, 9500*time.Millisecond)
 		outs = append(outs, s.render(fixtures.Spec{
 			Name: fmt.Sprintf("split-%s-%d", id, i), Codec: codec, Container: container, Duration: d,
 		}))

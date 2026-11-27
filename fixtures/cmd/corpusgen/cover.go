@@ -53,8 +53,8 @@ func coverImage(index int) image.Image {
 	// variations of one image. index+1 because index 0 would otherwise
 	// be the one album with no pattern at all.
 	pattern := uint64(index+1) * 0x9E3779B97F4A7C15
-	for y := 0; y < coverSize; y++ {
-		for x := 0; x < coverSize; x++ {
+	for y := range coverSize {
+		for x := range coverSize {
 			// The wash: near colour at the top left, far at the bottom
 			// right.
 			t := (x + y) * 255 / (2 * coverSize)

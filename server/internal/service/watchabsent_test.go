@@ -127,7 +127,7 @@ func TestAnAbsentRootIsNotWatchedUntilItIsThere(t *testing.T) {
 	}
 	const said = "library root is not present; not watched"
 	waitFor(t, func() bool { return strings.Contains(logged.String(), said) }, "the absent root said")
-	for _, line := range strings.Split(logged.String(), "\n") {
+	for line := range strings.SplitSeq(logged.String(), "\n") {
 		if strings.Contains(line, said) && (!strings.Contains(line, "library=later") || !strings.Contains(line, "path="+later)) {
 			t.Errorf("the line %q does not name the library and its path", line)
 		}

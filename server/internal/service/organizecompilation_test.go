@@ -49,8 +49,8 @@ func TestACompilationFilesWhereItsProfileSays(t *testing.T) {
 		under  string
 	}{
 		{"unset", nil, "Various Artists"},
-		{"own", ptrTo(""), "Harbor Selectors"},
-		{"mixes", ptrTo("Mixes"), "Mixes"},
+		{"own", new(""), "Harbor Selectors"},
+		{"mixes", new("Mixes"), "Mixes"},
 	} {
 		if _, err := svc.Health.PutOrganizeProfile(ctx, uc, tc.name, OrganizeProfileInput{CompilationFolder: tc.folder}); err != nil {
 			t.Fatalf("saving %s: %v", tc.name, err)
@@ -69,7 +69,7 @@ func TestACompilationFolderIsReportedAsSaved(t *testing.T) {
 	t.Parallel()
 	dataDir := t.TempDir()
 	ctx, svc, uc, stop := managedAt(t, dataDir)
-	want := map[string]*string{"unset": nil, "own": ptrTo(""), "mixes": ptrTo("Mixes")}
+	want := map[string]*string{"unset": nil, "own": new(""), "mixes": new("Mixes")}
 	for name, folder := range want {
 		saved, err := svc.Health.PutOrganizeProfile(ctx, uc, name, OrganizeProfileInput{CompilationFolder: folder})
 		if err != nil || !sameFolder(saved.CompilationFolder, folder) {
@@ -113,13 +113,13 @@ func TestACompilationFolderIsChecked(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := managedAt(t, t.TempDir())
 	for raw, want := range map[string]string{"  Mixes  ": "Mixes", "   ": ""} {
-		saved, err := svc.Health.PutOrganizeProfile(ctx, uc, "trimmed", OrganizeProfileInput{CompilationFolder: ptrTo(raw)})
+		saved, err := svc.Health.PutOrganizeProfile(ctx, uc, "trimmed", OrganizeProfileInput{CompilationFolder: new(raw)})
 		if err != nil || saved.CompilationFolder == nil || *saved.CompilationFolder != want {
 			t.Errorf("saving %q = %v (%v), want %q", raw, saved.CompilationFolder, err, want)
 		}
 	}
 	for _, bad := range []string{"...", strings.Repeat("x", maxCompilationFolderLen+1)} {
-		in := OrganizeProfileInput{CompilationFolder: ptrTo(bad)}
+		in := OrganizeProfileInput{CompilationFolder: new(bad)}
 		if _, err := svc.Health.PutOrganizeProfile(ctx, uc, "bad", in); KindOf(err) != KindInvalid {
 			t.Errorf("saving %.12q = %v, want invalid", bad, err)
 		}
@@ -142,8 +142,8 @@ func TestAProfileSampleShowsWhereACompilationGoes(t *testing.T) {
 		under  string
 	}{
 		{nil, "Various Artists"},
-		{ptrTo(""), sampleCompilation.AlbumArtist},
-		{ptrTo("Mixes"), "Mixes"},
+		{new(""), sampleCompilation.AlbumArtist},
+		{new("Mixes"), "Mixes"},
 	} {
 		sample, err := svc.Health.PreviewOrganizeProfile(ctx, uc, "", OrganizeProfileInput{CompilationFolder: tc.folder})
 		if err != nil || !strings.HasPrefix(sample.Compilation, tc.under+string(filepath.Separator)) {
@@ -153,7 +153,7 @@ func TestAProfileSampleShowsWhereACompilationGoes(t *testing.T) {
 			t.Errorf("folder %v moved the plain track: %q", tc.folder, sample.Music)
 		}
 	}
-	saved, err := svc.Health.PutOrganizeProfile(ctx, uc, "mixes", OrganizeProfileInput{CompilationFolder: ptrTo("Mixes")})
+	saved, err := svc.Health.PutOrganizeProfile(ctx, uc, "mixes", OrganizeProfileInput{CompilationFolder: new("Mixes")})
 	if err != nil || !strings.HasPrefix(saved.Sample.Compilation, "Mixes"+string(filepath.Separator)) {
 		t.Errorf("saved sample = %+v (%v), want the compilation under Mixes", saved.Sample, err)
 	}

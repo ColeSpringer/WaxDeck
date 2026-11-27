@@ -23,19 +23,19 @@ func uploadJSON(u service.UploadDTO) Upload {
 		CreatedAt:     u.CreatedAt,
 	}
 	if u.LibraryPID != "" {
-		out.LibraryPid = ptr(u.LibraryPID)
+		out.LibraryPid = new(u.LibraryPID)
 	}
 	if u.BatchID != "" {
-		out.BatchId = ptr(u.BatchID)
+		out.BatchId = new(u.BatchID)
 	}
 	if u.ReviewEntryID != "" {
-		out.ReviewEntryId = ptr(u.ReviewEntryID)
+		out.ReviewEntryId = new(u.ReviewEntryID)
 	}
 	if u.UploadedBy != "" {
-		out.UploadedBy = ptr(u.UploadedBy)
+		out.UploadedBy = new(u.UploadedBy)
 	}
 	if !u.ExpiresAt.IsZero() {
-		out.ExpiresAt = ptr(u.ExpiresAt)
+		out.ExpiresAt = new(u.ExpiresAt)
 	}
 	out.Duplicate = duplicateJSON(u.Duplicate)
 	return out
@@ -49,13 +49,13 @@ func duplicateJSON(d *service.DuplicateDTO) *DuplicateWarning {
 	}
 	out := &DuplicateWarning{Kind: d.Kind}
 	if d.ItemPID != "" {
-		out.ItemPid = ptr(d.ItemPID)
+		out.ItemPid = new(d.ItemPID)
 	}
 	if d.Title != "" {
-		out.Title = ptr(d.Title)
+		out.Title = new(d.Title)
 	}
 	if d.Artist != "" {
-		out.Artist = ptr(d.Artist)
+		out.Artist = new(d.Artist)
 	}
 	return out
 }
@@ -88,11 +88,11 @@ func (s *Server) ListUploads(ctx context.Context, req ListUploadsRequestObject) 
 		page.Uploads = append(page.Uploads, uploadJSON(u))
 	}
 	if next != "" {
-		page.NextCursor = ptr(next)
+		page.NextCursor = new(next)
 	}
 	q := UploadQuota{BytesInUse: quota.BytesInUse}
 	if quota.QuotaBytes > 0 {
-		q.QuotaBytes = ptr(quota.QuotaBytes)
+		q.QuotaBytes = new(quota.QuotaBytes)
 	}
 	page.Quota = &q
 	return ListUploads200JSONResponse(page), nil
@@ -220,7 +220,7 @@ func uploadBatchJSON(b service.UploadBatchDTO) UploadBatch {
 	}
 	out.ReviewEntryIds = append(out.ReviewEntryIds, b.ReviewEntryIDs...)
 	if b.LibraryPID != "" {
-		out.LibraryPid = ptr(b.LibraryPID)
+		out.LibraryPid = new(b.LibraryPID)
 	}
 	return out
 }

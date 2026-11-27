@@ -40,7 +40,7 @@ func (s *Server) ListFileDiagnostics(ctx context.Context, req ListFileDiagnostic
 		out.Diagnostics = append(out.Diagnostics, fileDiagnosticJSON(d))
 	}
 	if next != "" {
-		out.NextCursor = ptr(next)
+		out.NextCursor = new(next)
 	}
 	return ListFileDiagnostics200JSONResponse(out), nil
 }
@@ -81,10 +81,10 @@ func fileDiagnosticJSON(d service.FileDiagnosticDTO) FileDiagnostic {
 		SeenAt:   time.Unix(0, d.SeenAtNS).UTC(),
 	}
 	if d.TagKey != "" {
-		out.TagKey = ptr(d.TagKey)
+		out.TagKey = new(d.TagKey)
 	}
 	if d.Detail != "" {
-		out.Detail = ptr(d.Detail)
+		out.Detail = new(d.Detail)
 	}
 	return out
 }

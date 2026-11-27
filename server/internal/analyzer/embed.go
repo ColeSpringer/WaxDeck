@@ -113,7 +113,7 @@ func NewEmbedder() *Embedder {
 	for b := range e.bands {
 		fLo, fC, fHi := edges[b], edges[b+1], edges[b+2]
 		band := melBand{first: -1}
-		for k := 0; k < bins; k++ {
+		for k := range bins {
 			f := float64(k) * binHz
 			var w float64
 			switch {
@@ -148,9 +148,9 @@ func (e *Embedder) Embed(samples []float32) ([]float32, error) {
 	// mel is the log-compressed band-energy matrix, frames x bands,
 	// stored flat in frame-major order.
 	mel := make([]float64, frames*melBandCount)
-	for f := 0; f < frames; f++ {
+	for f := range frames {
 		base := f * hopSize
-		for i := 0; i < windowSize; i++ {
+		for i := range windowSize {
 			e.srcRe[i] = float32(float64(samples[base+i]) * e.window[i])
 			e.srcIm[i] = 0
 		}
@@ -174,9 +174,9 @@ func (e *Embedder) Embed(samples []float32) ([]float32, error) {
 	vec := make([]float64, Dims)
 	n := float64(frames)
 	dn := float64(frames - 1) // frames >= 2 is guaranteed by minSamples
-	for b := 0; b < melBandCount; b++ {
+	for b := range melBandCount {
 		var sum, sumSq float64
-		for f := 0; f < frames; f++ {
+		for f := range frames {
 			v := mel[f*melBandCount+b]
 			sum += v
 			sumSq += v * v

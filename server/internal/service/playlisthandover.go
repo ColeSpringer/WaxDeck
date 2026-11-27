@@ -473,7 +473,7 @@ func (l *Playlists) keepCopy(ctx context.Context, fixed *model.Playlist, takerPI
 			return classify(err)
 		}
 	}
-	if name := strings.TrimSuffix(fixed.Name, handoverMarker(source)); name != fixed.Name {
+	if name, ok := strings.CutSuffix(fixed.Name, handoverMarker(source)); ok {
 		if err := l.lib.Playlists().Rename(ctx, fixed.PID, name); err != nil {
 			return classify(err)
 		}

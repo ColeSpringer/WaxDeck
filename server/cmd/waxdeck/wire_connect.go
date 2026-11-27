@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net"
-	"strconv"
 	"strings"
 
 	"github.com/colespringer/waxdeck/server/internal/api"
@@ -61,12 +60,12 @@ func startConnect(ctx context.Context, group *supervise.Group, casting castingCo
 	// Device discovery: multicast on the LAN plus statically configured
 	// devices for networks where multicast never arrives (the compose
 	// stack runs the server on the host network for this).
-	if casting.discovery || casting.devices != "" {
+	if casting.discovery || len(casting.devices) > 0 {
 		cfg := castv2.DiscoveryConfig{
 			Announce:   connectSvc,
 			Group:      group,
 			Logger:     log,
-			Static:     parseCastDevices(casting.devices),
+			Static:     casting.devices,
 			StaticOnly: !casting.discovery,
 		}
 		group.Go(ctx, "cast-discovery", func(c context.Context) error {
@@ -174,35 +173,10 @@ func virtualInterface(name string) bool {
 	return false
 }
 
-// parseCastDevices parses name=host:port pairs into static devices.
-func parseCastDevices(s string) []castv2.Device {
-	var out []castv2.Device
-	for _, part := range strings.Split(s, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		name, addr, ok := strings.Cut(part, "=")
-		if !ok {
-			continue
-		}
-		host, portStr, err := net.SplitHostPort(addr)
-		if err != nil {
-			continue
-		}
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
-			continue
-		}
-		out = append(out, castv2.Device{Host: host, Port: port, Name: name})
-	}
-	return out
-}
-
 // parseDLNADevices parses description URLs into static devices.
 func parseDLNADevices(s string) []dlna.Device {
 	var out []dlna.Device
-	for _, part := range strings.Split(s, ",") {
+	for part := range strings.SplitSeq(s, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue

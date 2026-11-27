@@ -141,13 +141,11 @@ func TestAdminSettingsPutsOfDifferentFieldsBothStick(t *testing.T) {
 	}
 	var wg sync.WaitGroup
 	for _, w := range writes {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if _, err := svc.Settings.AdminSettingsPut(ctx, admin, w); err != nil {
 				t.Error(err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

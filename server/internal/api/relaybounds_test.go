@@ -73,7 +73,7 @@ func TestRadioRelayCapsConcurrentStreamsPerUser(t *testing.T) {
 		return r, nil
 	}
 
-	for i := 0; i < maxUserRelays; i++ {
+	for i := range maxUserRelays {
 		r, err := open()
 		if err != nil {
 			t.Fatalf("relay %d: %v", i, err)
@@ -125,7 +125,7 @@ func TestRelayGuardBounds(t *testing.T) {
 			idle: time.Minute, maxBytes: 1024, minRate: 1, rateGrace: time.Minute,
 		}, func() { t.Error("cancelled a healthy transfer") })
 		defer g.stop()
-		for i := 0; i < 8; i++ {
+		for i := range 8 {
 			if !g.note(64) {
 				t.Fatalf("note %d cut a transfer inside its bounds: %s", i, g.reason())
 			}
@@ -282,7 +282,7 @@ func TestRelayGuardBounds(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		g := newRelayGuard(relayLimits{idle: 80 * time.Millisecond}, cancel)
 		defer g.stop()
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			time.Sleep(30 * time.Millisecond)
 			if !g.note(1) {
 				t.Fatalf("progress at %d did not hold off the idle deadline", i)

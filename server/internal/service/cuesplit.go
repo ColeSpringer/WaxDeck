@@ -489,12 +489,10 @@ func (c *cueSplit) landed(ctx context.Context, i int) (model.PID, error) {
 // of the rip still uses. A rip someone else deleted since leaves nothing
 // to carry or retire.
 func (c *cueSplit) retire(ctx context.Context) error {
-	for _, pid := range c.p.PiecePIDs {
-		if pid == "" {
-			// Every piece a track first; the import tries the rest.
-			c.p.Step = cueStepImporting
-			return c.save(ctx)
-		}
+	if slices.Contains(c.p.PiecePIDs, "") {
+		// Every piece a track first; the import tries the rest.
+		c.p.Step = cueStepImporting
+		return c.save(ctx)
 	}
 	if c.p.Step == cueStepImported {
 		if err := c.carry(ctx); err != nil {

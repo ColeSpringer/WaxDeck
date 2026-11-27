@@ -74,8 +74,7 @@ func acquireReason(err error) (reason string, permanent bool) {
 	if err == nil {
 		return "", false
 	}
-	var refusal *syncsource.Refusal
-	if errors.As(err, &refusal) {
+	if refusal, ok := errors.AsType[*syncsource.Refusal](err); ok {
 		if r, known := sourceReasons[refusal.Reason]; known {
 			return refusal.Reason, r.permanent
 		}

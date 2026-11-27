@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"maps"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -71,9 +72,7 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 			"iat": time.Now().Unix(),
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		for k, v := range idp.claims {
-			claims[k] = v
-		}
+		maps.Copy(claims, idp.claims)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
 			"access_token": "fake-access",

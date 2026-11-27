@@ -21,7 +21,7 @@ func (s *Server) GetBootstrapStatus(ctx context.Context, _ GetBootstrapStatusReq
 	}
 	return GetBootstrapStatus200JSONResponse{
 		Required:      required,
-		SignupEnabled: ptr(s.svc.Identity.SignupEnabled(ctx)),
+		SignupEnabled: new(s.svc.Identity.SignupEnabled(ctx)),
 	}, nil
 }
 
@@ -227,17 +227,17 @@ func deviceSessionJSON(row *wdb.Session, current bool) DeviceSession {
 		Current:   current,
 	}
 	if row.DeviceName != "" {
-		out.DeviceName = ptr(row.DeviceName)
+		out.DeviceName = new(row.DeviceName)
 	}
 	// Summarized on the way out as well as on the way in, so a session
 	// stored before this server learned to do it reads the same as one
 	// stored after. Idempotent by construction: a summary carries no
 	// browser token, so it falls through unchanged.
 	if client := summarizeClient(row.Client); client != "" {
-		out.Client = ptr(client)
+		out.Client = new(client)
 	}
 	if !row.LastSeenAt.IsZero() {
-		out.LastSeenAt = ptr(row.LastSeenAt)
+		out.LastSeenAt = new(row.LastSeenAt)
 	}
 	return out
 }
@@ -261,7 +261,7 @@ func (s *Server) ListUsers(ctx context.Context, req ListUsersRequestObject) (Lis
 		out.Users = append(out.Users, userAccountJSON(acct))
 	}
 	if page.Next != "" {
-		out.NextCursor = ptr(page.Next)
+		out.NextCursor = new(page.Next)
 	}
 	return ListUsers200JSONResponse(out), nil
 }
@@ -605,17 +605,17 @@ func (s *Server) PutPrefs(ctx context.Context, req PutPrefsRequestObject) (PutPr
 func prefsJSON(p service.Prefs) Prefs {
 	out := Prefs{}
 	if p.Timezone != "" {
-		out.Timezone = ptr(p.Timezone)
+		out.Timezone = new(p.Timezone)
 	}
 	if p.Locale != "" {
-		out.Locale = ptr(p.Locale)
+		out.Locale = new(p.Locale)
 	}
 	if p.Theme != "" {
 		theme := PrefsTheme(p.Theme)
 		out.Theme = &theme
 	}
 	if p.SharedStatsOptOut {
-		out.SharedStatsOptOut = ptr(true)
+		out.SharedStatsOptOut = new(true)
 	}
 	if len(p.RadioFavorites) > 0 {
 		out.RadioFavorites = &p.RadioFavorites
@@ -627,19 +627,19 @@ func prefsJSON(p service.Prefs) Prefs {
 		out.Pinned = &p.Pinned
 	}
 	if p.CrossfadeSeconds > 0 {
-		out.CrossfadeSeconds = ptr(p.CrossfadeSeconds)
+		out.CrossfadeSeconds = new(p.CrossfadeSeconds)
 	}
 	if p.ReplayGain {
-		out.ReplayGain = ptr(true)
+		out.ReplayGain = new(true)
 	}
 	if p.RadioScrobbleOptOut {
-		out.RadioScrobbleOptOut = ptr(true)
+		out.RadioScrobbleOptOut = new(true)
 	}
 	if p.IdentifyOptOut {
-		out.IdentifyOptOut = ptr(true)
+		out.IdentifyOptOut = new(true)
 	}
 	if p.AcceptBestMatch {
-		out.AcceptBestMatch = ptr(true)
+		out.AcceptBestMatch = new(true)
 	}
 	out.BrowseShowUnknown = p.BrowseShowUnknown
 	out.Autoplay = p.Autoplay
@@ -839,12 +839,12 @@ func userAccountJSON(acct service.Account) UserAccount {
 		},
 	}
 	if u.UploadQuotaBytes > 0 {
-		out.UploadQuotaBytes = ptr(u.UploadQuotaBytes)
+		out.UploadQuotaBytes = new(u.UploadQuotaBytes)
 	}
 	if u.DisplayName != "" {
-		out.DisplayName = ptr(u.DisplayName)
+		out.DisplayName = new(u.DisplayName)
 	}
-	out.HasPassword = ptr(u.HasPassword)
+	out.HasPassword = new(u.HasPassword)
 	if u.LibraryAccess == "granted" {
 		pids := acct.LibraryPIDs
 		if pids == nil {
@@ -857,7 +857,7 @@ func userAccountJSON(acct service.Account) UserAccount {
 		for _, ident := range acct.Identities {
 			li := LinkedIdentity{Provider: ident.Provider}
 			if ident.Email != "" {
-				li.Email = ptr(ident.Email)
+				li.Email = new(ident.Email)
 			}
 			idents = append(idents, li)
 		}

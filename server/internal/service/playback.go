@@ -271,14 +271,11 @@ func (l *Playback) checkpointLocked(ctx context.Context, uc *UserCtx, it *model.
 			// already in the event stream for this client to pull.
 			return false, nil
 		}
-		stampNS = recNS
-		if stamp.PositionNS > stampNS {
-			// A further-but-older replay wins the position but must not
-			// rewind the stamp: replays recorded between the two times
-			// would then read as newer than the newest observation and
-			// apply unconditionally.
-			stampNS = stamp.PositionNS
-		}
+		// A further-but-older replay wins the position but must not
+		// rewind the stamp: replays recorded between the two times
+		// would then read as newer than the newest observation and
+		// apply unconditionally.
+		stampNS = max(recNS, stamp.PositionNS)
 	}
 	if err := l.writePosition(ctx, uc, it, positionMS, at); err != nil {
 		return false, err

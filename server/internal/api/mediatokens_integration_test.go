@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -196,9 +197,7 @@ func TestMediaTokensStopWhenTheirPrincipalDoes(t *testing.T) {
 		}, 404},
 		{"tag deny added", func(id, _, _ string) {
 			perms := map[string]any{"tagDeny": []map[string]string{{"key": "MOOD", "value": "calm"}}}
-			for k, v := range allowed {
-				perms[k] = v
-			}
+			maps.Copy(perms, allowed)
 			wantStatus(t, h.patchJSON(t, "/api/v1/users/"+id, map[string]any{"permissions": perms}), 200, "deny")
 		}, 404},
 	}

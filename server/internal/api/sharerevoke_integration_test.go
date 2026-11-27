@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -87,8 +88,7 @@ func TestRevokingALinkEndsTransfersThatAreWaiting(t *testing.T) {
 		})
 		_, ep := firstEpisode(t, h, feed, nil)
 		share := shareOf(t, h, ep.Pid, nil)
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		resp := openStream(t, ctx, h.ts.URL+share.Url+"/stream?i=0")
 		defer resp.Body.Close()
 		if _, err := io.ReadFull(resp.Body, make([]byte, scriptedPart)); err != nil {
@@ -140,9 +140,7 @@ func shareAsNewUser(t *testing.T, h *harness, username, pid string, extra map[st
 	t.Helper()
 	account := decodeStatus[UserAccount](t, h.postJSON(t, "/api/v1/users", map[string]any{"username": username, "password": testPassword}), 201, "creating "+username)
 	body := map[string]any{"pid": pid}
-	for k, v := range extra {
-		body[k] = v
-	}
+	maps.Copy(body, extra)
 	resp := reqAs(t, h, "POST", "/api/v1/shares", loginAs(t, h.ts, username, testPassword).Token, body)
 	return account.Id, decodeStatus[Share](t, resp, 201, "sharing as "+username)
 }
@@ -165,8 +163,7 @@ func TestDisablingTheOwnerEndsTheirLinksRunningTransfers(t *testing.T) {
 		h.srv.streamRecheckEvery = 50 * time.Millisecond
 		ep := episodesByTitle(t, h, newEndlessFeed(t, 1, 5*time.Millisecond).feedURL())["Episode 1"]
 		owner, link := shareAsNewUser(t, h, "dana", ep.Pid, nil)
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		resp := openStream(t, ctx, h.ts.URL+link.Url+"/stream?i=0")
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {

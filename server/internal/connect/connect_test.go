@@ -918,8 +918,6 @@ func TestCommandVisibility(t *testing.T) {
 // Casting from a device that is playing is a handoff, and the client
 // that cannot name its own mirror session - bus down, first report
 // unanswered, server restarted - names itself instead.
-func ptr[T any](v T) *T { return &v }
-
 func TestCreateSessionHandsOffSource(t *testing.T) {
 	svc, _, _ := newTestService(t)
 	ctx := context.Background()
@@ -940,7 +938,7 @@ func TestCreateSessionHandsOffSource(t *testing.T) {
 		Index:       1,
 		PositionMS:  4000,
 		Play:        true,
-		Rate:        ptr(1.5),
+		Rate:        new(1.5),
 		Repeat:      "all",
 		Shuffle:     true,
 		HandoffFrom: phone,
@@ -1086,7 +1084,7 @@ func TestHandoffToClientCarriesTheModes(t *testing.T) {
 		EndpointID: laptop,
 		PIDs:       []string{"tr-one"},
 		Play:       true,
-		Rate:       ptr(1.5),
+		Rate:       new(1.5),
 		Repeat:     "all",
 	}); err != nil {
 		t.Fatal(err)
@@ -1320,12 +1318,7 @@ func TestTransferDeviceKeepsPosition(t *testing.T) {
 	waitFor(t, func() bool {
 		driver.mu.Lock()
 		defer driver.mu.Unlock()
-		for _, v := range driver.verbs {
-			if v == "stop" {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(driver.verbs, "stop")
 	})
 	// Transfer to the same endpoint is a no-op.
 	again, err := svc.Transfer(ctx, "us-alice", snap.ID, ep2.ID)

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -265,12 +266,7 @@ func iconLinksIn(r io.Reader, base *url.URL) iconLinks {
 // `rel="apple-touch-icon-precomposed"` is handled above and must not
 // match here by substring.
 func slicesContainsField(list, want string) bool {
-	for _, field := range strings.Fields(list) {
-		if field == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Fields(list), want)
 }
 
 // absoluteAgainst resolves a possibly relative reference, answering

@@ -120,8 +120,7 @@ var kindCodes = map[service.ErrorKind]struct {
 // answerTo is how a client meets err on any transport: a refusal as it
 // stands, anything else by its kind.
 func answerTo(err error) *wireError {
-	var refusal *wireError
-	if errors.As(err, &refusal) {
+	if refusal, ok := errors.AsType[*wireError](err); ok {
 		return refusal
 	}
 	return answerByKind(err)
@@ -164,8 +163,7 @@ func serviceMessage(err error) string {
 // diagnostic, a cast preflight's failed self-fetch. Every other error is
 // worded by serviceMessage, and so is a service error handed here.
 func ownWords(err error) string {
-	var se *service.Error
-	if errors.As(err, &se) {
+	if _, ok := errors.AsType[*service.Error](err); ok {
 		return serviceMessage(err)
 	}
 	return err.Error()

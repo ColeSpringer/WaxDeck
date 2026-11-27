@@ -121,7 +121,7 @@ func vendoredLicenses(dir, prefix string, collections bool, block func(title str
 	sort.Strings(inner)
 	stems := map[string]bool{}
 	for _, asset := range assets {
-		stem := strings.SplitN(asset, ".", 2)[0]
+		stem, _, _ := strings.Cut(asset, ".")
 		stems[stem] = true
 		if want := stem + "-LICENSE.txt"; !slices.Contains(licenses, want) {
 			return fmt.Errorf("vendored web asset %s%s has no %s beside it", prefix, asset, want)

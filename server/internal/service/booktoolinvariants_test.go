@@ -391,8 +391,7 @@ func TestAReadOnlyFlagAfterTheTrashStartedIsWaitedOut(t *testing.T) {
 	svc.Tools.toolStepHook = nil
 	flagReadOnly(t, ctx, svc, true)
 	err = attempt(t, ctx, svc, 2)
-	var wait *toolRetry
-	if !errors.As(err, &wait) {
+	if _, ok := errors.AsType[*toolRetry](err); !ok {
 		t.Fatalf("the rerun on a read-only library = %v, want it waiting", err)
 	}
 	if left := hiddenLeft(t, dir); len(left) != 1 {
@@ -450,8 +449,7 @@ func TestAPartMissingFromItsPlaceStopsTheMergeKeepingItsOutput(t *testing.T) {
 	var err error
 	for n := 2; n <= 2+toolStrandWaits; n++ {
 		err = attempt(t, ctx, svc, n)
-		var wait *toolRetry
-		if !errors.As(err, &wait) {
+		if _, ok := errors.AsType[*toolRetry](err); !ok {
 			break
 		}
 	}

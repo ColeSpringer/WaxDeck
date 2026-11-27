@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -1390,11 +1391,7 @@ func (l *Ingest) DrainMatchQueue(ctx context.Context) bool {
 }
 
 func backoffFor(attempts int) time.Duration {
-	d := time.Minute << attempts
-	if d > 30*time.Minute {
-		d = 30 * time.Minute
-	}
-	return d
+	return min(time.Minute<<attempts, 30*time.Minute)
 }
 
 // finishIdentifyEmpty closes identification with no candidates.
@@ -1738,9 +1735,7 @@ func applyQueryOverride(tracks []match.Track, o *reviewOverride) {
 			derivedTitle = judged
 		}
 		tags := make(map[string]string, len(tracks[i].Tags)+2)
-		for k, v := range tracks[i].Tags {
-			tags[k] = v
-		}
+		maps.Copy(tags, tracks[i].Tags)
 		if o.Artist != "" {
 			tags["ALBUMARTIST"] = o.Artist
 		}

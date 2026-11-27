@@ -223,8 +223,7 @@ func TestAnAlikePartDoesNotStandInForOneGoneFromTheTrash(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(cd2, 0o755) })
 	err := attempt(t, ctx, svc, 2)
-	var wait *toolRetry
-	if !errors.As(err, &wait) {
+	if _, ok := errors.AsType[*toolRetry](err); !ok {
 		t.Fatalf("second attempt = %v, want it waiting to finish the merge", err)
 	}
 	if p := taskParams(t, ctx, svc, id); !p.Forward {

@@ -25,18 +25,18 @@ func (s *Server) ListEntityFolds(ctx context.Context, req ListEntityFoldsRequest
 			EntityPid: f.EntityPID, EntityName: f.EntityName, CreatedAt: f.CreatedAt,
 		}
 		if f.Facet != "" {
-			fold.Facet = ptr(f.Facet)
+			fold.Facet = new(f.Facet)
 		}
 		if f.Folder != "" {
-			fold.Folder = ptr(f.Folder)
+			fold.Folder = new(f.Folder)
 		}
 		if f.Library != "" {
-			fold.Library = ptr(f.Library)
+			fold.Library = new(f.Library)
 		}
 		page.Folds = append(page.Folds, fold)
 	}
 	if next != "" {
-		page.NextCursor = ptr(next)
+		page.NextCursor = new(next)
 	}
 	return ListEntityFolds200JSONResponse(page), nil
 }

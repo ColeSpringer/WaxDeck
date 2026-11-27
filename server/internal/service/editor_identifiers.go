@@ -141,8 +141,7 @@ func editOutcomeFromWriteBack(err error) (EditOutcomeDTO, error) {
 	if err == nil {
 		return EditOutcomeDTO{}, nil
 	}
-	var wbe *waxbin.WriteBackError
-	if errors.As(err, &wbe) {
+	if wbe, ok := errors.AsType[*waxbin.WriteBackError](err); ok {
 		return EditOutcomeDTO{Failures: writeBackFailures(wbe)}, nil
 	}
 	return EditOutcomeDTO{}, classify(err)

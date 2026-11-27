@@ -252,7 +252,7 @@ func buildWorld() *corpusWorld {
 		"Northern Static", "Half Light", "The Long Pier", "Salt and Circuitry", "Afterglow",
 		"Signal Fires (Demo)", "Meridian (Live)")
 	// Deluxe reuses the standard recordings for the shared tracks.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		deluxe.Tracks[i].RecordingMBID = "rel-neon-rec-" + itoa(i+1)
 	}
 	w.add(deluxe)

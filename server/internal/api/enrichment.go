@@ -54,7 +54,7 @@ func enrichmentStatusJSON(st service.EnrichmentStatusDTO) EnrichmentStatus {
 			Capabilities: caps,
 			Configured:   p.Configured,
 			Builtin:      p.Builtin,
-			Enabled:      ptr(p.Enabled),
+			Enabled:      new(p.Enabled),
 		})
 	}
 	return out
@@ -84,7 +84,7 @@ func enrichmentLastRun(r *service.EnrichmentLastRunDTO) *EnrichmentLastRun {
 		out.Stalled = append(out.Stalled, EnrichmentPhase(ph))
 	}
 	if r.FinishedAtNS > 0 {
-		out.FinishedAt = ptr(time.Unix(0, r.FinishedAtNS).UTC())
+		out.FinishedAt = new(time.Unix(0, r.FinishedAtNS).UTC())
 	}
 	return out
 }
@@ -207,17 +207,17 @@ func enrichFieldProposalJSON(f service.EnrichFieldProposalDTO) EnrichFieldPropos
 	// Empty today by construction (enrichment only fills empty fields),
 	// but mapped rather than assumed so a future replace mode cannot
 	// silently report a wrong diff.
-	out.Current = ptr(f.Current)
+	out.Current = new(f.Current)
 	return out
 }
 
 func enrichCoverProposalJSON(c service.EnrichCoverProposalDTO) *EnrichCoverProposal {
 	out := &EnrichCoverProposal{Provider: c.Provider, Data: c.Data}
 	if c.Format != "" {
-		out.Format = ptr(c.Format)
+		out.Format = new(c.Format)
 	}
 	if c.SourceURL != "" {
-		out.SourceUrl = ptr(c.SourceURL)
+		out.SourceUrl = new(c.SourceURL)
 	}
 	return out
 }

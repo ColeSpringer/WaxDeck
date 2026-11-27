@@ -50,7 +50,7 @@ func TestMutedTargetTakesTestsAndNothingElse(t *testing.T) {
 		Kind:          "webhook",
 		Config:        []byte(`{"url":"https://hook.example.com/x"}`),
 		EnabledEvents: []string{"review-ready"},
-		Muted:         ptrTo(true),
+		Muted:         new(true),
 	})
 	if err != nil {
 		t.Fatalf("creating the target: %v", err)
@@ -90,7 +90,7 @@ func TestMutedTargetTakesTestsAndNothingElse(t *testing.T) {
 	if _, err := svc.Integrations.UpdateMyNotificationTarget(ctx, uc, target.PID, NotificationTargetInput{
 		Config:        []byte(`{"url":"https://hook.example.com/x"}`),
 		EnabledEvents: []string{"review-ready"},
-		Muted:         ptrTo(false),
+		Muted:         new(false),
 	}); err != nil {
 		t.Fatalf("unmuting: %v", err)
 	}
@@ -134,8 +134,6 @@ func TestPacingWaitsWithoutSpendingAnAttempt(t *testing.T) {
 	}
 }
 
-func ptrTo[T any](v T) *T { return &v }
-
 // The interval is capped where the API caps it, so a target cannot be
 // paced past the outbox horizon that would prune its backlog.
 func TestPacingIntervalIsBounded(t *testing.T) {
@@ -145,7 +143,7 @@ func TestPacingIntervalIsBounded(t *testing.T) {
 		Kind:               "webhook",
 		Config:             []byte(`{"url":"https://hook.example.com/x"}`),
 		EnabledEvents:      []string{},
-		MinIntervalSeconds: ptrTo(notifyMaxInterval + 1),
+		MinIntervalSeconds: new(notifyMaxInterval + 1),
 	})
 	wantKind(t, err, KindInvalid)
 }
@@ -232,7 +230,7 @@ func TestMuteDropsWhatIsAlreadyQueued(t *testing.T) {
 	if _, err := svc.Integrations.UpdateServerNotificationTarget(ctx, target.PID, NotificationTargetInput{
 		Config:        []byte(`{"url":"http://127.0.0.1:1/hook"}`),
 		EnabledEvents: []string{"backup-completed"},
-		Muted:         ptrTo(true),
+		Muted:         new(true),
 	}); err != nil {
 		t.Fatalf("muting: %v", err)
 	}
@@ -263,7 +261,7 @@ func TestPacedRowPastTheHorizonIsShed(t *testing.T) {
 		Kind:               "webhook",
 		Config:             []byte(`{"url":"http://127.0.0.1:1/hook"}`),
 		EnabledEvents:      []string{"backup-completed"},
-		MinIntervalSeconds: ptrTo(600),
+		MinIntervalSeconds: new(600),
 	})
 	if err != nil {
 		t.Fatalf("creating the target: %v", err)

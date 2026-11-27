@@ -69,8 +69,8 @@ func metadataPutBytes(t *testing.T, ts *httptest.Server, path, token string, dat
 func tinyPNG(t *testing.T) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 4, 4))
-	for x := 0; x < 4; x++ {
-		for y := 0; y < 4; y++ {
+	for x := range 4 {
+		for y := range 4 {
 			img.Set(x, y, color.RGBA{R: uint8(40 * x), G: uint8(40 * y), B: 128, A: 255})
 		}
 	}
@@ -91,12 +91,7 @@ func (h *harness) itemMeta(t *testing.T, pid string) ItemMetadata {
 }
 
 func containsString(list []string, want string) bool {
-	for _, s := range list {
-		if s == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, want)
 }
 
 func wantStatus(t *testing.T, resp *http.Response, want int, what string) {
@@ -980,8 +975,8 @@ func tinyTIFF(t *testing.T) []byte {
 func tiffImage(t *testing.T, w, h int) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for x := 0; x < w; x++ {
-		for y := 0; y < h; y++ {
+	for x := range w {
+		for y := range h {
 			img.Set(x, y, color.RGBA{R: uint8(30 * x), G: 90, B: uint8(40 * y), A: 255})
 		}
 	}
@@ -1098,8 +1093,8 @@ func bigPNG(t *testing.T, side int) []byte {
 	// Seeded noise, so the picture is the same every run and the encoder
 	// has nothing to compress it down past the bound with.
 	rng := rand.New(rand.NewSource(1))
-	for x := 0; x < side; x++ {
-		for y := 0; y < side; y++ {
+	for x := range side {
+		for y := range side {
 			img.Set(x, y, color.RGBA{
 				R: uint8(rng.Intn(256)), G: uint8(rng.Intn(256)),
 				B: uint8(rng.Intn(256)), A: 255,
@@ -1711,7 +1706,7 @@ func TestMetadataCommitEnforcesItsDeclaredBounds(t *testing.T) {
 		credits[i] = map[string]any{"role": "producer", "names": []string{"X"}}
 	}
 	tagSets := map[string]any{}
-	for i := 0; i < 101; i++ {
+	for i := range 101 {
 		tagSets[fmt.Sprintf("K%03d", i)] = []string{"v"}
 	}
 	removes := make([]string, 101)

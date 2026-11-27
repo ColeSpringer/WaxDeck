@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"time"
 	"unicode/utf8"
 
@@ -708,12 +709,7 @@ func targetWantsEvent(t wdb.NotificationTarget, event string) bool {
 	if err := json.Unmarshal([]byte(t.EnabledEvents), &events); err != nil {
 		return false
 	}
-	for _, e := range events {
-		if e == event {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(events, event)
 }
 
 // notificationLink is where a delivery's news lives in the web app, or

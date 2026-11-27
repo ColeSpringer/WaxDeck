@@ -16,7 +16,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/db"
@@ -44,6 +44,10 @@ func main() {
 	flag.Parse()
 	if *library == "" {
 		fmt.Fprintln(os.Stderr, "perfgate: -library is required")
+		os.Exit(2)
+	}
+	if *runs < 1 {
+		fmt.Fprintln(os.Stderr, "perfgate: -runs must be at least 1")
 		os.Exit(2)
 	}
 	if err := run(*library, *runs); err != nil {
@@ -207,14 +211,14 @@ func run(library string, runs int) error {
 	failed := false
 	for _, p := range probes {
 		times := make([]time.Duration, 0, runs)
-		for i := 0; i < runs; i++ {
+		for range runs {
 			t0 := time.Now()
 			if err := p.fn(); err != nil {
 				return fmt.Errorf("%s: %w", p.name, err)
 			}
 			times = append(times, time.Since(t0))
 		}
-		sort.Slice(times, func(i, j int) bool { return times[i] < times[j] })
+		slices.Sort(times)
 		median := times[len(times)/2]
 		p95 := times[len(times)*95/100]
 		budget := budgets[p.name]

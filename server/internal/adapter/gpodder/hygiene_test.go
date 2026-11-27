@@ -293,7 +293,7 @@ func TestStoredFieldsAreBounded(t *testing.T) {
 		t.Fatalf("stored %+v, want only the one valid action", page.Actions)
 	}
 	var said []string
-	for _, line := range strings.Split(logged.String(), "\n") {
+	for line := range strings.SplitSeq(logged.String(), "\n") {
 		if strings.Contains(line, "gpodder episode actions skipped") {
 			said = append(said, line)
 		}

@@ -13,8 +13,7 @@ import (
 // at, and of the structs its pointer fields point at, to a value that is
 // not its zero, so an omitempty field is on the wire.
 func fillNonZero(v reflect.Value) {
-	for i := range v.NumField() {
-		f := v.Field(i)
+	for _, f := range v.Fields() {
 		if !f.CanSet() {
 			continue
 		}

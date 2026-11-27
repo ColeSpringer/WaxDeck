@@ -300,7 +300,7 @@ type TaskTypes struct {
 // where is the narrowing as a condition on tool_tasks.type, and its
 // arguments.
 func (t TaskTypes) where() (string, []any) {
-	var cond string
+	var cond strings.Builder
 	var args []any
 	for _, set := range []struct {
 		op    string
@@ -309,12 +309,12 @@ func (t TaskTypes) where() (string, []any) {
 		if len(set.types) == 0 {
 			continue
 		}
-		cond += " AND type " + set.op + " (" + strings.Repeat("?, ", len(set.types)-1) + "?)"
+		fmt.Fprintf(&cond, " AND type %s (%s?)", set.op, strings.Repeat("?, ", len(set.types)-1))
 		for _, typ := range set.types {
 			args = append(args, typ)
 		}
 	}
-	return cond, args
+	return cond.String(), args
 }
 
 // leasableTask is the condition on the tool_tasks row alias names that a

@@ -1847,7 +1847,7 @@ func TestFetchLogsDownloadWarnings(t *testing.T) {
 		}
 	}
 	// A remark about a well-formed file is not a degraded delivery.
-	for _, line := range strings.Split(logs.String(), "\n") {
+	for line := range strings.SplitSeq(logs.String(), "\n") {
 		if strings.Contains(line, "code=input-note") && !strings.Contains(line, "level=INFO") {
 			t.Errorf("input note logged as degraded: %s", line)
 		}

@@ -4,11 +4,14 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"net"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
+	"github.com/colespringer/waxdeck/server/internal/cast/castv2"
 	"github.com/colespringer/waxdeck/server/internal/envflag"
 )
 
@@ -93,7 +96,7 @@ type acquisitionConfig struct {
 type castingConfig struct {
 	advertiseBase string
 	discovery     bool
-	devices       string
+	devices       []castv2.Device
 	dlnaDevices   string
 	jukebox       bool
 	jukeboxCmd    string
@@ -299,7 +302,6 @@ func parseConfig(fs *flag.FlagSet, args []string, lookupEnv func(string) (string
 		casting: castingConfig{
 			advertiseBase: *advertiseBase,
 			discovery:     *castDiscovery,
-			devices:       *castDevices,
 			dlnaDevices:   *dlnaDevices,
 			jukebox:       *jukeboxOn,
 			jukeboxCmd:    *jukeboxCmd,
@@ -361,6 +363,9 @@ func parseConfig(fs *flag.FlagSet, args []string, lookupEnv func(string) (string
 	if cfg.core.libraryRoots, err = parseRoots(*rootsFlag); err != nil {
 		return nil, err
 	}
+	if cfg.casting.devices, err = parseCastDevices(*castDevices); err != nil {
+		return nil, err
+	}
 	return cfg, nil
 }
 
@@ -390,6 +395,31 @@ func parseRoots(s string) ([]root, error) {
 		roots = append(roots, root{Name: name, Path: abs})
 	}
 	return roots, nil
+}
+
+// parseCastDevices parses "name=host:port,name2=host2:port2". An entry
+// that is not one refuses the start rather than being dropped: a device
+// the parse skipped would just never appear, with nothing to say why.
+func parseCastDevices(s string) ([]castv2.Device, error) {
+	var out []castv2.Device
+	for part := range strings.SplitSeq(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		name, addr, _ := strings.Cut(part, "=")
+		name = strings.TrimSpace(name)
+		host, portStr, err := net.SplitHostPort(strings.TrimSpace(addr))
+		if err != nil || name == "" || host == "" {
+			return nil, fmt.Errorf("bad cast device %q: want name=host:port", part)
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil || port < 1 || port > 65535 {
+			return nil, fmt.Errorf("bad cast device %q: the port must be a number from 1 to 65535", part)
+		}
+		out = append(out, castv2.Device{Host: host, Port: port, Name: name})
+	}
+	return out, nil
 }
 
 // podcastDirFrom resolves the podcast directory. Podcasts work out of
@@ -430,7 +460,7 @@ func sponsorBlockFrom(value string, flagSet bool, lookupEnv func(string) (string
 // splitNonEmpty splits on sep, trims each part, and drops empties.
 func splitNonEmpty(s, sep string) []string {
 	var out []string
-	for _, part := range strings.Split(s, sep) {
+	for part := range strings.SplitSeq(s, sep) {
 		if part = strings.TrimSpace(part); part != "" {
 			out = append(out, part)
 		}

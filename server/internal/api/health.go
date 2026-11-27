@@ -22,20 +22,20 @@ func (s *Server) GetLibraryHealth(ctx context.Context, _ GetLibraryHealthRequest
 		TotalItems:     sum.TotalItems,
 		EvaluatedItems: sum.EvaluatedItems,
 		WarmingUp:      sum.WarmingUp,
-		Sweeping:       ptr(sum.Sweeping),
+		Sweeping:       new(sum.Sweeping),
 		SweepFailed:    sum.SweepFailed,
 		Rules:          make([]HealthRuleCount, 0, len(sum.Rules)),
 	}
 	if !sum.SweptAt.IsZero() {
-		out.SweptAt = ptr(sum.SweptAt)
+		out.SweptAt = new(sum.SweptAt)
 	}
 	for _, r := range sum.Rules {
 		rc := HealthRuleCount{Rule: r.Rule, Failing: r.Failing, Fixable: r.Fixable, Fixing: r.Fixing}
 		if r.Label != "" {
-			rc.Label = ptr(r.Label)
+			rc.Label = new(r.Label)
 		}
 		if r.FixBlocked != "" {
-			rc.FixBlocked = ptr(HealthRuleCountFixBlocked(r.FixBlocked))
+			rc.FixBlocked = new(HealthRuleCountFixBlocked(r.FixBlocked))
 		}
 		out.Rules = append(out.Rules, rc)
 	}
@@ -64,18 +64,18 @@ func (s *Server) ListHealthIssues(ctx context.Context, req ListHealthIssuesReque
 			hi.Rules = []string{}
 		}
 		if it.Artist != "" {
-			hi.Artist = ptr(it.Artist)
+			hi.Artist = new(it.Artist)
 		}
 		if d := it.Duration; d != nil {
-			hi.Detail = &HealthIssueDetail{HeaderMs: ptr(d.HeaderMS), DecodedMs: ptr(d.DecodedMS), PartIndex: d.PartIndex}
+			hi.Detail = &HealthIssueDetail{HeaderMs: new(d.HeaderMS), DecodedMs: new(d.DecodedMS), PartIndex: d.PartIndex}
 			if d.WholeFile {
-				hi.Detail.WholeFile = ptr(true)
+				hi.Detail.WholeFile = new(true)
 			}
 		}
 		page.Items = append(page.Items, hi)
 	}
 	if next != "" {
-		page.NextCursor = ptr(next)
+		page.NextCursor = new(next)
 	}
 	return ListHealthIssues200JSONResponse(page), nil
 }
@@ -103,10 +103,10 @@ func (s *Server) FixHealthIssues(ctx context.Context, req FixHealthIssuesRequest
 	}
 	out := HealthFixResult{Queued: start.Queued}
 	if start.JobPID != "" {
-		out.JobPid = ptr(start.JobPID)
+		out.JobPid = new(start.JobPID)
 	}
 	if start.TaskID != "" {
-		out.TaskId = ptr(start.TaskID)
+		out.TaskId = new(start.TaskID)
 	}
 	return FixHealthIssues202JSONResponse(out), nil
 }
@@ -125,7 +125,7 @@ func (s *Server) ListDuplicates(ctx context.Context, _ ListDuplicatesRequestObje
 			Losers:     make([]DuplicateEntity, 0, len(g.Losers)),
 		}
 		if g.Detail != "" {
-			dg.Detail = ptr(g.Detail)
+			dg.Detail = new(g.Detail)
 		}
 		for _, m := range g.Losers {
 			dg.Losers = append(dg.Losers, DuplicateEntity{Pid: m.PID, Name: m.Name})
@@ -169,19 +169,19 @@ func (s *Server) ListUpgrades(ctx context.Context, _ ListUpgradesRequestObject) 
 				Best:     m.Best,
 			}
 			if m.Path != "" {
-				um.Path = ptr(m.Path)
+				um.Path = new(m.Path)
 			}
 			if m.Artist != "" {
-				um.Artist = ptr(m.Artist)
+				um.Artist = new(m.Artist)
 			}
 			if m.Bitrate > 0 {
-				um.Bitrate = ptr(m.Bitrate)
+				um.Bitrate = new(m.Bitrate)
 			}
 			if m.SampleRate > 0 {
-				um.SampleRate = ptr(m.SampleRate)
+				um.SampleRate = new(m.SampleRate)
 			}
 			if m.BitDepth > 0 {
-				um.BitDepth = ptr(m.BitDepth)
+				um.BitDepth = new(m.BitDepth)
 			}
 			ug.Members = append(ug.Members, um)
 		}

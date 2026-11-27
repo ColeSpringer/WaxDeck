@@ -1,6 +1,7 @@
 package match
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -204,12 +205,7 @@ func stripEdition(s string) string {
 }
 
 func isEditionWord(w string) bool {
-	for _, e := range editionWords {
-		if w == e {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(editionWords, w)
 }
 
 func isYear(w string) bool {

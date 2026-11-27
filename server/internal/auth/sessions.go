@@ -42,12 +42,7 @@ type Principal struct {
 
 // IsAdmin reports whether the principal holds the admin role.
 func (p *Principal) IsAdmin() bool {
-	for _, r := range p.User.Roles {
-		if r == "admin" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(p.User.Roles, "admin")
 }
 
 // DefaultSessionCap is how many live sessions one account may hold

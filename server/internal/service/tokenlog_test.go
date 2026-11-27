@@ -63,7 +63,7 @@ func TestDownloadAndCatalogFailuresNameNoAddress(t *testing.T) {
 	if !strings.Contains(out, "episode fetch failed") || !strings.Contains(out, "reason=host-refused") {
 		t.Errorf("log = %q, want the download's failure and its reason", out)
 	}
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		if strings.Contains(line, "s3cr3t-token") {
 			t.Errorf("a log line names a tokenized address: %q", line)
 		}
@@ -107,7 +107,7 @@ func TestAChaptersFailureLogsNoAddress(t *testing.T) {
 			t.Errorf("log for %s = %q, want a chapters line with %s", c.base, line, c.cause)
 		}
 	}
-	for _, line := range strings.Split(logged.String(), "\n") {
+	for line := range strings.SplitSeq(logged.String(), "\n") {
 		if strings.Contains(line, "s3cr3t") {
 			t.Errorf("a log line names a chapters address: %q", line)
 		}

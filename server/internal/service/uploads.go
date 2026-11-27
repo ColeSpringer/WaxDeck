@@ -58,7 +58,7 @@ const MaxUploadChunk = 32 << 20
 // enough that it refuses nothing real. What actually decides whether a
 // big upload is accepted is the caller's quota and the room on the
 // staging volume, both of which move; this one does not.
-const MaxUploadSize = 16 << 30
+const MaxUploadSize int64 = 16 << 30
 
 // stagingReserve is the room checkStagingRoom leaves free after an
 // upload it accepts. Staging shares its volume with the catalog, its
@@ -1459,9 +1459,7 @@ func (l *Ingest) stampBookUnit(ctx context.Context, entry *wdb.ReviewEntry, payl
 		}
 		done = append(done, stamped{i: i, doc: before, prior: prior})
 		tags := make(map[string]string, len(doc.Tags)+4)
-		for k, v := range doc.Tags {
-			tags[k] = v
-		}
+		maps.Copy(tags, doc.Tags)
 		if album != "" {
 			tags["ALBUM"] = album
 		}

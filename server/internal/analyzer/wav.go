@@ -132,10 +132,10 @@ func decodePCM(data []byte, formatCode, bits, channels int) ([]float32, error) {
 	frameBytes := bps * channels
 	frames := len(data) / frameBytes
 	out := make([]float32, frames)
-	for f := 0; f < frames; f++ {
+	for f := range frames {
 		var sum float64
 		base := f * frameBytes
-		for c := 0; c < channels; c++ {
+		for c := range channels {
 			sum += read(data[base+c*bps:])
 		}
 		out[f] = float32(sum / float64(channels))
@@ -155,13 +155,7 @@ func (w *memWriteSeeker) Write(p []byte) (int, error) {
 		if need > int64(cap(w.b)) {
 			// Grow geometrically: exact-size growth would copy the
 			// whole buffer once per Write, quadratic across a decode.
-			newCap := 2 * cap(w.b)
-			if newCap < int(need) {
-				newCap = int(need)
-			}
-			if newCap < 64<<10 {
-				newCap = 64 << 10
-			}
+			newCap := max(2*cap(w.b), int(need), 64<<10)
 			grown := make([]byte, need, newCap)
 			copy(grown, w.b)
 			w.b = grown

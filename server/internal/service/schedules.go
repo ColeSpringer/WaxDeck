@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/cron"
@@ -55,12 +56,7 @@ type scheduleState struct {
 func scheduleKey(kind string) string { return "schedule:" + kind }
 
 func validScheduleKind(kind string) bool {
-	for _, k := range scheduleKinds {
-		if k == kind {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(scheduleKinds, kind)
 }
 
 func (l *Integrations) scheduleState(ctx context.Context, kind string) scheduleState {

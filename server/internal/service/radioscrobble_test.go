@@ -162,7 +162,7 @@ func TestScrobbleRadioPlayNeverBlocks(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for i := 0; i < radioWriteQueue*2; i++ {
+		for range radioWriteQueue * 2 {
 			svc.Radio.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Boards of Canada - Roygbiv", started)
 		}
 	}()

@@ -788,7 +788,7 @@ func TestResumeAndListens(t *testing.T) {
 	// permanently rejected, never silently stored.
 	bogus := "bogus"
 	report := ListenReport{Sessions: []ListenSession{
-		{SessionId: "sess-1", Pid: pid, StartedAt: time.Now().UTC(), MsPlayed: 900, Finished: ptr(true)},
+		{SessionId: "sess-1", Pid: pid, StartedAt: time.Now().UTC(), MsPlayed: 900, Finished: new(true)},
 		{SessionId: "sess-2", Pid: "tr-01JZX5N8QW3F4V9T2B7KD3M9R6", StartedAt: time.Now().UTC(), MsPlayed: 900},
 		{SessionId: "sess-3", Pid: pid, StartedAt: time.Now().UTC(), MsPlayed: 900, Source: (*ListenSessionSource)(&bogus)},
 	}}

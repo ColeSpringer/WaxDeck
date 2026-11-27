@@ -3,6 +3,7 @@ package api
 import (
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -41,7 +42,7 @@ type TrustedProxies struct {
 // somebody was locked out.
 func ParseTrustedProxies(list string) (TrustedProxies, error) {
 	var out TrustedProxies
-	for _, raw := range strings.Split(list, ",") {
+	for raw := range strings.SplitSeq(list, ",") {
 		entry := strings.TrimSpace(raw)
 		if entry == "" {
 			continue
@@ -113,8 +114,8 @@ func (t TrustedProxies) clientIP(r *http.Request) string {
 	}
 	hops := forwardedHops(r)
 	answer := socket
-	for i := len(hops) - 1; i >= 0; i-- {
-		hop := net.ParseIP(unwrapHop(hops[i]))
+	for _, raw := range slices.Backward(hops) {
+		hop := net.ParseIP(unwrapHop(raw))
 		if hop == nil {
 			// Unparseable: stop here. Reaching further left would take an
 			// address that this hop, not the proxy, chose to put there.
@@ -134,7 +135,7 @@ func (t TrustedProxies) clientIP(r *http.Request) string {
 func forwardedHops(r *http.Request) []string {
 	var out []string
 	for _, line := range r.Header.Values("X-Forwarded-For") {
-		for _, entry := range strings.Split(line, ",") {
+		for entry := range strings.SplitSeq(line, ",") {
 			if entry = strings.TrimSpace(entry); entry != "" {
 				out = append(out, entry)
 			}

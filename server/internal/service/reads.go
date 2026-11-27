@@ -817,7 +817,7 @@ func searchTier(name, q searchName) int {
 	case strings.Contains(" "+name.key, " "+q.key):
 		return 1
 	}
-	for _, w := range strings.Fields(q.key) {
+	for w := range strings.FieldsSeq(q.key) {
 		if !strings.Contains(name.joined, w) {
 			return 3
 		}

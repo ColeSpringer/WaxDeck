@@ -107,7 +107,7 @@ func newGenreFixture(t *testing.T) genreFixture {
 func (f genreFixture) sweepToQuiet(t *testing.T) GenreSweepReport {
 	t.Helper()
 	var last GenreSweepReport
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		rep, err := f.svc.Reads.SweepGenres(f.ctx)
 		if err != nil {
 			t.Fatalf("genre sweep: %v", err)
@@ -235,7 +235,7 @@ func TestSweeperSkipsLockedGenres(t *testing.T) {
 	}
 
 	var locked int
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		rep, err := f.svc.Reads.SweepGenres(f.ctx)
 		if err != nil {
 			t.Fatalf("genre sweep: %v", err)

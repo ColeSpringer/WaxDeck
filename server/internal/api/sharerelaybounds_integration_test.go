@@ -159,8 +159,7 @@ func TestVisitorsWhoStopReadingLetGoOfTheirSlots(t *testing.T) {
 	for range maxShareStreams {
 		stalledVisitor(t, h.ts.URL, strings.TrimPrefix(link, h.ts.URL))
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	for i := range maxUserRelays - maxShareStreams {
 		resp := openStream(t, ctx, relay)
 		defer resp.Body.Close()
@@ -186,8 +185,7 @@ func TestRevokingALinkEndsItsTransfers(t *testing.T) {
 	h := newPodcastHarness(t)
 	h.srv.streamRecheckEvery = time.Hour
 	share := shareOf(t, h, episodesByTitle(t, h, newEndlessFeed(t, 1, 5*time.Millisecond).feedURL())["Episode 1"].Pid, nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	resp := openStream(t, ctx, h.ts.URL+share.Url+"/stream?i=0")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -220,8 +218,7 @@ func TestAnOwnersLinksLeaveTheOwnerRelaySlots(t *testing.T) {
 	first := h.ts.URL + shareOf(t, h, held.Pid, nil).Url + "/stream?i=0"
 	second := h.ts.URL + shareOf(t, h, held.Pid, nil).Url + "/stream?i=0"
 	relay := h.ts.URL + decode[PlayInfo](t, get(t, h.ts, "/api/v1/items/"+held.Pid+"/play-info", h.token)).Url
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	hold := func(url, what string) {
 		t.Helper()
 		resp := openStream(t, ctx, url)

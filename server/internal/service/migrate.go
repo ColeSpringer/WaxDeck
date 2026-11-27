@@ -758,7 +758,7 @@ func (l *Migrate) migrateListens(ctx context.Context, uc *UserCtx, sum *migratio
 		sessions = sessions[:0]
 		return err
 	}
-	for n := 0; n < count; n++ {
+	for n := range count {
 		sessions = append(sessions, ListenSession{
 			SessionID: migrateSessionID(source, sourceID, n),
 			PID:       apiItemPID,
@@ -929,8 +929,7 @@ func migrateClientErr(err error) error {
 	if err == nil {
 		return nil
 	}
-	var api *subsonicAPIError
-	if errors.As(err, &api) {
+	if _, ok := errors.AsType[*subsonicAPIError](err); ok {
 		return fmt.Errorf("%w: %v", errToolPermanent, err)
 	}
 	var hs *migrateHTTPError

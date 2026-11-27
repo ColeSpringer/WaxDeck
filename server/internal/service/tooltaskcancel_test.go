@@ -310,11 +310,9 @@ func TestACancelAsTheRunEndsEndsItOnce(t *testing.T) {
 				t.Fatal(err)
 			}
 			var wg sync.WaitGroup
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				svc.Tools.DrainSourceToolTasks(ctx)
-			}()
+			})
 			if _, err := svc.Tools.CancelToolTaskFor(ctx, uc, task.ID); err != nil {
 				t.Errorf("canceling: %v", err)
 			}

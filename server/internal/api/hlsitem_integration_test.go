@@ -45,7 +45,7 @@ func fetchHLS(t *testing.T, h *harness, u string) (int, string) {
 // whose URI starts with prefix.
 func hlsChild(t *testing.T, body, prefix string) string {
 	t.Helper()
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		if strings.HasPrefix(line, prefix) {
 			return "/media/hls/" + line
 		}

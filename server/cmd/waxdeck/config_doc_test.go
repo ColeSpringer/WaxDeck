@@ -163,7 +163,7 @@ func TestDockerDesktopOverrideMatchesTheDocs(t *testing.T) {
 	var lines []string
 	quoted := regexp.MustCompile(`'([^']*)'`)
 	inUp, inPrintf := false, false
-	for _, l := range strings.Split(string(mk), "\n") {
+	for l := range strings.SplitSeq(string(mk), "\n") {
 		// Only the up recipe's printf: other recipes use the same form.
 		if strings.HasPrefix(l, "up:") {
 			inUp = true

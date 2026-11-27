@@ -320,10 +320,7 @@ func stitchPeaks(parts []model.BookPart, byFile map[string]model.PeaksData, tota
 		// bucket belongs to the part that starts in it and no sample is
 		// counted twice.
 		from := int(start * int64(buckets) / totalMS)
-		to := int(elapsedMS * int64(buckets) / totalMS)
-		if to > buckets {
-			to = buckets
-		}
+		to := min(int(elapsedMS*int64(buckets)/totalMS), buckets)
 		if to <= from {
 			// A part shorter than one bucket still gets the bucket it
 			// falls in: dropping it would silence real audio.

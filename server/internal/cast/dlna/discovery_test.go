@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -43,9 +44,9 @@ func (a *fakeAnnouncer) EndpointOffline(_ context.Context, endpointID string) {
 func (a *fakeAnnouncer) lastOnline(deviceKey string) (onlineCall, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	for i := len(a.online) - 1; i >= 0; i-- {
-		if a.online[i].DeviceKey == deviceKey {
-			return a.online[i], true
+	for _, v := range slices.Backward(a.online) {
+		if v.DeviceKey == deviceKey {
+			return v, true
 		}
 	}
 	return onlineCall{}, false
@@ -54,12 +55,7 @@ func (a *fakeAnnouncer) lastOnline(deviceKey string) (onlineCall, bool) {
 func (a *fakeAnnouncer) wentOffline(endpointID string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	for _, id := range a.offline {
-		if id == endpointID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(a.offline, endpointID)
 }
 
 // shortSSDP shrinks the multicast listen window so sweeps finish in

@@ -208,9 +208,7 @@ func build(specPath, hintsPath, extensions string, hand *handPackage) (map[strin
 		return nil, err
 	}
 	files := m.emit(cs.public())
-	for rel, data := range cs.emit() {
-		files[rel] = data
-	}
+	maps.Copy(files, cs.emit())
 	return files, nil
 }
 

@@ -797,11 +797,11 @@ func decodeSnapshotCursor(s string) (since string, next read.Cursor, afterShow s
 		return "", "", "", false, false
 	}
 	if rest, found := strings.CutPrefix(string(raw), "n1s|"); found {
-		i := strings.IndexByte(rest, '|')
-		if i < 0 {
+		before, after, ok := strings.Cut(rest, "|")
+		if !ok {
 			return "", "", "", false, false
 		}
-		since, afterShow = rest[:i], rest[i+1:]
+		since, afterShow = before, after
 		if _, valid := decodeCatalogCursor(since); !valid {
 			return "", "", "", false, false
 		}
@@ -813,11 +813,11 @@ func decodeSnapshotCursor(s string) (since string, next read.Cursor, afterShow s
 	}
 	// The frozen cursor is base64url and cannot contain the separator;
 	// the keyset remainder may contain anything.
-	i := strings.IndexByte(rest, '|')
-	if i < 0 {
+	before, after, ok := strings.Cut(rest, "|")
+	if !ok {
 		return "", "", "", false, false
 	}
-	since, next = rest[:i], read.Cursor(rest[i+1:])
+	since, next = before, read.Cursor(after)
 	if _, valid := decodeCatalogCursor(since); !valid {
 		return "", "", "", false, false
 	}

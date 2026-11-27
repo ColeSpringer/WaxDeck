@@ -156,8 +156,7 @@ func TestABusyCatalogAtTheCueImportIsWaitedOut(t *testing.T) {
 	}
 	svc.Tools.mutateHook = busyOnce("import")
 	err = attempt(t, ctx, svc, 1)
-	var wait *toolRetry
-	if !errors.As(err, &wait) {
+	if _, ok := errors.AsType[*toolRetry](err); !ok {
 		t.Fatalf("first attempt = %v, want it waiting on the busy catalog", err)
 	}
 	if err := attempt(t, ctx, svc, 2); err != nil {
@@ -248,8 +247,7 @@ func TestACueSplitWaitsOutAReadOnlyRip(t *testing.T) {
 	svc.Tools.toolStepHook = nil
 	flagReadOnly(t, ctx, svc, true)
 	err = attempt(t, ctx, svc, 2)
-	var wait *toolRetry
-	if !errors.As(err, &wait) {
+	if _, ok := errors.AsType[*toolRetry](err); !ok {
 		t.Fatalf("the rerun on a read-only library = %v, want it waiting", err)
 	}
 	flagReadOnly(t, ctx, svc, false)

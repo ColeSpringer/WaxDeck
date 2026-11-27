@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
+	"github.com/colespringer/waxdeck/server/internal/cast/castv2"
 )
 
 // envOf is a lookupEnv over vars, so no test reads the process environment.
@@ -94,10 +95,30 @@ func TestParseConfigRefusesSettingsTheServerCannotRunWith(t *testing.T) {
 		{[]string{"-session-cap=0"}, "WAXDECK_SESSION_CAP"},
 		{[]string{"-enrichment-retry-misses-days=-1"}, "WAXDECK_ENRICHMENT_RETRY_MISSES_DAYS"},
 		{[]string{"-library-roots", "music"}, `bad library root "music"`},
+		{[]string{"-cast-devices", "Kitchen=192.168.1.50"}, `bad cast device "Kitchen=192.168.1.50"`},
+		{[]string{"-cast-devices", "192.168.1.50:8009"}, `bad cast device "192.168.1.50:8009"`},
+		{[]string{"-cast-devices", "Kitchen=:8009"}, `bad cast device "Kitchen=:8009"`},
+		{[]string{"-cast-devices", "Kitchen=192.168.1.50:cast"}, "the port must be a number"},
 	} {
 		if _, err := parseWith(c.args, nil); err == nil || !strings.Contains(err.Error(), c.says) {
 			t.Errorf("%v: parse = %v, want a refusal naming %s", c.args, err, c.says)
 		}
+	}
+}
+
+// Spaces around a cast device's parts are formatting, not part of its
+// name or address, which a dial would otherwise fail on.
+func TestCastDevicesAreTrimmed(t *testing.T) {
+	cfg, err := parseWith([]string{"-cast-devices", " Kitchen speaker = 192.168.1.50:8009 ,, Den=[fe80::1]:8010"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []castv2.Device{
+		{Name: "Kitchen speaker", Host: "192.168.1.50", Port: 8009},
+		{Name: "Den", Host: "fe80::1", Port: 8010},
+	}
+	if !slices.Equal(cfg.casting.devices, want) {
+		t.Fatalf("devices = %+v, want %+v", cfg.casting.devices, want)
 	}
 }
 

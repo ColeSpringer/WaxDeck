@@ -153,7 +153,7 @@ func TestUndoRacesACompletionCheckpoint(t *testing.T) {
 	end := book.DurationMs
 	resume := end / 10
 
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		putPlayed(t, h, book.Pid, map[string]any{
 			"played": false, "finished": false, "playCount": 0, "positionMs": resume,
 		})
@@ -249,7 +249,7 @@ func TestUndoRacesAListenIngest(t *testing.T) {
 	end := book.DurationMs
 	resume := end / 10
 
-	for i := 0; i < 60; i++ {
+	for i := range 60 {
 		// The listen's crossing reads the stored position, so the book
 		// starts at its end with the flags clear: exactly the state where
 		// an ingest is due to mark.
@@ -328,7 +328,7 @@ func TestUndoRacesAReplayedCheckpoint(t *testing.T) {
 	end := book.DurationMs
 	resume := end / 10
 
-	for i := 0; i < 120; i++ {
+	for i := range 120 {
 		putPlayed(t, h, book.Pid, map[string]any{
 			"played": false, "finished": false, "playCount": 0, "positionMs": resume,
 		})
@@ -422,7 +422,7 @@ func TestFlagsOnlyWriteRacesACheckpointMark(t *testing.T) {
 	book := bookForPlayedRaces(t, h)
 	end := book.DurationMs
 
-	for i := 0; i < 120; i++ {
+	for i := range 120 {
 		// At the end with the flags clear, so the checkpoint below is
 		// due a mark rather than a no-op.
 		putPlayed(t, h, book.Pid, map[string]any{

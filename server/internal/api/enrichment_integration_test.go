@@ -637,9 +637,9 @@ func (f *fakeFieldsProvider) Enrich(_ context.Context, req enrich.Request) (*enr
 func (f *fakeFieldsProvider) lastRecording() (enrich.Request, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	for i := len(f.seen) - 1; i >= 0; i-- {
-		if f.seen[i].Type == enrich.TargetRecording {
-			return f.seen[i], true
+	for _, v := range slices.Backward(f.seen) {
+		if v.Type == enrich.TargetRecording {
+			return v, true
 		}
 	}
 	return enrich.Request{}, false

@@ -87,24 +87,24 @@ func playlistSourceJSON(src service.PlaylistSourceDTO) PlaylistSource {
 		ConsecutiveFailures: src.ConsecutiveFailures,
 	}
 	if src.URL != "" {
-		out.Url = ptr(src.URL)
+		out.Url = new(src.URL)
 	}
 	if src.Title != "" {
-		out.Title = ptr(src.Title)
+		out.Title = new(src.Title)
 	}
 	if src.Live {
-		out.IntervalHours = ptr(src.IntervalHours)
+		out.IntervalHours = new(src.IntervalHours)
 	} else {
-		out.RefCount = ptr(src.RefCount)
+		out.RefCount = new(src.RefCount)
 	}
 	if src.LastError != "" {
-		out.LastError = ptr(src.LastError)
+		out.LastError = new(src.LastError)
 	}
 	if src.LastAttemptNS > 0 {
-		out.LastAttemptAt = ptr(time.Unix(0, src.LastAttemptNS).UTC())
+		out.LastAttemptAt = new(time.Unix(0, src.LastAttemptNS).UTC())
 	}
 	if src.LastSyncedNS > 0 {
-		out.LastSyncedAt = ptr(time.Unix(0, src.LastSyncedNS).UTC())
+		out.LastSyncedAt = new(time.Unix(0, src.LastSyncedNS).UTC())
 	}
 	if src.HasRun {
 		out.LastRun = &PlaylistSyncCounts{

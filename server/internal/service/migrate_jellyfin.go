@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -157,9 +158,7 @@ func (i jellyfinItem) durationMS() int64 { return i.RunTimeTicks / 10000 }
 func (c *jellyfinClient) items(ctx context.Context, types string, extra url.Values, fn func(jellyfinItem) error) error {
 	for start := 0; ; {
 		q := url.Values{}
-		for k, vs := range extra {
-			q[k] = vs
-		}
+		maps.Copy(q, extra)
 		q.Set("userId", c.userID)
 		q.Set("IncludeItemTypes", types)
 		q.Set("Recursive", "true")

@@ -887,6 +887,15 @@ note.
   library takes music, which lands the parts as tracks with no book
   stamp, or discard it and acquire the list again with a transcoded
   format (`mp3`, `opus`, `flac`), whose files take tags.
+- **The catalog does not build on the BSDs.** `internal/diskfree` is one
+  `//go:build unix` file that reads `syscall.Statfs` with Linux and
+  Darwin field types: FreeBSD stops on `Bavail` being signed, OpenBSD
+  names the fields `F_bavail` and `F_bsize`, and NetBSD has no `Statfs`
+  at all (x/sys/unix has its `Statvfs`). modernc.org/sqlite builds on
+  all three, so this file is the first thing a BSD build of WaxDeck
+  stops on. Wanted: per-platform probes (x/sys/unix carries each one),
+  or a fallback that reports no answer. Shipped workaround: none needed;
+  WaxDeck builds and ships Linux, macOS and Windows only.
 
 ## WaxTap
 

@@ -102,13 +102,7 @@ func (h *Handler) findSonicPath(w http.ResponseWriter, r *http.Request, uc *serv
 		h.fail(w, r, 10, "missing fromId or toId")
 		return
 	}
-	length := formInt(r, "length", 12)
-	if length < 3 {
-		length = 3
-	}
-	if length > 50 {
-		length = 50
-	}
+	length := min(max(formInt(r, "length", 12), 3), 50)
 	res, err := h.svc.Similarity.SonicPathFor(r.Context(), uc, from, to, length)
 	if err != nil {
 		h.failFromService(w, r, err, "finding a sonic path failed")

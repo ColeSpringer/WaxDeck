@@ -442,12 +442,7 @@ func ruleCondToEngine(n RuleNode) (query.Node, error) {
 }
 
 func opAllowed(kind, op string) bool {
-	for _, o := range ruleOpsByKind[kind] {
-		if o == op {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ruleOpsByKind[kind], op)
 }
 
 // ruleValueToEngine parses one string-encoded wire value into the typed

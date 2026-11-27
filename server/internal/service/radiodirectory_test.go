@@ -56,7 +56,7 @@ func TestRadioDirectoryMirrorCooldown(t *testing.T) {
 	// afternoon where every mirror is having one, dropping them would
 	// leave nothing to ask.
 	l.Radio.coolRadioMirror("https://sick.example")
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		got := l.Radio.directoryMirrors(ctx)
 		if len(got) != 2 {
 			t.Fatalf("cooled mirrors = %v, want both", got)

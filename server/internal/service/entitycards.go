@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/colespringer/waxbin/model"
@@ -124,9 +125,7 @@ func (l *Reads) EntityCards(ctx context.Context, uc *UserCtx, apiPIDs []string) 
 		if err != nil {
 			return nil, nil, err
 		}
-		for pid, card := range got {
-			cards[pid] = card
-		}
+		maps.Copy(cards, got)
 		for pid := range dep {
 			gone[pid] = true
 		}

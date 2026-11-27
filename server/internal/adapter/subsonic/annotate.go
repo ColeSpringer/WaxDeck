@@ -2,6 +2,7 @@ package subsonic
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"strings"
 	"time"
@@ -355,9 +356,7 @@ func (h *Handler) annotate(r *http.Request, env *envelope) {
 		if err != nil {
 			h.warn("subsonic entity marks", "err", err)
 		}
-		for pid, m := range read {
-			entities[pid] = m
-		}
+		maps.Copy(entities, read)
 	}
 	var files map[string]service.FileFacts
 	if pids := s.filePIDs(); len(pids) > 0 {

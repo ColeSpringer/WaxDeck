@@ -2194,7 +2194,7 @@ type AuditEvent struct {
 	CreatedAt time.Time `json:"createdAt"`
 
 	// Detail Action-specific structure: what changed, from what, to what. Shapes are stable per action but may grow fields.
-	Detail *map[string]interface{} `json:"detail,omitempty"`
+	Detail *map[string]any `json:"detail,omitempty"`
 
 	// Id Opaque event id, unique and time-ordered.
 	Id string `json:"id"`
@@ -5012,7 +5012,7 @@ type Job struct {
 	Progress *float64 `json:"progress,omitempty"`
 
 	// Result What a finished job did, once it records a summary. A `scan` counts files: `audioFiles` (every audio file it visited) is `created`, `updated`, `sidecarsUpdated` (a lyrics, cue or cover change without the audio changing), `copies` (files that joined an item as another copy of its audio or another encoding of its recording), `unchanged` and `errored` together, and `filesSeen` is `audioFiles` and `skipped` (files that are not audio). `relinked` (moved or renamed) and `reread` (read in full rather than recognized by size and time) count among the audio files; `missing` counts items whose files are gone, `promoted` copies that took a gone file's place, `dropped` the records of gone files removed, and `walkErrors` entries the scan could not read, which no file count holds. `rootUnreachable` says a library's folder could not be reached, so nothing under it was marked missing, and `subPathGone` that the folder asked for was not there. For administrators, `runs` lists each library's own counts in the same words, with its `libraryPid` and `library` name, and `rootsUnreachable` names the libraries whose folder could not be reached. An `analyze` pass reports `analyzed`, `loudnessMeasured`, `measureFailed`, `skipped` and `errored`, with `fingerprintFallbacks` (files fpcalc could not read, fingerprinted another way that does not group with fpcalc's) and `fingerprintPartialReads` (fpcalc reads kept although they ended in an error, their fingerprint covering the span analyzed); an `enrich` pass the same tallies as the enrichment status's `lastRun`; an `organize` run `profile` (absent when it laid several libraries out by their own), `moved`, `skipped` (files that did not move, in place or held back), `held` (of those, the moves held back), `errored`, `sidecarsMoved` and `dirsPruned` (folders the moves emptied and removed), and an `organize-undo` moving one back the same without `profile`. A `set-kind` run reports `converted` (the items that changed kind in place), `absorbed` (each pid folded into another item, which no longer exists, mapped to the item that took it in, or to an empty string when that item is in a library the reader is not granted), `created` (the items a book split minted for its parts) and `writeBackFailures` (`filePid`, `reason`, and for administrators `path`); every pid is in its current form, and a change cut short reports what it did before it stopped. A `remove-root` run reports `filesDetached` (the files the catalog let go of, which stay on disk), `itemsArchived` (items left with no file, kept until the folder is added again) and `trashRowsDropped` (the library's trash entries, whose files stay in its trash folder). Absent while running and for kinds that record none. Shapes may grow fields.
-	Result *map[string]interface{} `json:"result,omitempty"`
+	Result *map[string]any `json:"result,omitempty"`
 
 	// StartedAt When the job started.
 	StartedAt *time.Time `json:"startedAt,omitempty"`
@@ -6073,7 +6073,7 @@ type NotificationScope string
 // NotificationTarget One notification delivery destination. `config` is a free-form object whose fields depend on `kind` (a discriminated union is deliberately avoided; validation is server-side and per kind, and unknown fields are refused): `pushover` takes `token` (application API token), `userKey`, and optional integer `priority` (-2 quietest to 2 emergency; emergency deliveries use the service's minimum retry cadence); `ntfy` takes `topic`, optional `serverUrl` (default `https://ntfy.sh`), and optional `accessToken` (sent as a Bearer token); its deliveries carry a `click` URL and a view action when the server knows its public base; `gotify` takes `serverUrl` and `token` (sent as a header, so it stays out of URLs and logs) and optional integer `priority` (0 to 10); `discord` takes `webhookUrl`, which must be a discord.com or discordapp.com webhook URL; its embeds carry a timestamp, a colour per event family, a WaxDeck footer, and a link when the server knows its public base; `webhook` takes `url` and posts `{event, title, body, timestamp}` as JSON with timestamp in RFC 3339 UTC, plus `link` when the server knows its own public base (`WAXDECK_PUBLIC_BASE`) and the event names something to open; it also takes optional `headers` (an object of at most 8 extra request headers, names ASCII tokens up to 64 characters and values up to 1024; hop-by-hop names, `Host`, `Content-Length` and `Content-Type` are refused) and optional `secret` (up to 256 characters), which signs every post: `X-WaxDeck-Timestamp` carries unix seconds and `X-WaxDeck-Signature` carries `sha256=<hex HMAC-SHA256(secret, timestamp + "." + body)>`; `apprise` takes `serverUrl` (the Apprise API server base; its notify endpoint is derived unless the URL already names a path) and optional `targets` (comma or space separated Apprise target URLs; empty relies on the Apprise server's own configuration); `unifiedpush` takes `endpoint` (the distributor-issued https URL, unique per owner). The `kind` is fixed at creation.
 type NotificationTarget struct {
 	// Config The kind's delivery configuration, returned verbatim to the owner (see the schema description for per-kind fields). Sealed at rest.
-	Config map[string]interface{} `json:"config"`
+	Config map[string]any `json:"config"`
 
 	// CreatedAt When the target was created.
 	CreatedAt time.Time `json:"createdAt"`
@@ -6114,7 +6114,7 @@ type NotificationTarget struct {
 // NotificationTargetCreate A notification target to create.
 type NotificationTargetCreate struct {
 	// Config The kind's delivery configuration (see the NotificationTarget schema for per-kind fields).
-	Config map[string]interface{} `json:"config"`
+	Config map[string]any `json:"config"`
 
 	// EnabledEvents Catalog event names to deliver. Scope rules apply: server-scope targets take server-scope events; user-scope targets take user-scope events, plus server-scope events when the owner is an administrator.
 	EnabledEvents []string `json:"enabledEvents"`
@@ -6144,7 +6144,7 @@ type NotificationTargetList struct {
 // NotificationTargetUpdate Replaces a target's label, config, and enabled events; the kind is fixed at creation. `muted` and `minIntervalSeconds` are the exception to the whole-replace: omitting one keeps what the target holds, so a client that predates them cannot wake a destination somebody silenced on purpose just by renaming it.
 type NotificationTargetUpdate struct {
 	// Config The kind's delivery configuration, replaced whole.
-	Config map[string]interface{} `json:"config"`
+	Config map[string]any `json:"config"`
 
 	// EnabledEvents Catalog event names to deliver, under the same scope rules as creation.
 	EnabledEvents []string `json:"enabledEvents"`
@@ -6160,7 +6160,7 @@ type NotificationTargetUpdate struct {
 }
 
 // NspDocument A Navidrome smart playlist (NSP) document, carried verbatim: `name`, `comment`, `public`, one of the mutually exclusive `all` / `any` condition groups, `sort`, `order`, and `limit`. Free-form on purpose - the grammar is another server's, and pinning its shape here would make every change over there a breaking change over here. What WaxDeck does and does not read is described on the two operations that carry it.
-type NspDocument map[string]interface{}
+type NspDocument map[string]any
 
 // NspGap One part of a rule or an NSP document with no faithful counterpart on the other side.
 //
@@ -6191,7 +6191,7 @@ type NspGap struct {
 	Reason string `json:"reason"`
 
 	// Value The value this gap is about, where one is named, of whatever JSON type the rule or the document held. On a `sort` gap that drops a term, the term as a rule's sort writes it: `field` and `desc`.
-	Value interface{} `json:"value,omitempty"`
+	Value any `json:"value,omitempty"`
 }
 
 // NspGapKind Why this part has no counterpart. `field` and `operator` are the common two; `value` is a value outside the other side's domain (a rating that is not a whole number of stars); `shape` is a rule shape such as a negation that is not `notContains`; `sort`, `limit` and `entity` are the document's other clauses; `malformed` is import-only and means the document is broken rather than unmappable.
@@ -9249,7 +9249,7 @@ type ToolTask struct {
 	State string `json:"state"`
 
 	// Summary Task-type-specific detail, documented per type: some keys are there from the moment the task is queued, the rest once it has run, for example a migration import's match-and-write report. Shapes may grow fields. An `acquire` task carries `url` (the link it was given) and `source` (`video`, `playlist` or `channel`: how the link was taken) from the moment it is queued, and once it has run, `canceled` included, `entries` (the titles of the review entries it opened, in order) and `truncated` (true when the listing stopped at the two-hundred-item cap). A `genre-normalize` task carries `dryRun` from the moment it is queued, and an `import-` task `target` (the account it imports into, by display name, else username) and `dryRun`. A `health-fix` task carries `rule` from the moment it is queued, and once it has run `attempted`, `filled`, `failed` (item counts) and `skipped`, an object counting the items left alone by reason (`gone`, `locked`, `no match`, ...); a `path-mismatch` fix also carries `moved` (the items it moved), `held` (by hold code) and `jobPids` (the organize jobs that moved them). A `health-fix` task queued for chosen items also carries `scoped`, how many, from the moment it is queued. A `catalog-repair` task carries each step's count once that step has run, added up over its attempts and absent for a step none has reached: `sortKeysRewritten`, `orphansDeleted` (entities with no items deleted), `orphansPending` (those its last orphans step noted for the next repair), `artSourcesReclaimed`, `thumbnailsReclaimed`, `tagProvenanceReclaimed`, `strandedTagRowsReclaimed` and `searchRowsRebuilt` (entries written or dropped); `runs`, what each run of the task did: the steps it finished, in order, with `error` saying why a run stopped short and `handedOff` marking one a catalog hand-off cut short; and once it has run, `after`, the `CatalogConsistency` its closing check read. A canceled task's counts say what it did before it stopped.
-	Summary *map[string]interface{} `json:"summary,omitempty"`
+	Summary *map[string]any `json:"summary,omitempty"`
 
 	// Type The operation: `book-merge`, `book-split`, `cue-split`, `acquire`, `playlist-sync`, `genre-normalize`, `health-fix`, `catalog-repair`, or an `import-` migration (`import-jellyfin`, `import-subsonic`, ...). A string, not a closed enum.
 	Type string `json:"type"`
@@ -45948,7 +45948,7 @@ func (sh *strictHandler) CreateAcquisition(w http.ResponseWriter, r *http.Reques
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateAcquisition(ctx, request.(CreateAcquisitionRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -45974,7 +45974,7 @@ func (sh *strictHandler) ListAuditEvents(w http.ResponseWriter, r *http.Request,
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListAuditEvents(ctx, request.(ListAuditEventsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -45998,7 +45998,7 @@ func (sh *strictHandler) ListAuditEvents(w http.ResponseWriter, r *http.Request,
 func (sh *strictHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
 	var request ListBackupsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListBackups(ctx, request.(ListBackupsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46022,7 +46022,7 @@ func (sh *strictHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
 func (sh *strictHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 	var request CreateBackupRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateBackup(ctx, request.(CreateBackupRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46048,7 +46048,7 @@ func (sh *strictHandler) ImportBackup(w http.ResponseWriter, r *http.Request) {
 
 	request.Body = r.Body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ImportBackup(ctx, request.(ImportBackupRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46072,7 +46072,7 @@ func (sh *strictHandler) ImportBackup(w http.ResponseWriter, r *http.Request) {
 func (sh *strictHandler) CancelStagedRestore(w http.ResponseWriter, r *http.Request) {
 	var request CancelStagedRestoreRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CancelStagedRestore(ctx, request.(CancelStagedRestoreRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46096,7 +46096,7 @@ func (sh *strictHandler) CancelStagedRestore(w http.ResponseWriter, r *http.Requ
 func (sh *strictHandler) GetStagedRestore(w http.ResponseWriter, r *http.Request) {
 	var request GetStagedRestoreRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetStagedRestore(ctx, request.(GetStagedRestoreRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46122,7 +46122,7 @@ func (sh *strictHandler) DeleteBackup(w http.ResponseWriter, r *http.Request, ba
 
 	request.BackupId = backupId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeleteBackup(ctx, request.(DeleteBackupRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46148,7 +46148,7 @@ func (sh *strictHandler) GetBackup(w http.ResponseWriter, r *http.Request, backu
 
 	request.BackupId = backupId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetBackup(ctx, request.(GetBackupRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46174,7 +46174,7 @@ func (sh *strictHandler) DownloadBackup(w http.ResponseWriter, r *http.Request, 
 
 	request.BackupId = backupId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DownloadBackup(ctx, request.(DownloadBackupRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46200,7 +46200,7 @@ func (sh *strictHandler) StageRestore(w http.ResponseWriter, r *http.Request, ba
 
 	request.BackupId = backupId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.StageRestore(ctx, request.(StageRestoreRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46224,7 +46224,7 @@ func (sh *strictHandler) StageRestore(w http.ResponseWriter, r *http.Request, ba
 func (sh *strictHandler) GetCatalogConsistency(w http.ResponseWriter, r *http.Request) {
 	var request GetCatalogConsistencyRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetCatalogConsistency(ctx, request.(GetCatalogConsistencyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46248,7 +46248,7 @@ func (sh *strictHandler) GetCatalogConsistency(w http.ResponseWriter, r *http.Re
 func (sh *strictHandler) RepairCatalog(w http.ResponseWriter, r *http.Request) {
 	var request RepairCatalogRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RepairCatalog(ctx, request.(RepairCatalogRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46272,7 +46272,7 @@ func (sh *strictHandler) RepairCatalog(w http.ResponseWriter, r *http.Request) {
 func (sh *strictHandler) GetEnrichmentCache(w http.ResponseWriter, r *http.Request) {
 	var request GetEnrichmentCacheRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetEnrichmentCache(ctx, request.(GetEnrichmentCacheRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46303,7 +46303,7 @@ func (sh *strictHandler) PruneEnrichmentCache(w http.ResponseWriter, r *http.Req
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PruneEnrichmentCache(ctx, request.(PruneEnrichmentCacheRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46334,7 +46334,7 @@ func (sh *strictHandler) CreateGenreNormalization(w http.ResponseWriter, r *http
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateGenreNormalization(ctx, request.(CreateGenreNormalizationRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46358,7 +46358,7 @@ func (sh *strictHandler) CreateGenreNormalization(w http.ResponseWriter, r *http
 func (sh *strictHandler) GetGenreTree(w http.ResponseWriter, r *http.Request) {
 	var request GetGenreTreeRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetGenreTree(ctx, request.(GetGenreTreeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46389,7 +46389,7 @@ func (sh *strictHandler) PutGenreTree(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PutGenreTree(ctx, request.(PutGenreTreeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46420,7 +46420,7 @@ func (sh *strictHandler) CreateMigration(w http.ResponseWriter, r *http.Request)
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateMigration(ctx, request.(CreateMigrationRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46446,7 +46446,7 @@ func (sh *strictHandler) StageMigrationExport(w http.ResponseWriter, r *http.Req
 
 	request.Body = r.Body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.StageMigrationExport(ctx, request.(StageMigrationExportRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46472,7 +46472,7 @@ func (sh *strictHandler) DiscardMigrationExport(w http.ResponseWriter, r *http.R
 
 	request.ExportId = exportId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DiscardMigrationExport(ctx, request.(DiscardMigrationExportRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46496,7 +46496,7 @@ func (sh *strictHandler) DiscardMigrationExport(w http.ResponseWriter, r *http.R
 func (sh *strictHandler) ListServerNotificationTargets(w http.ResponseWriter, r *http.Request) {
 	var request ListServerNotificationTargetsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListServerNotificationTargets(ctx, request.(ListServerNotificationTargetsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46527,7 +46527,7 @@ func (sh *strictHandler) CreateServerNotificationTarget(w http.ResponseWriter, r
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateServerNotificationTarget(ctx, request.(CreateServerNotificationTargetRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46553,7 +46553,7 @@ func (sh *strictHandler) DeleteServerNotificationTarget(w http.ResponseWriter, r
 
 	request.TargetId = targetId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeleteServerNotificationTarget(ctx, request.(DeleteServerNotificationTargetRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46586,7 +46586,7 @@ func (sh *strictHandler) UpdateServerNotificationTarget(w http.ResponseWriter, r
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.UpdateServerNotificationTarget(ctx, request.(UpdateServerNotificationTargetRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46612,7 +46612,7 @@ func (sh *strictHandler) TestServerNotificationTarget(w http.ResponseWriter, r *
 
 	request.TargetId = targetId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.TestServerNotificationTarget(ctx, request.(TestServerNotificationTargetRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46636,7 +46636,7 @@ func (sh *strictHandler) TestServerNotificationTarget(w http.ResponseWriter, r *
 func (sh *strictHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 	var request ListSchedulesRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListSchedules(ctx, request.(ListSchedulesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46669,7 +46669,7 @@ func (sh *strictHandler) PutSchedule(w http.ResponseWriter, r *http.Request, kin
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PutSchedule(ctx, request.(PutScheduleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46693,7 +46693,7 @@ func (sh *strictHandler) PutSchedule(w http.ResponseWriter, r *http.Request, kin
 func (sh *strictHandler) GetScrobblingConfig(w http.ResponseWriter, r *http.Request) {
 	var request GetScrobblingConfigRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetScrobblingConfig(ctx, request.(GetScrobblingConfigRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46724,7 +46724,7 @@ func (sh *strictHandler) PutScrobblingConfig(w http.ResponseWriter, r *http.Requ
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PutScrobblingConfig(ctx, request.(PutScrobblingConfigRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46748,7 +46748,7 @@ func (sh *strictHandler) PutScrobblingConfig(w http.ResponseWriter, r *http.Requ
 func (sh *strictHandler) GetAdminSettings(w http.ResponseWriter, r *http.Request) {
 	var request GetAdminSettingsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetAdminSettings(ctx, request.(GetAdminSettingsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46779,7 +46779,7 @@ func (sh *strictHandler) PutAdminSettings(w http.ResponseWriter, r *http.Request
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PutAdminSettings(ctx, request.(PutAdminSettingsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46803,7 +46803,7 @@ func (sh *strictHandler) PutAdminSettings(w http.ResponseWriter, r *http.Request
 func (sh *strictHandler) GetThumbnailCache(w http.ResponseWriter, r *http.Request) {
 	var request GetThumbnailCacheRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetThumbnailCache(ctx, request.(GetThumbnailCacheRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46834,7 +46834,7 @@ func (sh *strictHandler) PruneThumbnailCache(w http.ResponseWriter, r *http.Requ
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PruneThumbnailCache(ctx, request.(PruneThumbnailCacheRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46858,7 +46858,7 @@ func (sh *strictHandler) PruneThumbnailCache(w http.ResponseWriter, r *http.Requ
 func (sh *strictHandler) GetTranscodingLimits(w http.ResponseWriter, r *http.Request) {
 	var request GetTranscodingLimitsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetTranscodingLimits(ctx, request.(GetTranscodingLimitsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46889,7 +46889,7 @@ func (sh *strictHandler) PutTranscodingLimits(w http.ResponseWriter, r *http.Req
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PutTranscodingLimits(ctx, request.(PutTranscodingLimitsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46913,7 +46913,7 @@ func (sh *strictHandler) PutTranscodingLimits(w http.ResponseWriter, r *http.Req
 func (sh *strictHandler) GetTranscodingActivity(w http.ResponseWriter, r *http.Request) {
 	var request GetTranscodingActivityRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetTranscodingActivity(ctx, request.(GetTranscodingActivityRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46939,7 +46939,7 @@ func (sh *strictHandler) ListTrash(w http.ResponseWriter, r *http.Request, param
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListTrash(ctx, request.(ListTrashRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46963,7 +46963,7 @@ func (sh *strictHandler) ListTrash(w http.ResponseWriter, r *http.Request, param
 func (sh *strictHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) {
 	var request EmptyTrashRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.EmptyTrash(ctx, request.(EmptyTrashRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -46989,7 +46989,7 @@ func (sh *strictHandler) PurgeTrashEntry(w http.ResponseWriter, r *http.Request,
 
 	request.TrashId = trashId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PurgeTrashEntry(ctx, request.(PurgeTrashEntryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47015,7 +47015,7 @@ func (sh *strictHandler) RestoreTrashEntry(w http.ResponseWriter, r *http.Reques
 
 	request.TrashId = trashId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RestoreTrashEntry(ctx, request.(RestoreTrashEntryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47041,7 +47041,7 @@ func (sh *strictHandler) GetAlbum(w http.ResponseWriter, r *http.Request, pid Pi
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetAlbum(ctx, request.(GetAlbumRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47067,7 +47067,7 @@ func (sh *strictHandler) GetAlbumPlayState(w http.ResponseWriter, r *http.Reques
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetAlbumPlayState(ctx, request.(GetAlbumPlayStateRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47100,7 +47100,7 @@ func (sh *strictHandler) SetAlbumRating(w http.ResponseWriter, r *http.Request, 
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetAlbumRating(ctx, request.(SetAlbumRatingRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47133,7 +47133,7 @@ func (sh *strictHandler) SetAlbumStar(w http.ResponseWriter, r *http.Request, pi
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetAlbumStar(ctx, request.(SetAlbumStarRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47159,7 +47159,7 @@ func (sh *strictHandler) GetArtistPlayState(w http.ResponseWriter, r *http.Reque
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetArtistPlayState(ctx, request.(GetArtistPlayStateRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47192,7 +47192,7 @@ func (sh *strictHandler) SetArtistRating(w http.ResponseWriter, r *http.Request,
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetArtistRating(ctx, request.(SetArtistRatingRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47225,7 +47225,7 @@ func (sh *strictHandler) SetArtistStar(w http.ResponseWriter, r *http.Request, p
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetArtistStar(ctx, request.(SetArtistStarRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47249,7 +47249,7 @@ func (sh *strictHandler) SetArtistStar(w http.ResponseWriter, r *http.Request, p
 func (sh *strictHandler) GetBootstrapStatus(w http.ResponseWriter, r *http.Request) {
 	var request GetBootstrapStatusRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetBootstrapStatus(ctx, request.(GetBootstrapStatusRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47280,7 +47280,7 @@ func (sh *strictHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.Bootstrap(ctx, request.(BootstrapRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47311,7 +47311,7 @@ func (sh *strictHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.Login(ctx, request.(LoginRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47335,7 +47335,7 @@ func (sh *strictHandler) Login(w http.ResponseWriter, r *http.Request) {
 func (sh *strictHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	var request LogoutRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.Logout(ctx, request.(LogoutRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47361,7 +47361,7 @@ func (sh *strictHandler) OidcCallback(w http.ResponseWriter, r *http.Request, pa
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.OidcCallback(ctx, request.(OidcCallbackRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47392,7 +47392,7 @@ func (sh *strictHandler) ExchangeOidcCode(w http.ResponseWriter, r *http.Request
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ExchangeOidcCode(ctx, request.(ExchangeOidcCodeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47416,7 +47416,7 @@ func (sh *strictHandler) ExchangeOidcCode(w http.ResponseWriter, r *http.Request
 func (sh *strictHandler) ListOidcProviders(w http.ResponseWriter, r *http.Request) {
 	var request ListOidcProvidersRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListOidcProviders(ctx, request.(ListOidcProvidersRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47442,7 +47442,7 @@ func (sh *strictHandler) StartOidc(w http.ResponseWriter, r *http.Request, param
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.StartOidc(ctx, request.(StartOidcRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47466,7 +47466,7 @@ func (sh *strictHandler) StartOidc(w http.ResponseWriter, r *http.Request, param
 func (sh *strictHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	var request RefreshTokenRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RefreshToken(ctx, request.(RefreshTokenRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47490,7 +47490,7 @@ func (sh *strictHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 func (sh *strictHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 	var request GetSessionRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetSession(ctx, request.(GetSessionRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47514,7 +47514,7 @@ func (sh *strictHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 func (sh *strictHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	var request ListSessionsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListSessions(ctx, request.(ListSessionsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47540,7 +47540,7 @@ func (sh *strictHandler) RevokeSession(w http.ResponseWriter, r *http.Request, s
 
 	request.SessionId = sessionId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RevokeSession(ctx, request.(RevokeSessionRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47573,7 +47573,7 @@ func (sh *strictHandler) RenameSession(w http.ResponseWriter, r *http.Request, s
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RenameSession(ctx, request.(RenameSessionRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47604,7 +47604,7 @@ func (sh *strictHandler) Signup(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.Signup(ctx, request.(SignupRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47630,7 +47630,7 @@ func (sh *strictHandler) ListBookSeries(w http.ResponseWriter, r *http.Request, 
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListBookSeries(ctx, request.(ListBookSeriesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47656,7 +47656,7 @@ func (sh *strictHandler) GetBook(w http.ResponseWriter, r *http.Request, pid Pid
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetBook(ctx, request.(GetBookRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47682,7 +47682,7 @@ func (sh *strictHandler) ListBookmarks(w http.ResponseWriter, r *http.Request, p
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListBookmarks(ctx, request.(ListBookmarksRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47715,7 +47715,7 @@ func (sh *strictHandler) CreateBookmark(w http.ResponseWriter, r *http.Request, 
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateBookmark(ctx, request.(CreateBookmarkRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47742,7 +47742,7 @@ func (sh *strictHandler) DeleteBookmark(w http.ResponseWriter, r *http.Request, 
 	request.Pid = pid
 	request.BookmarkId = bookmarkId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeleteBookmark(ctx, request.(DeleteBookmarkRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47775,7 +47775,7 @@ func (sh *strictHandler) SetBookChapters(w http.ResponseWriter, r *http.Request,
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetBookChapters(ctx, request.(SetBookChaptersRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47811,7 +47811,7 @@ func (sh *strictHandler) MergeBook(w http.ResponseWriter, r *http.Request, pid P
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.MergeBook(ctx, request.(MergeBookRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47837,7 +47837,7 @@ func (sh *strictHandler) GetBookResume(w http.ResponseWriter, r *http.Request, p
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetBookResume(ctx, request.(GetBookResumeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47870,7 +47870,7 @@ func (sh *strictHandler) PutBookSettings(w http.ResponseWriter, r *http.Request,
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PutBookSettings(ctx, request.(PutBookSettingsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47906,7 +47906,7 @@ func (sh *strictHandler) SplitBook(w http.ResponseWriter, r *http.Request, pid P
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SplitBook(ctx, request.(SplitBookRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47940,7 +47940,7 @@ func (sh *strictHandler) EditEntity(w http.ResponseWriter, r *http.Request, enti
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.EditEntity(ctx, request.(EditEntityRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47968,7 +47968,7 @@ func (sh *strictHandler) ClearEntityArtwork(w http.ResponseWriter, r *http.Reque
 	request.EntityPid = entityPid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ClearEntityArtwork(ctx, request.(ClearEntityArtworkRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -47998,7 +47998,7 @@ func (sh *strictHandler) SetEntityArtwork(w http.ResponseWriter, r *http.Request
 
 	request.Body = r.Body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetEntityArtwork(ctx, request.(SetEntityArtworkRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48026,7 +48026,7 @@ func (sh *strictHandler) GetEntityArtworkLock(w http.ResponseWriter, r *http.Req
 	request.EntityPid = entityPid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetEntityArtworkLock(ctx, request.(GetEntityArtworkLockRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48061,7 +48061,7 @@ func (sh *strictHandler) SetEntityArtworkLock(w http.ResponseWriter, r *http.Req
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetEntityArtworkLock(ctx, request.(SetEntityArtworkLockRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48088,7 +48088,7 @@ func (sh *strictHandler) GetEntityCuration(w http.ResponseWriter, r *http.Reques
 	request.EntityType = entityType
 	request.EntityPid = entityPid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetEntityCuration(ctx, request.(GetEntityCurationRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48122,7 +48122,7 @@ func (sh *strictHandler) RenameEntity(w http.ResponseWriter, r *http.Request, en
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RenameEntity(ctx, request.(RenameEntityRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48148,7 +48148,7 @@ func (sh *strictHandler) GetEpisode(w http.ResponseWriter, r *http.Request, pid 
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetEpisode(ctx, request.(GetEpisodeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48174,7 +48174,7 @@ func (sh *strictHandler) RemoveEpisodeDownload(w http.ResponseWriter, r *http.Re
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RemoveEpisodeDownload(ctx, request.(RemoveEpisodeDownloadRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48200,7 +48200,7 @@ func (sh *strictHandler) FetchEpisode(w http.ResponseWriter, r *http.Request, pi
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.FetchEpisode(ctx, request.(FetchEpisodeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48226,7 +48226,7 @@ func (sh *strictHandler) GetEpisodeTranscript(w http.ResponseWriter, r *http.Req
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetEpisodeTranscript(ctx, request.(GetEpisodeTranscriptRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48252,7 +48252,7 @@ func (sh *strictHandler) CaptureEpisodeTranscript(w http.ResponseWriter, r *http
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CaptureEpisodeTranscript(ctx, request.(CaptureEpisodeTranscriptRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48276,7 +48276,7 @@ func (sh *strictHandler) CaptureEpisodeTranscript(w http.ResponseWriter, r *http
 func (sh *strictHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 	var request GetHealthRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetHealth(ctx, request.(GetHealthRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48300,7 +48300,7 @@ func (sh *strictHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 func (sh *strictHandler) ListInvites(w http.ResponseWriter, r *http.Request) {
 	var request ListInvitesRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListInvites(ctx, request.(ListInvitesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48334,7 +48334,7 @@ func (sh *strictHandler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateInvite(ctx, request.(CreateInviteRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48360,7 +48360,7 @@ func (sh *strictHandler) RevokeInvite(w http.ResponseWriter, r *http.Request, in
 
 	request.InviteId = inviteId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RevokeInvite(ctx, request.(RevokeInviteRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48391,7 +48391,7 @@ func (sh *strictHandler) BulkEditMetadata(w http.ResponseWriter, r *http.Request
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.BulkEditMetadata(ctx, request.(BulkEditMetadataRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48422,7 +48422,7 @@ func (sh *strictHandler) SetItemKind(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetItemKind(ctx, request.(SetItemKindRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48448,7 +48448,7 @@ func (sh *strictHandler) GetItem(w http.ResponseWriter, r *http.Request, pid Pid
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetItem(ctx, request.(GetItemRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48475,7 +48475,7 @@ func (sh *strictHandler) ClearItemAcquisition(w http.ResponseWriter, r *http.Req
 	request.Pid = pid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ClearItemAcquisition(ctx, request.(ClearItemAcquisitionRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48508,7 +48508,7 @@ func (sh *strictHandler) SetItemAcquisition(w http.ResponseWriter, r *http.Reque
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetItemAcquisition(ctx, request.(SetItemAcquisitionRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48535,7 +48535,7 @@ func (sh *strictHandler) GetItemArt(w http.ResponseWriter, r *http.Request, pid 
 	request.Pid = pid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetItemArt(ctx, request.(GetItemArtRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48561,7 +48561,7 @@ func (sh *strictHandler) GetItemArtRoles(w http.ResponseWriter, r *http.Request,
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetItemArtRoles(ctx, request.(GetItemArtRolesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48588,7 +48588,7 @@ func (sh *strictHandler) ClearItemArtwork(w http.ResponseWriter, r *http.Request
 	request.Pid = pid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ClearItemArtwork(ctx, request.(ClearItemArtworkRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48617,7 +48617,7 @@ func (sh *strictHandler) SetItemArtwork(w http.ResponseWriter, r *http.Request, 
 
 	request.Body = r.Body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetItemArtwork(ctx, request.(SetItemArtworkRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48650,7 +48650,7 @@ func (sh *strictHandler) SetItemCredits(w http.ResponseWriter, r *http.Request, 
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetItemCredits(ctx, request.(SetItemCreditsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48686,7 +48686,7 @@ func (sh *strictHandler) DetachItem(w http.ResponseWriter, r *http.Request, pid 
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DetachItem(ctx, request.(DetachItemRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48712,7 +48712,7 @@ func (sh *strictHandler) GetDownloadInfo(w http.ResponseWriter, r *http.Request,
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetDownloadInfo(ctx, request.(GetDownloadInfoRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48745,7 +48745,7 @@ func (sh *strictHandler) EnrichItem(w http.ResponseWriter, r *http.Request, pid 
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.EnrichItem(ctx, request.(EnrichItemRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48778,7 +48778,7 @@ func (sh *strictHandler) PreviewEnrichItem(w http.ResponseWriter, r *http.Reques
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PreviewEnrichItem(ctx, request.(PreviewEnrichItemRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48804,7 +48804,7 @@ func (sh *strictHandler) GetItemFiles(w http.ResponseWriter, r *http.Request, pi
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetItemFiles(ctx, request.(GetItemFilesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48837,7 +48837,7 @@ func (sh *strictHandler) DeleteItemFiles(w http.ResponseWriter, r *http.Request,
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeleteItemFiles(ctx, request.(DeleteItemFilesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48870,7 +48870,7 @@ func (sh *strictHandler) SetItemLocks(w http.ResponseWriter, r *http.Request, pi
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetItemLocks(ctx, request.(SetItemLocksRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48897,7 +48897,7 @@ func (sh *strictHandler) ClearItemLyrics(w http.ResponseWriter, r *http.Request,
 	request.Pid = pid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ClearItemLyrics(ctx, request.(ClearItemLyricsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48923,7 +48923,7 @@ func (sh *strictHandler) GetItemLyrics(w http.ResponseWriter, r *http.Request, p
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetItemLyrics(ctx, request.(GetItemLyricsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48956,7 +48956,7 @@ func (sh *strictHandler) SetItemLyrics(w http.ResponseWriter, r *http.Request, p
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetItemLyrics(ctx, request.(SetItemLyricsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -48982,7 +48982,7 @@ func (sh *strictHandler) GetItemMetadata(w http.ResponseWriter, r *http.Request,
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetItemMetadata(ctx, request.(GetItemMetadataRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49015,7 +49015,7 @@ func (sh *strictHandler) EditItemMetadata(w http.ResponseWriter, r *http.Request
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.EditItemMetadata(ctx, request.(EditItemMetadataRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49048,7 +49048,7 @@ func (sh *strictHandler) CommitItemMetadata(w http.ResponseWriter, r *http.Reque
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CommitItemMetadata(ctx, request.(CommitItemMetadataRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49074,7 +49074,7 @@ func (sh *strictHandler) GetItemPermissions(w http.ResponseWriter, r *http.Reque
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetItemPermissions(ctx, request.(GetItemPermissionsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49101,7 +49101,7 @@ func (sh *strictHandler) GetPlayInfo(w http.ResponseWriter, r *http.Request, pid
 	request.Pid = pid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetPlayInfo(ctx, request.(GetPlayInfoRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49127,7 +49127,7 @@ func (sh *strictHandler) GetPlayState(w http.ResponseWriter, r *http.Request, pi
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetPlayState(ctx, request.(GetPlayStateRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49160,7 +49160,7 @@ func (sh *strictHandler) PutPlayState(w http.ResponseWriter, r *http.Request, pi
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PutPlayState(ctx, request.(PutPlayStateRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49193,7 +49193,7 @@ func (sh *strictHandler) SetPlayed(w http.ResponseWriter, r *http.Request, pid P
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetPlayed(ctx, request.(SetPlayedRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49226,7 +49226,7 @@ func (sh *strictHandler) SetRating(w http.ResponseWriter, r *http.Request, pid P
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetRating(ctx, request.(SetRatingRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49259,7 +49259,7 @@ func (sh *strictHandler) SetReleaseStatus(w http.ResponseWriter, r *http.Request
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetReleaseStatus(ctx, request.(SetReleaseStatusRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49285,7 +49285,7 @@ func (sh *strictHandler) RematchItem(w http.ResponseWriter, r *http.Request, pid
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RematchItem(ctx, request.(RematchItemRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49312,7 +49312,7 @@ func (sh *strictHandler) GetSimilarTracks(w http.ResponseWriter, r *http.Request
 	request.Pid = pid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetSimilarTracks(ctx, request.(GetSimilarTracksRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49339,7 +49339,7 @@ func (sh *strictHandler) GetSkipMap(w http.ResponseWriter, r *http.Request, pid 
 	request.Pid = pid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetSkipMap(ctx, request.(GetSkipMapRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49375,7 +49375,7 @@ func (sh *strictHandler) SplitCueRip(w http.ResponseWriter, r *http.Request, pid
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SplitCueRip(ctx, request.(SplitCueRipRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49408,7 +49408,7 @@ func (sh *strictHandler) SetStar(w http.ResponseWriter, r *http.Request, pid Pid
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetStar(ctx, request.(SetStarRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49436,7 +49436,7 @@ func (sh *strictHandler) ClearItemTag(w http.ResponseWriter, r *http.Request, pi
 	request.Key = key
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ClearItemTag(ctx, request.(ClearItemTagRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49470,7 +49470,7 @@ func (sh *strictHandler) SetItemTag(w http.ResponseWriter, r *http.Request, pid 
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetItemTag(ctx, request.(SetItemTagRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49497,7 +49497,7 @@ func (sh *strictHandler) GetWaveform(w http.ResponseWriter, r *http.Request, pid
 	request.Pid = pid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetWaveform(ctx, request.(GetWaveformRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49523,7 +49523,7 @@ func (sh *strictHandler) ListJobs(w http.ResponseWriter, r *http.Request, params
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListJobs(ctx, request.(ListJobsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49547,7 +49547,7 @@ func (sh *strictHandler) ListJobs(w http.ResponseWriter, r *http.Request, params
 func (sh *strictHandler) ClearFinishedJobs(w http.ResponseWriter, r *http.Request) {
 	var request ClearFinishedJobsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ClearFinishedJobs(ctx, request.(ClearFinishedJobsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49573,7 +49573,7 @@ func (sh *strictHandler) GetJob(w http.ResponseWriter, r *http.Request, pid Pid)
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetJob(ctx, request.(GetJobRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49599,7 +49599,7 @@ func (sh *strictHandler) CancelJob(w http.ResponseWriter, r *http.Request, pid P
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CancelJob(ctx, request.(CancelJobRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49625,7 +49625,7 @@ func (sh *strictHandler) ListLibraries(w http.ResponseWriter, r *http.Request, p
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListLibraries(ctx, request.(ListLibrariesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49656,7 +49656,7 @@ func (sh *strictHandler) CreateLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateLibrary(ctx, request.(CreateLibraryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49682,7 +49682,7 @@ func (sh *strictHandler) RemoveLibrary(w http.ResponseWriter, r *http.Request, p
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RemoveLibrary(ctx, request.(RemoveLibraryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49715,7 +49715,7 @@ func (sh *strictHandler) SetLibraryFolderFallback(w http.ResponseWriter, r *http
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetLibraryFolderFallback(ctx, request.(SetLibraryFolderFallbackRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49741,7 +49741,7 @@ func (sh *strictHandler) GetLibraryMatching(w http.ResponseWriter, r *http.Reque
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetLibraryMatching(ctx, request.(GetLibraryMatchingRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49774,7 +49774,7 @@ func (sh *strictHandler) SetLibraryMatching(w http.ResponseWriter, r *http.Reque
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetLibraryMatching(ctx, request.(SetLibraryMatchingRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49807,7 +49807,7 @@ func (sh *strictHandler) SetLibraryMedia(w http.ResponseWriter, r *http.Request,
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetLibraryMedia(ctx, request.(SetLibraryMediaRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49840,7 +49840,7 @@ func (sh *strictHandler) SetLibraryProfile(w http.ResponseWriter, r *http.Reques
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetLibraryProfile(ctx, request.(SetLibraryProfileRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49873,7 +49873,7 @@ func (sh *strictHandler) SetLibraryReadOnly(w http.ResponseWriter, r *http.Reque
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetLibraryReadOnly(ctx, request.(SetLibraryReadOnlyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49897,7 +49897,7 @@ func (sh *strictHandler) SetLibraryReadOnly(w http.ResponseWriter, r *http.Reque
 func (sh *strictHandler) AnalyzeLibrary(w http.ResponseWriter, r *http.Request) {
 	var request AnalyzeLibraryRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.AnalyzeLibrary(ctx, request.(AnalyzeLibraryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49923,7 +49923,7 @@ func (sh *strictHandler) BrowseList(w http.ResponseWriter, r *http.Request, para
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.BrowseList(ctx, request.(BrowseListRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49949,7 +49949,7 @@ func (sh *strictHandler) ListFileDiagnostics(w http.ResponseWriter, r *http.Requ
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListFileDiagnostics(ctx, request.(ListFileDiagnosticsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49975,7 +49975,7 @@ func (sh *strictHandler) GetDiagnosticSummary(w http.ResponseWriter, r *http.Req
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetDiagnosticSummary(ctx, request.(GetDiagnosticSummaryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -49999,7 +49999,7 @@ func (sh *strictHandler) GetDiagnosticSummary(w http.ResponseWriter, r *http.Req
 func (sh *strictHandler) ListDuplicates(w http.ResponseWriter, r *http.Request) {
 	var request ListDuplicatesRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListDuplicates(ctx, request.(ListDuplicatesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50030,7 +50030,7 @@ func (sh *strictHandler) MergeDuplicates(w http.ResponseWriter, r *http.Request)
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.MergeDuplicates(ctx, request.(MergeDuplicatesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50054,7 +50054,7 @@ func (sh *strictHandler) MergeDuplicates(w http.ResponseWriter, r *http.Request)
 func (sh *strictHandler) GetEnrichmentStatus(w http.ResponseWriter, r *http.Request) {
 	var request GetEnrichmentStatusRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetEnrichmentStatus(ctx, request.(GetEnrichmentStatusRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50088,7 +50088,7 @@ func (sh *strictHandler) RunEnrichment(w http.ResponseWriter, r *http.Request) {
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RunEnrichment(ctx, request.(RunEnrichmentRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50119,7 +50119,7 @@ func (sh *strictHandler) PutEnrichmentSources(w http.ResponseWriter, r *http.Req
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PutEnrichmentSources(ctx, request.(PutEnrichmentSourcesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50150,7 +50150,7 @@ func (sh *strictHandler) ResolveEntities(w http.ResponseWriter, r *http.Request)
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ResolveEntities(ctx, request.(ResolveEntitiesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50176,7 +50176,7 @@ func (sh *strictHandler) ListFacets(w http.ResponseWriter, r *http.Request, para
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListFacets(ctx, request.(ListFacetsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50202,7 +50202,7 @@ func (sh *strictHandler) ListEntityFolds(w http.ResponseWriter, r *http.Request,
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListEntityFolds(ctx, request.(ListEntityFoldsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50233,7 +50233,7 @@ func (sh *strictHandler) UnfoldEntities(w http.ResponseWriter, r *http.Request) 
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.UnfoldEntities(ctx, request.(UnfoldEntitiesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50257,7 +50257,7 @@ func (sh *strictHandler) UnfoldEntities(w http.ResponseWriter, r *http.Request) 
 func (sh *strictHandler) GetLibraryHealth(w http.ResponseWriter, r *http.Request) {
 	var request GetLibraryHealthRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetLibraryHealth(ctx, request.(GetLibraryHealthRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50288,7 +50288,7 @@ func (sh *strictHandler) FixHealthIssues(w http.ResponseWriter, r *http.Request)
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.FixHealthIssues(ctx, request.(FixHealthIssuesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50314,7 +50314,7 @@ func (sh *strictHandler) ListHealthIssues(w http.ResponseWriter, r *http.Request
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListHealthIssues(ctx, request.(ListHealthIssuesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50338,7 +50338,7 @@ func (sh *strictHandler) ListHealthIssues(w http.ResponseWriter, r *http.Request
 func (sh *strictHandler) SweepLibraryHealth(w http.ResponseWriter, r *http.Request) {
 	var request SweepLibraryHealthRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SweepLibraryHealth(ctx, request.(SweepLibraryHealthRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50364,7 +50364,7 @@ func (sh *strictHandler) ListItems(w http.ResponseWriter, r *http.Request, param
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListItems(ctx, request.(ListItemsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50395,7 +50395,7 @@ func (sh *strictHandler) DeleteLibraryItems(w http.ResponseWriter, r *http.Reque
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeleteLibraryItems(ctx, request.(DeleteLibraryItemsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50426,7 +50426,7 @@ func (sh *strictHandler) ResolveItems(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ResolveItems(ctx, request.(ResolveItemsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50460,7 +50460,7 @@ func (sh *strictHandler) RescanLibrary(w http.ResponseWriter, r *http.Request) {
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RescanLibrary(ctx, request.(RescanLibraryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50486,7 +50486,7 @@ func (sh *strictHandler) Search(w http.ResponseWriter, r *http.Request, params S
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.Search(ctx, request.(SearchRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50510,7 +50510,7 @@ func (sh *strictHandler) Search(w http.ResponseWriter, r *http.Request, params S
 func (sh *strictHandler) ListUpgrades(w http.ResponseWriter, r *http.Request) {
 	var request ListUpgradesRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListUpgrades(ctx, request.(ListUpgradesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50541,7 +50541,7 @@ func (sh *strictHandler) ResolveUpgrade(w http.ResponseWriter, r *http.Request) 
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ResolveUpgrade(ctx, request.(ResolveUpgradeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50572,7 +50572,7 @@ func (sh *strictHandler) ReportListens(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ReportListens(ctx, request.(ReportListensRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50596,7 +50596,7 @@ func (sh *strictHandler) ReportListens(w http.ResponseWriter, r *http.Request) {
 func (sh *strictHandler) GetMetadataFields(w http.ResponseWriter, r *http.Request) {
 	var request GetMetadataFieldsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetMetadataFields(ctx, request.(GetMetadataFieldsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50627,7 +50627,7 @@ func (sh *strictHandler) CreateInstantMix(w http.ResponseWriter, r *http.Request
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateInstantMix(ctx, request.(CreateInstantMixRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50653,7 +50653,7 @@ func (sh *strictHandler) GetSonicPath(w http.ResponseWriter, r *http.Request, pa
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetSonicPath(ctx, request.(GetSonicPathRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50677,7 +50677,7 @@ func (sh *strictHandler) GetSonicPath(w http.ResponseWriter, r *http.Request, pa
 func (sh *strictHandler) ListNotificationEvents(w http.ResponseWriter, r *http.Request) {
 	var request ListNotificationEventsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListNotificationEvents(ctx, request.(ListNotificationEventsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50708,7 +50708,7 @@ func (sh *strictHandler) ApplyOrganize(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ApplyOrganize(ctx, request.(ApplyOrganizeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50734,7 +50734,7 @@ func (sh *strictHandler) ListOrganizeHistory(w http.ResponseWriter, r *http.Requ
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListOrganizeHistory(ctx, request.(ListOrganizeHistoryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50765,7 +50765,7 @@ func (sh *strictHandler) PreviewOrganize(w http.ResponseWriter, r *http.Request)
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PreviewOrganize(ctx, request.(PreviewOrganizeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50789,7 +50789,7 @@ func (sh *strictHandler) PreviewOrganize(w http.ResponseWriter, r *http.Request)
 func (sh *strictHandler) ListOrganizeProfiles(w http.ResponseWriter, r *http.Request) {
 	var request ListOrganizeProfilesRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListOrganizeProfiles(ctx, request.(ListOrganizeProfilesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50820,7 +50820,7 @@ func (sh *strictHandler) PreviewOrganizeProfile(w http.ResponseWriter, r *http.R
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PreviewOrganizeProfile(ctx, request.(PreviewOrganizeProfileRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50846,7 +50846,7 @@ func (sh *strictHandler) DeleteOrganizeProfile(w http.ResponseWriter, r *http.Re
 
 	request.Name = name
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeleteOrganizeProfile(ctx, request.(DeleteOrganizeProfileRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50879,7 +50879,7 @@ func (sh *strictHandler) PutOrganizeProfile(w http.ResponseWriter, r *http.Reque
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PutOrganizeProfile(ctx, request.(PutOrganizeProfileRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50910,7 +50910,7 @@ func (sh *strictHandler) UndoOrganize(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.UndoOrganize(ctx, request.(UndoOrganizeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50941,7 +50941,7 @@ func (sh *strictHandler) ListPlayStates(w http.ResponseWriter, r *http.Request) 
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListPlayStates(ctx, request.(ListPlayStatesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50965,7 +50965,7 @@ func (sh *strictHandler) ListPlayStates(w http.ResponseWriter, r *http.Request) 
 func (sh *strictHandler) GetCastPreflight(w http.ResponseWriter, r *http.Request) {
 	var request GetCastPreflightRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetCastPreflight(ctx, request.(GetCastPreflightRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -50991,7 +50991,7 @@ func (sh *strictHandler) ProbeCastEndpoint(w http.ResponseWriter, r *http.Reques
 
 	request.EndpointId = endpointId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ProbeCastEndpoint(ctx, request.(ProbeCastEndpointRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51015,7 +51015,7 @@ func (sh *strictHandler) ProbeCastEndpoint(w http.ResponseWriter, r *http.Reques
 func (sh *strictHandler) ListPlayerEndpoints(w http.ResponseWriter, r *http.Request) {
 	var request ListPlayerEndpointsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListPlayerEndpoints(ctx, request.(ListPlayerEndpointsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51039,7 +51039,7 @@ func (sh *strictHandler) ListPlayerEndpoints(w http.ResponseWriter, r *http.Requ
 func (sh *strictHandler) ListPlaybackSessions(w http.ResponseWriter, r *http.Request) {
 	var request ListPlaybackSessionsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListPlaybackSessions(ctx, request.(ListPlaybackSessionsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51070,7 +51070,7 @@ func (sh *strictHandler) CreatePlaybackSession(w http.ResponseWriter, r *http.Re
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreatePlaybackSession(ctx, request.(CreatePlaybackSessionRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51094,7 +51094,7 @@ func (sh *strictHandler) CreatePlaybackSession(w http.ResponseWriter, r *http.Re
 func (sh *strictHandler) ListPlaybackSessionHistory(w http.ResponseWriter, r *http.Request) {
 	var request ListPlaybackSessionHistoryRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListPlaybackSessionHistory(ctx, request.(ListPlaybackSessionHistoryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51120,7 +51120,7 @@ func (sh *strictHandler) DeletePlaybackSession(w http.ResponseWriter, r *http.Re
 
 	request.SessionId = sessionId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeletePlaybackSession(ctx, request.(DeletePlaybackSessionRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51146,7 +51146,7 @@ func (sh *strictHandler) GetPlaybackSession(w http.ResponseWriter, r *http.Reque
 
 	request.SessionId = sessionId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetPlaybackSession(ctx, request.(GetPlaybackSessionRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51179,7 +51179,7 @@ func (sh *strictHandler) TransferPlaybackSession(w http.ResponseWriter, r *http.
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.TransferPlaybackSession(ctx, request.(TransferPlaybackSessionRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51210,7 +51210,7 @@ func (sh *strictHandler) CreateQueueTimeline(w http.ResponseWriter, r *http.Requ
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateQueueTimeline(ctx, request.(CreateQueueTimelineRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51236,7 +51236,7 @@ func (sh *strictHandler) ReleaseQueueTimeline(w http.ResponseWriter, r *http.Req
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ReleaseQueueTimeline(ctx, request.(ReleaseQueueTimelineRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51262,7 +51262,7 @@ func (sh *strictHandler) ListPlaylists(w http.ResponseWriter, r *http.Request, p
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListPlaylists(ctx, request.(ListPlaylistsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51293,7 +51293,7 @@ func (sh *strictHandler) CreatePlaylist(w http.ResponseWriter, r *http.Request) 
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreatePlaylist(ctx, request.(CreatePlaylistRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51324,7 +51324,7 @@ func (sh *strictHandler) ImportPlaylist(w http.ResponseWriter, r *http.Request) 
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ImportPlaylist(ctx, request.(ImportPlaylistRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51355,7 +51355,7 @@ func (sh *strictHandler) ImportPlaylistM3u(w http.ResponseWriter, r *http.Reques
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ImportPlaylistM3u(ctx, request.(ImportPlaylistM3uRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51386,7 +51386,7 @@ func (sh *strictHandler) PreviewPlaylistM3u(w http.ResponseWriter, r *http.Reque
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PreviewPlaylistM3u(ctx, request.(PreviewPlaylistM3uRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51419,7 +51419,7 @@ func (sh *strictHandler) ImportPlaylistNsp(w http.ResponseWriter, r *http.Reques
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ImportPlaylistNsp(ctx, request.(ImportPlaylistNspRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51450,7 +51450,7 @@ func (sh *strictHandler) ReportPlaylistNspImport(w http.ResponseWriter, r *http.
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ReportPlaylistNspImport(ctx, request.(ReportPlaylistNspImportRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51483,7 +51483,7 @@ func (sh *strictHandler) PreviewSmartRule(w http.ResponseWriter, r *http.Request
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PreviewSmartRule(ctx, request.(PreviewSmartRuleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51507,7 +51507,7 @@ func (sh *strictHandler) PreviewSmartRule(w http.ResponseWriter, r *http.Request
 func (sh *strictHandler) GetRuleFields(w http.ResponseWriter, r *http.Request) {
 	var request GetRuleFieldsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetRuleFields(ctx, request.(GetRuleFieldsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51533,7 +51533,7 @@ func (sh *strictHandler) DeletePlaylist(w http.ResponseWriter, r *http.Request, 
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeletePlaylist(ctx, request.(DeletePlaylistRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51559,7 +51559,7 @@ func (sh *strictHandler) GetPlaylist(w http.ResponseWriter, r *http.Request, pid
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetPlaylist(ctx, request.(GetPlaylistRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51592,7 +51592,7 @@ func (sh *strictHandler) UpdatePlaylist(w http.ResponseWriter, r *http.Request, 
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.UpdatePlaylist(ctx, request.(UpdatePlaylistRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51619,7 +51619,7 @@ func (sh *strictHandler) ListPlaylistItems(w http.ResponseWriter, r *http.Reques
 	request.Pid = pid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListPlaylistItems(ctx, request.(ListPlaylistItemsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51652,7 +51652,7 @@ func (sh *strictHandler) AddPlaylistItems(w http.ResponseWriter, r *http.Request
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.AddPlaylistItems(ctx, request.(AddPlaylistItemsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51685,7 +51685,7 @@ func (sh *strictHandler) ReplacePlaylistItems(w http.ResponseWriter, r *http.Req
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ReplacePlaylistItems(ctx, request.(ReplacePlaylistItemsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51713,7 +51713,7 @@ func (sh *strictHandler) RemovePlaylistItemAt(w http.ResponseWriter, r *http.Req
 	request.Position = position
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RemovePlaylistItemAt(ctx, request.(RemovePlaylistItemAtRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51739,7 +51739,7 @@ func (sh *strictHandler) ExportPlaylistM3u(w http.ResponseWriter, r *http.Reques
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ExportPlaylistM3u(ctx, request.(ExportPlaylistM3uRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51766,7 +51766,7 @@ func (sh *strictHandler) ExportPlaylistNsp(w http.ResponseWriter, r *http.Reques
 	request.Pid = pid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ExportPlaylistNsp(ctx, request.(ExportPlaylistNspRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51792,7 +51792,7 @@ func (sh *strictHandler) ReportPlaylistNspExport(w http.ResponseWriter, r *http.
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ReportPlaylistNspExport(ctx, request.(ReportPlaylistNspExportRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51818,7 +51818,7 @@ func (sh *strictHandler) ExportPlaylistPortable(w http.ResponseWriter, r *http.R
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ExportPlaylistPortable(ctx, request.(ExportPlaylistPortableRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51844,7 +51844,7 @@ func (sh *strictHandler) UnbindPlaylistSource(w http.ResponseWriter, r *http.Req
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.UnbindPlaylistSource(ctx, request.(UnbindPlaylistSourceRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51870,7 +51870,7 @@ func (sh *strictHandler) GetPlaylistSource(w http.ResponseWriter, r *http.Reques
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetPlaylistSource(ctx, request.(GetPlaylistSourceRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51903,7 +51903,7 @@ func (sh *strictHandler) SetPlaylistSource(w http.ResponseWriter, r *http.Reques
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetPlaylistSource(ctx, request.(SetPlaylistSourceRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51939,7 +51939,7 @@ func (sh *strictHandler) PreviewPlaylistSync(w http.ResponseWriter, r *http.Requ
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PreviewPlaylistSync(ctx, request.(PreviewPlaylistSyncRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51965,7 +51965,7 @@ func (sh *strictHandler) SyncPlaylistSource(w http.ResponseWriter, r *http.Reque
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SyncPlaylistSource(ctx, request.(SyncPlaylistSourceRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -51991,7 +51991,7 @@ func (sh *strictHandler) ListSubscriptions(w http.ResponseWriter, r *http.Reques
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListSubscriptions(ctx, request.(ListSubscriptionsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52022,7 +52022,7 @@ func (sh *strictHandler) SubscribePodcast(w http.ResponseWriter, r *http.Request
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SubscribePodcast(ctx, request.(SubscribePodcastRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52048,7 +52048,7 @@ func (sh *strictHandler) SearchPodcastDirectory(w http.ResponseWriter, r *http.R
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SearchPodcastDirectory(ctx, request.(SearchPodcastDirectoryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52074,7 +52074,7 @@ func (sh *strictHandler) ListSubscribedEpisodes(w http.ResponseWriter, r *http.R
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListSubscribedEpisodes(ctx, request.(ListSubscribedEpisodesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52098,7 +52098,7 @@ func (sh *strictHandler) ListSubscribedEpisodes(w http.ResponseWriter, r *http.R
 func (sh *strictHandler) ExportOpml(w http.ResponseWriter, r *http.Request) {
 	var request ExportOpmlRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ExportOpml(ctx, request.(ExportOpmlRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52129,7 +52129,7 @@ func (sh *strictHandler) ImportOpml(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ImportOpml(ctx, request.(ImportOpmlRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52156,7 +52156,7 @@ func (sh *strictHandler) UnsubscribePodcast(w http.ResponseWriter, r *http.Reque
 	request.Pid = pid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.UnsubscribePodcast(ctx, request.(UnsubscribePodcastRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52182,7 +52182,7 @@ func (sh *strictHandler) GetPodcast(w http.ResponseWriter, r *http.Request, pid 
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetPodcast(ctx, request.(GetPodcastRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52209,7 +52209,7 @@ func (sh *strictHandler) ListEpisodes(w http.ResponseWriter, r *http.Request, pi
 	request.Pid = pid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListEpisodes(ctx, request.(ListEpisodesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52235,7 +52235,7 @@ func (sh *strictHandler) RefreshPodcast(w http.ResponseWriter, r *http.Request, 
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RefreshPodcast(ctx, request.(RefreshPodcastRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52268,7 +52268,7 @@ func (sh *strictHandler) PutSubscriptionSettings(w http.ResponseWriter, r *http.
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PutSubscriptionSettings(ctx, request.(PutSubscriptionSettingsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52294,7 +52294,7 @@ func (sh *strictHandler) SearchRadioDirectory(w http.ResponseWriter, r *http.Req
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SearchRadioDirectory(ctx, request.(SearchRadioDirectoryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52320,7 +52320,7 @@ func (sh *strictHandler) ListRadioSavedSongs(w http.ResponseWriter, r *http.Requ
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListRadioSavedSongs(ctx, request.(ListRadioSavedSongsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52351,7 +52351,7 @@ func (sh *strictHandler) SaveRadioSong(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SaveRadioSong(ctx, request.(SaveRadioSongRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52377,7 +52377,7 @@ func (sh *strictHandler) DeleteRadioSavedSong(w http.ResponseWriter, r *http.Req
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeleteRadioSavedSong(ctx, request.(DeleteRadioSavedSongRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52404,7 +52404,7 @@ func (sh *strictHandler) GetRadioSavedSongArt(w http.ResponseWriter, r *http.Req
 	request.Pid = pid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetRadioSavedSongArt(ctx, request.(GetRadioSavedSongArtRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52428,7 +52428,7 @@ func (sh *strictHandler) GetRadioSavedSongArt(w http.ResponseWriter, r *http.Req
 func (sh *strictHandler) ListRadioStations(w http.ResponseWriter, r *http.Request) {
 	var request ListRadioStationsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListRadioStations(ctx, request.(ListRadioStationsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52459,7 +52459,7 @@ func (sh *strictHandler) CreateRadioStation(w http.ResponseWriter, r *http.Reque
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateRadioStation(ctx, request.(CreateRadioStationRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52485,7 +52485,7 @@ func (sh *strictHandler) DeleteRadioStation(w http.ResponseWriter, r *http.Reque
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeleteRadioStation(ctx, request.(DeleteRadioStationRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52511,7 +52511,7 @@ func (sh *strictHandler) GetRadioStation(w http.ResponseWriter, r *http.Request,
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetRadioStation(ctx, request.(GetRadioStationRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52544,7 +52544,7 @@ func (sh *strictHandler) UpdateRadioStation(w http.ResponseWriter, r *http.Reque
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.UpdateRadioStation(ctx, request.(UpdateRadioStationRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52571,7 +52571,7 @@ func (sh *strictHandler) GetRadioStationLogo(w http.ResponseWriter, r *http.Requ
 	request.Pid = pid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetRadioStationLogo(ctx, request.(GetRadioStationLogoRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52598,7 +52598,7 @@ func (sh *strictHandler) GetRadioNowPlayingArt(w http.ResponseWriter, r *http.Re
 	request.Pid = pid
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetRadioNowPlayingArt(ctx, request.(GetRadioNowPlayingArtRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52624,7 +52624,7 @@ func (sh *strictHandler) GetRadioPlayInfo(w http.ResponseWriter, r *http.Request
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetRadioPlayInfo(ctx, request.(GetRadioPlayInfoRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52655,7 +52655,7 @@ func (sh *strictHandler) DecideReviewBulk(w http.ResponseWriter, r *http.Request
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DecideReviewBulk(ctx, request.(DecideReviewBulkRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52681,7 +52681,7 @@ func (sh *strictHandler) ListReviewQueue(w http.ResponseWriter, r *http.Request,
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListReviewQueue(ctx, request.(ListReviewQueueRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52707,7 +52707,7 @@ func (sh *strictHandler) GetReviewEntry(w http.ResponseWriter, r *http.Request, 
 
 	request.EntryId = entryId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetReviewEntry(ctx, request.(GetReviewEntryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52740,7 +52740,7 @@ func (sh *strictHandler) DecideReviewEntry(w http.ResponseWriter, r *http.Reques
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DecideReviewEntry(ctx, request.(DecideReviewEntryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52776,7 +52776,7 @@ func (sh *strictHandler) ReidentifyReviewEntry(w http.ResponseWriter, r *http.Re
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ReidentifyReviewEntry(ctx, request.(ReidentifyReviewEntryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52802,7 +52802,7 @@ func (sh *strictHandler) RevertReviewEntry(w http.ResponseWriter, r *http.Reques
 
 	request.EntryId = entryId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RevertReviewEntry(ctx, request.(RevertReviewEntryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52826,7 +52826,7 @@ func (sh *strictHandler) RevertReviewEntry(w http.ResponseWriter, r *http.Reques
 func (sh *strictHandler) GetReviewStats(w http.ResponseWriter, r *http.Request) {
 	var request GetReviewStatsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetReviewStats(ctx, request.(GetReviewStatsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52852,7 +52852,7 @@ func (sh *strictHandler) LastfmCallback(w http.ResponseWriter, r *http.Request, 
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.LastfmCallback(ctx, request.(LastfmCallbackRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52878,7 +52878,7 @@ func (sh *strictHandler) GetBookSeries(w http.ResponseWriter, r *http.Request, p
 
 	request.Pid = pid
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetBookSeries(ctx, request.(GetBookSeriesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52904,7 +52904,7 @@ func (sh *strictHandler) ListShares(w http.ResponseWriter, r *http.Request, para
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListShares(ctx, request.(ListSharesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52935,7 +52935,7 @@ func (sh *strictHandler) CreateShare(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateShare(ctx, request.(CreateShareRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52961,7 +52961,7 @@ func (sh *strictHandler) RevokeShare(w http.ResponseWriter, r *http.Request, sha
 
 	request.ShareId = shareId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RevokeShare(ctx, request.(RevokeShareRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -52992,7 +52992,7 @@ func (sh *strictHandler) ReportEmbeddings(w http.ResponseWriter, r *http.Request
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ReportEmbeddings(ctx, request.(ReportEmbeddingsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53016,7 +53016,7 @@ func (sh *strictHandler) ReportEmbeddings(w http.ResponseWriter, r *http.Request
 func (sh *strictHandler) GetSimilarityStatus(w http.ResponseWriter, r *http.Request) {
 	var request GetSimilarityStatusRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetSimilarityStatus(ctx, request.(GetSimilarityStatusRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53042,7 +53042,7 @@ func (sh *strictHandler) PullSimilarityWork(w http.ResponseWriter, r *http.Reque
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PullSimilarityWork(ctx, request.(PullSimilarityWorkRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53066,7 +53066,7 @@ func (sh *strictHandler) PullSimilarityWork(w http.ResponseWriter, r *http.Reque
 func (sh *strictHandler) ListStarredEntities(w http.ResponseWriter, r *http.Request) {
 	var request ListStarredEntitiesRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListStarredEntities(ctx, request.(ListStarredEntitiesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53092,7 +53092,7 @@ func (sh *strictHandler) GetListeningHeatmap(w http.ResponseWriter, r *http.Requ
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetListeningHeatmap(ctx, request.(GetListeningHeatmapRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53118,7 +53118,7 @@ func (sh *strictHandler) GetListeningStats(w http.ResponseWriter, r *http.Reques
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetListeningStats(ctx, request.(GetListeningStatsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53144,7 +53144,7 @@ func (sh *strictHandler) GetServerYearInReview(w http.ResponseWriter, r *http.Re
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetServerYearInReview(ctx, request.(GetServerYearInReviewRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53170,7 +53170,7 @@ func (sh *strictHandler) ListListenLog(w http.ResponseWriter, r *http.Request, p
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListListenLog(ctx, request.(ListListenLogRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53196,7 +53196,7 @@ func (sh *strictHandler) GetTopList(w http.ResponseWriter, r *http.Request, para
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetTopList(ctx, request.(GetTopListRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53222,7 +53222,7 @@ func (sh *strictHandler) GetYearInReview(w http.ResponseWriter, r *http.Request,
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetYearInReview(ctx, request.(GetYearInReviewRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53248,7 +53248,7 @@ func (sh *strictHandler) SyncCatalog(w http.ResponseWriter, r *http.Request, par
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SyncCatalog(ctx, request.(SyncCatalogRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53279,7 +53279,7 @@ func (sh *strictHandler) SyncCatalogRemoved(w http.ResponseWriter, r *http.Reque
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SyncCatalogRemoved(ctx, request.(SyncCatalogRemovedRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53305,7 +53305,7 @@ func (sh *strictHandler) SyncServer(w http.ResponseWriter, r *http.Request, para
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SyncServer(ctx, request.(SyncServerRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53331,7 +53331,7 @@ func (sh *strictHandler) ListToolTasks(w http.ResponseWriter, r *http.Request, p
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListToolTasks(ctx, request.(ListToolTasksRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53365,7 +53365,7 @@ func (sh *strictHandler) ClearFinishedToolTasks(w http.ResponseWriter, r *http.R
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ClearFinishedToolTasks(ctx, request.(ClearFinishedToolTasksRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53391,7 +53391,7 @@ func (sh *strictHandler) DeleteToolTask(w http.ResponseWriter, r *http.Request, 
 
 	request.TaskId = taskId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeleteToolTask(ctx, request.(DeleteToolTaskRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53417,7 +53417,7 @@ func (sh *strictHandler) GetToolTask(w http.ResponseWriter, r *http.Request, tas
 
 	request.TaskId = taskId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetToolTask(ctx, request.(GetToolTaskRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53443,7 +53443,7 @@ func (sh *strictHandler) CancelToolTask(w http.ResponseWriter, r *http.Request, 
 
 	request.TaskId = taskId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CancelToolTask(ctx, request.(CancelToolTaskRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53469,7 +53469,7 @@ func (sh *strictHandler) StreamToolTaskEvents(w http.ResponseWriter, r *http.Req
 
 	request.TaskId = taskId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.StreamToolTaskEvents(ctx, request.(StreamToolTaskEventsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53495,7 +53495,7 @@ func (sh *strictHandler) ListUploads(w http.ResponseWriter, r *http.Request, par
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListUploads(ctx, request.(ListUploadsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53526,7 +53526,7 @@ func (sh *strictHandler) CreateUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateUpload(ctx, request.(CreateUploadRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53557,7 +53557,7 @@ func (sh *strictHandler) CreateUploadBatch(w http.ResponseWriter, r *http.Reques
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateUploadBatch(ctx, request.(CreateUploadBatchRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53583,7 +53583,7 @@ func (sh *strictHandler) CompleteUploadBatch(w http.ResponseWriter, r *http.Requ
 
 	request.BatchId = batchId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CompleteUploadBatch(ctx, request.(CompleteUploadBatchRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53607,7 +53607,7 @@ func (sh *strictHandler) CompleteUploadBatch(w http.ResponseWriter, r *http.Requ
 func (sh *strictHandler) ListUploadTargets(w http.ResponseWriter, r *http.Request) {
 	var request ListUploadTargetsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListUploadTargets(ctx, request.(ListUploadTargetsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53633,7 +53633,7 @@ func (sh *strictHandler) DeleteUpload(w http.ResponseWriter, r *http.Request, up
 
 	request.UploadId = uploadId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeleteUpload(ctx, request.(DeleteUploadRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53659,7 +53659,7 @@ func (sh *strictHandler) GetUpload(w http.ResponseWriter, r *http.Request, uploa
 
 	request.UploadId = uploadId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetUpload(ctx, request.(GetUploadRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53685,7 +53685,7 @@ func (sh *strictHandler) CompleteUpload(w http.ResponseWriter, r *http.Request, 
 
 	request.UploadId = uploadId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CompleteUpload(ctx, request.(CompleteUploadRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53714,7 +53714,7 @@ func (sh *strictHandler) PutUploadData(w http.ResponseWriter, r *http.Request, u
 
 	request.Body = r.Body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PutUploadData(ctx, request.(PutUploadDataRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53740,7 +53740,7 @@ func (sh *strictHandler) ListUsers(w http.ResponseWriter, r *http.Request, param
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListUsers(ctx, request.(ListUsersRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53771,7 +53771,7 @@ func (sh *strictHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateUser(ctx, request.(CreateUserRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53795,7 +53795,7 @@ func (sh *strictHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 func (sh *strictHandler) ListAppPasswords(w http.ResponseWriter, r *http.Request) {
 	var request ListAppPasswordsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListAppPasswords(ctx, request.(ListAppPasswordsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53826,7 +53826,7 @@ func (sh *strictHandler) CreateAppPassword(w http.ResponseWriter, r *http.Reques
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateAppPassword(ctx, request.(CreateAppPasswordRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53852,7 +53852,7 @@ func (sh *strictHandler) RevokeAppPassword(w http.ResponseWriter, r *http.Reques
 
 	request.AppPasswordId = appPasswordId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RevokeAppPassword(ctx, request.(RevokeAppPasswordRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53876,7 +53876,7 @@ func (sh *strictHandler) RevokeAppPassword(w http.ResponseWriter, r *http.Reques
 func (sh *strictHandler) ListMyNotificationTargets(w http.ResponseWriter, r *http.Request) {
 	var request ListMyNotificationTargetsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListMyNotificationTargets(ctx, request.(ListMyNotificationTargetsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53907,7 +53907,7 @@ func (sh *strictHandler) CreateMyNotificationTarget(w http.ResponseWriter, r *ht
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreateMyNotificationTarget(ctx, request.(CreateMyNotificationTargetRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53933,7 +53933,7 @@ func (sh *strictHandler) DeleteMyNotificationTarget(w http.ResponseWriter, r *ht
 
 	request.TargetId = targetId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeleteMyNotificationTarget(ctx, request.(DeleteMyNotificationTargetRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53966,7 +53966,7 @@ func (sh *strictHandler) UpdateMyNotificationTarget(w http.ResponseWriter, r *ht
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.UpdateMyNotificationTarget(ctx, request.(UpdateMyNotificationTargetRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -53992,7 +53992,7 @@ func (sh *strictHandler) TestMyNotificationTarget(w http.ResponseWriter, r *http
 
 	request.TargetId = targetId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.TestMyNotificationTarget(ctx, request.(TestMyNotificationTargetRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54018,7 +54018,7 @@ func (sh *strictHandler) ClearMyNotifications(w http.ResponseWriter, r *http.Req
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ClearMyNotifications(ctx, request.(ClearMyNotificationsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54044,7 +54044,7 @@ func (sh *strictHandler) ListMyNotifications(w http.ResponseWriter, r *http.Requ
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListMyNotifications(ctx, request.(ListMyNotificationsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54078,7 +54078,7 @@ func (sh *strictHandler) MarkMyNotificationsRead(w http.ResponseWriter, r *http.
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.MarkMyNotificationsRead(ctx, request.(MarkMyNotificationsReadRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54104,7 +54104,7 @@ func (sh *strictHandler) DeleteMyNotification(w http.ResponseWriter, r *http.Req
 
 	request.NotificationId = notificationId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeleteMyNotification(ctx, request.(DeleteMyNotificationRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54128,7 +54128,7 @@ func (sh *strictHandler) DeleteMyNotification(w http.ResponseWriter, r *http.Req
 func (sh *strictHandler) GetPrefs(w http.ResponseWriter, r *http.Request) {
 	var request GetPrefsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetPrefs(ctx, request.(GetPrefsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54159,7 +54159,7 @@ func (sh *strictHandler) PutPrefs(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PutPrefs(ctx, request.(PutPrefsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54183,7 +54183,7 @@ func (sh *strictHandler) PutPrefs(w http.ResponseWriter, r *http.Request) {
 func (sh *strictHandler) DeleteAllPushRegistrations(w http.ResponseWriter, r *http.Request) {
 	var request DeleteAllPushRegistrationsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeleteAllPushRegistrations(ctx, request.(DeleteAllPushRegistrationsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54207,7 +54207,7 @@ func (sh *strictHandler) DeleteAllPushRegistrations(w http.ResponseWriter, r *ht
 func (sh *strictHandler) ListPushRegistrations(w http.ResponseWriter, r *http.Request) {
 	var request ListPushRegistrationsRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListPushRegistrations(ctx, request.(ListPushRegistrationsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54238,7 +54238,7 @@ func (sh *strictHandler) CreatePushRegistration(w http.ResponseWriter, r *http.R
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.CreatePushRegistration(ctx, request.(CreatePushRegistrationRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54264,7 +54264,7 @@ func (sh *strictHandler) DeletePushRegistration(w http.ResponseWriter, r *http.R
 
 	request.RegistrationId = registrationId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeletePushRegistration(ctx, request.(DeletePushRegistrationRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54288,7 +54288,7 @@ func (sh *strictHandler) DeletePushRegistration(w http.ResponseWriter, r *http.R
 func (sh *strictHandler) ListScrobblers(w http.ResponseWriter, r *http.Request) {
 	var request ListScrobblersRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListScrobblers(ctx, request.(ListScrobblersRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54312,7 +54312,7 @@ func (sh *strictHandler) ListScrobblers(w http.ResponseWriter, r *http.Request) 
 func (sh *strictHandler) DisconnectLastfm(w http.ResponseWriter, r *http.Request) {
 	var request DisconnectLastfmRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DisconnectLastfm(ctx, request.(DisconnectLastfmRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54336,7 +54336,7 @@ func (sh *strictHandler) DisconnectLastfm(w http.ResponseWriter, r *http.Request
 func (sh *strictHandler) StartLastfmConnect(w http.ResponseWriter, r *http.Request) {
 	var request StartLastfmConnectRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.StartLastfmConnect(ctx, request.(StartLastfmConnectRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54360,7 +54360,7 @@ func (sh *strictHandler) StartLastfmConnect(w http.ResponseWriter, r *http.Reque
 func (sh *strictHandler) DisconnectListenBrainz(w http.ResponseWriter, r *http.Request) {
 	var request DisconnectListenBrainzRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DisconnectListenBrainz(ctx, request.(DisconnectListenBrainzRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54391,7 +54391,7 @@ func (sh *strictHandler) ConnectListenBrainz(w http.ResponseWriter, r *http.Requ
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ConnectListenBrainz(ctx, request.(ConnectListenBrainzRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54417,7 +54417,7 @@ func (sh *strictHandler) ListSignupRequests(w http.ResponseWriter, r *http.Reque
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ListSignupRequests(ctx, request.(ListSignupRequestsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54453,7 +54453,7 @@ func (sh *strictHandler) ApproveSignupRequest(w http.ResponseWriter, r *http.Req
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ApproveSignupRequest(ctx, request.(ApproveSignupRequestRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54479,7 +54479,7 @@ func (sh *strictHandler) RejectSignupRequest(w http.ResponseWriter, r *http.Requ
 
 	request.UserId = userId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RejectSignupRequest(ctx, request.(RejectSignupRequestRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54506,7 +54506,7 @@ func (sh *strictHandler) DeleteUser(w http.ResponseWriter, r *http.Request, user
 	request.UserId = userId
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.DeleteUser(ctx, request.(DeleteUserRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54532,7 +54532,7 @@ func (sh *strictHandler) GetUser(w http.ResponseWriter, r *http.Request, userId 
 
 	request.UserId = userId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetUser(ctx, request.(GetUserRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54565,7 +54565,7 @@ func (sh *strictHandler) UpdateUser(w http.ResponseWriter, r *http.Request, user
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.UpdateUser(ctx, request.(UpdateUserRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54598,7 +54598,7 @@ func (sh *strictHandler) SetPassword(w http.ResponseWriter, r *http.Request, use
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.SetPassword(ctx, request.(SetPasswordRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -54624,7 +54624,7 @@ func (sh *strictHandler) RevokeUserSessions(w http.ResponseWriter, r *http.Reque
 
 	request.UserId = userId
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RevokeUserSessions(ctx, request.(RevokeUserSessionsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {

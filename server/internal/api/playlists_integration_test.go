@@ -1050,7 +1050,7 @@ func TestPlaylistNspImportRefusalDedupesAndBounds(t *testing.T) {
 	h := newHarness(t)
 
 	nodes := make([]any, 0, 40)
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		nodes = append(nodes, map[string]any{"gt": map[string]any{"bitrate": 128 + i}})
 	}
 	resp := h.postJSON(t, "/api/v1/playlists/nsp", map[string]any{"name": "x", "all": nodes})
@@ -1703,7 +1703,7 @@ func TestPlaylistNspImportReportDedupesAndBounds(t *testing.T) {
 	h := newHarness(t)
 
 	nodes := make([]any, 0, 200)
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		nodes = append(nodes, map[string]any{"gt": map[string]any{"bitrate": 128 + i}})
 	}
 	resp := h.postJSON(t, "/api/v1/playlists/nsp/report", map[string]any{"name": "x", "all": nodes})

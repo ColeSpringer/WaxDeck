@@ -1,7 +1,6 @@
 package events
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"slices"
@@ -136,8 +135,7 @@ func TestHubFansRadioOutAndRespectsTheSubscription(t *testing.T) {
 	radioOnly := h.Register("u1", "se-u1", []string{TopicRadio})
 	catalogOnly := h.Register("u2", "se-u2", []string{TopicCatalog})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go h.Run(ctx)
 
 	// Three covers landing inside one window, which is what a household
@@ -188,8 +186,7 @@ func TestHubMarksOnlyTheTunedConnections(t *testing.T) {
 	// send it, which the topic still owes every landing.
 	legacy := h.Register("u3", "se-u3", nil)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go h.Run(ctx)
 
 	h.MarkRadio("rs-jazz")
@@ -470,8 +467,7 @@ func TestACatalogFrameNamesWhatMoved(t *testing.T) {
 	c := h.Register("u1", "se-u1", nil)
 	elsewhere := h.Register("u1", "se-u1", []string{TopicUser})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go h.Run(ctx)
 
 	src.moved("tr-b", "al-a", "tr-b")
@@ -552,8 +548,7 @@ func TestASourceThatCouldNotNameWhatMovedSendsUnnamed(t *testing.T) {
 	h := New(src)
 	c := h.Register("u1", "se-u1", nil)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go h.Run(ctx)
 
 	src.couldNotName("ar-a", "al-b")

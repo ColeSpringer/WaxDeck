@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -26,9 +27,7 @@ import (
 func shareOf(t *testing.T, h *harness, pid string, extra map[string]any) Share {
 	t.Helper()
 	body := map[string]any{"pid": pid}
-	for k, v := range extra {
-		body[k] = v
-	}
+	maps.Copy(body, extra)
 	return decodeStatus[Share](t, h.postJSON(t, "/api/v1/shares", body), 201, "sharing "+pid)
 }
 
@@ -73,9 +72,7 @@ func sharePlays(t *testing.T, h *harness, sharePID string) int {
 func firstEpisode(t *testing.T, h *harness, feedURL string, extra map[string]any) (Subscription, EpisodeSummary) {
 	t.Helper()
 	body := map[string]any{"url": feedURL}
-	for k, v := range extra {
-		body[k] = v
-	}
+	maps.Copy(body, extra)
 	sub := decodeStatus[Subscription](t, h.postJSON(t, "/api/v1/podcasts", body), 201, "subscribing to "+feedURL)
 	page := decode[EpisodePage](t, get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token))
 	if len(page.Items) == 0 {
@@ -223,8 +220,7 @@ func TestASharedEpisodeRelayIsBoundedAndBilledToItsOwner(t *testing.T) {
 		feed := newHeldFeed(t)
 		_, ep := firstEpisode(t, h, feed.feedURL(), nil)
 		share := shareOf(t, h, ep.Pid, nil)
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		for i := range maxShareStreams {
 			resp := openStream(t, ctx, h.ts.URL+share.Url+"/stream?i=0")
 			if resp.StatusCode != 200 {
@@ -244,8 +240,7 @@ func TestASharedEpisodeRelayIsBoundedAndBilledToItsOwner(t *testing.T) {
 		_, ep := firstEpisode(t, h, feed.feedURL(), nil)
 		share := shareOf(t, h, ep.Pid, nil)
 		info := decode[PlayInfo](t, get(t, h.ts, "/api/v1/items/"+ep.Pid+"/play-info", h.token))
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		for i := range maxUserRelays {
 			resp := openStream(t, ctx, h.ts.URL+info.Url)
 			if resp.StatusCode != 200 {

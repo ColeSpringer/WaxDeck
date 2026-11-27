@@ -1744,8 +1744,7 @@ func (l *Tools) auditToolOnce(ctx context.Context, t *wdb.ToolTask, action strin
 // toolFailure is a run's failure as one more can be said of: a copy of a
 // service error, else one in the failure's own words.
 func toolFailure(cause error) *Error {
-	var se *Error
-	if errors.As(cause, &se) {
+	if se, ok := errors.AsType[*Error](cause); ok {
 		c := *se
 		if c.Msg == "" {
 			c.Msg = taskFailureText(se)

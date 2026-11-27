@@ -21,28 +21,28 @@ func reviewEntryJSON(e service.ReviewEntryDTO) ReviewEntry {
 		CreatedAt:   e.CreatedAt,
 	}
 	if e.Title != "" {
-		out.Title = ptr(e.Title)
+		out.Title = new(e.Title)
 	}
 	if e.Artist != "" {
-		out.Artist = ptr(e.Artist)
+		out.Artist = new(e.Artist)
 	}
 	if e.LibraryPID != "" {
-		out.LibraryPid = ptr(e.LibraryPID)
+		out.LibraryPid = new(e.LibraryPID)
 	}
 	if e.UploadedBy != "" {
-		out.UploadedBy = ptr(e.UploadedBy)
+		out.UploadedBy = new(e.UploadedBy)
 	}
 	if e.AppliedMBID != "" {
-		out.AppliedMbid = ptr(e.AppliedMBID)
+		out.AppliedMbid = new(e.AppliedMBID)
 	}
 	if !e.DecidedAt.IsZero() {
-		out.DecidedAt = ptr(e.DecidedAt)
+		out.DecidedAt = new(e.DecidedAt)
 	}
 	if e.DecidedBy != "" {
-		out.DecidedBy = ptr(e.DecidedBy)
+		out.DecidedBy = new(e.DecidedBy)
 	}
 	if e.DuplicateCount > 0 {
-		out.DuplicateCount = ptr(e.DuplicateCount)
+		out.DuplicateCount = new(e.DuplicateCount)
 	}
 	if e.Best != nil {
 		out.Best = &CandidateSummary{
@@ -50,7 +50,7 @@ func reviewEntryJSON(e service.ReviewEntryDTO) ReviewEntry {
 			SimilarityPct: e.Best.SimilarityPct,
 		}
 		if e.Best.Year > 0 {
-			out.Best.Year = ptr(e.Best.Year)
+			out.Best.Year = new(e.Best.Year)
 		}
 	}
 	return out
@@ -71,7 +71,7 @@ func (s *Server) ListReviewQueue(ctx context.Context, req ListReviewQueueRequest
 		page.Entries = append(page.Entries, reviewEntryJSON(e))
 	}
 	if next != "" {
-		page.NextCursor = ptr(next)
+		page.NextCursor = new(next)
 	}
 	return ListReviewQueue200JSONResponse(page), nil
 }
@@ -98,36 +98,36 @@ func reviewDetailJSON(d service.ReviewDetailDTO) ReviewEntryDetail {
 		Candidates:     make([]ReviewCandidate, 0, len(d.Candidates)),
 	}
 	if d.UploadedByName != "" {
-		out.UploadedByName = ptr(d.UploadedByName)
+		out.UploadedByName = new(d.UploadedByName)
 	}
 	if d.IdentifyDeclined {
-		out.IdentifyDeclined = ptr(true)
+		out.IdentifyDeclined = new(true)
 	}
 	if d.MediumFixed {
-		out.MediumFixed = ptr(true)
+		out.MediumFixed = new(true)
 	}
 	if d.AcceptBestWithheld != "" {
-		out.AcceptBestWithheld = ptr(ReviewEntryDetailAcceptBestWithheld(d.AcceptBestWithheld))
+		out.AcceptBestWithheld = new(ReviewEntryDetailAcceptBestWithheld(d.AcceptBestWithheld))
 	}
 	out.IdentifyOverride = identifyRequestJSON(d.Override)
 	out.Suggested = identifyRequestJSON(d.Suggested)
 	for _, t := range d.Tracks {
 		rt := ReviewTrack{Path: t.Path, Title: t.Title, DurationMs: t.DurationMS}
 		if t.PID != "" {
-			rt.Pid = ptr(t.PID)
+			rt.Pid = new(t.PID)
 		}
 		if t.Artist != "" {
-			rt.Artist = ptr(t.Artist)
+			rt.Artist = new(t.Artist)
 		}
 		if t.TrackNo > 0 {
-			rt.TrackNo = ptr(t.TrackNo)
+			rt.TrackNo = new(t.TrackNo)
 		}
 		if t.DiscNo > 0 {
-			rt.DiscNo = ptr(t.DiscNo)
+			rt.DiscNo = new(t.DiscNo)
 		}
 		rt.Duplicate = duplicateJSON(t.Duplicate)
 		if t.Joined {
-			rt.Joined = ptr(true)
+			rt.Joined = new(true)
 		}
 		out.Tracks = append(out.Tracks, rt)
 	}
@@ -137,28 +137,28 @@ func reviewDetailJSON(d service.ReviewDetailDTO) ReviewEntryDetail {
 			Pairings: make([]CandidatePairing, 0, len(c.Pairings)),
 		}
 		if c.ReleaseGroupMBID != "" {
-			rc.ReleaseGroupMbid = ptr(c.ReleaseGroupMBID)
+			rc.ReleaseGroupMbid = new(c.ReleaseGroupMBID)
 		}
 		if c.Year > 0 {
-			rc.Year = ptr(c.Year)
+			rc.Year = new(c.Year)
 		}
 		if c.MediaCount > 0 {
-			rc.MediaCount = ptr(c.MediaCount)
+			rc.MediaCount = new(c.MediaCount)
 		}
 		if c.TrackCount > 0 {
-			rc.TrackCount = ptr(c.TrackCount)
+			rc.TrackCount = new(c.TrackCount)
 		}
 		if c.Country != "" {
-			rc.Country = ptr(c.Country)
+			rc.Country = new(c.Country)
 		}
 		if c.Label != "" {
-			rc.Label = ptr(c.Label)
+			rc.Label = new(c.Label)
 		}
 		if c.CatalogNumber != "" {
-			rc.CatalogNumber = ptr(c.CatalogNumber)
+			rc.CatalogNumber = new(c.CatalogNumber)
 		}
 		if c.Compilation {
-			rc.Compilation = ptr(true)
+			rc.Compilation = new(true)
 		}
 		if len(c.Components) > 0 {
 			comps := make([]CandidateComponent, 0, len(c.Components))
@@ -167,31 +167,31 @@ func reviewDetailJSON(d service.ReviewDetailDTO) ReviewEntryDetail {
 					Name: comp.Name, Distance: comp.Distance, Weight: comp.Weight,
 				})
 			}
-			rc.Components = ptr(comps)
+			rc.Components = new(comps)
 		}
 		for _, p := range c.Pairings {
 			cp := CandidatePairing{
 				TrackIndex: p.TrackIndex, Position: p.Position, Title: p.Title, Distance: p.Distance,
 			}
 			if p.Disc > 0 {
-				cp.Disc = ptr(p.Disc)
+				cp.Disc = new(p.Disc)
 			}
 			if p.Artist != "" {
-				cp.Artist = ptr(p.Artist)
+				cp.Artist = new(p.Artist)
 			}
 			if p.DurationMS > 0 {
-				cp.DurationMs = ptr(p.DurationMS)
+				cp.DurationMs = new(p.DurationMS)
 			}
 			if p.RecordingMBID != "" {
-				cp.RecordingMbid = ptr(p.RecordingMBID)
+				cp.RecordingMbid = new(p.RecordingMBID)
 			}
 			rc.Pairings = append(rc.Pairings, cp)
 		}
 		if len(c.MissingTitles) > 0 {
-			rc.MissingTitles = ptr(append([]string{}, c.MissingTitles...))
+			rc.MissingTitles = new(append([]string{}, c.MissingTitles...))
 		}
 		if len(c.ExtraIndexes) > 0 {
-			rc.ExtraTrackIndexes = ptr(append([]int{}, c.ExtraIndexes...))
+			rc.ExtraTrackIndexes = new(append([]int{}, c.ExtraIndexes...))
 		}
 		out.Candidates = append(out.Candidates, rc)
 	}
@@ -205,13 +205,13 @@ func identifyRequestJSON(o *service.ReviewOverrideDTO) *ReviewIdentifyRequest {
 	}
 	out := &ReviewIdentifyRequest{}
 	if o.Artist != "" {
-		out.Artist = ptr(o.Artist)
+		out.Artist = new(o.Artist)
 	}
 	if o.Album != "" {
-		out.Album = ptr(o.Album)
+		out.Album = new(o.Album)
 	}
 	if o.Title != "" {
-		out.Title = ptr(o.Title)
+		out.Title = new(o.Title)
 	}
 	return out
 }
@@ -232,7 +232,7 @@ func (s *Server) DecideReviewEntry(ctx context.Context, req DecideReviewEntryReq
 	}
 	result := ReviewDecideResult{Entry: reviewEntryJSON(entry)}
 	if len(warnings) > 0 {
-		result.Warnings = ptr(warnings)
+		result.Warnings = new(warnings)
 	}
 	return DecideReviewEntry200JSONResponse(result), nil
 }
@@ -281,10 +281,10 @@ func (s *Server) DecideReviewBulk(ctx context.Context, req DecideReviewBulkReque
 	for _, o := range outcomes {
 		ro := ReviewBulkOutcome{EntryId: o.EntryID, Ok: o.OK}
 		if o.Error != "" {
-			ro.Code, ro.Error = ptr(o.Code), ptr(o.Error)
+			ro.Code, ro.Error = new(o.Code), new(o.Error)
 		}
 		if len(o.Warnings) > 0 {
-			ro.Warnings = ptr(o.Warnings)
+			ro.Warnings = new(o.Warnings)
 		}
 		result.Results = append(result.Results, ro)
 	}
@@ -306,16 +306,16 @@ func (s *Server) GetReviewStats(ctx context.Context, _ GetReviewStatsRequestObje
 		RevertedAutoApplied: stats.RevertedAutoApplied,
 	}
 	if stats.Identifying > 0 {
-		out.Identifying = ptr(stats.Identifying)
+		out.Identifying = new(stats.Identifying)
 	}
 	if stats.AsIs > 0 {
-		out.AsIs = ptr(stats.AsIs)
+		out.AsIs = new(stats.AsIs)
 	}
 	if stats.Unofficial > 0 {
-		out.Unofficial = ptr(stats.Unofficial)
+		out.Unofficial = new(stats.Unofficial)
 	}
 	if stats.Skipped > 0 {
-		out.Skipped = ptr(stats.Skipped)
+		out.Skipped = new(stats.Skipped)
 	}
 	return GetReviewStats200JSONResponse(out), nil
 }

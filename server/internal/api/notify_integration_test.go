@@ -237,7 +237,7 @@ func TestNotificationTargetCRUDAndIsolation(t *testing.T) {
 	resp.Body.Close()
 
 	// The per-kind cap answers conflict on the 21st target.
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		resp := reqAs(t, h, "POST", "/api/v1/users/me/notification-targets", sam.Token, map[string]any{
 			"kind": "webhook", "config": map[string]any{"url": fmt.Sprintf("https://hooks.example.net/%d", i)},
 			"enabledEvents": []string{},
@@ -629,7 +629,7 @@ func TestPushRegistrationCompat(t *testing.T) {
 	resp.Body.Close()
 
 	// The per-user cap answers conflict on the 21st distinct endpoint.
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		resp = h.postJSON(t, "/api/v1/users/me/push-registrations", map[string]any{
 			"endpoint": fmt.Sprintf("https://push.example.net/cap/%d", i),
 		})

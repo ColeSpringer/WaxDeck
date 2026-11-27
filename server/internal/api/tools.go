@@ -24,38 +24,38 @@ func toolTaskJSON(d service.ToolTaskDTO) ToolTask {
 		out.Summary = &summary
 	}
 	if d.ItemPID != "" {
-		out.ItemPid = ptr(d.ItemPID)
+		out.ItemPid = new(d.ItemPID)
 	}
 	if d.ItemTitle != "" {
-		out.ItemTitle = ptr(d.ItemTitle)
+		out.ItemTitle = new(d.ItemTitle)
 	}
 	if d.ProgressPct > 0 {
-		out.ProgressPct = ptr(d.ProgressPct)
+		out.ProgressPct = new(d.ProgressPct)
 	}
 	if d.Error != "" {
-		out.Error = ptr(d.Error)
+		out.Error = new(d.Error)
 	}
 	if d.ErrorCode != "" {
-		out.ErrorCode = ptr(d.ErrorCode)
+		out.ErrorCode = new(d.ErrorCode)
 		if len(d.ErrorParams) > 0 {
-			out.ErrorParams = ptr(maps.Clone(d.ErrorParams))
+			out.ErrorParams = new(maps.Clone(d.ErrorParams))
 		}
 	}
 	if len(d.ResultPIDs) > 0 {
-		out.ResultPids = ptr(append([]string{}, d.ResultPIDs...))
+		out.ResultPids = new(append([]string{}, d.ResultPIDs...))
 	}
 	if d.FinishedAtNS > 0 {
-		out.FinishedAt = ptr(time.Unix(0, d.FinishedAtNS).UTC())
+		out.FinishedAt = new(time.Unix(0, d.FinishedAtNS).UTC())
 	}
 	if d.WaitReason != "" {
-		out.WaitReason = ptr(d.WaitReason)
-		out.RetryAt = ptr(time.Unix(0, d.RetryAtNS).UTC())
+		out.WaitReason = new(d.WaitReason)
+		out.RetryAt = new(time.Unix(0, d.RetryAtNS).UTC())
 	}
 	if d.BookInTrash {
-		out.BookInTrash = ptr(true)
+		out.BookInTrash = new(true)
 	}
 	if d.CancelRequested {
-		out.CancelRequested = ptr(true)
+		out.CancelRequested = new(true)
 	}
 	if a := d.Activity; a != nil {
 		out.Activity = toolTaskActivityJSON(*a)
@@ -68,19 +68,19 @@ func toolTaskJSON(d service.ToolTaskDTO) ToolTask {
 func toolTaskActivityJSON(a service.ToolTaskActivity) *ToolTaskActivity {
 	out := &ToolTaskActivity{Phase: a.Phase, At: time.Unix(0, a.AtNS).UTC()}
 	if a.ItemsTotal > 0 || a.ItemsDone > 0 {
-		out.ItemsDone = ptr(a.ItemsDone)
+		out.ItemsDone = new(a.ItemsDone)
 	}
 	if a.ItemsTotal > 0 {
-		out.ItemsTotal = ptr(a.ItemsTotal)
+		out.ItemsTotal = new(a.ItemsTotal)
 	}
 	if a.ItemTitle != "" {
-		out.ItemTitle = ptr(a.ItemTitle)
+		out.ItemTitle = new(a.ItemTitle)
 	}
 	if a.BytesDone > 0 || a.BytesTotal > 0 {
-		out.BytesDone = ptr(a.BytesDone)
+		out.BytesDone = new(a.BytesDone)
 	}
 	if a.BytesTotal > 0 {
-		out.BytesTotal = ptr(a.BytesTotal)
+		out.BytesTotal = new(a.BytesTotal)
 	}
 	return out
 }
@@ -165,7 +165,7 @@ func (s *Server) ListToolTasks(ctx context.Context, req ListToolTasksRequestObje
 		page.Tasks = append(page.Tasks, toolTaskJSON(t))
 	}
 	if next != "" {
-		page.NextCursor = ptr(next)
+		page.NextCursor = new(next)
 	}
 	return ListToolTasks200JSONResponse(page), nil
 }

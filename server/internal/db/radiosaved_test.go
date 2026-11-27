@@ -60,7 +60,7 @@ func TestRadioSavedSongCapRefusesButHeldRowStillAnswers(t *testing.T) {
 	ctx := context.Background()
 	mustCreateTestUser(t, d, "us-a")
 
-	for i := 0; i < radioSavedSongCap; i++ {
+	for i := range radioSavedSongCap {
 		mustSave(t, d, savedSong("us-a", fmt.Sprintf("rw-%04d", i), fmt.Sprintf("ident-%d", i)))
 	}
 	// A new song at the cap is the one refusal this table has.
@@ -84,7 +84,7 @@ func TestRadioSavedSongsPageNewestFirst(t *testing.T) {
 	d := openTest(t)
 	ctx := context.Background()
 	mustCreateTestUser(t, d, "us-a")
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		mustSave(t, d, savedSong("us-a", fmt.Sprintf("rw-%03d", i), fmt.Sprintf("ident-%d", i)))
 	}
 

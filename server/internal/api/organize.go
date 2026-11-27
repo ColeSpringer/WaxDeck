@@ -99,10 +99,10 @@ func (s *Server) PreviewOrganize(ctx context.Context, req PreviewOrganizeRequest
 		Profile:           plan.Profile,
 		TotalActions:      plan.TotalActions,
 		Held:              plan.Held,
-		HeldByCode:        ptr(plan.HeldByCode),
+		HeldByCode:        new(plan.HeldByCode),
 		Holds:             organizeHoldsJSON(plan.Holds),
 		ReadOnlyLibraries: plan.ReadOnlyLibraries,
-		TagWrite:          ptr(plan.TagWrite),
+		TagWrite:          new(plan.TagWrite),
 		Actions:           make([]OrganizeAction, 0, len(plan.Actions)),
 	}
 	for _, a := range plan.Actions {
@@ -120,10 +120,10 @@ func organizeHoldsJSON(holds []service.OrganizeHoldDTO) *[]OrganizeHold {
 	for _, h := range holds {
 		hold := OrganizeHold{From: h.From, Code: OrganizeHoldCode(h.Code), Reason: h.Reason}
 		if h.ItemPID != "" {
-			hold.ItemPid = ptr(h.ItemPID)
+			hold.ItemPid = new(h.ItemPID)
 		}
 		if h.To != "" {
-			hold.To = ptr(h.To)
+			hold.To = new(h.To)
 		}
 		out = append(out, hold)
 	}
@@ -149,13 +149,13 @@ func (s *Server) ApplyOrganize(ctx context.Context, req ApplyOrganizeRequestObje
 func organizeReportJSON(rep service.OrganizeReportDTO) OrganizeReport {
 	out := OrganizeReport{JobPid: rep.JobPID, Moved: rep.Moved, Skipped: rep.Skipped, Held: rep.Held,
 		Holds: organizeHoldsJSON(rep.Holds), ReadOnlyLibraries: rep.ReadOnlyLibraries, Failed: rep.Failed,
-		DirsPruned: ptr(rep.DirsPruned)}
+		DirsPruned: new(rep.DirsPruned)}
 	if len(rep.Failures) > 0 {
 		failures := make([]OrganizeFailure, 0, len(rep.Failures))
 		for _, f := range rep.Failures {
 			failures = append(failures, OrganizeFailure{Path: f.Path, Reason: f.Reason})
 		}
-		out.Failures = ptr(failures)
+		out.Failures = new(failures)
 	}
 	return out
 }
@@ -175,12 +175,12 @@ func (s *Server) ListOrganizeHistory(ctx context.Context, req ListOrganizeHistor
 		b := OrganizeBatch{JobPid: r.JobPID, Kind: OrganizeBatchKind(r.Kind), State: r.State, StartedAt: r.StartedAt,
 			Committed: r.Committed, RolledBack: r.RolledBack, Planned: r.Planned, Undoable: r.Undoable}
 		if r.Profile != "" {
-			b.Profile = ptr(r.Profile)
+			b.Profile = new(r.Profile)
 		}
 		out.Batches = append(out.Batches, b)
 	}
 	if next != "" {
-		out.NextCursor = ptr(next)
+		out.NextCursor = new(next)
 	}
 	return ListOrganizeHistory200JSONResponse(out), nil
 }

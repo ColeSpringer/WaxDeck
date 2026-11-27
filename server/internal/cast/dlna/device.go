@@ -237,7 +237,7 @@ func (c *client) protocolInfo(ctx context.Context) (map[string]bool, error) {
 		return nil, err
 	}
 	mimes := make(map[string]bool)
-	for _, entry := range strings.Split(out["Sink"], ",") {
+	for entry := range strings.SplitSeq(out["Sink"], ",") {
 		fields := strings.Split(strings.TrimSpace(entry), ":")
 		if len(fields) < 3 {
 			continue

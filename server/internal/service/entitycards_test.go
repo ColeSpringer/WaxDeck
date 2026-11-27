@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"maps"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -34,9 +35,7 @@ func newShelfFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 			"ALBUM":       album,
 			"DATE":        "1996",
 		}
-		for k, v := range extra {
-			tags[k] = v
-		}
+		maps.Copy(tags, extra)
 		return fixtures.Spec{Name: name, Codec: fixtures.CodecFLAC, Duration: d, Tags: tags}
 	}
 	// Every identity column upstream keeps on the album entity, so the

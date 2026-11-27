@@ -149,7 +149,7 @@ func (l *Migrate) runListenBrainzImport(ctx context.Context, t *wdb.ToolTask, uc
 
 	if p.History {
 		maxTS := int64(0)
-		for page := 0; page < migrateLBMaxPages; page++ {
+		for page := range migrateLBMaxPages {
 			if ctx.Err() != nil {
 				return sum, ctx.Err()
 			}

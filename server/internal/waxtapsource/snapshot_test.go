@@ -175,7 +175,7 @@ func TestPlaylistSnapshotCoverIsFirstAvailableThumbnail(t *testing.T) {
 
 func TestPlaylistSnapshotBoundsEnrichmentNotTheListing(t *testing.T) {
 	var entries []waxtap.PlaylistEntry
-	for i := 0; i < enrichLimit+10; i++ {
+	for i := range enrichLimit + 10 {
 		entries = append(entries, waxtap.PlaylistEntry{
 			VideoID: string(rune('a'+i%26)) + "-vid", Index: i, Title: "t",
 		})

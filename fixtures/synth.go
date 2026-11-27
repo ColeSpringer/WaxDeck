@@ -47,10 +47,10 @@ func buildSourceWAV(s Spec) ([]byte, error) {
 		ch := buf.ChanI(c)
 		// Pooled buffers arrive dirty, so the silent stretches are
 		// zeroed explicitly rather than assumed.
-		for i := 0; i < leadFrames; i++ {
+		for i := range leadFrames {
 			ch[i] = 0
 		}
-		for i := 0; i < toneFrames; i++ {
+		for i := range toneFrames {
 			ch[leadFrames+i] = int32(math.Round(amp * math.Sin(step*float64(i))))
 		}
 		for i := leadFrames + toneFrames; i < frames; i++ {

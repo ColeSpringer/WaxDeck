@@ -1929,7 +1929,7 @@ var (
 
 func words(s string) map[string]bool {
 	out := map[string]bool{}
-	for _, w := range strings.Fields(s) {
+	for w := range strings.FieldsSeq(s) {
 		out[w] = true
 	}
 	return out

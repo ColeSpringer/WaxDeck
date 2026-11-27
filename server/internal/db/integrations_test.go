@@ -75,7 +75,7 @@ func TestScrobbleOutboxExhaustAndPrune(t *testing.T) {
 
 	const maxAttempts = 3
 	now := int64(10)
-	for i := 0; i < maxAttempts; i++ {
+	for i := range maxAttempts {
 		row, err := d.LeaseScrobble(ctx, now, 100, maxAttempts)
 		if err != nil {
 			t.Fatalf("lease attempt %d: %v", i, err)
@@ -122,7 +122,7 @@ func TestUnifiedPushTargetUpsertAndCap(t *testing.T) {
 	mustCreateTestUser(t, d, "us-2")
 
 	endpoint := func(i int) string { return fmt.Sprintf("https://push.example.net/ep/%d", i) }
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		_, created, err := d.UpsertUnifiedPushTarget(ctx, upTarget(fmt.Sprintf("reg-%02d", i), "us-1", endpoint(i), "device", int64(i)))
 		if err != nil || !created {
 			t.Fatalf("registration %d = (created %v, %v)", i, created, err)
@@ -334,7 +334,7 @@ func TestUnifiedPushUpsertRaceStaysIdempotent(t *testing.T) {
 	created := make(chan bool, racers)
 	errs := make(chan error, racers)
 	var wg sync.WaitGroup
-	for i := 0; i < racers; i++ {
+	for i := range racers {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()

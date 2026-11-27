@@ -32,7 +32,7 @@ func (s *Server) SyncCatalog(ctx context.Context, req SyncCatalogRequestObject) 
 			NextSince: delta.NextSince,
 		}
 		if delta.More {
-			out.More = ptr(true)
+			out.More = new(true)
 		}
 		return SyncCatalog200JSONResponse(out), nil
 	}
@@ -47,7 +47,7 @@ func (s *Server) SyncCatalog(ctx context.Context, req SyncCatalogRequestObject) 
 		NextSince: page.NextSince,
 	}
 	if page.NextCursor != "" {
-		out.NextCursor = ptr(page.NextCursor)
+		out.NextCursor = new(page.NextCursor)
 	}
 	return SyncCatalog200JSONResponse(out), nil
 }
@@ -116,12 +116,12 @@ func (s *Server) SyncServer(ctx context.Context, req SyncServerRequestObject) (S
 		UserId:    uc.ID,
 	}
 	if delta.More {
-		out.More = ptr(true)
+		out.More = new(true)
 	}
 	for _, e := range delta.Events {
 		je := ServerSyncEvent{Kind: e.Kind}
 		if e.PID != "" {
-			je.Pid = ptr(e.PID)
+			je.Pid = new(e.PID)
 		}
 		if e.PlayState != nil {
 			st := playStateJSON(*e.PlayState)
@@ -215,13 +215,13 @@ func (s *Server) GetDownloadInfo(ctx context.Context, req GetDownloadInfoRequest
 		// from "nobody knows how long this part is", and a zero would
 		// place every later part at the same offset.
 		if f.DurationMS > 0 {
-			df.DurationMs = ptr(f.DurationMS)
+			df.DurationMs = new(f.DurationMS)
 		}
 		out.Files = append(out.Files, df)
 	}
 	if res.HasSpan {
-		out.SpanStartMs = ptr(res.SpanStartMS)
-		out.SpanEndMs = ptr(res.SpanEndMS)
+		out.SpanStartMs = new(res.SpanStartMS)
+		out.SpanEndMs = new(res.SpanEndMS)
 	}
 	return GetDownloadInfo200JSONResponse(out), nil
 }

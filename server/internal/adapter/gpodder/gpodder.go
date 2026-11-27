@@ -728,8 +728,7 @@ func (h *handler) writeJSON(w http.ResponseWriter, v any) {
 // failBody answers a body that could not be read: 413 for one over the
 // limit, which retrying as it is cannot cure, else 400.
 func (h *handler) failBody(w http.ResponseWriter, err error) {
-	var tooBig *http.MaxBytesError
-	if errors.As(err, &tooBig) {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 		h.fail(w, http.StatusRequestEntityTooLarge, "request body too large")
 		return
 	}

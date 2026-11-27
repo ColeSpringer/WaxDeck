@@ -43,11 +43,7 @@ const (
 // failing enclosure host or a wedged analysis is never hammered
 // back-to-back.
 func queueRetryDelay(attempts int) time.Duration {
-	d := time.Minute << min(attempts, 5)
-	if d > 30*time.Minute {
-		d = 30 * time.Minute
-	}
-	return d
+	return min(time.Minute<<min(attempts, 5), 30*time.Minute)
 }
 
 // RefreshDueFeeds syncs every subscribed show whose last attempt is

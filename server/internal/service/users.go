@@ -866,7 +866,7 @@ func (l *Identity) ResolveOidcAccount(ctx context.Context, ident OidcIdentity) (
 		roles = []string{"user"}
 	}
 	var acct *Account
-	for attempt := 0; attempt < 20; attempt++ {
+	for attempt := range 20 {
 		name := base
 		if attempt > 0 {
 			name = fmt.Sprintf("%s%d", base, attempt+1)
@@ -1034,10 +1034,5 @@ func normalizeAccess(mode string, apiPIDs []string) (string, []string, error) {
 }
 
 func hasRole(roles []string, want string) bool {
-	for _, r := range roles {
-		if r == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(roles, want)
 }

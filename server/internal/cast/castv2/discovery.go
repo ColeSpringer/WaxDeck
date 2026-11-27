@@ -211,7 +211,7 @@ func mdnsQuestion() []byte {
 }
 
 func appendDNSName(b []byte, name string) []byte {
-	for _, label := range strings.Split(name, ".") {
+	for label := range strings.SplitSeq(name, ".") {
 		if label == "" {
 			continue
 		}

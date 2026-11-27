@@ -23,8 +23,7 @@ const limit = 64 << 10
 // cut it.
 var reading = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	_, err := io.Copy(io.Discard, bodylimit.Reader(w, r.Body, limit))
-	var tooBig *http.MaxBytesError
-	if errors.As(err, &tooBig) {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 		w.WriteHeader(http.StatusRequestEntityTooLarge)
 	}
 })

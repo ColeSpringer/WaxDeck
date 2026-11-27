@@ -47,7 +47,7 @@ func TestARefusedLabelIsLoggedCutShort(t *testing.T) {
 		t.Fatalf("relay = %d, want the refusal", resp.StatusCode)
 	}
 	var line string
-	for _, l := range strings.Split(logged.String(), "\n") {
+	for l := range strings.SplitSeq(logged.String(), "\n") {
 		if strings.Contains(l, "something other than audio") {
 			line = l
 		}

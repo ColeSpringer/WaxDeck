@@ -31,13 +31,13 @@ func TestEffectiveVoiceBoostForABook(t *testing.T) {
 	if boost(nil, false) {
 		t.Error("none stored, default off: want none")
 	}
-	if boost(ptrTo(false), true) {
+	if boost(new(false), true) {
 		t.Error("an explicit off under a default on: want none")
 	}
 
 	store := func(on bool) {
 		t.Helper()
-		if _, err := svc.Reads.PutBookSettings(ctx, uc, book, BookSettings{VoiceBoost: ptrTo(on)}); err != nil {
+		if _, err := svc.Reads.PutBookSettings(ctx, uc, book, BookSettings{VoiceBoost: new(on)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -45,14 +45,14 @@ func TestEffectiveVoiceBoostForABook(t *testing.T) {
 	if !boost(nil, false) {
 		t.Error("stored on, default off: want the boost")
 	}
-	if boost(ptrTo(false), true) {
+	if boost(new(false), true) {
 		t.Error("stored on, explicit off: want none")
 	}
 	store(false)
 	if boost(nil, true) {
 		t.Error("stored off, default on: want none")
 	}
-	if !boost(ptrTo(true), false) {
+	if !boost(new(true), false) {
 		t.Error("stored off, explicit on: want the boost")
 	}
 }
@@ -75,7 +75,7 @@ func TestEffectiveVoiceBoostForAnEpisode(t *testing.T) {
 
 	store := func(on bool) {
 		t.Helper()
-		if _, err := d.svc.Podcasts.PutSubscriptionSettings(d.ctx, d.carol(t), d.show, SubscriptionSettings{VoiceBoost: ptrTo(on)}); err != nil {
+		if _, err := d.svc.Podcasts.PutSubscriptionSettings(d.ctx, d.carol(t), d.show, SubscriptionSettings{VoiceBoost: new(on)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -83,14 +83,14 @@ func TestEffectiveVoiceBoostForAnEpisode(t *testing.T) {
 	if !boost(nil, false) {
 		t.Error("stored on, default off: want the boost")
 	}
-	if boost(ptrTo(false), true) {
+	if boost(new(false), true) {
 		t.Error("stored on, explicit off: want none")
 	}
 	store(false)
 	if boost(nil, true) {
 		t.Error("stored off, default on: want none")
 	}
-	if !boost(ptrTo(true), false) {
+	if !boost(new(true), false) {
 		t.Error("stored off, explicit on: want the boost")
 	}
 

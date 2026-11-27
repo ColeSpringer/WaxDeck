@@ -103,8 +103,7 @@ type nspMeta struct {
 func splitNSP(doc []byte) (nspMeta, []byte, error) {
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(doc, &top); err != nil || top == nil {
-		var syntax *json.SyntaxError
-		if errors.As(err, &syntax) {
+		if _, ok := errors.AsType[*json.SyntaxError](err); ok {
 			return nspMeta{}, nil, errInvalid("the NSP document is not valid JSON: " + err.Error())
 		}
 		return nspMeta{}, nil, errInvalid("the NSP document is not a JSON object")

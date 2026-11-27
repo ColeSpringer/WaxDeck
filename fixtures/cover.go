@@ -36,8 +36,8 @@ const ExoticCoverName = "sleeve.tiff"
 // recognizer rather than http.DetectContentType.
 func GenerateExoticCover(dir string) (string, error) {
 	img := image.NewRGBA(image.Rect(0, 0, ExoticCoverWidth, ExoticCoverHeight))
-	for x := 0; x < ExoticCoverWidth; x++ {
-		for y := 0; y < ExoticCoverHeight; y++ {
+	for x := range ExoticCoverWidth {
+		for y := range ExoticCoverHeight {
 			img.Set(x, y, color.RGBA{R: uint8(x), G: uint8(y), B: 160, A: 255})
 		}
 	}

@@ -91,14 +91,14 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 	// and a second read could land on the next track.
 	if announced := s.svc.Radio.NowPlayingAnnouncement(req.Pid); announced.Title != "" {
 		title := announced.Title
-		out.NowPlaying = ptr(title)
+		out.NowPlaying = new(title)
 		// One indexed read, and what keeps the heart honest across
 		// devices: a save made on the phone fills the desktop's heart on
 		// its next poll. Absent rather than false when nothing is kept,
 		// which the contract says means the same thing.
 		if savedPID := s.svc.Radio.SavedPIDForNowPlaying(ctx, uc, station.Name, title); savedPID != "" {
-			out.NowPlayingSaved = ptr(true)
-			out.NowPlayingSavedPid = ptr(savedPID)
+			out.NowPlayingSaved = new(true)
+			out.NowPlayingSavedPid = new(savedPID)
 		}
 		// Resolved against this caller's own visibility, since the pid
 		// is going to be used to fetch cover art. Absent is the ordinary
@@ -106,9 +106,9 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 		// station announced and the external lookup, which the service
 		// walks without ever waiting on either.
 		if pid := s.svc.Radio.NowPlayingItem(ctx, uc, req.Pid, station.Name, title); pid != "" {
-			out.NowPlayingItemPid = ptr(pid)
+			out.NowPlayingItemPid = new(pid)
 		} else if key := s.svc.Radio.NowPlayingCover(req.Pid, station.Name, announced); key != "" {
-			out.NowPlayingArtKey = ptr(key)
+			out.NowPlayingArtKey = new(key)
 			out.NowPlayingArtSource = artSourceJSON(s.svc.Radio.NowPlayingArtSource(key))
 		}
 	}
@@ -232,7 +232,7 @@ func (s *Server) ListRadioSavedSongs(ctx context.Context, req ListRadioSavedSong
 		out.Songs = append(out.Songs, radioSavedSongJSON(sg))
 	}
 	if page.Next != "" {
-		out.NextCursor = ptr(page.Next)
+		out.NextCursor = new(page.Next)
 	}
 	return ListRadioSavedSongs200JSONResponse(out), nil
 }
@@ -310,16 +310,16 @@ func radioSavedSongJSON(s service.RadioSavedSong) RadioSavedSong {
 		HasArt:      s.HasArt,
 	}
 	if s.Artist != "" {
-		out.Artist = ptr(s.Artist)
+		out.Artist = new(s.Artist)
 	}
 	if s.Title != "" {
-		out.Title = ptr(s.Title)
+		out.Title = new(s.Title)
 	}
 	if s.StationPID != "" {
-		out.StationPid = ptr(s.StationPID)
+		out.StationPid = new(s.StationPID)
 	}
 	if s.InLibraryPID != "" {
-		out.InLibraryPid = ptr(s.InLibraryPID)
+		out.InLibraryPid = new(s.InLibraryPID)
 	}
 	return out
 }
@@ -340,22 +340,22 @@ func (s *Server) SearchRadioDirectory(ctx context.Context, req SearchRadioDirect
 	for _, e := range entries {
 		w := RadioDirectoryEntry{Name: e.Name, StreamUrl: e.StreamURL}
 		if e.HomepageURL != "" {
-			w.HomepageUrl = ptr(e.HomepageURL)
+			w.HomepageUrl = new(e.HomepageURL)
 		}
 		if e.LogoURL != "" {
-			w.LogoUrl = ptr(e.LogoURL)
+			w.LogoUrl = new(e.LogoURL)
 		}
 		if e.Tags != "" {
-			w.Tags = ptr(e.Tags)
+			w.Tags = new(e.Tags)
 		}
 		if e.Country != "" {
-			w.Country = ptr(e.Country)
+			w.Country = new(e.Country)
 		}
 		if e.Codec != "" {
-			w.Codec = ptr(e.Codec)
+			w.Codec = new(e.Codec)
 		}
 		if e.BitrateKbps > 0 {
-			w.BitrateKbps = ptr(e.BitrateKbps)
+			w.BitrateKbps = new(e.BitrateKbps)
 		}
 		out.Entries = append(out.Entries, w)
 	}
@@ -947,7 +947,7 @@ func (s *Server) ListMyNotifications(ctx context.Context, req ListMyNotification
 		out.Notifications = append(out.Notifications, notificationJSON(n))
 	}
 	if page.Next != "" {
-		out.NextCursor = ptr(page.Next)
+		out.NextCursor = new(page.Next)
 	}
 	return ListMyNotifications200JSONResponse(out), nil
 }
@@ -998,18 +998,18 @@ func notificationJSON(n service.InboxNotification) Notification {
 		Event:     n.Event,
 		Title:     n.Title,
 		Body:      n.Body,
-		Count:     ptr(n.Count),
+		Count:     new(n.Count),
 		CreatedAt: n.CreatedAt,
 		UpdatedAt: n.UpdatedAt,
 	}
 	if n.TargetPID != "" {
-		out.TargetPid = ptr(n.TargetPID)
+		out.TargetPid = new(n.TargetPID)
 	}
 	if !n.ResolvedAt.IsZero() {
-		out.ResolvedAt = ptr(n.ResolvedAt)
+		out.ResolvedAt = new(n.ResolvedAt)
 	}
 	if !n.ReadAt.IsZero() {
-		out.ReadAt = ptr(n.ReadAt)
+		out.ReadAt = new(n.ReadAt)
 	}
 	return out
 }
@@ -1024,10 +1024,10 @@ func radioStationJSON(st service.RadioStation) RadioStation {
 		CreatedAt: st.CreatedAt,
 	}
 	if st.HomepageURL != "" {
-		out.HomepageUrl = ptr(st.HomepageURL)
+		out.HomepageUrl = new(st.HomepageURL)
 	}
 	if st.LogoURL != "" {
-		out.LogoUrl = ptr(st.LogoURL)
+		out.LogoUrl = new(st.LogoURL)
 	}
 	return out
 }
@@ -1046,17 +1046,17 @@ func radioEditFromWire(e RadioStationEdit) service.RadioStationEdit {
 func scrobblerJSON(sc service.Scrobbler) Scrobbler {
 	out := Scrobbler{Service: sc.Service, Available: sc.Available, Connected: sc.Connected}
 	if sc.Username != "" {
-		out.Username = ptr(sc.Username)
+		out.Username = new(sc.Username)
 	}
 	if sc.APIURL != "" {
-		out.ApiUrl = ptr(sc.APIURL)
+		out.ApiUrl = new(sc.APIURL)
 	}
 	if !sc.LastSuccessAt.IsZero() {
-		out.LastSuccessAt = ptr(sc.LastSuccessAt)
+		out.LastSuccessAt = new(sc.LastSuccessAt)
 	}
 	if sc.LastError != "" {
-		out.LastError = ptr(sc.LastError)
-		out.LastErrorAt = ptr(sc.LastErrorAt)
+		out.LastError = new(sc.LastError)
+		out.LastErrorAt = new(sc.LastErrorAt)
 	}
 	return out
 }
@@ -1064,7 +1064,7 @@ func scrobblerJSON(sc service.Scrobbler) Scrobbler {
 func pushRegistrationJSON(r service.PushRegistration) PushRegistration {
 	out := PushRegistration{Pid: r.PID, Endpoint: r.Endpoint, CreatedAt: r.CreatedAt}
 	if r.Label != "" {
-		out.Label = ptr(r.Label)
+		out.Label = new(r.Label)
 	}
 	return out
 }
@@ -1073,7 +1073,7 @@ func pushRegistrationJSON(r service.PushRegistration) PushRegistration {
 // The free-form config object round-trips through JSON so the service
 // and providers see the raw document; kind is empty on updates (fixed
 // at creation, resolved from the stored row).
-func notificationTargetInputFromWire(kind string, label *string, config map[string]interface{}, events []string, muted *bool, minInterval *int) (service.NotificationTargetInput, error) {
+func notificationTargetInputFromWire(kind string, label *string, config map[string]any, events []string, muted *bool, minInterval *int) (service.NotificationTargetInput, error) {
 	raw, err := json.Marshal(config)
 	if err != nil {
 		return service.NotificationTargetInput{}, &service.Error{Kind: service.KindInvalid, Msg: "config is not a valid document"}
@@ -1101,7 +1101,7 @@ func notificationTargetListJSON(rows []service.NotificationTarget) NotificationT
 }
 
 func notificationTargetJSON(t service.NotificationTarget) NotificationTarget {
-	config := map[string]interface{}{}
+	config := map[string]any{}
 	// The service hands the opened document; an unreadable one already
 	// degraded to {} there.
 	_ = json.Unmarshal(t.Config, &config)
@@ -1111,21 +1111,21 @@ func notificationTargetJSON(t service.NotificationTarget) NotificationTarget {
 		Scope:         NotificationScope(t.Scope),
 		Config:        config,
 		EnabledEvents: t.EnabledEvents,
-		Muted:         ptr(t.Muted),
+		Muted:         new(t.Muted),
 		CreatedAt:     t.CreatedAt,
 	}
 	if t.MinIntervalSeconds > 0 {
-		out.MinIntervalSeconds = ptr(t.MinIntervalSeconds)
+		out.MinIntervalSeconds = new(t.MinIntervalSeconds)
 	}
 	if t.Label != "" {
-		out.Label = ptr(t.Label)
+		out.Label = new(t.Label)
 	}
 	if !t.LastSuccessAt.IsZero() {
-		out.LastSuccessAt = ptr(t.LastSuccessAt)
+		out.LastSuccessAt = new(t.LastSuccessAt)
 	}
 	if t.LastError != "" {
-		out.LastError = ptr(t.LastError)
-		out.LastErrorAt = ptr(t.LastErrorAt)
+		out.LastError = new(t.LastError)
+		out.LastErrorAt = new(t.LastErrorAt)
 	}
 	return out
 }

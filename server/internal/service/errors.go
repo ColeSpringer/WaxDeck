@@ -117,8 +117,7 @@ type Error struct {
 
 // RefusalParams answers the params a refusal carries, or nil.
 func RefusalParams(err error) map[string]string {
-	var se *Error
-	if errors.As(err, &se) {
+	if se, ok := errors.AsType[*Error](err); ok {
 		return se.Params
 	}
 	return nil
@@ -143,8 +142,7 @@ func KindOf(err error) ErrorKind {
 	if err == nil {
 		return ""
 	}
-	var se *Error
-	if errors.As(err, &se) {
+	if se, ok := errors.AsType[*Error](err); ok {
 		return se.Kind
 	}
 	return kindFromWaxErr(err)

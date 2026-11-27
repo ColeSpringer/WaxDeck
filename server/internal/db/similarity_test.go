@@ -244,7 +244,7 @@ func TestLeaseSimilarityWorkAttemptCap(t *testing.T) {
 	// An item a worker leases but never reports must not re-lease
 	// forever: past the cap it stops being offered and leaves the
 	// reported queue depth.
-	for i := 0; i < maxAnalysisAttempts; i++ {
+	for i := range maxAnalysisAttempts {
 		work, err := d.LeaseSimilarityWork(ctx, 10, 0, true)
 		if err != nil || len(work) != 1 {
 			t.Fatalf("lease %d = (%v, %v), want the item", i+1, work, err)

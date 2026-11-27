@@ -108,7 +108,7 @@ func TestPathConnectsAndFitsLength(t *testing.T) {
 	// A chain around the circle: consecutive angles are close, the
 	// endpoints are far, so the path must walk the chain.
 	n := 30
-	for i := 0; i < n; i++ {
+	for i := range n {
 		e.Ingest(fmt.Sprintf("e%d", i), vecAngle(float64(i)*0.1))
 	}
 	path, complete := e.Path("e0", fmt.Sprintf("e%d", n-1), 8)
@@ -181,7 +181,7 @@ func TestBruteForceMatchesGraphAtScale(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	e := New()
 	const n, dims = 300, 8
-	for i := 0; i < n; i++ {
+	for i := range n {
 		v := make([]float32, dims)
 		for j := range v {
 			v[j] = float32(rng.NormFloat64())

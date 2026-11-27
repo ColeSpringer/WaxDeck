@@ -68,17 +68,17 @@ func newFeedServer(t *testing.T, episodes int) *feedServer {
 	// podtrac-style measurement chains front real enclosures.
 	mux.HandleFunc("/hop/", func(w http.ResponseWriter, r *http.Request) {
 		rest := strings.TrimPrefix(r.URL.Path, "/hop/")
-		slash := strings.IndexByte(rest, '/')
-		if slash < 0 {
+		before, after, ok := strings.Cut(rest, "/")
+		if !ok {
 			http.NotFound(w, r)
 			return
 		}
-		n, err := strconv.Atoi(rest[:slash])
+		n, err := strconv.Atoi(before)
 		if err != nil || n < 1 {
 			http.NotFound(w, r)
 			return
 		}
-		target := "/" + rest[slash+1:]
+		target := "/" + after
 		if n > 1 {
 			target = fmt.Sprintf("/hop/%d%s", n-1, target)
 		}
@@ -573,7 +573,7 @@ func TestPodcastLifecycle(t *testing.T) {
 	// mirrors walk every page.
 	var sawShow, sawEpisode bool
 	snapPath := "/api/v1/sync/catalog"
-	for pages := 0; pages < 10; pages++ {
+	for range 10 {
 		resp = get(t, h.ts, snapPath, h.token)
 		snap := decode[CatalogSyncPage](t, resp)
 		for _, e := range snap.Entries {
@@ -940,7 +940,7 @@ func TestEpisodeVisibilityFollowsSubscription(t *testing.T) {
 	// The fresh snapshot reflects the new membership: no shows, no
 	// episodes, and the show stays browsable through its own surface.
 	snapPath := "/api/v1/sync/catalog"
-	for pages := 0; pages < 10; pages++ {
+	for range 10 {
 		r := get(t, h.ts, snapPath, h.token)
 		snap := decode[CatalogSyncPage](t, r)
 		for _, e := range snap.Entries {

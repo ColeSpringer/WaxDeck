@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,8 +64,8 @@ func buildGolden(reverse bool) *Registry {
 		},
 	}
 	if reverse {
-		for i := len(fill) - 1; i >= 0; i-- {
-			fill[i]()
+		for _, f := range slices.Backward(fill) {
+			f()
 		}
 	} else {
 		for _, f := range fill {
@@ -204,14 +205,12 @@ func TestConcurrentCounter(t *testing.T) {
 	cv := r.CounterVec("cv_total", "", []string{"w"})
 	var wg sync.WaitGroup
 	for range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range perWorker {
 				c.Inc()
 				cv.With("x").Inc() // resolve the child concurrently too
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	const want = workers * perWorker

@@ -32,7 +32,7 @@ func (s *Server) ListPlaylists(ctx context.Context, req ListPlaylistsRequestObje
 		out.Playlists = append(out.Playlists, playlistJSON(pl))
 	}
 	if page.Next != "" {
-		out.NextCursor = ptr(page.Next)
+		out.NextCursor = new(page.Next)
 	}
 	return ListPlaylists200JSONResponse(out), nil
 }
@@ -119,7 +119,7 @@ func (s *Server) ListPlaylistItems(ctx context.Context, req ListPlaylistItemsReq
 		out.Entries = append(out.Entries, PlaylistEntry{Position: e.Position, Item: summaryJSON(e.Item)})
 	}
 	if page.Next != "" {
-		out.NextCursor = ptr(page.Next)
+		out.NextCursor = new(page.Next)
 	}
 	return ListPlaylistItems200JSONResponse(out), nil
 }
@@ -193,7 +193,7 @@ func (s *Server) GetRuleFields(ctx context.Context, _ GetRuleFieldsRequestObject
 			Sortable:  f.Sortable,
 		}
 		if f.Description != "" {
-			rf.Description = ptr(f.Description)
+			rf.Description = new(f.Description)
 		}
 		out.Fields = append(out.Fields, rf)
 	}
@@ -234,7 +234,7 @@ func (s *Server) ImportPlaylistM3u(ctx context.Context, req ImportPlaylistM3uReq
 		Unmatched: res.Unmatched,
 	}
 	if len(res.UnmatchedPaths) > 0 {
-		out.UnmatchedPaths = ptr(res.UnmatchedPaths)
+		out.UnmatchedPaths = new(res.UnmatchedPaths)
 	}
 	return ImportPlaylistM3u201JSONResponse(out), nil
 }
@@ -255,7 +255,7 @@ func (s *Server) PreviewPlaylistM3u(ctx context.Context, req PreviewPlaylistM3uR
 	for _, ln := range prev.Lines {
 		e := M3uPreviewEntry{Path: ln.Path, Outcome: M3uPreviewEntryOutcome(ln.Outcome)}
 		if ln.Item != nil {
-			e.Item = ptr(summaryJSON(*ln.Item))
+			e.Item = new(summaryJSON(*ln.Item))
 		}
 		out.Entries = append(out.Entries, e)
 	}
@@ -329,10 +329,10 @@ func nspReportJSON(rep service.NSPReport) NspReport {
 		out.Notes = &notes
 	}
 	if rep.Truncated {
-		out.Truncated = ptr(true)
+		out.Truncated = new(true)
 	}
 	if rep.RuleHash != "" {
-		out.RuleHash = ptr(rep.RuleHash)
+		out.RuleHash = new(rep.RuleHash)
 	}
 	if rep.Rule != nil {
 		r := ruleToWire(*rep.Rule)
@@ -354,21 +354,20 @@ func nspGapsJSON(gaps []service.NSPGap) []NspGap {
 			Reason: g.Reason,
 		}
 		if g.Field != "" {
-			row.Field = ptr(g.Field)
+			row.Field = new(g.Field)
 		}
 		if g.Op != "" {
-			row.Op = ptr(g.Op)
+			row.Op = new(g.Op)
 		}
 		if g.Key != "" {
-			row.Key = ptr(g.Key)
+			row.Key = new(g.Key)
 		}
 		if g.Mode != "" {
-			row.Mode = ptr(g.Mode)
+			row.Mode = new(g.Mode)
 		}
-		// The generated field is a bare `interface{}`, not a pointer:
-		// taking an address here would hand every in-process reader a
-		// `*interface{}` that only survives because encoding/json
-		// follows it.
+		// The generated field is a bare `any`, not a pointer: taking an
+		// address here would hand every in-process reader a `*any` that
+		// only survives because encoding/json follows it.
 		row.Value = g.Value
 		out = append(out, row)
 	}
@@ -390,7 +389,7 @@ func playlistJSON(pl service.Playlist) Playlist {
 		UpdatedAt:  pl.UpdatedAt,
 	}
 	if pl.HasArt {
-		out.HasArt = ptr(true)
+		out.HasArt = new(true)
 	}
 	if pl.Rule != nil {
 		r := ruleToWire(*pl.Rule)
@@ -451,20 +450,20 @@ func ruleNodeFromWire(n RuleNode) service.RuleNode {
 func ruleToWire(r service.SmartRule) SmartRule {
 	out := SmartRule{Root: ruleNodeToWire(r.Root)}
 	if r.Limit > 0 {
-		out.Limit = ptr(r.Limit)
+		out.Limit = new(r.Limit)
 	}
 	if r.LimitMode != "" {
-		out.LimitMode = ptr(r.LimitMode)
+		out.LimitMode = new(r.LimitMode)
 	}
 	if r.LimitSeed != 0 {
-		out.LimitSeed = ptr(r.LimitSeed)
+		out.LimitSeed = new(r.LimitSeed)
 	}
 	if len(r.Sorts) > 0 {
 		sorts := make([]RuleSort, 0, len(r.Sorts))
 		for _, s := range r.Sorts {
 			ws := RuleSort{Field: s.Field}
 			if s.Desc {
-				ws.Desc = ptr(true)
+				ws.Desc = new(true)
 			}
 			sorts = append(sorts, ws)
 		}
@@ -487,16 +486,16 @@ func ruleNodeToWire(n service.RuleNode) RuleNode {
 		out.Node = &child
 	}
 	if n.Field != "" {
-		out.Field = ptr(n.Field)
+		out.Field = new(n.Field)
 	}
 	if n.Op != "" {
-		out.Op = ptr(n.Op)
+		out.Op = new(n.Op)
 	}
 	if n.Value != "" {
-		out.Value = ptr(n.Value)
+		out.Value = new(n.Value)
 	}
 	if len(n.Values) > 0 {
-		out.Values = ptr(n.Values)
+		out.Values = new(n.Values)
 	}
 	return out
 }

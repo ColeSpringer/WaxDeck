@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"testing"
@@ -58,9 +59,7 @@ func uploadDeclaring(t *testing.T, h *harness, token, path string, extra map[str
 		"sizeBytes": len(raw),
 		"mediaType": "music",
 	}
-	for k, v := range extra {
-		body[k] = v
-	}
+	maps.Copy(body, extra)
 	resp := postJSONAs(t, h, token, "/api/v1/uploads", body)
 	if resp.StatusCode != 201 {
 		t.Fatalf("create upload status = %d", resp.StatusCode)
@@ -619,9 +618,7 @@ func TestAcquisitionCarriesTheAcceptBestChoice(t *testing.T) {
 		url := "https://tube.example/watch?v=" + name
 		src.files[url] = paths[0]
 		body := map[string]any{"url": url, "mediaType": "music"}
-		for k, v := range extra {
-			body[k] = v
-		}
+		maps.Copy(body, extra)
 		return decodeStatus[ToolTask](t, postJSONAs(t, h, h.token, "/api/v1/acquisitions", body), 202, "acquisition").Id
 	}
 	entryFor := func(taskID string) ReviewEntryDetail {

@@ -207,8 +207,7 @@ func bindRefusal(err error) error {
 // failure the classifier cannot name: no refusal of the link, so a service
 // error as it stands and anything else by its classification.
 func unnamedBindFailure(err error) error {
-	var se *Error
-	if errors.As(err, &se) {
+	if _, ok := errors.AsType[*Error](err); ok {
 		return err
 	}
 	return classify(err)

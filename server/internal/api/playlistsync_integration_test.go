@@ -1026,7 +1026,7 @@ func TestPlaylistSyncFailureAccounting(t *testing.T) {
 	wantStatus(t, resp, 200, "bind")
 
 	// Nine failures stand recorded; the failing run ahead is the edge.
-	for i := 0; i < 9; i++ {
+	for range 9 {
 		if _, err := h.store.RecordPlaylistSyncFailure(ctx, rawPlaylistPID(pl.Pid), "prior", time.Now().UnixNano(), 100); err != nil {
 			t.Fatal(err)
 		}

@@ -651,8 +651,7 @@ func TestASplitWhosePiecesCannotTakeTheirNamesWaitsSayingWhereEachIs(t *testing.
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
 	err = attempt(t, ctx, svc, 1)
-	var wait *toolRetry
-	if !errors.As(err, &wait) {
+	if _, ok := errors.AsType[*toolRetry](err); !ok {
 		t.Fatalf("split = %v, want it waiting", err)
 	}
 	for i := range 3 {

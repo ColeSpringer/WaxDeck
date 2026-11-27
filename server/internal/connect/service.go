@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"slices"
 	"sync"
 	"time"
 
@@ -74,10 +75,8 @@ func (b Bases) forKind(kind string) []string {
 		if s == "" {
 			return
 		}
-		for _, have := range out {
-			if have == s {
-				return
-			}
+		if slices.Contains(out, s) {
+			return
 		}
 		out = append(out, s)
 	}
@@ -903,11 +902,7 @@ func mediaTTL(entries []QueueEntry) time.Duration {
 	for _, e := range entries {
 		totalMS += e.DurationMS
 	}
-	ttl := time.Duration(totalMS)*time.Millisecond + 15*time.Minute
-	if ttl < 30*time.Minute {
-		ttl = 30 * time.Minute
-	}
-	return ttl
+	return max(time.Duration(totalMS)*time.Millisecond+15*time.Minute, 30*time.Minute)
 }
 
 // timelineAbsoluteMS maps (index, in-entry position) to the absolute

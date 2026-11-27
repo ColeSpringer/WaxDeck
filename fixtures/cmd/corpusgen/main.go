@@ -54,7 +54,7 @@ func run(out string, items, perFile int, covers bool) error {
 	genres := []string{"Rock", "Jazz", "Ambient", "Folk", "Electronic", "Classical", "Blues", "Soul"}
 	start := time.Now()
 	made := 0
-	for f := 0; f < files; f++ {
+	for f := range files {
 		name := fmt.Sprintf("album%05d", f)
 		// Each album gets a directory of its own. Flat was fine while a
 		// corpus was audio and cue sheets, but folder art is per

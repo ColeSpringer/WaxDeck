@@ -22,13 +22,13 @@ func (s *Server) shareJSON(info service.ShareInfo) Share {
 		Plays:         info.Plays,
 	}
 	if info.OwnerName != "" {
-		out.Owner = ptr(info.OwnerName)
+		out.Owner = new(info.OwnerName)
 	}
 	if info.PositionMs > 0 {
-		out.PositionMs = ptr(info.PositionMs)
+		out.PositionMs = new(info.PositionMs)
 	}
 	if !info.ExpiresAt.IsZero() {
-		out.ExpiresAt = ptr(info.ExpiresAt)
+		out.ExpiresAt = new(info.ExpiresAt)
 	}
 	return out
 }
@@ -56,7 +56,7 @@ func (s *Server) ListShares(ctx context.Context, req ListSharesRequestObject) (L
 		out.Shares = append(out.Shares, s.shareJSON(sh))
 	}
 	if res.Next != "" {
-		out.NextCursor = ptr(res.Next)
+		out.NextCursor = new(res.Next)
 	}
 	return ListShares200JSONResponse(out), nil
 }

@@ -57,9 +57,7 @@ func loadSpec(path string) (*spec, error) {
 	}
 	s := &spec{doc: doc, root: &root, schemas: map[string]*openapi3.SchemaRef{}}
 	if doc.Components != nil {
-		for name, ref := range doc.Components.Schemas {
-			s.schemas[name] = ref
-		}
+		maps.Copy(s.schemas, doc.Components.Schemas)
 	}
 	var p problems
 	for _, path := range s.keys("paths") {

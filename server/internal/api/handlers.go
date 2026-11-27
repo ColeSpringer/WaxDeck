@@ -263,8 +263,8 @@ func (s *Server) GetHealth(ctx context.Context, _ GetHealthRequestObject) (GetHe
 		Status:          "ok",
 		Version:         s.Version,
 		ApiVersion:      1,
-		UploadFormats:   ptr(s.svc.Ingest.UploadFormats()),
-		RejectedFormats: ptr(s.svc.Ingest.RejectedFormats()),
+		UploadFormats:   new(s.svc.Ingest.UploadFormats()),
+		RejectedFormats: new(s.svc.Ingest.RejectedFormats()),
 		Streaming: &StreamingEngineState{
 			Configured: s.bridge != nil,
 			Connected:  engine.Connected,
@@ -272,7 +272,7 @@ func (s *Server) GetHealth(ctx context.Context, _ GetHealthRequestObject) (GetHe
 			VoiceBoost: engine.VoiceBoost,
 			FileTools:  engine.FileTools,
 		},
-		Podcasts: ptr(s.svc.Podcasts.On()),
+		Podcasts: new(s.svc.Podcasts.On()),
 	}, nil
 }
 
@@ -411,7 +411,7 @@ type selfView struct {
 func (v selfView) json() User {
 	out := User{Id: v.id, Username: v.username, Roles: v.roles}
 	if v.displayName != "" {
-		out.DisplayName = ptr(v.displayName)
+		out.DisplayName = new(v.displayName)
 	}
 	out.UploadEnabled = v.uploadEnabled
 	manage := v.perms.ManagePodcasts
@@ -423,8 +423,8 @@ func (v selfView) json() User {
 			del = true
 		}
 	}
-	out.ManagePodcasts = ptr(manage)
-	out.Delete = ptr(del)
+	out.ManagePodcasts = new(manage)
+	out.Delete = new(del)
 	return out
 }
 
@@ -562,7 +562,7 @@ func (s *Server) Search(ctx context.Context, req SearchRequestObject) (SearchRes
 		Tracks:    searchHitsJSON(res.Tracks),
 		Books:     searchHitsJSON(res.Books),
 		Episodes:  searchHitsJSON(res.Episodes),
-		Truncated: ptr(res.Truncated),
+		Truncated: new(res.Truncated),
 	}, nil
 }
 
@@ -586,10 +586,10 @@ func (s *Server) ResolveEntities(ctx context.Context, req ResolveEntitiesRequest
 			Title: c.Title,
 		}
 		if c.Artist != "" {
-			card.Artist = ptr(c.Artist)
+			card.Artist = new(c.Artist)
 		}
 		if c.Year != 0 {
-			card.Year = ptr(c.Year)
+			card.Year = new(c.Year)
 		}
 		card.ItemCount = c.ItemCount
 		if c.MediaTypes != nil {
@@ -651,17 +651,17 @@ func albumJSON(d service.AlbumDetail) AlbumDetail {
 		{d.Country, &out.Country},
 	} {
 		if f.value != "" {
-			*f.into = ptr(f.value)
+			*f.into = new(f.value)
 		}
 	}
 	if d.Year != 0 {
-		out.Year = ptr(d.Year)
+		out.Year = new(d.Year)
 	}
 	if d.ItemCount != 0 {
-		out.ItemCount = ptr(d.ItemCount)
+		out.ItemCount = new(d.ItemCount)
 	}
 	if d.TotalDurationMS != 0 {
-		out.TotalDurationMs = ptr(d.TotalDurationMS)
+		out.TotalDurationMs = new(d.TotalDurationMS)
 	}
 	out.ArtSource = artSourceJSON(d.ArtSource)
 	return out
@@ -748,9 +748,9 @@ func artTooBigForSize(blob service.ArtBlob) bool {
 // artHeaderValues renders one resolved cover's provenance as the four
 // response headers, for the 200 and the 304 alike.
 func artHeaderValues(src service.ArtSourceDTO) (source, provider, sourceURL, level *string) {
-	source = ptr(src.Source)
+	source = new(src.Source)
 	if src.Provider != "" {
-		provider = ptr(src.Provider)
+		provider = new(src.Provider)
 	}
 	// The one header value that came off somebody else's network.
 	// net/http neutralizes the newlines, so this is the length: a
@@ -759,10 +759,10 @@ func artHeaderValues(src service.ArtSourceDTO) (source, provider, sourceURL, lev
 	// trade. Omitted rather than truncated, because half a URL is not a
 	// shorter URL.
 	if url := src.SourceURL; url != "" && len(url) <= maxArtHeaderURL {
-		sourceURL = ptr(url)
+		sourceURL = new(url)
 	}
 	if src.Level != "" {
-		level = ptr(src.Level)
+		level = new(src.Level)
 	}
 	return source, provider, sourceURL, level
 }
@@ -870,25 +870,25 @@ func (s *Server) GetItemArtRoles(ctx context.Context, req GetItemArtRolesRequest
 	for _, i := range infos.Roles {
 		info := ArtRoleInfo{
 			Role:       ArtRole(i.Role),
-			Width:      ptr(i.Width),
-			Height:     ptr(i.Height),
-			Locked:     ptr(i.Locked),
-			RoleLocked: ptr(i.RoleLocked),
+			Width:      new(i.Width),
+			Height:     new(i.Height),
+			Locked:     new(i.Locked),
+			RoleLocked: new(i.RoleLocked),
 		}
 		if i.Format != "" {
-			info.Format = ptr(i.Format)
+			info.Format = new(i.Format)
 		}
 		if i.Source != "" {
-			info.Source = ptr(i.Source)
+			info.Source = new(i.Source)
 		}
 		if i.Provider != "" {
-			info.Provider = ptr(i.Provider)
+			info.Provider = new(i.Provider)
 		}
 		if i.SourceURL != "" {
-			info.SourceUrl = ptr(i.SourceURL)
+			info.SourceUrl = new(i.SourceURL)
 		}
 		if !i.UpdatedAt.IsZero() {
-			info.UpdatedAt = ptr(i.UpdatedAt)
+			info.UpdatedAt = new(i.UpdatedAt)
 		}
 		out.Roles = append(out.Roles, info)
 	}
@@ -905,19 +905,19 @@ func artSourceJSON(a service.ArtSourceDTO) *ArtSource {
 	}
 	out := &ArtSource{Source: a.Source}
 	if a.Provider != "" {
-		out.Provider = ptr(a.Provider)
+		out.Provider = new(a.Provider)
 	}
 	if a.SourceURL != "" {
-		out.SourceUrl = ptr(a.SourceURL)
+		out.SourceUrl = new(a.SourceURL)
 	}
 	if a.Level != "" {
-		out.Level = ptr(a.Level)
+		out.Level = new(a.Level)
 	}
 	if a.Derived {
-		out.Derived = ptr(true)
+		out.Derived = new(true)
 	}
 	if !a.UpdatedAt.IsZero() {
-		out.UpdatedAt = ptr(a.UpdatedAt)
+		out.UpdatedAt = new(a.UpdatedAt)
 	}
 	return out
 }
@@ -930,7 +930,7 @@ func (s *Server) GetItemLyrics(ctx context.Context, req GetItemLyricsRequestObje
 	}
 	out := Lyrics{Pid: ly.PID, Source: ly.Source}
 	if ly.Provider != "" {
-		out.Provider = ptr(ly.Provider)
+		out.Provider = new(ly.Provider)
 	}
 	if len(ly.Synced) > 0 {
 		lines := make([]SyncedLine, 0, len(ly.Synced))
@@ -940,7 +940,7 @@ func (s *Server) GetItemLyrics(ctx context.Context, req GetItemLyricsRequestObje
 		out.Synced = &lines
 	}
 	if ly.Unsynced != "" {
-		out.Unsynced = ptr(ly.Unsynced)
+		out.Unsynced = new(ly.Unsynced)
 	}
 	return GetItemLyrics200JSONResponse(out), nil
 }
@@ -1173,10 +1173,10 @@ func searchHitsJSON(hits []service.SearchHit) []SearchHit {
 	for _, h := range hits {
 		hit := SearchHit{Pid: h.PID, Kind: h.Kind, Title: h.Title}
 		if h.Subtitle != "" {
-			hit.Subtitle = ptr(h.Subtitle)
+			hit.Subtitle = new(h.Subtitle)
 		}
 		if h.Exact {
-			hit.Exact = ptr(true)
+			hit.Exact = new(true)
 		}
 		out = append(out, hit)
 	}
@@ -1265,7 +1265,7 @@ func pageJSON(p service.Page) ItemPage {
 		out.Items = append(out.Items, summaryJSON(it))
 	}
 	if p.Next != "" {
-		out.NextCursor = ptr(p.Next)
+		out.NextCursor = new(p.Next)
 	}
 	return out
 }
@@ -1276,34 +1276,34 @@ func summaryJSON(it service.ItemSummary) ItemSummary {
 		MediaType:  MediaType(it.MediaType),
 		Title:      it.Title,
 		DurationMs: it.DurationMS,
-		ArtUrl:     ptr("/api/v1/items/" + url.PathEscape(it.PID) + "/art"),
+		ArtUrl:     new("/api/v1/items/" + url.PathEscape(it.PID) + "/art"),
 	}
 	if it.Artist != "" {
-		s.Artist = ptr(it.Artist)
+		s.Artist = new(it.Artist)
 	}
 	if it.Album != "" {
-		s.Album = ptr(it.Album)
+		s.Album = new(it.Album)
 	}
 	if it.ArtistPID != "" {
-		s.ArtistPid = ptr(it.ArtistPID)
+		s.ArtistPid = new(it.ArtistPID)
 	}
 	if it.AlbumPID != "" {
-		s.AlbumPid = ptr(it.AlbumPID)
+		s.AlbumPid = new(it.AlbumPID)
 	}
 	if it.TrackNo > 0 {
-		s.TrackNumber = ptr(it.TrackNo)
+		s.TrackNumber = new(it.TrackNo)
 	}
 	if it.DiscNo > 0 {
-		s.DiscNumber = ptr(it.DiscNo)
+		s.DiscNumber = new(it.DiscNo)
 	}
 	if it.SortKey != "" {
-		s.SortKey = ptr(it.SortKey)
+		s.SortKey = new(it.SortKey)
 	}
 	if it.ArtistSort != "" {
-		s.ArtistSort = ptr(it.ArtistSort)
+		s.ArtistSort = new(it.ArtistSort)
 	}
 	if it.ArtistSortKey != "" {
-		s.ArtistSortKey = ptr(it.ArtistSortKey)
+		s.ArtistSortKey = new(it.ArtistSortKey)
 	}
 	return s
 }
@@ -1314,76 +1314,76 @@ func itemJSON(d service.ItemDetail) Item {
 		MediaType:  MediaType(d.MediaType),
 		Title:      d.Title,
 		DurationMs: d.DurationMS,
-		ArtUrl:     ptr("/api/v1/items/" + url.PathEscape(d.PID) + "/art"),
+		ArtUrl:     new("/api/v1/items/" + url.PathEscape(d.PID) + "/art"),
 	}
 	if d.Artist != "" {
-		it.Artist = ptr(d.Artist)
+		it.Artist = new(d.Artist)
 	}
 	if d.Album != "" {
-		it.Album = ptr(d.Album)
+		it.Album = new(d.Album)
 	}
 	if d.ArtistPID != "" {
-		it.ArtistPid = ptr(d.ArtistPID)
+		it.ArtistPid = new(d.ArtistPID)
 	}
 	if d.AlbumPID != "" {
-		it.AlbumPid = ptr(d.AlbumPID)
+		it.AlbumPid = new(d.AlbumPID)
 	}
 	if len(d.Genres) > 0 {
 		it.Genres = &d.Genres
 	}
 	if d.Year != 0 {
-		it.Year = ptr(d.Year)
+		it.Year = new(d.Year)
 	}
 	if d.TrackNo != 0 {
-		it.TrackNumber = ptr(d.TrackNo)
+		it.TrackNumber = new(d.TrackNo)
 	}
 	if d.DiscNo != 0 {
-		it.DiscNumber = ptr(d.DiscNo)
+		it.DiscNumber = new(d.DiscNo)
 	}
 	if d.SortKey != "" {
-		it.SortKey = ptr(d.SortKey)
+		it.SortKey = new(d.SortKey)
 	}
 	if d.ArtistSort != "" {
-		it.ArtistSort = ptr(d.ArtistSort)
+		it.ArtistSort = new(d.ArtistSort)
 	}
 	if d.ArtistSortKey != "" {
-		it.ArtistSortKey = ptr(d.ArtistSortKey)
+		it.ArtistSortKey = new(d.ArtistSortKey)
 	}
 	if d.TrackTotal != 0 {
-		it.TrackTotal = ptr(d.TrackTotal)
+		it.TrackTotal = new(d.TrackTotal)
 	}
 	if d.DiscTotal != 0 {
-		it.DiscTotal = ptr(d.DiscTotal)
+		it.DiscTotal = new(d.DiscTotal)
 	}
 	if d.PartTotal != 0 {
-		it.PartTotal = ptr(d.PartTotal)
+		it.PartTotal = new(d.PartTotal)
 	}
 	if d.BPM != 0 {
-		it.Bpm = ptr(d.BPM)
+		it.Bpm = new(d.BPM)
 	}
 	if d.Codec != "" {
-		it.Codec = ptr(d.Codec)
+		it.Codec = new(d.Codec)
 	}
 	if d.Container != "" {
-		it.Container = ptr(d.Container)
+		it.Container = new(d.Container)
 	}
 	if d.SampleRate != 0 {
-		it.SampleRate = ptr(d.SampleRate)
+		it.SampleRate = new(d.SampleRate)
 	}
 	if d.Bitrate != 0 {
-		it.Bitrate = ptr(d.Bitrate)
+		it.Bitrate = new(d.Bitrate)
 	}
 	if !d.AddedAt.IsZero() {
 		it.AddedAt = &d.AddedAt
 	}
 	if d.Copies > 0 {
-		it.Copies = ptr(d.Copies)
+		it.Copies = new(d.Copies)
 	}
 	if d.MBID != "" {
-		it.Mbid = ptr(d.MBID)
+		it.Mbid = new(d.MBID)
 	}
 	if d.ISRC != "" {
-		it.Isrc = ptr(d.ISRC)
+		it.Isrc = new(d.ISRC)
 	}
 	it.ArtSource = artSourceJSON(d.ArtSource)
 	return it
@@ -1392,19 +1392,19 @@ func itemJSON(d service.ItemDetail) Item {
 func jobJSON(j service.Job) Job {
 	out := Job{Pid: j.PID, Kind: j.Kind, State: j.State, Cancelable: j.Cancelable, CancelRequested: j.CancelRequested}
 	if j.Progress > 0 {
-		out.Progress = ptr(j.Progress)
+		out.Progress = new(j.Progress)
 	}
 	if j.Message != "" {
-		out.Message = ptr(j.Message)
+		out.Message = new(j.Message)
 	}
 	if j.Error != "" {
-		out.Error = ptr(j.Error)
+		out.Error = new(j.Error)
 	}
 	if !j.StartedAt.IsZero() {
-		out.StartedAt = ptr(j.StartedAt)
+		out.StartedAt = new(j.StartedAt)
 	}
 	if !j.FinishedAt.IsZero() {
-		out.FinishedAt = ptr(j.FinishedAt)
+		out.FinishedAt = new(j.FinishedAt)
 	}
 	if r := jobResultJSON(j); r != nil {
 		out.Result = &r
@@ -1412,7 +1412,7 @@ func jobJSON(j service.Job) Job {
 	if t := j.Target; t != nil {
 		out.Target = &JobTarget{Type: t.Type, Pid: t.PID}
 		if t.Name != "" {
-			out.Target.Name = ptr(t.Name)
+			out.Target.Name = new(t.Name)
 		}
 	}
 	return out
@@ -1514,8 +1514,6 @@ func scanTallyJSON(r service.ScanTallyDTO) map[string]any {
 }
 
 // --- small helpers ----------------------------------------------------------------
-
-func ptr[T any](v T) *T { return &v }
 
 func deref(p *string) string {
 	if p == nil {

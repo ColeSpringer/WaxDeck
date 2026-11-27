@@ -268,7 +268,7 @@ func TestCatalogCursorsAtTheirTail(t *testing.T) {
 	if _, err := svc.SyncCatalogDelta(ctx, admin, past, 10); KindOf(err) != KindGone {
 		t.Errorf("a cursor past the tail answered %q (%v), want sync-reset", KindOf(err), err)
 	}
-	old := base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf("c1|%s|%d|%d", feedGen(svc), epoch, head)))
+	old := base64.RawURLEncoding.EncodeToString(fmt.Appendf(nil, "c1|%s|%d|%d", feedGen(svc), epoch, head))
 	if _, err := svc.SyncCatalogDelta(ctx, admin, old, 10); KindOf(err) != KindGone {
 		t.Errorf("a cursor of the earlier shape answered %q (%v), want sync-reset", KindOf(err), err)
 	}
@@ -334,7 +334,7 @@ func TestServerCursorsAtTheirTail(t *testing.T) {
 	if _, err := svc.SyncServerDelta(ctx, uc, past, 10); KindOf(err) != KindGone {
 		t.Errorf("a cursor past the tail answered %q (%v), want sync-reset", KindOf(err), err)
 	}
-	old := base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf("s1|%s|%d", svc.serverGen, tail)))
+	old := base64.RawURLEncoding.EncodeToString(fmt.Appendf(nil, "s1|%s|%d", svc.serverGen, tail))
 	if _, err := svc.SyncServerDelta(ctx, uc, old, 10); KindOf(err) != KindGone {
 		t.Errorf("a cursor of the earlier shape answered %q (%v), want sync-reset", KindOf(err), err)
 	}

@@ -100,7 +100,7 @@ func newDiscoveryFixture(t *testing.T) discoveryFixture {
 func (f discoveryFixture) sweepToQuiet(t *testing.T) DiscoverySweepReport {
 	t.Helper()
 	var last DiscoverySweepReport
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		rep, err := f.svc.Similarity.SweepDiscoveries(f.ctx)
 		if err != nil {
 			t.Fatalf("discovery sweep: %v", err)
@@ -191,7 +191,7 @@ func TestDiscoveryCappedPassAdvancesToWhereItStopped(t *testing.T) {
 	// are the albums.
 	const albums = discoveryUnitsPerPass + 4
 	specs := make([]fixtures.Spec, 0, albums)
-	for i := 0; i < albums; i++ {
+	for i := range albums {
 		specs = append(
 			specs,
 			discoveryTrack("found"+strconv.Itoa(i), "Track "+strconv.Itoa(i),

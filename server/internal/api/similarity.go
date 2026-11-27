@@ -63,11 +63,11 @@ func (s *Server) GetSimilarityStatus(ctx context.Context, _ GetSimilarityStatusR
 		QueueDepth:     st.QueueDepth,
 	}
 	if st.Model != "" {
-		out.Model = ptr(st.Model)
-		out.Dims = ptr(st.Dims)
+		out.Model = new(st.Model)
+		out.Dims = new(st.Dims)
 	}
 	if !st.LastIngestAt.IsZero() {
-		out.LastIngestAt = ptr(st.LastIngestAt)
+		out.LastIngestAt = new(st.LastIngestAt)
 	}
 	return GetSimilarityStatus200JSONResponse(out), nil
 }
@@ -103,7 +103,7 @@ func (s *Server) PullSimilarityWork(ctx context.Context, req PullSimilarityWorkR
 			MediaType:  MediaType(w.MediaType),
 		}
 		if w.LocalPath != "" {
-			item.LocalPath = ptr(w.LocalPath)
+			item.LocalPath = new(w.LocalPath)
 		}
 		out.Items = append(out.Items, item)
 	}
@@ -143,10 +143,10 @@ func (s *Server) ReportEmbeddings(ctx context.Context, req ReportEmbeddingsReque
 		for _, r := range res.Rejected {
 			re := RejectedEmbedding{Code: r.Code, Message: r.Message}
 			if r.PID != "" {
-				re.Pid = ptr(r.PID)
+				re.Pid = new(r.PID)
 			}
 			if r.Essence != "" {
-				re.Essence = ptr(r.Essence)
+				re.Essence = new(r.Essence)
 			}
 			rej = append(rej, re)
 		}

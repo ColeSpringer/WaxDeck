@@ -205,8 +205,8 @@ func TestAServerWithNoServiceResolvesNoUser(t *testing.T) {
 func TestOperationAccessKnowsEveryHandler(t *testing.T) {
 	t.Parallel()
 	methods := reflect.TypeFor[StrictServerInterface]()
-	for i := range methods.NumMethod() {
-		name := methods.Method(i).Name
+	for method := range methods.Methods() {
+		name := method.Name
 		if _, ok := operationAccess()[name]; !ok {
 			t.Errorf("%s is not in the contract under its method name", name)
 		}

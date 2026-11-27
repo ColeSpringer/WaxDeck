@@ -511,7 +511,7 @@ func TestServeHLSRewritesPlaylistsAndProxiesSegments(t *testing.T) {
 
 	// Extract the media playlist URI and fetch it through the proxy.
 	var mediaURI string
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		if strings.HasPrefix(line, "media.m3u8") {
 			mediaURI = "/media/hls/" + line
 		}
@@ -531,7 +531,7 @@ func TestServeHLSRewritesPlaylistsAndProxiesSegments(t *testing.T) {
 	// Segment fetches pass the upstream signature through, minus the
 	// token, and never carry the API key.
 	var segURI string
-	for _, line := range strings.Split(mediaBody, "\n") {
+	for line := range strings.SplitSeq(mediaBody, "\n") {
 		if strings.HasPrefix(line, "seg/") {
 			segURI = "/media/hls/" + line
 		}
@@ -1275,11 +1275,9 @@ func TestConcurrentFirstHoldsShareTheSlot(t *testing.T) {
 	var wg sync.WaitGroup
 	fresh, errs := make([]bool, 2), make([]error, 2)
 	for i := range 2 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			fresh[i], errs[i] = b.holdTimelineSlot(context.Background(), "us-alice", TranscodeStream)
-		}()
+		})
 	}
 	wg.Wait()
 	if errs[0] != nil || errs[1] != nil || fresh[0] == fresh[1] {
@@ -1441,7 +1439,7 @@ func TestServeHLSAsksTheGateOnEveryFetch(t *testing.T) {
 		t.Fatalf("master status %d", rec.Code)
 	}
 	var mediaURI string
-	for _, line := range strings.Split(rec.Body.String(), "\n") {
+	for line := range strings.SplitSeq(rec.Body.String(), "\n") {
 		if strings.HasPrefix(line, "media.m3u8") {
 			mediaURI = "/media/hls/" + line
 		}

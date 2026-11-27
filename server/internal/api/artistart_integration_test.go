@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -61,12 +62,7 @@ func (f *fakeArtistArtProvider) Enrich(_ context.Context, req enrich.Request) (*
 func (f *fakeArtistArtProvider) askedAbout(name string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	for _, a := range f.asks {
-		if a == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(f.asks, name)
 }
 
 // demoArtistPID resolves the fixture library's one artist entity.
@@ -251,10 +247,5 @@ func TestEnrichmentStatusReportsNothingToRun(t *testing.T) {
 }
 
 func hasPhase(phases []EnrichmentPhase, want EnrichmentPhase) bool {
-	for _, p := range phases {
-		if p == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(phases, want)
 }

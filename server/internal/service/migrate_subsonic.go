@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -72,9 +73,7 @@ func (c *subsonicClient) call(ctx context.Context, method string, params url.Val
 	salt := hex.EncodeToString(saltBytes)
 	sum := md5.Sum([]byte(c.password + salt))
 	q := url.Values{}
-	for k, vs := range params {
-		q[k] = vs
-	}
+	maps.Copy(q, params)
 	q.Set("u", c.username)
 	q.Set("t", hex.EncodeToString(sum[:]))
 	q.Set("s", salt)
@@ -535,10 +534,7 @@ func (l *Migrate) runSubsonicImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 			}
 		}
 		if p.Ratings && s.UserRating > 0 {
-			r := s.UserRating
-			if r > 5 {
-				r = 5
-			}
+			r := min(s.UserRating, 5)
 			scaled := r * 20
 			ok, err := write(func() error {
 				_, err := l.Playback.SetRating(ctx, uc, pid, &scaled, nil)

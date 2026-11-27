@@ -50,9 +50,11 @@ generate: gen-go gen-dart gen-semantics gen-api-types gen-l10n gen-version gen-m
 spec-bundle:
 	cd server && go run ./cmd/specbundle -src ../$(SPEC_SRC) -out ../$(SPEC)
 
+# oapi-codegen still writes interface{}; the rewrite keeps gopls from
+# hinting at every one of them in the generated file.
 gen-go: spec-bundle
 	cd server && go tool oapi-codegen -config ../tools/oapi-codegen.yaml ../$(SPEC)
-	cd server && gofmt -w internal/api/gen.go
+	cd server && gofmt -r 'interface{} -> any' -w internal/api/gen.go
 
 # The Dart client's models, codec, interfaces and calls. -client fails the
 # run unless client.dart takes calls.g.dart, its one part, and -extensions

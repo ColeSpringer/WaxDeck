@@ -3,16 +3,15 @@ package service
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 )
 
 // failing is a fallback hook failing the named reads.
 func failing(reads ...string) func(string) error {
 	return func(read string) error {
-		for _, r := range reads {
-			if r == read {
-				return errors.New("disk on fire")
-			}
+		if slices.Contains(reads, read) {
+			return errors.New("disk on fire")
 		}
 		return nil
 	}

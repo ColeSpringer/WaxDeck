@@ -91,7 +91,7 @@ func TestCreateUploadRefusesPastTheSessionCeiling(t *testing.T) {
 	// And it says which limit. Nothing the caller or the operator can
 	// free moves this one, so a client that renders the code alone
 	// sends somebody to clear space that will never help.
-	if !strings.Contains(err.Error(), strconv.Itoa(MaxUploadSize)) {
+	if !strings.Contains(err.Error(), strconv.FormatInt(MaxUploadSize, 10)) {
 		t.Fatalf("the refusal does not name the ceiling: %v", err)
 	}
 	// The ceiling is checked before the quota, and that order is what

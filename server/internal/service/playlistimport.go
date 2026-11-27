@@ -745,7 +745,7 @@ func parseTextExport(payload string) ([]PortableRefDTO, error) {
 		return nil, errInvalid("payload is empty")
 	}
 	var out []PortableRefDTO
-	for _, line := range strings.Split(payload, "\n") {
+	for line := range strings.SplitSeq(payload, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

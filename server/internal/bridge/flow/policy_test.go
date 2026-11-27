@@ -348,8 +348,6 @@ func TestDeviceFormat(t *testing.T) {
 	}
 }
 
-func lufs(v float64) *float64 { return &v }
-
 func TestTimelineGainDB(t *testing.T) {
 	member := func(durationMS int64, integrated, peak *float64) TimelineMember {
 		return TimelineMember{Src: Source{DurationMS: durationMS, IntegratedLUFS: integrated, TruePeakDB: peak}}
@@ -366,13 +364,13 @@ func TestTimelineGainDB(t *testing.T) {
 		},
 		{
 			name:    "a loud master is cut to the target",
-			members: []TimelineMember{member(60000, lufs(-8), lufs(-0.2))},
+			members: []TimelineMember{member(60000, new(-8.0), new(-0.2))},
 			want:    -10,
 			wantOK:  true,
 		},
 		{
 			name:    "a quiet master with headroom is lifted",
-			members: []TimelineMember{member(60000, lufs(-24), lufs(-12))},
+			members: []TimelineMember{member(60000, new(-24.0), new(-12.0))},
 			want:    6,
 			wantOK:  true,
 		},
@@ -381,15 +379,15 @@ func TestTimelineGainDB(t *testing.T) {
 			// decides more of the queue's level than a one-minute one.
 			name: "measured members are weighted by duration",
 			members: []TimelineMember{
-				member(600000, lufs(-20), lufs(-6)),
-				member(60000, lufs(-9), lufs(-6)),
+				member(600000, new(-20.0), new(-6.0)),
+				member(60000, new(-9.0), new(-6.0)),
 			},
 			want:   -18 - (-20*600000+-9*60000)/660000,
 			wantOK: true,
 		},
 		{
 			name:    "an unmeasured member rides the measured ones' gain",
-			members: []TimelineMember{member(60000, lufs(-24), lufs(-12)), member(60000, nil, nil)},
+			members: []TimelineMember{member(60000, new(-24.0), new(-12.0)), member(60000, nil, nil)},
 			want:    6,
 			wantOK:  true,
 		},
@@ -398,13 +396,13 @@ func TestTimelineGainDB(t *testing.T) {
 			// clip, so the peak decides and the queue is nudged down to
 			// the headroom line instead.
 			name:    "a peaking master is held under the ceiling",
-			members: []TimelineMember{member(60000, lufs(-24), lufs(-0.5))},
+			members: []TimelineMember{member(60000, new(-24.0), new(-0.5))},
 			want:    -0.5,
 			wantOK:  true,
 		},
 		{
 			name:    "a very quiet queue stops at the boost ceiling",
-			members: []TimelineMember{member(60000, lufs(-40), nil)},
+			members: []TimelineMember{member(60000, new(-40.0), nil)},
 			want:    replayGainMaxBoostDB,
 			wantOK:  true,
 		},
@@ -416,15 +414,15 @@ func TestTimelineGainDB(t *testing.T) {
 			// skips a member, and this is what says so.
 			name: "a peak counts even where its member's loudness does not",
 			members: []TimelineMember{
-				member(60000, lufs(-24), nil),
-				member(60000, nil, lufs(-0.5)),
+				member(60000, new(-24.0), nil),
+				member(60000, nil, new(-0.5)),
 			},
 			want:   -0.5,
 			wantOK: true,
 		},
 		{
 			name:    "a queue already at the target is left alone",
-			members: []TimelineMember{member(60000, lufs(-18.01), lufs(-3))},
+			members: []TimelineMember{member(60000, new(-18.01), new(-3.0))},
 		},
 	}
 	for _, tc := range cases {

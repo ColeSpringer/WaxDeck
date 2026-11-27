@@ -181,8 +181,7 @@ func (f *feedFault) Unwrap() error { return f.err }
 // FeedFailureReason is the reason a feed-side failure carries, "" for any
 // other error.
 func FeedFailureReason(err error) string {
-	var f *feedFault
-	if errors.As(err, &f) {
+	if f, ok := errors.AsType[*feedFault](err); ok {
 		return f.reason
 	}
 	return ""

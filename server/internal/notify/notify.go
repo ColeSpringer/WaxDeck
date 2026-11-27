@@ -104,8 +104,7 @@ func (t *Throttled) Unwrap() error { return t.Err }
 
 // RetryAfterOf reports the wait a destination asked for, or zero.
 func RetryAfterOf(err error) time.Duration {
-	var t *Throttled
-	if errors.As(err, &t) {
+	if t, ok := errors.AsType[*Throttled](err); ok {
 		return t.RetryAfter
 	}
 	return 0

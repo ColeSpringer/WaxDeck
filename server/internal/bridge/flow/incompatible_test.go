@@ -78,7 +78,7 @@ func TestAnEngineThatCannotServeIsSaidAsOne(t *testing.T) {
 	if n := logs.count(cannotServe); n != 1 {
 		t.Fatalf("the engine that cannot serve was said %d times, want once:\n%s", n, logs.buf.String())
 	}
-	for _, line := range strings.Split(logs.buf.String(), "\n") {
+	for line := range strings.SplitSeq(logs.buf.String(), "\n") {
 		if strings.Contains(line, cannotServe) && (!strings.Contains(line, "progressive") || !strings.Contains(line, e.srv.URL)) {
 			t.Errorf("the line %q does not name what the engine lacks and where it is", line)
 		}

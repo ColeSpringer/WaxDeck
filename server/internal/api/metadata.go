@@ -45,7 +45,7 @@ func (s *Server) editResultJSON(ctx context.Context, uc *service.UserCtx, o serv
 		out.Warnings = &ws
 	}
 	if o.MergedInto != "" {
-		out.MergedInto = ptr(o.MergedInto)
+		out.MergedInto = new(o.MergedInto)
 	}
 	if len(o.MovedAlbums) > 0 {
 		moved := append([]string{}, o.MovedAlbums...)
@@ -80,7 +80,7 @@ func narrowedWriteBackFailuresJSON(failures []service.WriteBackFailureDTO) []Wri
 	for _, f := range failures {
 		wf := WriteBackFailure{FilePid: service.FileAPIPID(f.FilePID), Reason: f.Reason}
 		if f.Path != "" {
-			wf.Path = ptr(f.Path)
+			wf.Path = new(f.Path)
 		}
 		out = append(out, wf)
 	}
@@ -100,10 +100,10 @@ func chapterMarksJSON(chapters []service.ChapterMark) []ChapterMark {
 	for _, ch := range chapters {
 		cm := ChapterMark{Index: ch.Index, StartMs: ch.StartMS}
 		if ch.Title != "" {
-			cm.Title = ptr(ch.Title)
+			cm.Title = new(ch.Title)
 		}
 		if ch.EndMS > 0 {
-			cm.EndMs = ptr(ch.EndMS)
+			cm.EndMs = new(ch.EndMS)
 		}
 		out = append(out, cm)
 	}
@@ -132,32 +132,32 @@ func itemMetadataJSON(d service.ItemMetadataDTO) ItemMetadata {
 	if a := d.Acquisition; a != nil {
 		acq := ItemAcquisition{SourceType: a.SourceType}
 		if !a.AcquiredAt.IsZero() {
-			acq.AcquiredAt = ptr(a.AcquiredAt)
+			acq.AcquiredAt = new(a.AcquiredAt)
 		}
 		if a.SourceURL != "" {
-			acq.SourceUrl = ptr(a.SourceURL)
+			acq.SourceUrl = new(a.SourceURL)
 		}
 		if a.SourceID != "" {
-			acq.SourceId = ptr(a.SourceID)
+			acq.SourceId = new(a.SourceID)
 		}
 		if a.Provider != "" {
-			acq.Provider = ptr(a.Provider)
+			acq.Provider = new(a.Provider)
 		}
 		if a.Locked {
-			acq.Locked = ptr(true)
+			acq.Locked = new(true)
 		}
 		out.Acquisition = &acq
 	}
 	for _, p := range d.Provenance {
 		fp := FieldProvenance{Field: p.Field, Source: p.Source, Locked: p.Locked}
 		if p.Provider != "" {
-			fp.Provider = ptr(p.Provider)
+			fp.Provider = new(p.Provider)
 		}
 		if p.SourceURL != "" {
-			fp.SourceUrl = ptr(p.SourceURL)
+			fp.SourceUrl = new(p.SourceURL)
 		}
 		if !p.UpdatedAt.IsZero() {
-			fp.UpdatedAt = ptr(p.UpdatedAt)
+			fp.UpdatedAt = new(p.UpdatedAt)
 		}
 		out.Provenance = append(out.Provenance, fp)
 	}
@@ -170,20 +170,20 @@ func itemMetadataJSON(d service.ItemMetadataDTO) ItemMetadata {
 	for _, w := range d.WriteBackIssues {
 		wi := WriteBackIssue{FilePid: service.FileAPIPID(w.FilePID), Code: w.Code}
 		if w.TagKey != "" {
-			wi.TagKey = ptr(w.TagKey)
+			wi.TagKey = new(w.TagKey)
 		}
 		if w.Detail != "" {
-			wi.Detail = ptr(w.Detail)
+			wi.Detail = new(w.Detail)
 		}
 		out.WriteBackIssues = append(out.WriteBackIssues, wi)
 	}
 	if d.Lyrics != nil {
 		ls := LyricsState{Synced: d.Lyrics.Synced, Source: d.Lyrics.Source}
 		if d.Lyrics.Provider != "" {
-			ls.Provider = ptr(d.Lyrics.Provider)
+			ls.Provider = new(d.Lyrics.Provider)
 		}
 		if d.Lyrics.LRC != "" {
-			ls.Lrc = ptr(d.Lyrics.LRC)
+			ls.Lrc = new(d.Lyrics.LRC)
 		}
 		out.Lyrics = &ls
 	}
@@ -336,7 +336,7 @@ func (s *Server) commitResultJSON(ctx context.Context, uc *service.UserCtx, out 
 			Status: MetadataCommitPartStatus(p.Status),
 		}
 		if p.Detail != "" {
-			part.Detail = ptr(p.Detail)
+			part.Detail = new(p.Detail)
 		}
 		if p.Refusal != nil {
 			refusal := s.partRefusal(p.Refusal)
@@ -608,7 +608,7 @@ func (s *Server) GetEntityArtworkLock(ctx context.Context, req GetEntityArtworkL
 	}
 	return GetEntityArtworkLock200JSONResponse(ArtworkLock{
 		Locked:     locked.Locked,
-		RoleLocked: ptr(locked.RoleLocked),
+		RoleLocked: new(locked.RoleLocked),
 	}), nil
 }
 
@@ -626,7 +626,7 @@ func (s *Server) SetEntityArtworkLock(ctx context.Context, req SetEntityArtworkL
 	}
 	return SetEntityArtworkLock200JSONResponse(ArtworkLock{
 		Locked:     locked.Locked,
-		RoleLocked: ptr(locked.RoleLocked),
+		RoleLocked: new(locked.RoleLocked),
 	}), nil
 }
 
@@ -793,7 +793,7 @@ func (s *Server) RenameEntity(ctx context.Context, req RenameEntityRequestObject
 		Credits:   out.Credits,
 	}
 	if out.MergedInto != "" {
-		res.MergedInto = ptr(out.MergedInto)
+		res.MergedInto = new(out.MergedInto)
 	}
 	if len(out.MovedAlbums) > 0 {
 		moved := append([]string{}, out.MovedAlbums...)
@@ -816,10 +816,10 @@ func (s *Server) GetEntityCuration(ctx context.Context, req GetEntityCurationReq
 	for _, r := range rows {
 		cf := EntityCuratedField{Field: r.Field, Source: r.Source, Locked: r.Locked}
 		if r.Value != "" {
-			cf.Value = ptr(r.Value)
+			cf.Value = new(r.Value)
 		}
 		if !r.UpdatedAt.IsZero() {
-			cf.UpdatedAt = ptr(r.UpdatedAt)
+			cf.UpdatedAt = new(r.UpdatedAt)
 		}
 		out.Curated = append(out.Curated, cf)
 	}
@@ -860,10 +860,10 @@ func (s *Server) DetachItem(ctx context.Context, req DetachItemRequestObject) (D
 	}
 	res := DetachResult{ItemPid: out.ItemPID, OldAlbumPid: out.OldAlbumPID}
 	if out.NewAlbumPID != "" {
-		res.NewAlbumPid = ptr(out.NewAlbumPID)
+		res.NewAlbumPid = new(out.NewAlbumPID)
 	}
 	if out.NewReleaseGroupPID != "" {
-		res.NewReleaseGroupPid = ptr(out.NewReleaseGroupPID)
+		res.NewReleaseGroupPid = new(out.NewReleaseGroupPID)
 	}
 	if fs := s.writeBackFailuresJSON(ctx, uc, out.Failures); len(fs) > 0 {
 		res.Failures = &fs

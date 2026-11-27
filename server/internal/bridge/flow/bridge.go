@@ -261,8 +261,7 @@ type downWhy struct {
 
 // downWhyOf reads why a failed ask left the engine down.
 func downWhyOf(err error) downWhy {
-	var cannot *cannotServeError
-	if errors.As(err, &cannot) {
+	if cannot, ok := errors.AsType[*cannotServeError](err); ok {
 		return downWhy{lacks: cannot.lacks}
 	}
 	return downWhy{refused: credentialsRefused(err)}

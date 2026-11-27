@@ -61,7 +61,7 @@ func assignedCost(cost [][]float64, assigned []int) float64 {
 
 func TestAssignMatchesBruteForce(t *testing.T) {
 	rng := rand.New(rand.NewSource(7))
-	for trial := 0; trial < 200; trial++ {
+	for trial := range 200 {
 		n := 1 + rng.Intn(5)
 		m := 1 + rng.Intn(5)
 		cost := make([][]float64, n)
@@ -87,10 +87,7 @@ func TestAssignMatchesBruteForce(t *testing.T) {
 			usedCols[j] = true
 			assignedRows++
 		}
-		want := n
-		if m < n {
-			want = m
-		}
+		want := min(m, n)
 		if assignedRows != want {
 			t.Fatalf("trial %d: %d rows assigned, want %d (n=%d m=%d)", trial, assignedRows, want, n, m)
 		}

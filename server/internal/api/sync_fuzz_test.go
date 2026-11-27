@@ -247,7 +247,7 @@ func runSyncModelFuzz(t *testing.T, seed uint64) {
 
 	allListenIDs := make(map[string]bool)
 	steps := 60
-	for step := 0; step < steps; step++ {
+	for step := range steps {
 		d := devices[rng.IntN(len(devices))]
 		switch rng.IntN(10) {
 		case 0, 1: // connectivity flip
