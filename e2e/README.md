@@ -218,7 +218,6 @@ real HTTP IdP, and a feed host for the podcast specs.
 | --- | --- |
 | `E2E_RETRIES=0` | no retries. What the soak uses, and what to use when hunting a flake |
 | `E2E_QUARANTINE=include` | run `@quarantine`-tagged tests too |
-| `WAXDECK_E2E_MT_SKWASM=1` | re-test a new engine against the skwasm heap race |
 
 A `@quarantine` tag takes a test out of the blocking run and leaves it to
 the soak. Every one owes an entry in `docs/deferred-work.md` in the same

@@ -3,12 +3,13 @@ import * as path from 'node:path';
 import type { Page, TestInfo } from '@playwright/test';
 
 // Evidence collector for a renderer hang, such as multi-threaded skwasm's
-// heap race (the skwasm entry in docs/deferred-work.md). Playwright's
-// trace shows the page stopped answering but nothing about which thread
-// stopped or why; this closes that gap. Everything here races against a
-// deadline - a probe against a hung renderer must never be awaited bare,
-// and a probe promise that loses its race must carry a catch already, or
-// its late rejection (when the context closes) takes down the runner.
+// heap race (flutter/flutter#190039, fixed from 3.49.0-0.1.pre).
+// Playwright's trace shows the page stopped answering but nothing about
+// which thread stopped or why; this closes that gap. Everything here
+// races against a deadline - a probe against a hung renderer must never
+// be awaited bare, and a probe promise that loses its race must carry a
+// catch already, or its late rejection (when the context closes) takes
+// down the runner.
 
 type ProbeResult =
   | { ok: true; ms: number; value: unknown }

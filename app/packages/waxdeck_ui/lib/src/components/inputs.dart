@@ -179,7 +179,7 @@ class WaxTextField extends StatefulWidget {
     this.clearSemanticsId,
     this.showLabel = true,
     this.validator,
-    this.autofillHints = const <String>[],
+    this.autofillHints,
     this.autocorrect = true,
     this.enabled = true,
     super.key,
@@ -275,8 +275,10 @@ class WaxTextField extends StatefulWidget {
   final String? Function(String? value)? validator;
 
   /// What a password manager or the platform's autofill may offer for
-  /// the field, such as [AutofillHints.username]. Empty leaves autofill
-  /// on with no hint, as a bare text field has it; null turns it off.
+  /// the field, such as [AutofillHints.username]. Null, the default,
+  /// keeps the field out of autofill: on the web a field in it leaves a
+  /// copy of its value in a hidden form once it loses focus, so only a
+  /// field that says what it holds joins. Empty joins with no hint.
   final Iterable<String>? autofillHints;
 
   /// Off for a field that holds an address or a code, where a

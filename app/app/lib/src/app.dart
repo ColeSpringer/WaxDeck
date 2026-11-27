@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'auth/auth_controller.dart';
+import 'auth/credential_autofill.dart';
 import 'desktop/mini_window.dart';
 import 'l10n/l10n.dart';
 import 'l10n/locale_warmup.dart';
@@ -75,7 +76,11 @@ class WaxDeckApp extends ConsumerWidget {
                   // Around every page, so one outside the session draws
                   // messages too: the routes and the boot gate's own.
                   child: ShellMessageHost.public(
-                    child: _BootGate(child: DesktopBack(child: child!)),
+                    // Above the router, so no credential screen's own
+                    // autofill group finishes the context as it goes.
+                    child: AutofillRoot(
+                      child: _BootGate(child: DesktopBack(child: child!)),
+                    ),
                   ),
                 ),
               ),

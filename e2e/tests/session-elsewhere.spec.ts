@@ -244,9 +244,15 @@ test('a tab that was away while another signed out finds it signed out when it i
 
   // Away, its socket with it, while the other tab signs out and nobody
   // signs in: the socket's every try to come back is refused, which a
-  // browser reports like a dead network.
+  // browser reports like a dead network. The sign-out is on that tab's
+  // screen before its server has heard it, so this one comes back only
+  // once the revoke is answered: a try that beats it is let in.
   await network.off();
+  const revoked = other.page.waitForResponse((r) => apiPath(r.url()) === '/auth/logout', {
+    timeout: T.fetch,
+  });
   await other.auth.signOut();
+  expect((await revoked).status()).toBe(204);
   const away = network.sockets.length;
   await network.on();
 

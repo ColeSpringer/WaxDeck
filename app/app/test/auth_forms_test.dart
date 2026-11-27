@@ -152,6 +152,101 @@ void main() {
     }
   });
 
+  // What each credential form tells a password manager as its screen moves
+  // on: saved only once the credentials were taken. Ending the context is
+  // also what takes the web engine's hidden form, and the values typed
+  // into it, back out of the page.
+  group('autofill', () {
+    List<bool> ended(WidgetTester tester) => [
+      for (final call in tester.testTextInput.log)
+        if (call.method == 'TextInput.finishAutofillContext')
+          call.arguments as bool,
+    ];
+
+    testWidgets('a sign-in that lands offers its credentials for saving', (
+      tester,
+    ) async {
+      await mountApp(tester, const LoginScreen());
+      await tester.pump();
+      await tester.enterText(_id(SemanticsIds.loginUsername), 'admin');
+      await tester.enterText(_id(SemanticsIds.loginPassword), 'hunter-two');
+      await tester.tap(_id(SemanticsIds.loginSubmit));
+      // Signed in, the shell's own animations never settle.
+      await tester.pump();
+      await tester.pump();
+      expect(ended(tester).first, isTrue);
+    });
+
+    testWidgets('a refused sign-in keeps its context open', (tester) async {
+      final repo = FakeRepository()
+        ..loginError = const WaxDeckApiException(
+          code: 'unauthenticated',
+          message: 'invalid credentials',
+          statusCode: 401,
+        );
+      await mountApp(
+        tester,
+        const LoginScreen(),
+        container: appContainer(repo: repo),
+      );
+      await tester.pump();
+      await tester.enterText(_id(SemanticsIds.loginUsername), 'admin');
+      await tester.enterText(_id(SemanticsIds.loginPassword), 'nope');
+      await tester.tap(_id(SemanticsIds.loginSubmit));
+      await tester.pumpAndSettle();
+      expect(ended(tester), isEmpty);
+    });
+
+    testWidgets('a first run that lands offers the administrator for saving', (
+      tester,
+    ) async {
+      await mountApp(tester, const SetupScreen());
+      await tester.pump();
+      await tester.enterText(_id(SemanticsIds.setupUsername), 'admin');
+      await tester.enterText(_id(SemanticsIds.setupPassword), 'long-enough');
+      await tester.enterText(_id(SemanticsIds.setupConfirm), 'long-enough');
+      await tester.tap(_id(SemanticsIds.setupSubmit));
+      await tester.pump();
+      await tester.pump();
+      expect(ended(tester).first, isTrue);
+    });
+
+    for (final invite in <String?>['inv-token', null]) {
+      testWidgets(
+        'a sign-up the server takes ${invite == null ? 'as pending' : 'as active'} '
+        'offers the account for saving',
+        (tester) async {
+          await mountApp(tester, const SignupScreen(), pushed: true);
+          await tester.pumpAndSettle();
+          await tester.enterText(_id(SemanticsIds.signupUsername), 'sam');
+          await tester.enterText(
+            _id(SemanticsIds.signupPassword),
+            'po-ta-toes',
+          );
+          if (invite != null) {
+            await tester.enterText(_id(SemanticsIds.signupInviteToken), invite);
+          }
+          await tester.tap(_id(SemanticsIds.signupSubmit));
+          await tester.pumpAndSettle();
+          expect(ended(tester), <bool>[true]);
+        },
+      );
+    }
+
+    testWidgets('backing out of sign-up drops what was typed, unsaved', (
+      tester,
+    ) async {
+      await mountApp(tester, const SignupScreen(), pushed: true);
+      await tester.pumpAndSettle();
+      await tester.enterText(_id(SemanticsIds.signupUsername), 'sam');
+      await tester.enterText(_id(SemanticsIds.signupPassword), 'po-ta-toes');
+      await tester.tap(_id(SemanticsIds.navBack));
+      await tester.pumpAndSettle();
+      expect(find.byType(SignupScreen), findsNothing);
+      expect(ended(tester), <bool>[false]);
+    });
+  });
+
   testWidgets('the login form is made of Wax controls', (tester) async {
     await mountApp(tester, const LoginScreen());
     await tester.pump();

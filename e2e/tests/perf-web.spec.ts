@@ -202,7 +202,10 @@ test.describe('large-library web gate', () => {
       reportScrollPacing('album index', albums);
 
       // And a bucket listing: the drill-in from an index, which is a list
-      // of items rather than of buckets.
+      // of items rather than of buckets. From a fresh index, since the
+      // scroll above left the first bucket far outside the built list.
+      await page.goto(base + '/music/albums');
+      await page.locator(sem(SemanticsIds.indexBucket(0))).waitFor({ timeout: 60_000 });
       await clickThrough(
         page.locator(sem(SemanticsIds.indexBucket(0))),
         page.locator(sem(SemanticsIds.indexItem(0))),

@@ -38,15 +38,7 @@ export * from '@playwright/test';
 // heartbeat and buffered console/error listeners from birth, and a test
 // that fails or times out dumps hang evidence (thread states, worker
 // responsiveness, compositor liveness) next to its trace before the
-// context closes. Purpose and format: tests/support/hangprobe.ts and the
-// skwasm entry in docs/deferred-work.md.
-// The app ships skwasm single-threaded until the pinned Flutter carries
-// the fix for flutter/flutter#190039 (see web/index.html).
-// WAXDECK_E2E_MT_SKWASM=1 rewrites the served page to turn
-// multi-threading back on for the run, which is how a new engine gets
-// re-tested against the heap race without touching the app; expect the
-// old hang rate from an engine that does not carry the fix.
-const forceMtSkwasm = !!process.env.WAXDECK_E2E_MT_SKWASM;
+// context closes. Purpose and format: tests/support/hangprobe.ts.
 
 const isPerfSpec = (file: string) =>
   /^perf-.*\.spec\.ts$/.test(file.split(/[\\/]/).pop() ?? '');
@@ -84,10 +76,10 @@ async function checkMotionMode(page: Page, testInfo: TestInfo) {
 }
 
 /// What every page a test drives is given, the `page` fixture's and each
-/// `tab()`'s alike: the heartbeat, the engine the run asked for, buffered
-/// console and errors, and, once the test failed or timed out, the hang
-/// evidence under [name]. The evidence of all of a test's pages is taken
-/// together by `takeHangEvidence` at the first teardown, in one budget.
+/// `tab()`'s alike: the heartbeat, buffered console and errors, and, once
+/// the test failed or timed out, the hang evidence under [name]. The
+/// evidence of all of a test's pages is taken together by
+/// `takeHangEvidence` at the first teardown, in one budget.
 async function instrument(page: Page, testInfo: TestInfo, name = 'hang'): Promise<void> {
   // Not in the perf specs: a self-rescheduling rAF loop requests a
   // frame every frame, defeating idle throttling and adding a
@@ -101,17 +93,6 @@ async function instrument(page: Page, testInfo: TestInfo, name = 'hang'): Promis
   // separator because `testInfo.file` is an absolute platform path.
   if (!isPerfSpec(testInfo.file)) {
     await page.addInitScript(HEARTBEAT_INIT);
-  }
-  if (forceMtSkwasm) {
-    await page.route('**/*', async (route) => {
-      if (route.request().resourceType() !== 'document') return route.fallback();
-      const resp = await route.fetch();
-      const body = (await resp.text()).replace(
-        'forceSingleThreadedSkwasm: true',
-        'forceSingleThreadedSkwasm: false',
-      );
-      await route.fulfill({ response: resp, body });
-    });
   }
   const buffers = attachBuffers(page);
   // Bounded per test rather than per page: teardown shares the test's

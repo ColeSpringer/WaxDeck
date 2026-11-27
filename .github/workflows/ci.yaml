@@ -24,7 +24,7 @@ permissions:
 
 env:
   GO_VERSION: "1.26.x"
-  FLUTTER_VERSION: "3.47.1"
+  FLUTTER_VERSION: "3.50.1"
   NODE_VERSION: "24"
 
 # Every job carries a timeout-minutes of about three times its green

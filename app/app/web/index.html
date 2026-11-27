@@ -210,28 +210,43 @@
           'Still starting. If this does not clear, reload the page.';
       }
     }, 20000);
+
+    // The engine gives a password manager a hidden form beside the
+    // semantics tree, and since Flutter 3.50 screen readers and Tab find
+    // it there: an unnamed Submit button and copies of fields, ahead of
+    // the real ones. Semantics are always on here, so the real fields are
+    // in the semantics tree and the form holds only those copies; hidden
+    // from assistive technology and the Tab order, it still serves
+    // autofill, which reads neither. Copies join a form as fields blur.
+    window.addEventListener('flutter-first-frame', function () {
+      document.querySelectorAll('flt-text-editing-host').forEach(function (host) {
+        var hide = function () {
+          host.querySelectorAll(':scope > form').forEach(function (form) {
+            form.setAttribute('aria-hidden', 'true');
+            form.querySelectorAll('input').forEach(function (input) {
+              input.tabIndex = -1;
+            });
+          });
+        };
+        hide();
+        new MutationObserver(hide).observe(host, { childList: true, subtree: true });
+      });
+    });
   </script>
   <script>
     {{flutter_js}}
     {{flutter_build_config}}
 
     // The loader call is owned here rather than left to the generated
-    // one-line bootstrap, because two defaults are wrong for WaxDeck:
-    // the engine would load from Google's CDN (this page's header says
-    // nothing here may reach the network, and the server embeds the
-    // whole canvaskit directory), and multi-threaded skwasm corrupts
-    // its shared heap under concurrent text layout and rasterization,
-    // freezing the page at full CPU. Single-threaded until the pinned
-    // Flutter carries the fix for flutter/flutter#190039; e2e can flip
-    // threading back on per run (WAXDECK_E2E_MT_SKWASM=1) to re-test a
-    // new engine.
+    // one-line bootstrap, because the engine would otherwise load from
+    // Google's CDN: this page's header says nothing here may reach the
+    // network, and the server embeds the whole canvaskit directory.
     _flutter.loader.load({
       serviceWorkerSettings: {
         serviceWorkerVersion: {{flutter_service_worker_version}},
       },
       config: {
         canvasKitBaseUrl: "canvaskit",
-        forceSingleThreadedSkwasm: true,
         // The engine's last-resort font machinery downloads from
         // fonts.gstatic.com by default: Roboto, its default face, as it
         // starts, and per-glyph Noto shards for characters nothing

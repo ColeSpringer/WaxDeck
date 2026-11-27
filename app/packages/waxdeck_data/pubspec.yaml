@@ -33,5 +33,5 @@ dev_dependencies:
     sdk: flutter
   # drift_dev moves with the drift runtime above, in the same change.
   drift_dev: 2.35.0
-  build_runner: 2.16.1
+  build_runner: 2.16.2
   flutter_lints: ^6.0.0

@@ -212,69 +212,21 @@ Every entry carries a gate tag saying what actually blocks it:
   wants is a plugin behind a WaxDeck-owned port per the wrapping rule,
   which is a pinned dependency and a decision of its own for one number.
   Worth taking with the next plugin that lands for another reason.
-- `[in-repo]` **The web perf gate's measurement run is still owed.** Parked
-  for the larger UI and UX overhaul rather than spot-fixed, and the code
-  the run needs has now landed: the corpus writes one directory per album
-  with its own synthesized cover (`corpusgen`, `-covers=false` for the
-  comparison without art), the rAF collector and wheel loop are a
-  reusable helper (`e2e/tests/support/scroll-pacing.ts`), and
-  `perf-web.spec.ts` measures the music indexes, a bucket listing, and
-  the tracks index with a track playing alongside the plain tracks-index
-  scenario. What is left is running it and recording the numbers.
-
-  **Still owed after the hardening phase, deliberately.** The phase that
-  scheduled this is the one that flipped the URL strategy, swept the
-  remnants, and recorded the bundle (`docs/releasing.md`); the run itself
-  is a multi-hour manual job on a half-gigabyte corpus whose result is
-  provisional while the skwasm force stands, which is the same reason it
-  was split off in the first place. The miss policy below was named
-  before the run so a red number is a decision rather than an argument,
-  and it still stands.
-
-  The scenarios moved with the shelf home: the landing wait is
-  login-to-home, which is eight browse reads rather than one grid page,
-  and every scroll scenario is over a listing rather than over the
-  deleted grid. The `gridMs` budget is unchanged and is now about a
-  different thing, so the first run is the one that says whether 2.5
-  seconds is still the right number.
-
-  Two things to know before starting it. The corpus with covers is about
-  half a gigabyte on disk (covers are roughly 400 KB each against 86 KB
-  of audio per album), against well under a tenth of that without them.
-  And the three scenarios are declared `mode: 'default'` so they run in
-  one worker in order - running them at once would price the contention
-  between them rather than the app, which is the opposite of the point.
-
-  The reason it was split off rather than run inline: by the skwasm
-  entry's own words the gate prices whatever raster-thread difference
-  remains before the single-threaded force is removed, so while that
-  entry stands the number has to be taken twice regardless.
-
-  **The miss policy, named before the run so a red number is a decision
-  and not an argument.** A miss on cold TTI, warm TTI, or login-to-grid
-  is a hardening item and goes on the performance slice. A miss on scroll
-  FPS or long-frame share on the *index* scenarios reopens the artwork
-  negative cache's approach then and there, since those are the surfaces
-  it just changed. The artwork pipeline already took the cheap
-  levers - sized requests, bounded decodes, a day of client-side
-  freshness - so a miss on the grid is a signal about the virtualized
-  list rather than about artwork, and `-covers=false` is the run that
-  tells the two apart.
 
 - `[in-repo]` **How far ahead the artwork precacher warms is a guess.**
   The music listing and the music indexes call it when a scroll stops,
   naming the two viewports past the one on screen. Two viewports and
   "when the scroll stops" are the numbers the entry that wired this
-  deliberately left for the perf run: `_viewportsAhead` in
-  `artwork_precache.dart`, and the `ScrollEndNotification` gate in
-  `music/index_screen.dart` and `music/listing_screen.dart`.
+  deliberately left for the web perf gate (`perf-web.spec.ts`) to settle:
+  `_viewportsAhead` in `artwork_precache.dart`, and the
+  `ScrollEndNotification` gate in `music/index_screen.dart` and
+  `music/listing_screen.dart`.
 
-  The run should weigh one thing first, about web. A warm is only
+  Settling them should weigh one thing first, about web. A warm is only
   plainly cheap where there is a cache of our own to fill: on web the
   cache is the browser's, the only way to fill it is a real request
   through dio into the Dart heap, and that request shares a connection
-  pool and a main isolate with the media element. Take it with the
-  perf-measurement entry above.
+  pool and a main isolate with the media element.
 - `[decision]` **The web build skips tracks the browser cannot decode.**
   Monkey's Audio, WavPack, WMA, Musepack and (outside Safari) AIFF stream
   as the file is, and a browser refuses them (media error 4), so the queue
@@ -506,9 +458,23 @@ Every entry carries a gate tag saying what actually blocks it:
   are slow rather than hung. Blocked on the owner's call on that
   trade-off.
 
+- `[third-party]` **desktop_drop still applies the Kotlin Gradle plugin.**
+  Flutter 3.50's Android build warns that the 0.8.4 pin applies it while
+  the app builds on built-in Kotlin (`android.builtInKotlin=true`), and
+  that a later Flutter will refuse to build with such a plugin. 0.9.2
+  stops applying it, but 0.9 requires `cross_file` 0.4, which removed
+  `XFile(path)`, `XFile.fromData` and `XFile.path`; every released
+  `file_selector` package builds its files with those and pins
+  `cross_file ^0.3`, so the two cannot resolve together and an override
+  would not compile. Blocked on flutter/packages#13147 (`file_selector`
+  on `cross_file` 0.4, itself a breaking release), open on 2026-11-27.
+  When it ships, the picker port and `uploads/audio_drop_area.dart` move
+  together: 0.9's `onDrop` hands typed items whose provider-backed data
+  is readable only inside the callback.
+
 - `[third-party]` **The Android build turns Kotlin's incremental compiler
-  off on Windows, and should stop having to.** Kotlin 2.3.20 opens a
-  cache file it already holds open while closing it, and every module
+  off on Windows, and should stop having to.** Kotlin 2.3.20 opened a
+  cache file it already held open while closing it, and every module
   with Kotlin in it fails to compile: "Could not close incremental
   caches ... Storage for class-fq-name-to-source.tab is already
   registered". It reproduces from an empty build directory, so cleaning
@@ -520,34 +486,22 @@ Every entry carries a gate tag saying what actually blocks it:
   that fixes the cache double-registration: delete the block, build an
   APK on Windows, and if it survives the flag is no longer needed. The
   Kotlin version it is pinned against sits just above it in the same
-  file.
+  file. The move to Flutter 3.50 took the pin to that template's 2.4.20
+  without that Windows build, so whether 2.4.20 fixed it is still unknown.
 
-- `[third-party]` **Skwasm runs single-threaded until a Flutter release
-  carries its heap-race fix.** Multi-threaded skwasm corrupts its shared
-  heap under concurrent text layout and rasterization (`RuntimeError:
-  memory access out of bounds` in its allocator on the paragraph-layout
-  path, stacks in or under `SkStrike`, Skia's shared glyph cache), and
-  from then on the renderer main thread and the render worker spin at
-  full CPU: the old e2e stall, a random spec stopping mid-step about
-  one suite run in four. Filed against engine
-  83675ed27633283e7fc296c8bca22e841224c096 (Flutter 3.44) as
-  flutter/flutter#190039, which closed on #190048 and #191014
-  (thread-local strike caches, `skia_enable_threadlocal_strikecache` in
-  the engine's canvaskit `BUILD.gn`). The pinned Flutter 3.47 does not
-  carry them; 3.49.0-0.1.pre is the first tag that does (checked
-  2026-10-29). Meanwhile the app ships skwasm single-threaded
-  (`web/index.html` owns the loader call and passes
-  `forceSingleThreadedSkwasm`; the same block sets `canvasKitBaseUrl`
-  so the engine loads from the embedded bundle instead of Google's CDN,
-  which a LAN-only instance cannot reach), and every spec runs through
-  `tests/fixtures.ts`, whose page fixture buffers console and pageerror
-  from birth and, when a test fails or times out, probes responsiveness
-  and snapshots every chromium thread twice into `hang-evidence.json`
-  beside the trace. Once the pinned Flutter carries the fix,
-  `WAXDECK_E2E_MT_SKWASM=1` runs the real suite multi-threaded to
-  confirm, and the `perf-web` gate against the 100k corpus prices
-  whatever raster-thread difference remains before the force is
-  removed.
+- `[third-party]` **The web engine shows screen readers its hidden autofill
+  form.** Since Flutter 3.50 (flutter/flutter#187108, which links
+  semantics-mode text fields to a hidden `<form>` so a password manager
+  can fill a whole login), that form sits in `<flt-text-editing-host>`,
+  ahead of the semantics tree, and nothing hides it from assistive
+  technology or the Tab order: a screen reader meets an unnamed Submit
+  button and a copy of a field before the real ones. `web/index.html`
+  marks those forms `aria-hidden` and their inputs `tabindex=-1` as
+  they appear (autofill reads neither, and with semantics always on
+  the real fields are in the semantics tree), and `a11y-audit.spec.ts`
+  asserts the login page shows none of it. Wanted from Flutter: the
+  engine hiding the form itself. Retire the observer when a release
+  does, by deleting it and seeing that spec stay green.
 - `[third-party]` **`make test-app-chrome` cannot run on Windows.**
   flutter_tools' own test server answers every CanvasKit request with a
   404: `_localCanvasKitHandler` gates on

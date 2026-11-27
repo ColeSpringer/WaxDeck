@@ -9,6 +9,7 @@ import '../shell/asked_from.dart';
 import '../shell/routes.dart';
 import '../shell/navigation_history.dart';
 import '../shell/semantics_ids.dart';
+import 'credential_autofill.dart';
 
 /// Requests an account: open signup queues the request for an
 /// administrator, an invite token activates it immediately. Pops the
@@ -22,6 +23,7 @@ class SignupScreen extends ConsumerStatefulWidget {
 
 class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _autofill = CredentialAutofillController();
   final _username = TextEditingController();
   final _password = TextEditingController();
   final _displayName = TextEditingController();
@@ -63,6 +65,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             inviteToken: inviteToken.isEmpty ? null : inviteToken,
           );
       if (await stillOnTop(router, (page) => page == from) && mounted) {
+        // Pending or active, the account is the visitor's: a password
+        // manager may keep it.
+        _autofill.finish(accepted: true);
         if (result.pending) {
           setState(() {
             _submitting = false;
@@ -138,67 +143,70 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   ],
                 ),
               )
-            : Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    WaxTextField(
-                      semanticsId: SemanticsIds.signupUsername,
-                      controller: _username,
-                      label: l10n.authUsername,
-                      autofillHints: const [AutofillHints.newUsername],
-                      validator: (value) =>
-                          (value == null || value.trim().isEmpty)
-                          ? l10n.authChooseUsername
-                          : null,
-                    ),
-                    const SizedBox(height: WaxSpace.s16),
-                    WaxTextField(
-                      semanticsId: SemanticsIds.signupPassword,
-                      controller: _password,
-                      label: l10n.authPassword,
-                      obscureText: true,
-                      autofillHints: const [AutofillHints.newPassword],
-                      validator: (value) => (value == null || value.isEmpty)
-                          ? l10n.authChoosePassword
-                          : null,
-                    ),
-                    const SizedBox(height: WaxSpace.s16),
-                    WaxTextField(
-                      key: const Key('signup-display-name'),
-                      controller: _displayName,
-                      label: l10n.authDisplayName,
-                    ),
-                    const SizedBox(height: WaxSpace.s16),
-                    WaxTextField(
-                      semanticsId: SemanticsIds.signupInviteToken,
-                      controller: _inviteToken,
-                      label: l10n.authInviteToken,
-                      onSubmitted: (_) => _submit(),
-                    ),
-                    const SizedBox(height: WaxSpace.s24),
-                    if (_error != null) ...[
-                      Semantics(
-                        identifier: SemanticsIds.signupError,
-                        child: Text(
-                          _error!,
-                          key: const Key(SemanticsIds.signupError),
-                          style: WaxType.body.copyWith(color: colors.error),
-                          textAlign: TextAlign.center,
-                        ),
+            : CredentialAutofill(
+                controller: _autofill,
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      WaxTextField(
+                        semanticsId: SemanticsIds.signupUsername,
+                        controller: _username,
+                        label: l10n.authUsername,
+                        autofillHints: const [AutofillHints.newUsername],
+                        validator: (value) =>
+                            (value == null || value.trim().isEmpty)
+                            ? l10n.authChooseUsername
+                            : null,
                       ),
                       const SizedBox(height: WaxSpace.s16),
+                      WaxTextField(
+                        semanticsId: SemanticsIds.signupPassword,
+                        controller: _password,
+                        label: l10n.authPassword,
+                        obscureText: true,
+                        autofillHints: const [AutofillHints.newPassword],
+                        validator: (value) => (value == null || value.isEmpty)
+                            ? l10n.authChoosePassword
+                            : null,
+                      ),
+                      const SizedBox(height: WaxSpace.s16),
+                      WaxTextField(
+                        key: const Key('signup-display-name'),
+                        controller: _displayName,
+                        label: l10n.authDisplayName,
+                      ),
+                      const SizedBox(height: WaxSpace.s16),
+                      WaxTextField(
+                        semanticsId: SemanticsIds.signupInviteToken,
+                        controller: _inviteToken,
+                        label: l10n.authInviteToken,
+                        onSubmitted: (_) => _submit(),
+                      ),
+                      const SizedBox(height: WaxSpace.s24),
+                      if (_error != null) ...[
+                        Semantics(
+                          identifier: SemanticsIds.signupError,
+                          child: Text(
+                            _error!,
+                            key: const Key(SemanticsIds.signupError),
+                            style: WaxType.body.copyWith(color: colors.error),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        const SizedBox(height: WaxSpace.s16),
+                      ],
+                      WaxButton(
+                        semanticsId: SemanticsIds.signupSubmit,
+                        label: l10n.authRequestSubmit,
+                        expand: true,
+                        busy: _submitting,
+                        onPressed: _submitting ? null : _submit,
+                      ),
                     ],
-                    WaxButton(
-                      semanticsId: SemanticsIds.signupSubmit,
-                      label: l10n.authRequestSubmit,
-                      expand: true,
-                      busy: _submitting,
-                      onPressed: _submitting ? null : _submit,
-                    ),
-                  ],
+                  ),
                 ),
               ),
       ),
@@ -206,7 +214,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     return WaxScaffold(
       title: l10n.authRequestAccount,
       largeTitle: false,
-      onBack: () => context.back(fallback: WaxRoute.login),
+      onBack: () {
+        _autofill.finish(accepted: false);
+        context.back(fallback: WaxRoute.login);
+      },
       backSemanticsId: SemanticsIds.navBack,
       // Centred in what the bar leaves, as the sign-in form it came from
       // is, and scrolling once a short window cannot hold it. Measured

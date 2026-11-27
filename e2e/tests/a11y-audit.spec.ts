@@ -29,6 +29,15 @@ test('login, browse, and play are completable through roles and names', async ({
   await username.waitFor({ timeout: T.nav });
   await typeInto(page, username, account.username);
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), account.password);
+  // The engine's hidden autofill form is not in the tree a screen reader
+  // walks, nor in the Tab order: no unnamed Submit button, no copy of a
+  // field ahead of the form.
+  await expect(page.getByRole('button', { name: 'Submit', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('textbox')).toHaveCount(2);
+  const tabbable = await page.evaluate(
+    () => document.querySelectorAll('flt-text-editing-host form input:not([tabindex="-1"])').length,
+  );
+  expect(tabbable).toBe(0);
   await page.getByRole('button', { name: 'Log in' }).click();
 
   // The shell puts its navigation before the content, so the first

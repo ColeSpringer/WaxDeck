@@ -78,46 +78,47 @@ Two version numbers are not stamped from the tag, and both live in
 
 The server binaries carry the web UI inside them (`-tags withweb`), so
 the bundle is both a download budget for browsers and a floor under the
-binary. Measured on Flutter 3.44, `make web`, WasmGC target:
+binary. Measured on Flutter 3.50.1, `make web`, WasmGC target:
 
 | First paint | Raw | gzip |
 |---|---|---|
-| `main.dart.wasm` (the app) | 5.31 MB | 1.84 MB |
-| `canvaskit/skwasm.wasm` (the renderer) | 3.42 MB | 1.46 MB |
-| Eager fonts (Archivo, Inter, Spline Sans Mono, two Phosphor subsets) | 1.33 MB | 615 KB |
-| Loader, glue, manifests, `index.html` | 145 KB | 41 KB |
-| **Total** | **10.2 MB** | **3.95 MB** |
+| `main.dart.wasm` (the app) | 6.28 MB | 2.25 MB |
+| `canvaskit/skwasm.wasm` (the renderer) | 3.45 MB | 1.48 MB |
+| Eager fonts (Archivo, Inter, Spline Sans Mono, two Phosphor subsets) | 1.34 MB | 634 KB |
+| The engine's default Roboto and the Material icon subset | 64 KB | 63 KB |
+| Loader, glue, manifests, `index.html` | 166 KB | 61 KB |
+| Brand emblem and favicon | 84 KB | 84 KB |
+| **Total** | **11.4 MB** | **4.54 MB** |
 
 Nothing else is fetched to draw the first screen. What is on disk and
 not in that total:
 
-- **`main.dart.js`, 5.76 MB** (1.51 MB gzipped). The JS fallback for
-  browsers without WasmGC, fetched *instead of* the wasm, never beside
-  it.
+- **`main.dart.js`, 6.69 MB** (1.89 MB gzipped). The JS fallback for
+  browsers that cannot run the wasm build, fetched *instead of* the
+  wasm, never beside it.
 - **The rest of `canvaskit/`, 33 MB.** Every renderer variant Flutter
-  ships - CanvasKit, the Chromium build, the multi-threaded
-  `skwasm_heavy`, WIMP, and the `.symbols` files for each. One is
-  loaded; the loader picks it, and the app pins single-threaded skwasm
-  (see the deferred-work entry on flutter/flutter#190039). They are
-  embedded because the engine resolves them at runtime from this origin
-  and a LAN-only instance cannot reach Google's CDN.
+  ships: CanvasKit with its Chromium and WebParagraph builds,
+  `skwasm_heavy` (for browsers without Chromium's codecs and break
+  iterators), WIMP, and the `.symbols` files for each. One is loaded,
+  and the loader picks it. They are embedded because the engine
+  resolves them at runtime from this origin and a LAN-only instance
+  cannot reach Google's CDN.
 - **On-demand fonts.** Twenty deferred faces, about 34 MB in all -
   Noto Sans CJK at 16 MB and the colour emoji face at 10.4 MB are the
   bulk, the fifteen script faces plus Arabic, Thai, and Hebrew the rest
   (`waxdeck_ui/assets/fonts/README.md` carries the list) - each fetched
   only when metadata in its script appears on screen. CJK is unsubset
   by decision: a curated core still renders tofu for names outside it.
-- **`NOTICES`, 1.49 MB**, fetched only if somebody opens the licence
+- **`NOTICES`, 1.55 MB**, fetched only if somebody opens the licence
   page.
 
-The whole embedded tree is about 84 MB (67.5 measured before the
-sixteen newest deferred faces, plus their 16.7), which is what a server
-binary gains from `-tags withweb`. Note that WaxDeck serves these
+The whole embedded tree is about 86 MB, which is what a server binary
+gains from `-tags withweb`. Note that WaxDeck serves these
 uncompressed; a reverse proxy that compresses is worth roughly the
 gzip column on every cold load.
 
-Re-measure when the engine version moves, when a font joins the eager
-chain, or when the single-threaded skwasm force is lifted.
+Re-measure when the engine version moves or when a font joins the eager
+chain.
 
 ## Android signing
 

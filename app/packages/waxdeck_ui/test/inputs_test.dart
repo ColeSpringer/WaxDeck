@@ -582,24 +582,24 @@ void main() {
       expect(find.bySemanticsLabel('Clear Search'), findsNothing);
     });
 
-    testWidgets('a field without hints keeps autofill on, as a bare input', (
-      tester,
-    ) async {
+    testWidgets('a field without hints stays out of autofill', (tester) async {
       await tester.pumpWidget(_host(const WaxTextField(label: 'Note')));
       final config = tester
           .state<EditableTextState>(find.byType(EditableText))
           .textInputConfiguration;
-      expect(config.autofillConfiguration.enabled, isTrue);
+      expect(config.autofillConfiguration.enabled, isFalse);
     });
 
-    testWidgets('null autofill hints turn autofill off', (tester) async {
+    testWidgets('empty autofill hints join autofill with no hint', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        _host(const WaxTextField(label: 'One-time code', autofillHints: null)),
+        _host(const WaxTextField(label: 'Note', autofillHints: <String>[])),
       );
       final config = tester
           .state<EditableTextState>(find.byType(EditableText))
           .textInputConfiguration;
-      expect(config.autofillConfiguration.enabled, isFalse);
+      expect(config.autofillConfiguration.enabled, isTrue);
     });
 
     testWidgets('hands autofill hints and autocorrect to the input', (

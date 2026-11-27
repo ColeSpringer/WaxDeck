@@ -14,7 +14,7 @@
 # publishes no linux-arm64 SDK archive).
 FROM --platform=$BUILDPLATFORM debian:bookworm-slim AS web
 
-ARG FLUTTER_VERSION=3.47.1
+ARG FLUTTER_VERSION=3.50.1
 
 # git: the flutter tool reads its own SDK version through it.
 RUN apt-get update \

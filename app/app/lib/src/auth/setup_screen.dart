@@ -10,6 +10,7 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'auth_controller.dart';
+import 'credential_autofill.dart';
 import 'reach_again.dart';
 
 /// First-run setup: creates the server's first administrator. Shown by the
@@ -25,6 +26,7 @@ class SetupScreen extends ConsumerStatefulWidget {
 
 class _SetupScreenState extends ConsumerState<SetupScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _autofill = CredentialAutofillController();
   final _username = TextEditingController();
   final _password = TextEditingController();
   final _confirm = TextEditingController();
@@ -58,10 +60,15 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
             password: _password.text,
             displayName: displayName.isEmpty ? null : displayName,
           );
-      // On success the root gate unmounts this screen. Overtaken before it
+      // On success the root gate unmounts this screen, and a password
+      // manager may keep the administrator it made. Overtaken before it
       // showed, the form is as it was before the press: whatever came
       // instead may have left nobody signed in.
-      if (!shown && mounted) setState(() => _submitting = false);
+      if (shown) {
+        _autofill.finish(accepted: true);
+      } else if (mounted) {
+        setState(() => _submitting = false);
+      }
     } on WaxDeckApiException catch (e) {
       // A refusal of what was just typed keeps the server's words: under
       // the form while this page is still there, else through the shell.
@@ -88,107 +95,113 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
               padding: const EdgeInsets.all(WaxSpace.s24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 360),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const WaxBrandBlock(),
-                      const SizedBox(height: WaxSpace.s16),
-                      Text(
-                        l10n.authFirstAdmin,
-                        style: WaxType.body.copyWith(color: colors.textPrimary),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: WaxSpace.s32),
-                      WaxTextField(
-                        semanticsId: SemanticsIds.setupUsername,
-                        controller: _username,
-                        label: l10n.authUsername,
-                        autofillHints: const [AutofillHints.username],
-                        validator: (value) =>
-                            (value == null || value.trim().isEmpty)
-                            ? l10n.authEnterUsername
-                            : null,
-                      ),
-                      const SizedBox(height: WaxSpace.s16),
-                      WaxTextField(
-                        semanticsId: SemanticsIds.setupPassword,
-                        controller: _password,
-                        label: l10n.authPassword,
-                        obscureText: true,
-                        autofillHints: const [AutofillHints.newPassword],
-                        validator: (value) =>
-                            (value == null || value.length < 8)
-                            ? l10n.authPasswordTooShort
-                            : null,
-                      ),
-                      const SizedBox(height: WaxSpace.s16),
-                      WaxTextField(
-                        semanticsId: SemanticsIds.setupConfirm,
-                        controller: _confirm,
-                        label: l10n.authConfirmPassword,
-                        obscureText: true,
-                        validator: (value) => (value != _password.text)
-                            ? l10n.authPasswordsDiffer
-                            : null,
-                        onSubmitted: (_) => _submit(),
-                      ),
-                      const SizedBox(height: WaxSpace.s16),
-                      WaxTextField(
-                        semanticsId: SemanticsIds.setupDisplayName,
-                        controller: _displayName,
-                        label: l10n.authDisplayName,
-                        onSubmitted: (_) => _submit(),
-                      ),
-                      const SizedBox(height: WaxSpace.s24),
-                      if (_error != null) ...[
-                        Semantics(
-                          identifier: SemanticsIds.setupError,
-                          child: Text(
-                            _error!,
-                            key: const Key(SemanticsIds.setupError),
-                            style: WaxType.body.copyWith(color: colors.error),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
+                child: CredentialAutofill(
+                  controller: _autofill,
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const WaxBrandBlock(),
                         const SizedBox(height: WaxSpace.s16),
-                      ],
-                      WaxButton(
-                        semanticsId: SemanticsIds.setupSubmit,
-                        label: l10n.authCreateAccount,
-                        expand: true,
-                        busy: _submitting,
-                        onPressed: _submitting ? null : _submit,
-                      ),
-                      // Which server this form would administer, native
-                      // only, with the way back out. A typo'd address that
-                      // reaches somebody's fresh install lands here, and
-                      // without this the only exits are creating an admin
-                      // account on the wrong server or clearing app data.
-                      if (!kIsWeb) ...[
-                        const SizedBox(height: WaxSpace.s24),
                         Text(
-                          ref.watch(serverAddressProvider) ?? '',
-                          style: WaxType.bodySmall.copyWith(
-                            color: colors.textSecondary,
+                          l10n.authFirstAdmin,
+                          style: WaxType.body.copyWith(
+                            color: colors.textPrimary,
                           ),
                           textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
+                        const SizedBox(height: WaxSpace.s32),
+                        WaxTextField(
+                          semanticsId: SemanticsIds.setupUsername,
+                          controller: _username,
+                          label: l10n.authUsername,
+                          autofillHints: const [AutofillHints.username],
+                          validator: (value) =>
+                              (value == null || value.trim().isEmpty)
+                              ? l10n.authEnterUsername
+                              : null,
+                        ),
+                        const SizedBox(height: WaxSpace.s16),
+                        WaxTextField(
+                          semanticsId: SemanticsIds.setupPassword,
+                          controller: _password,
+                          label: l10n.authPassword,
+                          obscureText: true,
+                          autofillHints: const [AutofillHints.newPassword],
+                          validator: (value) =>
+                              (value == null || value.length < 8)
+                              ? l10n.authPasswordTooShort
+                              : null,
+                        ),
+                        const SizedBox(height: WaxSpace.s16),
+                        WaxTextField(
+                          semanticsId: SemanticsIds.setupConfirm,
+                          controller: _confirm,
+                          label: l10n.authConfirmPassword,
+                          obscureText: true,
+                          validator: (value) => (value != _password.text)
+                              ? l10n.authPasswordsDiffer
+                              : null,
+                          onSubmitted: (_) => _submit(),
+                        ),
+                        const SizedBox(height: WaxSpace.s16),
+                        WaxTextField(
+                          semanticsId: SemanticsIds.setupDisplayName,
+                          controller: _displayName,
+                          label: l10n.authDisplayName,
+                          onSubmitted: (_) => _submit(),
+                        ),
+                        const SizedBox(height: WaxSpace.s24),
+                        if (_error != null) ...[
+                          Semantics(
+                            identifier: SemanticsIds.setupError,
+                            child: Text(
+                              _error!,
+                              key: const Key(SemanticsIds.setupError),
+                              style: WaxType.body.copyWith(color: colors.error),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          const SizedBox(height: WaxSpace.s16),
+                        ],
                         WaxButton(
-                          semanticsId: SemanticsIds.connectServerOpen,
-                          label: l10n.authChangeServer,
-                          kind: WaxButtonKind.text,
+                          semanticsId: SemanticsIds.setupSubmit,
+                          label: l10n.authCreateAccount,
                           expand: true,
-                          onPressed: _submitting
-                              ? null
-                              : () => context.pushOnce(WaxRoute.serverConnect),
+                          busy: _submitting,
+                          onPressed: _submitting ? null : _submit,
                         ),
+                        // Which server this form would administer, native
+                        // only, with the way back out. A typo'd address that
+                        // reaches somebody's fresh install lands here, and
+                        // without this the only exits are creating an admin
+                        // account on the wrong server or clearing app data.
+                        if (!kIsWeb) ...[
+                          const SizedBox(height: WaxSpace.s24),
+                          Text(
+                            ref.watch(serverAddressProvider) ?? '',
+                            style: WaxType.bodySmall.copyWith(
+                              color: colors.textSecondary,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          WaxButton(
+                            semanticsId: SemanticsIds.connectServerOpen,
+                            label: l10n.authChangeServer,
+                            kind: WaxButtonKind.text,
+                            expand: true,
+                            onPressed: _submitting
+                                ? null
+                                : () =>
+                                      context.pushOnce(WaxRoute.serverConnect),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),

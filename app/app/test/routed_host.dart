@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/auth/credential_autofill.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -69,5 +70,7 @@ Widget routedHost(
     locale: locale,
     localizationsDelegates: appLocalizationsDelegates,
     supportedLocales: appSupportedLocales,
+    // As the app has it, so a credential screen ends its own context.
+    builder: (context, child) => AutofillRoot(child: child!),
   );
 }

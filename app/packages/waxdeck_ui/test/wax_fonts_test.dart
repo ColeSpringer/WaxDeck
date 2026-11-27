@@ -142,10 +142,12 @@ void main() {
     });
   });
 
+  // Plain tests, not widget tests: nothing here pumps a tree, and in a
+  // widget test the harness's own "Test finished" text relays out on each
+  // load's late font-change message, which fails the test's
+  // no-pending-frame-callback check.
   group('loading', () {
-    testWidgets('every deferred face loads from the shipped assets', (
-      tester,
-    ) async {
+    test('every deferred face loads from the shipped assets', () async {
       // The bundle in the test binding resolves the same assets the app
       // ships, so this proves the paths in _faces point at real files
       // (a renamed or missing asset fails here, not as quiet tofu).
@@ -155,16 +157,14 @@ void main() {
       }
     });
 
-    testWidgets('ensureScript is one load per script', (tester) async {
+    test('ensureScript is one load per script', () async {
       final first = WaxFonts.ensureScript(WaxScript.arabic);
       final second = WaxFonts.ensureScript(WaxScript.arabic);
       expect(identical(first, second), isTrue);
       await first;
     });
 
-    testWidgets('ensureFor with no deferred scripts does nothing', (
-      tester,
-    ) async {
+    test('ensureFor with no deferred scripts does nothing', () async {
       await WaxFonts.ensureFor('plain latin title');
       for (final script in WaxScript.values) {
         expect(WaxFonts.isLoaded(script), isFalse);
