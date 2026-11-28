@@ -188,6 +188,8 @@ class FakeArtServer implements HttpClientAdapter {
   final Map<String, Map<String, List<String>>> _headers =
       <String, Map<String, List<String>>>{};
   final List<String> requested = <String>[];
+  final Stopwatch _clock = Stopwatch()..start();
+  final Map<String, List<Duration>> _askedAt = <String, List<Duration>>{};
 
   /// Held open, a fetch waits on it before it answers: a cover on its way.
   Completer<void>? hold;
@@ -241,6 +243,10 @@ class FakeArtServer implements HttpClientAdapter {
   Map<String, List<String>> headersFor(String url) =>
       _headers[url] ?? <String, List<String>>{};
 
+  /// Every time [url] was asked since the server was made, on a clock
+  /// started with it: clearing [requested] leaves these.
+  List<Duration> askedAt(String url) => _askedAt[url] ?? const <Duration>[];
+
   @override
   Future<ResponseBody> fetch(
     RequestOptions options,
@@ -249,6 +255,7 @@ class FakeArtServer implements HttpClientAdapter {
   ) async {
     final url = options.uri.toString();
     requested.add(url);
+    (_askedAt[url] ??= <Duration>[]).add(_clock.elapsed);
     _inFlight++;
     if (_inFlight > mostInFlight) mostInFlight = _inFlight;
     final askedBody = _bodies[url];

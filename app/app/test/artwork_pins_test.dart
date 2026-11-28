@@ -1819,8 +1819,9 @@ void main() {
       final all = over();
 
       final evicting = all.evictAll();
+      // On the clock, not in turns: the debt is on disk before the ask.
       for (var i = 0; i < 200 && server.requested.isEmpty; i++) {
-        await pumpEventQueue();
+        await Future<void>.delayed(const Duration(milliseconds: 5));
       }
       expect(server.requested, hasLength(1));
       await all.forgetEverything();
@@ -2410,11 +2411,14 @@ void main() {
         server.refuse(asked(_pid, rung), 500);
       }
       serve(second);
-      final held = over(retry: const Duration(milliseconds: 100));
+      const retry = Duration(milliseconds: 100);
+      final held = over(retry: retry);
 
       held.pinHeld({_pid: art(_pid), second: art(second)});
       await rests(held);
-      expect(server.requested, [
+      // The wait runs while the walk writes its place: on a slow disk the
+      // next round may be asked by now.
+      expect(server.requested.take(4), [
         asked(_pid, 1024),
         asked(_pid, 256),
         asked(second, 1024),
@@ -2422,8 +2426,20 @@ void main() {
       ]);
       expect(await pins.pinsFor(second), hasLength(2));
 
-      // Asked again after a wait, and by then the server can read it.
-      await until(() => server.requested.length > 4);
+      // A round once the wait is up asks both sizes again, and by the
+      // next the server can read it.
+      await until(() => server.requested.length > 5);
+      expect(server.requested.sublist(4, 6), [
+        asked(_pid, 1024),
+        asked(_pid, 256),
+      ]);
+      // From an ask before the wait is set, and the VM never wakes a timer
+      // early: no slack.
+      expect(
+        server.askedAt(asked(_pid, 1024))[1] -
+            server.askedAt(asked(second, 256)).single,
+        greaterThanOrEqualTo(retry),
+      );
       serve(_pid);
       await untilPinned(_pid);
     });
