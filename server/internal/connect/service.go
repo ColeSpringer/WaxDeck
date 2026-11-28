@@ -176,13 +176,16 @@ type Service struct {
 	stopped bool
 }
 
-// watchState tracks one connection's watch and the queue version it
-// last received entries for (state frames omit the queue unless it
-// changed).
+// watchState tracks one connection's watch. Its pushes are numbered as
+// they are owed and go out only in that order, a stale one dropped, and
+// the queue rides along until a frame carrying its version has gone out.
 type watchState struct {
 	sessionID string
-	sentQV    int64
-	sentAny   bool
+	// owed numbers the pushes owed this watch; sent is the number of the
+	// newest one that went out.
+	owed, sent uint64
+	// queueVersion is the version of the last queue the watcher was sent.
+	queueVersion int64
 }
 
 type route struct {
@@ -361,14 +364,42 @@ func (s *Service) visibleSessionLocked(userID string, sess *session) bool {
 // its slot, so the index still lines up, and loses all that names it.
 // It reads the catalog, so never under s.mu.
 func (s *Service) receiverView(snap Session, userID string) Session {
-	if snap.OwnerUserID == userID || s.cfg.EntriesVisible == nil || len(snap.Entries) == 0 {
-		return snap
+	return onlyVisible(snap, s.entriesVisible(snap, userID))
+}
+
+// filtersEntries reports whether userID's view of snap withholds what it
+// may not see: a session somebody else owns, with a check configured.
+func (s *Service) filtersEntries(snap Session, userID string) bool {
+	return snap.OwnerUserID != userID && s.cfg.EntriesVisible != nil
+}
+
+// entriesVisible answers which of snap's entries userID may read, or nil
+// when it reads them all (filtersEntries is false). It reads the
+// catalog, so never under s.mu.
+func (s *Service) entriesVisible(snap Session, userID string) map[string]bool {
+	if !s.filtersEntries(snap, userID) {
+		return nil
+	}
+	if len(snap.Entries) == 0 {
+		return map[string]bool{}
 	}
 	pids := make([]string, len(snap.Entries))
 	for i, e := range snap.Entries {
 		pids[i] = e.PID
 	}
-	visible := s.cfg.EntriesVisible(userID, pids)
+	if visible := s.cfg.EntriesVisible(userID, pids); visible != nil {
+		return visible
+	}
+	// No answer withholds every entry; nil would show them all.
+	return map[string]bool{}
+}
+
+// onlyVisible empties the slot of every entry visible does not name; a
+// nil visible keeps them all.
+func onlyVisible(snap Session, visible map[string]bool) Session {
+	if visible == nil || len(snap.Entries) == 0 {
+		return snap
+	}
 	// A copy: the snapshot shares its entries with the live session.
 	entries := make([]QueueEntry, len(snap.Entries))
 	for i, e := range snap.Entries {

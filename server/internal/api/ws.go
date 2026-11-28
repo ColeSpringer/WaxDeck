@@ -363,13 +363,16 @@ func (s *Server) dispatchWS(ctx context.Context, conn *events.Conn, link *connec
 			enqueue(connect.WireSessionFrame(*snap, link.UserID, true))
 		}
 	case "watch":
-		snap, ok := s.connect.HandleWatch(link, f.SessionID)
-		if !ok {
+		// The service sends the first frame itself, so that no push to
+		// the watcher can overtake it.
+		found, sent := s.connect.HandleWatch(link, f.SessionID)
+		switch {
+		case !found:
 			enqueue(wsErrorFrame{Type: "error", ID: f.ID, Code: "not-found", Message: "no such session is visible to you"})
-			return
-		}
-		if snap != nil {
-			enqueue(connect.WireSessionFrame(*snap, link.UserID, true))
+		case !sent:
+			// That frame is the watch's answer, and an answer that cannot
+			// be queued closes the connection, as enqueue does.
+			cancel()
 		}
 	default:
 		enqueue(wsErrorFrame{Type: "error", ID: f.ID, Code: "invalid-request", Message: "unknown frame type " + f.Type})

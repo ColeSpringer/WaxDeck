@@ -197,7 +197,9 @@ func (s *fakeSink) Listen(_ context.Context, _, pid string, _ int64, _ time.Time
 	s.mu.Unlock()
 }
 
-func newTestService(t *testing.T) (*Service, *fakeSink, *fakeDriver) {
+// newTestService builds a service over a fresh store, with a shared cast
+// device online; opts adjust the config before it is built.
+func newTestService(t *testing.T, opts ...func(*Config)) (*Service, *fakeSink, *fakeDriver) {
 	t.Helper()
 	ctx := context.Background()
 	store, err := db.Open(ctx, filepath.Join(t.TempDir(), "waxdeck.db"))
@@ -223,13 +225,17 @@ func newTestService(t *testing.T) (*Service, *fakeSink, *fakeDriver) {
 		books: map[string][]int64{"bk-one": {4000, 5000, 6000}},
 	}
 	group := supervise.NewGroup(nil)
-	svc, err := New(ctx, Config{
+	cfg := Config{
 		Store:    store,
 		Group:    group,
 		Resolver: resolver,
 		Sink:     sink,
 		Bases:    Bases{Public: "http://public.example", LAN: "http://192.0.2.10:4420", Loopback: "http://127.0.0.1:4420"},
-	})
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	svc, err := New(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1356,17 +1362,493 @@ func TestWatchSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	link := NewClientLink("us-bob", "Bob", "se-bob", "Tablet", func(any) bool { return true })
+	var frames sessionFrames
+	link := NewClientLink("us-bob", "Bob", "se-bob", "Tablet", frames.send)
 
-	got, ok := svc.HandleWatch(link, snap.ID)
-	if !ok || got == nil || got.ID != snap.ID {
-		t.Fatalf("watch failed: %+v ok=%v", got, ok)
+	if found, sent := svc.HandleWatch(link, snap.ID); !found || !sent {
+		t.Fatalf("watch failed: found=%v sent=%v", found, sent)
 	}
-	if _, ok := svc.HandleWatch(link, "ps-01BX5ZZKBKACTAV9WEVGEMMVS0"); ok {
+	if got := frames.all(); len(got) != 1 || got[0].ID != snap.ID || !slices.Equal(titles(got[0]), []string{"One"}) {
+		t.Fatalf("the watch sent %+v, want the session with its queue", got)
+	}
+	if found, _ := svc.HandleWatch(link, "ps-01BX5ZZKBKACTAV9WEVGEMMVS0"); found {
 		t.Fatal("watch of unknown session succeeded")
 	}
-	if got, ok := svc.HandleWatch(link, ""); !ok || got != nil {
+	if found, sent := svc.HandleWatch(link, ""); !found || !sent {
 		t.Fatal("stop watch misbehaved")
+	}
+	svc.pushPlayingToWatchers()
+	if got := frames.all(); len(got) != 1 {
+		t.Fatalf("an ended watch still gets frames: %v", describe(got[1:]))
+	}
+
+	// A first frame the connection cannot take leaves it unwatched.
+	full := NewClientLink("us-bob", "Bob", "se-bob-2", "Phone", func(any) bool { return false })
+	if found, sent := svc.HandleWatch(full, snap.ID); !found || sent {
+		t.Fatalf("a watch whose frame was refused answers found=%v sent=%v, want found and unsent", found, sent)
+	}
+	svc.mu.Lock()
+	_, watching := svc.watchers[full]
+	svc.mu.Unlock()
+	if watching {
+		t.Fatal("a watch whose first frame never went out is registered")
+	}
+}
+
+// watch follows sessionID for link and reports whether the watch took.
+func watch(svc *Service, link *ClientLink, sessionID string) bool {
+	found, sent := svc.HandleWatch(link, sessionID)
+	return found && sent
+}
+
+// sessionFrames records the session frames a link is sent, in order.
+type sessionFrames struct {
+	mu  sync.Mutex
+	got []wireSession
+}
+
+func (f *sessionFrames) send(v any) bool {
+	if frame, ok := v.(wireSessionFrame); ok {
+		f.mu.Lock()
+		f.got = append(f.got, frame.Session)
+		f.mu.Unlock()
+	}
+	return true
+}
+
+func (f *sessionFrames) all() []wireSession {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.got)
+}
+
+// titles reads the queue a frame carries, "" for a withheld slot, and
+// nil for a frame without one.
+func titles(frame wireSession) []string {
+	if frame.Entries == nil {
+		return nil
+	}
+	out := make([]string, len(frame.Entries))
+	for i, e := range frame.Entries {
+		out[i] = e.Title
+	}
+	return out
+}
+
+// describe names each frame's queue, for a failure message.
+func describe(frames []wireSession) []string {
+	out := make([]string, len(frames))
+	for i, frame := range frames {
+		out[i] = "no queue"
+		if frame.Entries != nil {
+			out[i] = fmt.Sprintf("%q", titles(frame))
+		}
+	}
+	return out
+}
+
+// lastQueue is the queue the latest frame carrying one names.
+func lastQueue(frames []wireSession) []string {
+	for _, frame := range slices.Backward(frames) {
+		if frame.Entries != nil {
+			return titles(frame)
+		}
+	}
+	return nil
+}
+
+// stall holds the first call through wait once armed: reached closes as
+// that call arrives, and it returns when release is closed. Every other
+// call passes straight through.
+type stall struct {
+	armed            atomic.Bool
+	reached, release chan struct{}
+}
+
+func newStall(armed bool) *stall {
+	s := &stall{reached: make(chan struct{}), release: make(chan struct{})}
+	s.armed.Store(armed)
+	return s
+}
+
+func (s *stall) wait() {
+	if s.armed.CompareAndSwap(true, false) {
+		close(s.reached)
+		<-s.release
+	}
+}
+
+// hookedResolver is the fake catalog with a hook in front of every
+// title read.
+type hookedResolver struct {
+	*fakeResolver
+	before func()
+}
+
+func (r hookedResolver) Entries(ctx context.Context, userID string, pids []string) ([]QueueEntry, error) {
+	r.before()
+	return r.fakeResolver.Entries(ctx, userID, pids)
+}
+
+// withholdingTwo is a service whose receivers may not see tr-two, and
+// whose first such read waits on st.
+func withholdingTwo(st *stall) func(*Config) {
+	return func(cfg *Config) {
+		cfg.EntriesVisible = func(_ string, pids []string) map[string]bool {
+			st.wait()
+			out := map[string]bool{}
+			for _, pid := range pids {
+				out[pid] = pid != "tr-two"
+			}
+			return out
+		}
+	}
+}
+
+// A watch's first frame is the first one its watcher gets, and it carries
+// the queue, as the contract promises. The receiver's view is read off
+// the lock, and a tick landing in that read used to reach the link first
+// with no queue on it.
+func TestAWatchsFirstFrameComesBeforeAnyPush(t *testing.T) {
+	st := newStall(true)
+	svc, _, _ := newTestService(t, withholdingTwo(st))
+	ctx := context.Background()
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{
+		EndpointID: deviceEndpointID(t, svc, "us-alice"), PIDs: []string{"tr-one", "tr-two"}, Play: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var frames sessionFrames
+	bob := NewClientLink("us-bob", "Bob", "se-bob", "Tablet", frames.send)
+	watched := make(chan bool)
+	go func() { watched <- watch(svc, bob, snap.ID) }()
+	<-st.reached
+	svc.pushPlayingToWatchers()
+	close(st.release)
+	if !<-watched {
+		t.Fatal("the watch was refused")
+	}
+	svc.pushPlayingToWatchers()
+
+	got := frames.all()
+	if len(got) == 0 || got[0].Entries == nil {
+		t.Fatalf("bob's first frame carries no queue; his frames: %v", describe(got))
+	}
+	if q := titles(got[0]); !slices.Equal(q, []string{"One", ""}) {
+		t.Errorf("the watch's frame reads %q, want One and a withheld slot", q)
+	}
+	if len(got) != 2 || got[1].Entries != nil {
+		t.Errorf("after the watch's frame bob got %v, want one tick without the queue", describe(got[1:]))
+	}
+}
+
+// A queue replaced while a watch reads the receiver's view still reaches
+// the watcher: the watch's frame carries the queue the read covered, and
+// a push follows with the current one, to that watcher alone. The read's
+// answer used to land last, leaving the watcher on the old queue while
+// the server counted the new one delivered.
+func TestAWatchCatchesUpWithAQueueReplacedDuringItsRead(t *testing.T) {
+	st := newStall(true)
+	svc, _, _ := newTestService(t, withholdingTwo(st))
+	ctx := context.Background()
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{
+		EndpointID: deviceEndpointID(t, svc, "us-alice"), PIDs: []string{"tr-one", "tr-two"}, Play: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tabletFrames sessionFrames
+	tablet := NewClientLink("us-alice", "Alice", "se-tablet", "Tablet", tabletFrames.send)
+	if !watch(svc, tablet, snap.ID) {
+		t.Fatal("the tablet's watch was refused")
+	}
+	var frames sessionFrames
+	bob := NewClientLink("us-bob", "Bob", "se-bob", "Tablet", frames.send)
+	watched := make(chan bool)
+	go func() { watched <- watch(svc, bob, snap.ID) }()
+	<-st.reached
+	alice := NewClientLink("us-alice", "Alice", "se-alice", "Phone", func(any) bool { return true })
+	if _, err := svc.HandleCommand(ctx, alice, snap.ID, "set-queue", CommandArgs{ItemPids: []string{"tr-three", "tr-two"}}); err != nil {
+		t.Fatal(err)
+	}
+	close(st.release)
+	if !<-watched {
+		t.Fatal("the watch was refused")
+	}
+
+	got := frames.all()
+	if len(got) == 0 || got[0].Entries == nil {
+		t.Fatalf("bob's first frame carries no queue; his frames: %v", describe(got))
+	}
+	if q := lastQueue(got); !slices.Equal(q, []string{"Three", ""}) {
+		t.Errorf("bob ends on %q, want the replaced queue: Three and a withheld slot", q)
+	}
+	if got := tabletFrames.all(); len(got) != 2 {
+		t.Errorf("the tablet got %v, want its watch's frame and the queue change's", describe(got))
+	}
+}
+
+// Two queues set in quick succession reach a watcher in order. Each push
+// reads the receiver's view off the lock, and one that finished its read
+// after a newer push had gone out used to land last, leaving the watcher
+// on the older queue.
+func TestAWatcherEndsOnTheNewerOfTwoRacingQueues(t *testing.T) {
+	st := newStall(false)
+	svc, _, _ := newTestService(t, withholdingTwo(st))
+	ctx := context.Background()
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{
+		EndpointID: deviceEndpointID(t, svc, "us-alice"), PIDs: []string{"tr-one", "tr-two"}, Play: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var frames sessionFrames
+	bob := NewClientLink("us-bob", "Bob", "se-bob", "Tablet", frames.send)
+	if !watch(svc, bob, snap.ID) {
+		t.Fatal("the watch was refused")
+	}
+
+	phone := NewClientLink("us-alice", "Alice", "se-phone", "Phone", func(any) bool { return true })
+	laptop := NewClientLink("us-alice", "Alice", "se-laptop", "Laptop", func(any) bool { return true })
+	st.armed.Store(true)
+	first := make(chan error, 1)
+	go func() {
+		_, err := svc.HandleCommand(ctx, phone, snap.ID, "set-queue", CommandArgs{ItemPids: []string{"tr-three", "tr-two"}})
+		first <- err
+	}()
+	<-st.reached
+	if _, err := svc.HandleCommand(ctx, laptop, snap.ID, "set-queue", CommandArgs{ItemPids: []string{"tr-one"}}); err != nil {
+		t.Fatal(err)
+	}
+	close(st.release)
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+
+	if q := lastQueue(frames.all()); !slices.Equal(q, []string{"One"}) {
+		t.Errorf("bob ends on %q, want the newer queue", q)
+	}
+}
+
+// A mirror client's new queue goes live with its version, in one step.
+// Its titles used to be read after the version had moved, so a tick
+// landing in that read published the new version over the old entries,
+// and the push that followed left the queue out as unchanged: the watcher
+// kept the old one.
+func TestAMirrorQueueGoesLiveWithItsVersion(t *testing.T) {
+	st := newStall(false)
+	svc, _, _ := newTestService(t, func(cfg *Config) {
+		cfg.Resolver = hookedResolver{fakeResolver: cfg.Resolver.(*fakeResolver), before: st.wait}
+	})
+	ctx := context.Background()
+	phone := NewClientLink("us-alice", "Alice", "se-phone", "Phone", func(any) bool { return true })
+	svc.HandleRegister(phone, "Phone", true, true)
+	mirror, _ := svc.HandleSessionReport(ctx, phone, SessionReport{Playing: true, ItemPids: []string{"tr-one"}})
+	if mirror == nil {
+		t.Fatal("the creating report was not answered")
+	}
+	var frames sessionFrames
+	tablet := NewClientLink("us-alice", "Alice", "se-tablet", "Tablet", frames.send)
+	if !watch(svc, tablet, mirror.ID) {
+		t.Fatal("the watch was refused")
+	}
+
+	st.armed.Store(true)
+	reported := make(chan struct{})
+	go func() {
+		defer close(reported)
+		svc.HandleSessionReport(ctx, phone, SessionReport{Playing: true, ItemPids: []string{"tr-two", "tr-three"}})
+	}()
+	<-st.reached
+	svc.pushPlayingToWatchers()
+	close(st.release)
+	<-reported
+
+	if q := lastQueue(frames.all()); !slices.Equal(q, []string{"Two", "Three"}) {
+		t.Errorf("the tablet ends on %q, want the reported queue", q)
+	}
+}
+
+// Pushes reach a watcher in the order they were owed. A push carrying the
+// queue reads the receiver's view first, and one owed after it that needed
+// no read used to go out ahead of it: the older state landed last, and a
+// paused session read as playing until something else changed.
+func TestAPushNeverLandsBehindANewerOne(t *testing.T) {
+	st := newStall(false)
+	svc, _, _ := newTestService(t, withholdingTwo(st))
+	ctx := context.Background()
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{
+		EndpointID: deviceEndpointID(t, svc, "us-alice"), PIDs: []string{"tr-one", "tr-two"}, Play: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var frames sessionFrames
+	bob := NewClientLink("us-bob", "Bob", "se-bob", "Tablet", frames.send)
+	if !watch(svc, bob, snap.ID) {
+		t.Fatal("the watch was refused")
+	}
+
+	phone := NewClientLink("us-alice", "Alice", "se-phone", "Phone", func(any) bool { return true })
+	laptop := NewClientLink("us-alice", "Alice", "se-laptop", "Laptop", func(any) bool { return true })
+	st.armed.Store(true)
+	queued := make(chan error, 1)
+	go func() {
+		_, err := svc.HandleCommand(ctx, phone, snap.ID, "set-queue", CommandArgs{ItemPids: []string{"tr-three", "tr-two"}})
+		queued <- err
+	}()
+	<-st.reached
+	if _, err := svc.HandleCommand(ctx, laptop, snap.ID, "pause", CommandArgs{}); err != nil {
+		t.Fatal(err)
+	}
+	close(st.release)
+	if err := <-queued; err != nil {
+		t.Fatal(err)
+	}
+
+	got := frames.all()
+	if got[len(got)-1].Playing {
+		t.Error("bob's last frame reads playing; the session was paused")
+	}
+	if q := lastQueue(got); !slices.Equal(q, []string{"Three", ""}) {
+		t.Errorf("bob ends on %q, want Three and a withheld slot", q)
+	}
+}
+
+// A frame the connection could not take is owed again, so the next push
+// carries the queue it had. It used to count as delivered: every later
+// frame left the queue out, and the watcher kept the old one.
+func TestAQueueFrameTheConnectionRefusedIsSentAgain(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	ctx := context.Background()
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{
+		EndpointID: deviceEndpointID(t, svc, "us-alice"), PIDs: []string{"tr-one"}, Play: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var frames sessionFrames
+	var refusing atomic.Bool
+	bob := NewClientLink("us-bob", "Bob", "se-bob", "Tablet", func(v any) bool {
+		return !refusing.Load() && frames.send(v)
+	})
+	if !watch(svc, bob, snap.ID) {
+		t.Fatal("the watch was refused")
+	}
+
+	phone := NewClientLink("us-alice", "Alice", "se-phone", "Phone", func(any) bool { return true })
+	refusing.Store(true)
+	if _, err := svc.HandleCommand(ctx, phone, snap.ID, "set-queue", CommandArgs{ItemPids: []string{"tr-two"}}); err != nil {
+		t.Fatal(err)
+	}
+	refusing.Store(false)
+	svc.pushPlayingToWatchers()
+
+	if q := lastQueue(frames.all()); !slices.Equal(q, []string{"Two"}) {
+		t.Errorf("bob ends on %q, want the queue of the frame his connection refused", q)
+	}
+}
+
+// A slow read of one receiver's view holds back that receiver's frame
+// alone. Every push in a batch used to wait for every read in it, so one
+// slow read delayed frames that need none, the owner's among them.
+func TestASlowReadHoldsBackOnlyItsOwnFrame(t *testing.T) {
+	st := newStall(false)
+	svc, _, _ := newTestService(t, withholdingTwo(st))
+	ctx := context.Background()
+	snap, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{
+		EndpointID: deviceEndpointID(t, svc, "us-alice"), PIDs: []string{"tr-one", "tr-two"}, Play: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bobFrames, tabletFrames sessionFrames
+	bob := NewClientLink("us-bob", "Bob", "se-bob", "Tablet", bobFrames.send)
+	tablet := NewClientLink("us-alice", "Alice", "se-tablet", "Tablet", tabletFrames.send)
+	if !watch(svc, bob, snap.ID) || !watch(svc, tablet, snap.ID) {
+		t.Fatal("a watch was refused")
+	}
+
+	phone := NewClientLink("us-alice", "Alice", "se-phone", "Phone", func(any) bool { return true })
+	st.armed.Store(true)
+	queued := make(chan error, 1)
+	go func() {
+		_, err := svc.HandleCommand(ctx, phone, snap.ID, "set-queue", CommandArgs{ItemPids: []string{"tr-three"}})
+		queued <- err
+	}()
+	<-st.reached
+	held := lastQueue(tabletFrames.all())
+	close(st.release)
+	if err := <-queued; err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(held, []string{"Three"}) {
+		t.Errorf("while bob's view was read the tablet held %q, want the new queue", held)
+	}
+	if q := lastQueue(bobFrames.all()); !slices.Equal(q, []string{"Three"}) {
+		t.Errorf("bob ends on %q, want the new queue", q)
+	}
+}
+
+// A mirror queue whose titles cannot be read still goes live, as its pids
+// without titles. The version used to move over the old entries, so the
+// watchers kept the old queue and a transfer would have loaded it.
+func TestAMirrorQueueKeepsItsPidsWhenItsTitlesCannotBeRead(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	ctx := context.Background()
+	phone := NewClientLink("us-alice", "Alice", "se-phone", "Phone", func(any) bool { return true })
+	svc.HandleRegister(phone, "Phone", true, true)
+	mirror, _ := svc.HandleSessionReport(ctx, phone, SessionReport{Playing: true, ItemPids: []string{"tr-one"}})
+	if mirror == nil {
+		t.Fatal("the creating report was not answered")
+	}
+	// The fake catalog has no tr-gone, so reading this queue's titles fails.
+	svc.HandleSessionReport(ctx, phone, SessionReport{Playing: true, ItemPids: []string{"tr-two", "tr-gone"}})
+
+	got, err := svc.Session("us-alice", mirror.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pids := entryPIDs(got.Entries); !slices.Equal(pids, []string{"tr-two", "tr-gone"}) {
+		t.Errorf("the session holds %q, want the reported queue", pids)
+	}
+	if got.QueueVersion == mirror.QueueVersion {
+		t.Errorf("the queue version stayed at %d", got.QueueVersion)
+	}
+}
+
+// A report the checks drop costs no catalog read: titles are read only
+// for a report that is kept. A client's first report, racing the routed
+// load that installs its session, used to pay for the read and then be
+// thrown away.
+func TestADroppedReportReadsNoTitles(t *testing.T) {
+	var reads atomic.Int32
+	svc, _, _ := newTestService(t, func(cfg *Config) {
+		cfg.Resolver = hookedResolver{fakeResolver: cfg.Resolver.(*fakeResolver), before: func() { reads.Add(1) }}
+	})
+	ctx := context.Background()
+	during := int32(-1)
+	var link *ClientLink
+	link = NewClientLink("us-alice", "Alice", "se-phone", "Phone", func(v any) bool {
+		cmd, ok := v.(wireEndpointCommand)
+		if !ok || cmd.Verb != "load" {
+			return true
+		}
+		before := reads.Load()
+		if snap, answer := svc.HandleSessionReport(ctx, link, SessionReport{Playing: true, ItemPids: cmd.ItemPids}); answer || snap != nil {
+			t.Error("the report racing the load was answered")
+		}
+		during = reads.Load() - before
+		svc.HandleCommandResult(cmd.ID, true, "", "")
+		return true
+	})
+	phone := svc.HandleRegister(link, "Phone", true, true)
+	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", SessionRequest{EndpointID: phone, PIDs: []string{"tr-one"}, Play: true}); err != nil {
+		t.Fatal(err)
+	}
+	if during != 0 {
+		t.Errorf("the dropped report read the catalog %d times, want none", during)
 	}
 }
 

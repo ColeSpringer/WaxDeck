@@ -499,32 +499,25 @@ func (s *Service) HandleSessionReport(ctx context.Context, link *ClientLink, rep
 	}
 
 	s.mu.Lock()
-	var sess *session
-	if id, ok := s.byEndpoint[endpointID]; ok {
-		sess = s.sessions[id]
+	sess, answer, keep := s.reportTargetLocked(endpointID, link.UserID, rep)
+	var entries []QueueEntry
+	if keep && len(rep.ItemPids) > 0 {
+		// The queue's titles are a catalog read, taken off the lock for a
+		// report the checks keep, which then run again. The entries go
+		// live in the same hold as the queue's version: a push between
+		// the two would pair the new version with the old entries, and
+		// every later one would leave the queue out as unchanged.
+		s.mu.Unlock()
+		entries = s.reportedEntries(ctx, link.UserID, rep.ItemPids)
+		s.mu.Lock()
+		sess, answer, keep = s.reportTargetLocked(endpointID, link.UserID, rep)
+	}
+	if !keep {
+		s.mu.Unlock()
+		return answer, answer != nil
 	}
 	created := false
 	if sess == nil {
-		if _, pending := s.pendingLoads[endpointID]; pending {
-			// A routed load is installing this endpoint's session; the
-			// racing first report is dropped rather than allowed to
-			// mint a ghost id the client would then hold stale.
-			s.mu.Unlock()
-			return nil, false
-		}
-		// A recently server-ended session on this endpoint answers
-		// terminally instead of spawning a ghost from a stale report.
-		if mark, ok := s.recentEnds[endpointID]; ok && s.cfg.Now().Sub(mark.at) < reportGrace {
-			s.mu.Unlock()
-			ended := Session{ID: mark.sessionID, EndpointID: endpointID, OwnerUserID: link.UserID, Authority: AuthorityMirror, Ended: true, UpdatedAt: s.cfg.Now(), PositionAt: s.cfg.Now(), Rate: 1}
-			return &ended, true
-		}
-		if len(rep.ItemPids) == 0 {
-			// A creating report must carry the queue; a session
-			// without one is unrenderable, so the report is ignored.
-			s.mu.Unlock()
-			return nil, false
-		}
 		sess = &session{
 			id:         newSessionID(),
 			ownerID:    link.UserID,
@@ -537,12 +530,6 @@ func (s *Service) HandleSessionReport(ctx context.Context, link *ClientLink, rep
 		s.sessions[sess.id] = sess
 		s.byEndpoint[endpointID] = sess.id
 		created = true
-	}
-	if sess.ownerID != link.UserID {
-		// An endpoint id collision across users cannot happen (ids
-		// derive from the device session), but stay fail-closed.
-		s.mu.Unlock()
-		return nil, false
 	}
 
 	now := s.cfg.Now()
@@ -568,22 +555,14 @@ func (s *Service) HandleSessionReport(ctx context.Context, link *ClientLink, rep
 		// The published queue version is the server's own monotone
 		// counter; the client's number is only the change signal.
 		sess.q.QueueVersion++
+		sess.q.Entries = entries
 	}
 	sess.updatedAt = now
-	pidsForHydrate := rep.ItemPids
 	snap := s.snapshotLocked(sess)
 	s.mu.Unlock()
 
 	if queueChanged {
-		// Hydrate titles off-lock; a failed hydration keeps bare pids
-		// out of the entries rather than blocking the report.
-		if entries, err := s.cfg.Resolver.Entries(ctx, link.UserID, pidsForHydrate); err == nil {
-			s.mu.Lock()
-			sess.q.Entries = entries
-			snap = s.snapshotLocked(sess)
-			s.mu.Unlock()
-		}
-		s.cfg.Sink.SetQueue(ctx, link.UserID, pidsForHydrate)
+		s.cfg.Sink.SetQueue(ctx, link.UserID, rep.ItemPids)
 		s.persist(ctx, sess, true)
 		s.cfg.InvalidatePlayer()
 	}
@@ -598,30 +577,113 @@ func (s *Service) HandleSessionReport(ctx context.Context, link *ClientLink, rep
 	return nil, false
 }
 
-// HandleWatch follows one session's live state for the connection.
-// Results: (snapshot, true) on success, (nil, true) for a stop watch,
-// (nil, false) for an unknown or invisible session (the transport
-// answers an error frame). The success snapshot always carries
-// entries; the watch state remembers the delivered queue version so
-// later pushes omit an unchanged queue.
-func (s *Service) HandleWatch(link *ClientLink, sessionID string) (*Session, bool) {
+// reportTargetLocked finds the session a report applies to, nil for one
+// it would create. keep is false for a report that is not applied, and
+// answer is then the terminal frame owed for a session the server just
+// ended. The caller holds s.mu.
+func (s *Service) reportTargetLocked(endpointID, userID string, rep SessionReport) (sess *session, answer *Session, keep bool) {
+	if id, ok := s.byEndpoint[endpointID]; ok {
+		sess = s.sessions[id]
+	}
+	if sess != nil {
+		// An endpoint id collision across users cannot happen (ids
+		// derive from the device session), but stay fail-closed.
+		return sess, nil, sess.ownerID == userID
+	}
+	if _, pending := s.pendingLoads[endpointID]; pending {
+		// A routed load is installing this endpoint's session; the
+		// racing first report is dropped rather than allowed to
+		// mint a ghost id the client would then hold stale.
+		return nil, nil, false
+	}
+	// A recently server-ended session on this endpoint answers
+	// terminally instead of spawning a ghost from a stale report.
+	if mark, ok := s.recentEnds[endpointID]; ok && s.cfg.Now().Sub(mark.at) < reportGrace {
+		now := s.cfg.Now()
+		return nil, &Session{ID: mark.sessionID, EndpointID: endpointID, OwnerUserID: userID, Authority: AuthorityMirror, Ended: true, UpdatedAt: now, PositionAt: now, Rate: 1}, false
+	}
+	// A creating report must carry the queue; a session without one
+	// is unrenderable, so the report is ignored.
+	return nil, nil, len(rep.ItemPids) > 0
+}
+
+// reportedEntries is a reported queue hydrated for display. A read that
+// fails leaves the titles out, not the queue: its pids are what the
+// client plays, and a transfer loads them, resolving each for the owner
+// again.
+func (s *Service) reportedEntries(ctx context.Context, userID string, pids []string) []QueueEntry {
+	entries, err := s.cfg.Resolver.Entries(ctx, userID, pids)
+	if err == nil {
+		return entries
+	}
+	s.cfg.Logger.Warn("reading a mirrored queue's titles", "err", err)
+	bare := make([]QueueEntry, len(pids))
+	for i, pid := range pids {
+		bare[i] = QueueEntry{PID: pid}
+	}
+	return bare
+}
+
+// HandleWatch follows one session's live state for the connection and
+// sends the watch's first frame: the session as the connection's user
+// may read it, entries included. The watch state remembers the queue
+// version that frame delivered, so later pushes omit an unchanged
+// queue. An empty sessionID stops watching.
+//
+// found is false for an unknown or invisible session (the transport
+// answers an error frame). sent is false when the first frame could not
+// be queued, which leaves the connection unwatched (the transport closes
+// it, as for any answer it cannot deliver).
+func (s *Service) HandleWatch(link *ClientLink, sessionID string) (found, sent bool) {
 	s.mu.Lock()
+	// The previous watch ends here, and the new one gets no push before
+	// its first frame.
+	delete(s.watchers, link)
 	if sessionID == "" {
-		delete(s.watchers, link)
 		s.mu.Unlock()
-		return nil, true
+		return true, true
 	}
 	sess, ok := s.sessions[sessionID]
 	if !ok || !s.visibleSessionLocked(link.UserID, sess) {
-		delete(s.watchers, link)
 		s.mu.Unlock()
-		return nil, false
+		return false, true
 	}
-	s.watchers[link] = &watchState{sessionID: sessionID, sentQV: sess.q.QueueVersion, sentAny: true}
-	snap := s.snapshotLocked(sess)
+	read := s.snapshotLocked(sess)
 	s.mu.Unlock()
-	snap = s.receiverView(snap, link.UserID)
-	return &snap, true
+	// What the receiver may see is a catalog read, so it is taken off the
+	// lock. The watch registers afterwards, in the hold that sends the
+	// first frame: pushes collect their watchers under the lock too, so
+	// none can reach the link ahead of that frame.
+	visible := s.entriesVisible(read, link.UserID)
+
+	s.mu.Lock()
+	sess, ok = s.sessions[sessionID]
+	if !ok || !s.visibleSessionLocked(link.UserID, sess) {
+		s.mu.Unlock()
+		return false, true
+	}
+	snap := s.snapshotLocked(sess)
+	first := snap
+	// A queue replaced during the read is one the read does not cover:
+	// the first frame carries the queue it does, and a push owed in this
+	// hold follows with the current one, to this watcher alone.
+	behind := visible != nil && snap.QueueVersion != read.QueueVersion
+	if behind {
+		first = read
+	}
+	if !link.Send(WireSessionFrame(onlyVisible(first, visible), link.UserID, true)) {
+		s.mu.Unlock()
+		return true, false
+	}
+	ws := &watchState{sessionID: sessionID, queueVersion: first.QueueVersion}
+	s.watchers[link] = ws
+	var catchUp []watchPush
+	if behind {
+		catchUp = []watchPush{ws.owe(link, snap)}
+	}
+	s.mu.Unlock()
+	s.deliver(catchUp)
+	return true, true
 }
 
 // OnDisconnect tears down a connection's registrations: its endpoint,
@@ -653,74 +715,102 @@ func (s *Service) notifyWatchers(sessionID string) {
 		return
 	}
 	snap := s.snapshotLocked(sess)
-	type push struct {
-		link        *ClientLink
-		withEntries bool
-	}
-	var pushes []push
+	var pushes []watchPush
 	for link, ws := range s.watchers {
-		if ws.sessionID != sessionID {
-			continue
+		if ws.sessionID == sessionID {
+			pushes = append(pushes, ws.owe(link, snap))
 		}
-		withEntries := !ws.sentAny || ws.sentQV != snap.QueueVersion
-		ws.sentAny = true
-		ws.sentQV = snap.QueueVersion
-		pushes = append(pushes, push{link: link, withEntries: withEntries})
 	}
 	s.mu.Unlock()
+	s.deliver(pushes)
+}
+
+// watchPush is one frame a watcher is owed: its place in the order they
+// were owed, the state it carries, and whether the queue rides along.
+type watchPush struct {
+	link        *ClientLink
+	ws          *watchState
+	seq         uint64
+	snap        Session
+	withEntries bool
+}
+
+// owe numbers the next push the watcher is owed, which carries the queue
+// until a frame with its version has been sent. The caller holds s.mu.
+func (ws *watchState) owe(link *ClientLink, snap Session) watchPush {
+	ws.owed++
+	return watchPush{link: link, ws: ws, seq: ws.owed, snap: snap, withEntries: snap.QueueVersion != ws.queueVersion}
+}
+
+// deliver sends the pushes. One that needs no catalog read goes out at
+// once; each of the others right after its own read, which is taken off
+// the lock, so a slow read holds back only the reads behind it.
+func (s *Service) deliver(pushes []watchPush) {
+	if len(pushes) == 0 {
+		return
+	}
+	var reads []watchPush
+	s.mu.Lock()
 	for _, p := range pushes {
-		view := snap
-		if p.withEntries {
-			view = s.receiverView(snap, p.link.UserID)
+		if p.withEntries && len(p.snap.Entries) > 0 && s.filtersEntries(p.snap, p.link.UserID) {
+			reads = append(reads, p)
+			continue
 		}
-		p.link.Send(WireSessionFrame(view, p.link.UserID, p.withEntries))
+		s.sendLocked(p, p.snap)
+	}
+	s.mu.Unlock()
+	for _, p := range reads {
+		view := s.receiverView(p.snap, p.link.UserID)
+		s.mu.Lock()
+		s.sendLocked(p, view)
+		s.mu.Unlock()
+	}
+}
+
+// sendLocked sends a push unless it is stale: its watch has ended or
+// been replaced, or a push owed after it has gone out already. A frame
+// the connection does not take is owed again by the next push, queue and
+// all. The caller holds s.mu.
+func (s *Service) sendLocked(p watchPush, view Session) {
+	ws := p.ws
+	if s.watchers[p.link] != ws || p.seq <= ws.sent {
+		return
+	}
+	if !p.link.Send(WireSessionFrame(view, p.link.UserID, p.withEntries)) {
+		return
+	}
+	ws.sent = p.seq
+	if p.withEntries {
+		ws.queueVersion = p.snap.QueueVersion
 	}
 }
 
 // notifyEnded pushes a terminal frame to the ended session's watchers
-// and unwatches them.
+// and unwatches them. It goes out under the lock, as every watch frame
+// does.
 func (s *Service) notifyEnded(snap Session) {
 	s.mu.Lock()
-	var links []*ClientLink
+	defer s.mu.Unlock()
 	for link, ws := range s.watchers {
 		if ws.sessionID == snap.ID {
-			links = append(links, link)
 			delete(s.watchers, link)
+			link.Send(WireSessionFrame(snap, link.UserID, false))
 		}
-	}
-	s.mu.Unlock()
-	for _, link := range links {
-		link.Send(WireSessionFrame(snap, link.UserID, false))
 	}
 }
 
 // pushPlayingToWatchers refreshes every watched, playing session about
-// once per second (entries omitted; the queue did not change).
+// once per second, leaving the queue out for a watcher already sent it.
 func (s *Service) pushPlayingToWatchers() {
 	s.mu.Lock()
-	type push struct {
-		snap        Session
-		link        *ClientLink
-		withEntries bool
-	}
-	var pushes []push
+	var pushes []watchPush
 	for link, ws := range s.watchers {
 		if sess, ok := s.sessions[ws.sessionID]; ok && sess.q.Playing {
-			snap := s.snapshotLocked(sess)
-			withEntries := !ws.sentAny || ws.sentQV != snap.QueueVersion
-			ws.sentAny = true
-			ws.sentQV = snap.QueueVersion
-			pushes = append(pushes, push{snap: snap, link: link, withEntries: withEntries})
+			pushes = append(pushes, ws.owe(link, s.snapshotLocked(sess)))
 		}
 	}
 	s.mu.Unlock()
-	for _, p := range pushes {
-		view := p.snap
-		if p.withEntries {
-			view = s.receiverView(p.snap, p.link.UserID)
-		}
-		p.link.Send(WireSessionFrame(view, p.link.UserID, p.withEntries))
-	}
+	s.deliver(pushes)
 }
 
 // checkpointPlaying persists every playing session, and writes the
